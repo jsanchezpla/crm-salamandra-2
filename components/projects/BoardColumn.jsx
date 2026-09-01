@@ -11,7 +11,7 @@ import TaskCard from "./TaskCard.jsx";
  * Si la columna tiene wipLimit definido, muestra "N/LIMIT". Visual warning
  * cuando supera el límite (apuntado al backlog para Sprint 3).
  */
-export default function BoardColumn({ column, onSelectTask, onCreateTask }) {
+export default function BoardColumn({ column, onSelectTask, onCreateTask, phasePorId }) {
   const { setNodeRef, isOver } = useDroppable({
     id: `col-${column.id}`,
     data: { type: "column", columnId: column.id },
@@ -59,7 +59,7 @@ export default function BoardColumn({ column, onSelectTask, onCreateTask }) {
       >
         <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
           {column.tasks.map((task) => (
-            <TaskCard key={task.id} task={task} onSelect={onSelectTask} />
+            <TaskCard key={task.id} task={task} onSelect={onSelectTask} fase={phasePorId?.get(task.phaseId) ?? null} />
           ))}
         </SortableContext>
 

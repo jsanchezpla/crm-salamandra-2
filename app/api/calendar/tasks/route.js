@@ -4,7 +4,14 @@ import { ForbiddenError, handleRouteError } from "../../../../lib/utils/errors.j
 import { getTenantContext } from "../../../../lib/tenant/tenantResolver.js";
 import { Op } from "sequelize";
 import { NextResponse } from "next/server";
-import { toFCEvent, calendarIncludes, resolveCalendarFks, resolveAttendees } from "../../../../lib/calendar/calendarEvent.js";
+import {
+  toFCEvent,
+  calendarIncludes,
+  resolveCalendarFks,
+  resolveAttendees,
+  resolveOwners,
+  reconciliarResponsables,
+} from "../../../../lib/calendar/calendarEvent.js";
 import { sincronizarTareaConGoogle } from "../../../../lib/calendar/googleSync.js";
 import { fetchProjectEvents } from "../../../../lib/calendar/projectEvents.js";
 import {
@@ -31,11 +38,13 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     where.startDate = { [Op.gte]: start };
   }
 
-  // Filtros opcionales por cliente / team member.
+  // Filtros opcionales por cliente / team member / categoría.
   const clientId = searchParams.get("clientId");
   const teamMemberId = searchParams.get("teamMemberId");
+  const categoryId = searchParams.get("categoryId");
   if (clientId) where.clientId = clientId;
   if (teamMemberId) where.teamMemberId = teamMemberId;
+  if (categoryId) where.categoryId = categoryId;
 
   const tasks = await CalendarTask.findAll({
     where,
@@ -83,6 +92,10 @@ export async function POST(request) {
     const asistentes = await resolveAttendees(body, ctx.tenantModels, ctx.hasModule);
     if (asistentes.error) return NextResponse.json({ ok: false, error: asistentes.error }, { status: 400 });
 
+    // Quién se encarga (01/09/2026): igual, y antes de crear nada.
+    const responsables = await resolveOwners(body, ctx.tenantModels, ctx.hasModule);
+    if (responsables.error) return NextResponse.json({ ok: false, error: responsables.error }, { status: 400 });
+
     // La convocatoria: enlace de videollamada y a quién se le manda. Se valida
     // ANTES de crear nada — un enlace mal pegado no puede dejar el evento
     // guardado a medias y a la persona esperando un correo que no va a llegar.
@@ -104,7 +117,12 @@ export async function POST(request) {
       endTime: allDay ? null : (endTime || null),
       allDay: Boolean(allDay),
       clientId: fk.updates.clientId ?? null,
-      teamMemberId: fk.updates.teamMemberId ?? null,
+      // El espejo del principal lo escribe `reconciliarResponsables` justo
+      // debajo cuando viene la lista; sin lista, manda el campo de siempre.
+      teamMemberId: responsables.present
+        ? (responsables.ids[0] ?? null)
+        : (fk.updates.teamMemberId ?? null),
+      categoryId: fk.updates.categoryId ?? null,
       meetUrl,
       inviteEmail,
     });
@@ -115,6 +133,11 @@ export async function POST(request) {
       await ctx.tenantModels.CalendarTaskAttendee.bulkCreate(
         asistentes.ids.map((teamMemberId) => ({ taskId: task.id, teamMemberId }))
       );
+    }
+
+    // Los responsables, por el mismo camino.
+    if (responsables.present && responsables.ids.length) {
+      await reconciliarResponsables({ taskId: task.id, ids: responsables.ids, tenantModels: ctx.tenantModels });
     }
 
     // El espejo en el Google de cada asistente conectado. Nunca lanza y nunca

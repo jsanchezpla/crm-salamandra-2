@@ -400,3 +400,45 @@ body {
 .fc .dia-festivo .fc-timegrid-axis-cushion {
   opacity: 0.55;
 }
+
+/* ── El selector de color, redondeado (01/09/2026, Rodrigo) ────────────────
+   «Todas las cosas que requieran de un color, el selector del color debe estar
+   con bordes redondeados, no cuadrados.»
+
+   Va aquí y no en cada pantalla porque el problema no era el `className`: las
+   cajas YA llevaban `rounded-lg`. Lo cuadrado es la MUESTRA que el navegador
+   pinta dentro (`::-webkit-color-swatch`), que ignora el radio del elemento y
+   solo se puede redondear con estos pseudoelementos. Con una regla global se
+   arreglan los nueve sitios que tienen un selector de color —tipos de cita,
+   categorías del calendario, fases y columnas de proyectos, colores del equipo,
+   marca del cliente, agenda y soporte— y los que vengan.
+
+   El radio del interior es el del borde menos el `padding`: si fueran iguales,
+   la muestra asomaría por las esquinas. */
+input[type="color"] {
+  border-radius: 0.625rem;
+  padding: 3px;
+  background-color: #fff;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+input[type="color"]::-webkit-color-swatch {
+  border: none;
+  border-radius: calc(0.625rem - 3px);
+}
+input[type="color"]::-moz-color-swatch {
+  border: none;
+  border-radius: calc(0.625rem - 3px);
+}
+
+/* Los que son cuadrados de verdad (mismo alto que ancho) se quedan en círculo:
+   una muestra de color redonda se lee como una muestra y no como un campo. */
+input[type="color"].muestra-redonda,
+input[type="color"].muestra-redonda::-webkit-color-swatch,
+input[type="color"].muestra-redonda::-moz-color-swatch {
+  border-radius: 9999px;
+}

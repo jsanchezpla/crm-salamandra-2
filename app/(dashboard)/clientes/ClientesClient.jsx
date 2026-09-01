@@ -127,7 +127,7 @@ export default function ClientesClient({
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [newClientOpen, setNewClientOpen] = useState(false);
-  const CAMPOS_ALTA = camposCliente(perfil, { conPacientes });
+  const CAMPOS_ALTA = camposCliente(perfil, { conPacientes, conCategoria });
   const ALTA_VACIA = Object.fromEntries(CAMPOS_ALTA.map((c) => [c.key, ""]));
   // La ficha edita lo mismo que se pregunta en el alta: si no, el código
   // postal que acaba de teclear recepción no se podría corregir nunca.
@@ -230,6 +230,10 @@ export default function ClientesClient({
       ...(conFacturacion
         ? Object.fromEntries(CAMPOS_FISCALES.map((c) => [c.key, client[c.key] || ""]))
         : {}),
+      // El tipo de contratante, donde lo hay. Lo que NO se siembra aquí sale
+      // vacío al abrir el panel y se guarda vacío al pulsar «Guardar», así que
+      // sin esta línea corregir un teléfono borraría el tipo de la ficha.
+      ...(conCategoria ? { categoria: client.customFields?.categoria || "" } : {}),
     });
   }
 

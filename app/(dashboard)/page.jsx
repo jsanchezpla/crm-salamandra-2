@@ -4,25 +4,41 @@ import { buildPortada } from "../../lib/home/summary.js";
 import GraficaRotatoria from "../../components/home/GraficaRotatoria.jsx";
 import MiAgenda from "../../components/home/MiAgenda.jsx";
 import MiTrabajo from "../../components/home/MiTrabajo.jsx";
+import AgendaCalendario from "../../components/home/AgendaCalendario.jsx";
+import TarjetaModulo from "../../components/home/TarjetaModulo.jsx";
 
 /**
  * La portada «Hoy y el negocio» (rediseño del 26/08/2026, elegido por Rodrigo).
  *
- * Dos mitades con nombre: a la izquierda HOY (Mi agenda + lo pendiente como
- * botones), a la derecha EL NEGOCIO (tres cifras + una gráfica que rota).
- * El saludo baja a una línea, y en escritorio TODO cabe en una pantalla sin
- * scroll (`lg:overflow-hidden` — lo vigila `_smoke-anchos-y-ayuda.mjs`); en
- * móvil las mitades se apilan y ahí sí se desplaza.
+ * Dos mitades con nombre: a la izquierda HOY (la agenda + lo pendiente como
+ * botones), a la derecha EL NEGOCIO (las cifras, la gráfica y las tarjetas de
+ * cada módulo). El saludo baja a una línea, y en escritorio TODO cabe en una
+ * pantalla sin scroll (`lg:overflow-hidden` — lo vigila
+ * `_smoke-anchos-y-ayuda.mjs`); en móvil las mitades se apilan y ahí sí se
+ * desplaza.
  *
  * Cada pieza llega ya gateada del servidor (lib/home/summary.js): módulo del
  * tenant ∩ acceso del usuario, la agenda con su regla de visibilidad, y el
- * cobrado solo para admin. Si a alguien le falta una mitad entera, la otra
- * ocupa todo el ancho.
+ * cobrado solo para admin.
  *
  * Quien NO está adherido a facturación no ve gráficas de ningún tipo (Rodrigo,
- * 29/08/2026): su mitad derecha es «Mi trabajo» (bandeja, semana, tareas), con
- * la misma disposición de cajas. La regla vive en el servidor; aquí solo se
- * elige qué sección pintar.
+ * 29/08/2026): su mitad derecha es «Mi trabajo» (bandeja, semana, tareas). La
+ * regla vive en el servidor; aquí solo se elige qué sección pintar.
+ *
+ * ── LA PORTADA SE COMPONE CON LOS MÓDULOS DEL CLIENTE (01/09/2026, Rodrigo) ──
+ * «El inicio universal tiene una gráfica gigante y ya porque no hay agenda.»
+ * Era exacto: la portada solo sabía dibujar DOS cosas —la agenda de Citas y las
+ * gráficas de Facturación—, así que a un cliente sin Citas se le caía la mitad
+ * izquierda entera y la gráfica se estiraba a lo ancho de la pantalla para
+ * tapar el hueco. Y de sus proyectos, sus tickets o sus cursos, ni una palabra.
+ *
+ * Ahora hay dos fuentes más y ninguna es opcional para el reparto:
+ *   · La izquierda tiene DOS agendas posibles —Citas y Calendario— y pinta la
+ *     que haya. Un cliente sin Citas pero con Calendario ya tiene su «hoy».
+ *   · La derecha lleva una TARJETA POR MÓDULO (`portada.tarjetas`), todas con
+ *     la misma forma. La gráfica es una caja MÁS de esa rejilla, no el suelo
+ *     donde cae todo lo que sobra: solo ocupa el ancho entero cuando de verdad
+ *     es lo único que este cliente tiene.
  */
 
 function greeting() {
@@ -55,7 +71,16 @@ async function loadPortada() {
   } catch (err) {
     // Fallo catastrófico (p.ej. master DB caída): la portada NUNCA da 500.
     console.error("[home] portada no disponible:", err?.message || err);
-    return { admin: false, finance: null, agenda: null, pendiente: [], vistas: [], trabajo: null };
+    return {
+      admin: false,
+      finance: null,
+      agenda: null,
+      agendaCalendario: null,
+      pendiente: [],
+      vistas: [],
+      tarjetas: [],
+      trabajo: null,
+    };
   }
 }
 
@@ -112,6 +137,12 @@ function Kpi({ label, value, sub, danger }) {
   );
 }
 
+function Rotulo({ children }) {
+  return (
+    <div className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-[var(--ink-400)]">{children}</div>
+  );
+}
+
 export default async function HomePage() {
   const hoyLargo = new Date().toLocaleDateString("es-ES", {
     weekday: "long",
@@ -122,7 +153,7 @@ export default async function HomePage() {
   const mes = new Date().toLocaleDateString("es-ES", { month: "long", timeZone: "Europe/Madrid" });
 
   const [portada, sinLeer] = await Promise.all([loadPortada(), respuestasSinLeer()]);
-  const { admin, finance, agenda, vistas, trabajo } = portada;
+  const { admin, finance, agenda, agendaCalendario, vistas, tarjetas = [], trabajo } = portada;
 
   const pendiente = [...portada.pendiente];
   if (sinLeer.length > 0) {
@@ -136,12 +167,30 @@ export default async function HomePage() {
     });
   }
 
-  const hayHoy = Boolean(agenda) || pendiente.length > 0;
-  const hayNegocio = Boolean(finance) || vistas.length > 0;
+  // ── Qué hay a cada lado ───────────────────────────────────────────────────
+  // La izquierda es «hoy»: las agendas que tenga este cliente (Citas y/o
+  // Calendario) y lo pendiente. La derecha es «el negocio»: cifras, gráfica y
+  // una tarjeta por módulo.
+  const hayAgenda = Boolean(agenda) || Boolean(agendaCalendario);
+  const hayHoy = hayAgenda || pendiente.length > 0;
+  const hayNegocio = Boolean(finance) || vistas.length > 0 || tarjetas.length > 0;
   // «Mi trabajo» solo llega del servidor cuando las gráficas están vetadas
   // (sin adhesión a facturación), así que nunca compite con «El negocio».
   const hayTrabajo = !hayNegocio && Boolean(trabajo);
   const hayDerecha = hayNegocio || hayTrabajo;
+
+  // La gráfica NO manda sobre el reparto: si hay tarjetas, comparte rejilla con
+  // ellas; si es lo único, se queda con el ancho, que entonces sí es suyo.
+  // Cuando no hay mitad izquierda, la derecha se queda con las doce columnas:
+  // ahí caben tres cajas por fila, y estirar dos a lo ancho de la pantalla es
+  // exactamente lo que se venía a quitar.
+  const cajasDerecha = vistas.length + tarjetas.length;
+  const rejillaDerecha =
+    cajasDerecha < 2
+      ? "grid-cols-1"
+      : hayHoy
+        ? "grid-cols-1 xl:grid-cols-2"
+        : "grid-cols-1 md:grid-cols-2 2xl:grid-cols-3";
 
   return (
     <div className="lg:h-full lg:overflow-hidden flex flex-col gap-3 lg:gap-4 px-4 lg:px-7 py-4 lg:py-5 bg-[var(--color-accent)]">
@@ -168,8 +217,11 @@ export default async function HomePage() {
             <section
               className={`${hayDerecha ? "lg:col-span-5" : "lg:col-span-12"} flex flex-col gap-2.5 min-h-0`}
             >
-              <div className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-[var(--ink-400)]">Hoy</div>
+              <Rotulo>Hoy</Rotulo>
+              {/* Las dos agendas posibles. Con las dos, la de Citas manda arriba:
+                  es la que tiene gente esperando al otro lado. */}
               {agenda && <MiAgenda agenda={agenda} />}
+              {agendaCalendario && <AgendaCalendario agenda={agendaCalendario} />}
               {pendiente.length > 0 && (
                 <div className="shrink-0">
                   <div className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-[var(--ink-400)] mb-2">
@@ -188,9 +240,7 @@ export default async function HomePage() {
           {/* ── EL NEGOCIO ── */}
           {hayNegocio && (
             <section className={`${hayHoy ? "lg:col-span-7" : "lg:col-span-12"} flex flex-col gap-2.5 min-h-0`}>
-              <div className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-[var(--ink-400)]">
-                El negocio
-              </div>
+              <Rotulo>El negocio</Rotulo>
               {finance && (
                 <div className={`grid gap-2.5 ${admin ? "grid-cols-3" : "grid-cols-2"}`}>
                   <Kpi
@@ -217,16 +267,21 @@ export default async function HomePage() {
                   />
                 </div>
               )}
-              <GraficaRotatoria vistas={vistas} />
+              {cajasDerecha > 0 && (
+                <div className={`flex-1 min-h-0 grid ${rejillaDerecha} gap-2.5 auto-rows-fr lg:overflow-y-auto`}>
+                  {vistas.length > 0 && <GraficaRotatoria vistas={vistas} />}
+                  {tarjetas.map((t) => (
+                    <TarjetaModulo key={t.key} tarjeta={t} />
+                  ))}
+                </div>
+              )}
             </section>
           )}
 
           {/* ── MI TRABAJO (sin adhesión a facturación: cero gráficas) ── */}
           {hayTrabajo && (
             <section className={`${hayHoy ? "lg:col-span-7" : "lg:col-span-12"} flex flex-col gap-2.5 min-h-0`}>
-              <div className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-[var(--ink-400)]">
-                Mi trabajo
-              </div>
+              <Rotulo>Mi trabajo</Rotulo>
               <MiTrabajo trabajo={trabajo} />
             </section>
           )}

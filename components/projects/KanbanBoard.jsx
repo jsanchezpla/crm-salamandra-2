@@ -33,6 +33,7 @@ import TaskDrawer from "./TaskDrawer.jsx";
 export default function KanbanBoard({
   projectId,
   filters = {},
+  phases = [],
   teamMembers = [],
 }) {
   const [data, setData] = useState(null); // { project, columns }
@@ -64,10 +65,14 @@ export default function KanbanBoard({
 
   useEffect(() => { fetchBoard(); }, [fetchBoard]);
 
+  // La fase de cada tarjeta se pinta por id: el /board manda `phaseId`, no el
+  // nombre, y bajar la fase entera en cada tarea sería repetirla cien veces.
+  const phasePorId = useMemo(() => new Map(phases.map((p) => [p.id, p])), [phases]);
+
   // ── Filtros (cliente — sobre la respuesta del /board) ─────────────────
   const filteredColumns = useMemo(() => {
     if (!data) return [];
-    const { search, assigneeId, tag } = filters;
+    const { search, assigneeId, tag, phaseId } = filters;
     return data.columns.map((col) => ({
       ...col,
       tasks: col.tasks.filter((t) => {
@@ -85,6 +90,10 @@ export default function KanbanBoard({
         }
         if (tag) {
           if (!(t.tags ?? []).includes(tag)) return false;
+        }
+        // "sin" = las que no cuelgan de ninguna fase (ver la barra del tablero).
+        if (phaseId) {
+          if (phaseId === "sin" ? t.phaseId : t.phaseId !== phaseId) return false;
         }
         return true;
       }),
@@ -223,6 +232,7 @@ export default function KanbanBoard({
             <BoardColumn
               key={col.id}
               column={col}
+              phasePorId={phasePorId}
               onSelectTask={openTask}
               onCreateTask={openCreateInColumn}
             />

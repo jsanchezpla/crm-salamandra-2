@@ -1,5 +1,5 @@
 import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
-import { ok, error, forbidden } from "../../../../../../lib/utils/apiResponse.js";
+import { error, forbidden } from "../../../../../../lib/utils/apiResponse.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../../../../../../lib/utils/errors.js";
 import { isAdminRole, isLeadOfProject } from "../../../../../../lib/projects/projectAuth.js";
 import { getTenantAnthropicKey } from "../../../../../../lib/ai/anthropicKey.js";
@@ -10,17 +10,14 @@ import { complete } from "../../../../../../lib/outreach/analysis/anthropic.js";
 import { buildEditPrompts } from "../../../../../../lib/projects/ai/prompts.js";
 import { buildProjectSnapshot, normalizeOperations } from "../../../../../../lib/projects/ai/editOps.js";
 import { fakeEditOps } from "../../../../../../lib/projects/ai/fake.js";
+import { extraerJson } from "../../../../../../lib/projects/ai/parsePlan.js";
+import { respuestaConLatido } from "../../../../../../lib/ai/respuestaConLatido.js";
+import { esErrorDeIa, mensajeDeErrorIa } from "../../../../../../lib/ai/errorLegible.js";
 
 const ADMIN_DENY = "Solo administradores o el lead del proyecto pueden modificarlo";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const NO_KEY_MSG = "Este cliente no tiene configurada la clave de IA (Configuración → IA)";
 const INVALID_OPS_MSG = "La IA no ha devuelto una propuesta válida, prueba a reformular la instrucción";
-
-function stripFences(text) {
-  const t = String(text ?? "").trim();
-  const match = t.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-  return match ? match[1].trim() : t;
-}
 
 /**
  * Carga el estado del proyecto y lo condensa en el snapshot para el prompt.
@@ -82,7 +79,8 @@ export async function loadSnapshot({ projectId, tenantModels }) {
 // Propone una lista de operaciones para reorganizar el proyecto ("entra una
 // persona nueva", "añade una fase de QA"...). NO escribe nada: el usuario
 // revisa la propuesta y la confirma contra /api/projects/[id]/ai/apply.
-// Responde ok({ summary, operations, warnings, fake }).
+// Responde 200 con { ok, data: { summary, operations, warnings, fake } } POR
+// STREAMING (respuestaConLatido): mira `j.ok`, no solo `res.ok`.
 // ─────────────────────────────────────────────────────────────────────────────
 export const POST = withTenant(async (request, { params }, ctx) => {
   try {
@@ -123,24 +121,52 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     if (!esFake && !apiKey) return error(NO_KEY_MSG, 503);
     const model = getTenantAnthropicModel(ctx);
 
-    let parsed;
-    if (esFake) {
-      parsed = fakeEditOps(instruction, snapshot);
-    } else {
-      const { system, user } = buildEditPrompts({ instruction, snapshot });
-      const raw = await complete({ system, user, model, maxTokens: 8000, apiKey });
+    /*
+     * Desde aquí la respuesta ya viaja (`respuestaConLatido`): lo que puede
+     * contestar un código distinto de 200 ha quedado arriba a propósito. El
+     * porqué entero está en lib/ai/respuestaConLatido.js.
+     */
+    return respuestaConLatido(async () => {
       try {
-        parsed = JSON.parse(stripFences(raw));
-      } catch {
-        throw new ValidationError(INVALID_OPS_MSG);
+        let parsed;
+        if (esFake) {
+          parsed = fakeEditOps(instruction, snapshot);
+        } else {
+          const { system, user } = buildEditPrompts({ instruction, snapshot });
+          // Por streaming y con margen, por el mismo motivo que /ai/generate:
+          // son las dos llamadas más largas del CRM.
+          const raw = await complete({
+            system,
+            user,
+            model,
+            maxTokens: 8000,
+            apiKey,
+            stream: true,
+            timeoutMs: 300_000,
+          });
+          // `extraerJson` y no un JSON.parse pelado: el modelo a veces envuelve
+          // el JSON en una frase o en una valla, y eso no es un error suyo.
+          parsed = extraerJson(raw);
+          if (parsed === null) throw new ValidationError(INVALID_OPS_MSG);
+        }
+        if (!parsed || typeof parsed !== "object") throw new ValidationError(INVALID_OPS_MSG);
+
+        const summary = typeof parsed.summary === "string" ? parsed.summary.trim() : "";
+        const { operations, warnings } = normalizeOperations(parsed.operations ?? parsed, snapshot);
+        return { ok: true, data: { summary, operations, warnings, fake: esFake } };
+      } catch (err) {
+        if (err?.code === "NO_API_KEY") return { ok: false, error: NO_KEY_MSG };
+        // Lo que falla en Anthropic se cuenta (ver /api/projects/ai/generate).
+        if (esErrorDeIa(err)) {
+          console.error("[projects/ai/edit]", err?.name, err?.status, err?.message);
+          return { ok: false, error: mensajeDeErrorIa(err) };
+        }
+        if (err?.statusCode === 422 || err?.name === "ValidationError") {
+          return { ok: false, error: err.message };
+        }
+        throw err;
       }
-    }
-    if (!parsed || typeof parsed !== "object") throw new ValidationError(INVALID_OPS_MSG);
-
-    const summary = typeof parsed.summary === "string" ? parsed.summary.trim() : "";
-    const { operations, warnings } = normalizeOperations(parsed.operations ?? parsed, snapshot);
-
-    return ok({ summary, operations, warnings, fake: esFake });
+    });
   } catch (err) {
     if (err?.code === "NO_API_KEY") return error(NO_KEY_MSG, 503);
     throw err; // withTenant → handleRouteError

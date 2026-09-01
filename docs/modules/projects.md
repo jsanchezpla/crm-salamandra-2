@@ -12,15 +12,15 @@
 | --- | --- |
 | **moduleKey** | `projects` · requiere — (`lib/provisioning/dependencias.js`: se vende solo; sin `team` los tableros funcionan pero solo el admin edita y no hay miembros ni asignados) |
 | **Reina** | — · el doc no declara ninguna |
-| **Pantallas** | `/proyectos` → `app/(dashboard)/proyectos/page.jsx` (listado, alta y «crear con IA») · `/proyectos/[id]` → `app/(dashboard)/proyectos/[id]/page.jsx` (pestañas Resumen · Equipo · Fases · Configuración, botón «Abrir tablero», reorganizar con IA) · `/proyectos/[id]/board` → `app/(dashboard)/proyectos/[id]/board/page.jsx` (Kanban \| Lista) |
+| **Pantallas** | `/proyectos` → `app/(dashboard)/proyectos/page.jsx` (listado, alta y «crear con IA») · `/proyectos/[id]` → `app/(dashboard)/proyectos/[id]/page.jsx` (pestañas Resumen · Equipo · Fases · Configuración, botón «Abrir tablero», reorganizar con IA; la pestaña Fases es `VistaFases` desde el 01/09/2026) · `/proyectos/[id]/board` → `app/(dashboard)/proyectos/[id]/board/page.jsx` (Kanban \| Lista) |
 | **Endpoints** | `app/api/projects/**` — 19 `route.js`: `route.js`, `[id]`, `[id]/phases` (+ `[phaseId]`, `reorder`), `[id]/milestones` (+ `[milestoneId]`), `[id]/columns` (+ `[columnId]`, `reorder`, `[columnId]/reorder-tasks`), `[id]/members` (+ `[memberId]`), `[id]/board`, `[id]/tasks`, IA: `ai/generate`, `ai/create`, `[id]/ai/edit`, `[id]/ai/apply` · `app/api/tasks/[id]/**` — 2 (`route.js`, `move`) · `app/api/project-templates/**` — 2 · gateados por `projects` en otros módulos: `app/api/clients/[id]/projects`, `app/api/team/[id]/projects`, `app/api/leads/[id]/convert-to-project`; `app/api/calendar/tasks` mezcla hitos y tarjetas vía `lib/calendar/projectEvents.js` · Públicos: ninguno |
-| **Lógica** | `lib/projects/`: `projectAuth.js` (admin o lead del proyecto) · `serializeProject.js` (oculta presupuesto a quien no es admin/lead) · `serializeTask.js` (`assigneeLinks` → `assignees`) · `generateProjectCode.js` (`PRY-YYYY-NNNN`) · `createDefaultBoardColumns.js` (las 4 columnas) · `taskPriority.js` (enum, etiquetas, orden) · `checklist.js` (normaliza items) · `ai/` (`prompts.js`, `parsePlan.js`, `editOps.js`, `fake.js`: modo demo sin coste) · fuera de la carpeta: `lib/calendar/projectEvents.js` |
-| **UI** | `components/projects/` (9, todos importados): `KanbanBoard.jsx`, `BoardColumn.jsx`, `TaskCard.jsx`, `TaskDrawer.jsx`, `ProjectListView.jsx`, `PriorityBadge.jsx`, `StatusBadge.jsx`, `AiProjectModal.jsx`, `AiEditModal.jsx` · ya no hay huérfanos: los tres del Sprint 1 (`ClientProjectsSection.jsx`, `EmployeeProjectsSection.jsx`, `ConvertLeadToProjectButton.jsx`) se borraron el 20/08/2026 (ver §4) · no hay `modules/projects/` |
+| **Lógica** | `lib/projects/`: `projectAuth.js` (admin o lead del proyecto) · `serializeProject.js` (oculta presupuesto a quien no es admin/lead) · `serializeTask.js` (`assigneeLinks` → `assignees`) · `generateProjectCode.js` (`PRY-YYYY-NNNN`) · `createDefaultBoardColumns.js` (las 4 columnas) · `taskPriority.js` (enum, etiquetas, orden) · `checklist.js` (normaliza items) · `faseProgreso.js` (01/09/2026: cuánto lleva hecha cada fase, el orden de la vista y el avance del proyecto) · `ai/` (`prompts.js`, `parsePlan.js`, `editOps.js`, `fake.js`: modo demo sin coste) · fuera de la carpeta: `lib/calendar/projectEvents.js` |
+| **UI** | `components/projects/` (9, todos importados): `KanbanBoard.jsx`, `BoardColumn.jsx`, `TaskCard.jsx`, `TaskDrawer.jsx`, `ProjectListView.jsx`, `PriorityBadge.jsx`, `StatusBadge.jsx`, `AiProjectModal.jsx`, `AiEditModal.jsx`, `VistaFases.jsx` (01/09/2026) · ya no hay huérfanos: los tres del Sprint 1 (`ClientProjectsSection.jsx`, `EmployeeProjectsSection.jsx`, `ConvertLeadToProjectButton.jsx`) se borraron el 20/08/2026 (ver §4) · no hay `modules/projects/` |
 | **Modelos** | `Project` (`projects`), `Phase` (`phases`), `Milestone` (`milestones`), `BoardColumn` (`board_columns`), `Task` (`tasks`), `TaskAssignee` (`task_assignees`), `ProjectMember` (`project_members`), `ProjectTemplate` (`project_templates`); `Lead.convertedProjectId` vive en `leads` |
 | **Interruptores y parámetros** | ninguno que lea el código (ni `featureFlags` ni `logicOverrides`); lo que varía es por rol (`lib/projects/projectAuth.js`) y por tener `team` |
 | **Pantallas propias** | ninguna (letrero `ui_override` vacío en producción) |
 | **Scripts** | activar: `node scripts/enable-module.js <slug> projects` (arrastra `MODULES.projects` de `scripts/_module-migrations.js`: `migrate-projects-sprint-1.js`, `migrate-projects-sprint-2.js`, `migrate-projects-task-priority.js`; atajos `npm run db:migrate:projects-1`, `-2`, `-priority`) · seed: `scripts/seed-projects-demo.js` (`npm run db:seed:projects-demo`, idempotente) · `scripts/_hechos/verify-projects-sprint-2.js` (comprobación post-migración) · `scripts/cleanup-projects-code-indexes.js` (índices `projects_code_key*` duplicados; aborta contra prod) |
-| **Pruebas** | `scripts/smoke-test-kanban.mjs` (`npm run smoke:kanban`; 13 pasos HTTP contra `demo`, necesita `npm run dev` y base de datos: entra en `npm run test:todo`, no en `npm test`) · ligera, en `npm test`: `scripts/_smoke-projects-ai-parsePlan-editOps.mjs` (`node:test`, 19/08/2026; importa la lib con el gancho `_abrir-lib-hooks.mjs` porque `lib/utils/errors.js` arrastra `next/server`): lo que devuelven `lib/projects/ai/parsePlan.js` y `editOps.js`, los DOS únicos filtros entre el texto de la IA y el schema del tenant —`normalizePlan` lanza `ValidationError` con el mensaje para el usuario si lo que manda el modelo no es un plan, con los topes (12 fases, 60 tareas, 15 hitos, 15 pasos de checklist, 10 etiquetas), fechas y horas estimadas, asignados y miembros filtrados contra el equipo **sin importar la caja del uuid**; `buildProjectSnapshot` con la forma exacta del prompt (200 tareas); `normalizeOperations` por cada operación (`updateProject`, `createPhase`, `updatePhase`/`deletePhase`, `createTask`, `updateTask`, `deleteTask`, `addMember`/`removeMember`) con qué se descarta en silencio, qué avisando y la etiqueta en español de la vista previa; desde el 19/08 un campo inválido («el lunes que viene», «mañana», una descripción que no es texto) se IGNORA avisando en vez de entrar como `null` y borrar lo que había —solo `null` explícito quita—; desde el 21/08/2026 también **la traducción del `phaseIndex` cuando se descarta una fase** (cada hito sigue en la suya y el que apuntaba a la descartada se queda sin fase), **que el mismo uuid en mayúsculas casa con el equipo y lo que se guarda es el id de la base** (y dos veces en distinta caja cuenta como una sola persona), y **que a un miembro que causó baja en el equipo SÍ se le puede quitar del proyecto**; el plan y la propuesta del modo demo (`fake.js`) pasan sin perder nada ni un aviso—. `loadProjectSnapshot` lee de la base y no se prueba |
+| **Pruebas** | `scripts/smoke-test-kanban.mjs` (`npm run smoke:kanban`; 13 pasos HTTP contra `demo`, necesita `npm run dev` y base de datos: entra en `npm run test:todo`, no en `npm test`) · ligera, en `npm test`: `scripts/_smoke-projects-ai-parsePlan-editOps.mjs` (`node:test`, 19/08/2026; importa la lib con el gancho `_abrir-lib-hooks.mjs` porque `lib/utils/errors.js` arrastra `next/server`): lo que devuelven `lib/projects/ai/parsePlan.js` y `editOps.js`, los DOS únicos filtros entre el texto de la IA y el schema del tenant —`normalizePlan` lanza `ValidationError` con el mensaje para el usuario si lo que manda el modelo no es un plan, con los topes (12 fases, 60 tareas, 15 hitos, 15 pasos de checklist, 10 etiquetas), fechas y horas estimadas, asignados y miembros filtrados contra el equipo **sin importar la caja del uuid**; `buildProjectSnapshot` con la forma exacta del prompt (200 tareas); `normalizeOperations` por cada operación (`updateProject`, `createPhase`, `updatePhase`/`deletePhase`, `createTask`, `updateTask`, `deleteTask`, `addMember`/`removeMember`) con qué se descarta en silencio, qué avisando y la etiqueta en español de la vista previa; desde el 19/08 un campo inválido («el lunes que viene», «mañana», una descripción que no es texto) se IGNORA avisando en vez de entrar como `null` y borrar lo que había —solo `null` explícito quita—; desde el 21/08/2026 también **la traducción del `phaseIndex` cuando se descarta una fase** (cada hito sigue en la suya y el que apuntaba a la descartada se queda sin fase), **que el mismo uuid en mayúsculas casa con el equipo y lo que se guarda es el id de la base** (y dos veces en distinta caja cuenta como una sola persona), y **que a un miembro que causó baja en el equipo SÍ se le puede quitar del proyecto**; el plan y la propuesta del modo demo (`fake.js`) pasan sin perder nada ni un aviso—. `loadProjectSnapshot` lee de la base y no se prueba · `scripts/_smoke-fases-progreso.mjs` (01/09/2026) fija el cálculo de la vista de Fases: el porcentaje de cada fase (tareas + entregables, con el mismo peso), qué cuenta como retraso, los cinco órdenes de la lista y que el avance del proyecto SUME unidades en vez de promediar porcentajes · desde el 01/09/2026, `scripts/_smoke-ia-respuesta.mjs` cubre lo que rodea a esa frontera: la traducción del error de Anthropic (`lib/ai/errorLegible.js`), el rescate del JSON envuelto (`extraerJson`) y que la respuesta con latido siga siendo JSON parseable con el fallo dentro del cuerpo |
 | **Decisiones** | — (ninguna propia; la transversal `../decisions/2026-07-28-repaso-de-seguridad.md` aplica como a todos) |
 | **En este doc** | 3. Arquitectura BD · 4. Rutas frontend · 5. Endpoints REST · 6. Helpers / libs · 7. Decisiones arquitectónicas · 8. Migraciones y seeds · 11. Backlog técnico |
 
@@ -229,6 +229,66 @@ Si alguien busca esos nombres dentro de seis meses, esto es lo que pasó.
 
 ---
 
+## 4.b Las fases dejan de ser una etiqueta (01/09/2026, Rodrigo)
+
+> «Para que las fases de un proyecto tengan sentido, cuando se pongan en las
+> tablas debería haber un desplegable para las distintas Fases. (…) Cada fase
+> tiene sus propias tareas y entregables. Debería haber también una vista para
+> ver todas las fases en orden de porcentaje de compleción etc y más cosas
+> útiles.»
+
+Las fases existían en la base desde el Sprint 1 (`phases`, y `tasks.phase_id` /
+`milestones.phase_id`), pero **solo se podían tocar de una en una desde el
+drawer** y la pestaña «Fases» era una lista de nombres con dos fechas: decía qué
+fases hay y nada de cómo van. Tres cambios, ninguno toca la base:
+
+**1. El desplegable de fase, en las tablas.** La Vista de Lista estrena columna
+**Fase** con un `Select` por fila que cambia `phaseId` al vuelo
+(`PATCH /api/tasks/[id]`, optimista y con vuelta atrás si el endpoint dice que
+no: pide admin o lead). Repartir veinte tareas entre tres fases eran sesenta
+clics abriendo y cerrando el drawer; ahora son veinte. La barra del tablero
+lleva además un filtro **«Todas las fases»** —con **«— Sin fase —»**, que es un
+valor real: las que nadie ha colocado, que es justo lo que hay que colocar— y
+vale para las DOS vistas. En el Kanban, cada tarjeta enseña su fase arriba con
+su color: una tarjeta suelta no decía de qué parte del proyecto es, y
+«Revisión» significa una cosa en Diseño y otra en Entrega.
+
+**2. Cada fase, con sus tareas y sus entregables.** Al abrir una fase en la
+pestaña «Fases» salen sus dos listas. **«Entregable» es el HITO (`milestone`)
+de esa fase**: el CRM ya tenía el concepto —nombre, fecha, hecho o no, y su
+fase— y crear una segunda tabla casi idéntica al lado habría sido duplicar por
+el nombre. El rótulo dice «Entregables» porque es la palabra del cliente; el
+modelo sigue llamándose `Milestone` y los endpoints, `/milestones`.
+
+**3. La vista de fases.** `components/projects/VistaFases.jsx`, con los números
+en `lib/projects/faseProgreso.js` (probado en `_smoke-fases-progreso.mjs`).
+Cada fase enseña su porcentaje, su barra, el estado, cuántas tareas y
+entregables lleva, lo que se está pasando de fecha, las horas estimadas, las
+fechas y quién anda metido; la lista se ordena por avance, por fecha de fin o
+por retraso. Se puede crear, editar (nombre, color, fechas), dar por completada
+y borrar sin salir de ahí.
+
+Tres decisiones del cálculo que conviene no deshacer sin pensarlo:
+
+- **Tareas y entregables pesan lo mismo.** 8 tareas + 2 entregables son 10
+  unidades al 10% cada una. Ponderar los entregables se pensó y se descartó:
+  un porcentaje que no se puede recalcular a mano deja de ser un dato y se
+  convierte en una opinión.
+- **Una fase vacía está a `null`, no a 0%.** Un 0% dice «sin empezar» y un 100%
+  dice «hecho»; una fase sin nada no dice ninguna de las dos, y pintarla al 0%
+  la pone la primera en la lista de lo urgente sin que nadie haya prometido
+  nada. En los órdenes por avance va siempre al final.
+- **El avance del proyecto suma unidades, no promedia porcentajes.** Una fase
+  con 1 de 1 y otra con 1 de 9 no son el 55%: son 2 de 10, o sea el 20%. La
+  media miente en cuanto las fases tienen tamaños distintos, que es siempre.
+
+De paso, **el porcentaje de la cabecera del proyecto cambia de fuente**:
+contaba fases con `completedAt`, un campo que en la práctica nadie marcaba (un
+proyecto con las tres fases a medias salía al 0%, y con las tres terminadas
+también hasta que alguien se acordaba del botón). Ahora sale del mismo cálculo
+que la vista de Fases, para que las dos cifras no se contradigan.
+
+
 ## 5. Endpoints REST
 
 ### 5.1 Sprint 1 — proyectos / fases / hitos / columnas / miembros
@@ -284,6 +344,41 @@ dinero ni necesita clave, y por eso la demo pública funciona de punta a punta.
 | `/api/projects/ai/create` | POST | `{ plan, clientId?, status? }` → materializa el plan en UNA transacción (proyecto, columnas por defecto, fases, hitos, tareas a «Por hacer», miembros). El plan se **re-normaliza** con `normalizePlan`: nunca se confía en lo que manda el navegador. Audita `project.created` con `aiGenerated: true`. |
 | `/api/projects/[id]/ai/edit` | POST | `{ instruction }` → **propuesta** de operaciones sobre el proyecto (mover/crear/borrar tareas, fases, miembros…) a partir de un snapshot del estado (`buildProjectSnapshot`). Solo admin o lead. Mismo BYOK/veto/demo que `generate`. |
 | `/api/projects/[id]/ai/apply` | POST | `{ operations }` (máx. 100) → aplica las que el usuario dejó marcadas. Las operaciones vuelven a pasar por `normalizeOperations` contra un snapshot **recién leído de BD** (lo que ya no existe se descarta y se cuenta en `skipped`; nadie puede colar ids de otro proyecto). Solo admin o lead. Audita `project.ai_reorganized` con un RESUMEN (hay nombres de tareas y personas). **No existía hasta el 12/08**: el modal lo pedía y recibía 404. |
+
+#### Por qué «no funcionaba» (01/09/2026, Rodrigo)
+
+No era un bug del módulo: eran **tres relojes y un traductor que faltaba**, y
+los cuatro salían por pantalla como «Error interno del servidor». Estos dos
+endpoints son las llamadas más largas del CRM con diferencia —12.000 y 8.000
+tokens de JSON, frente a los 700–3.000 de todo lo demás—, así que eran los
+únicos a los que les caían encima:
+
+1. **El timeout del SDK.** Se pedían los 12.000 tokens de golpe, sin `stream`,
+   contra un tope de 120 s: a la velocidad normal del modelo eso no llega.
+   Ahora `complete({ stream: true, timeoutMs: 300_000 })`.
+2. **nginx**, con su `proxy_read_timeout` de 60 s de fábrica: la conexión estaba
+   muda todo el rato y la cortaba antes de tiempo. Lo resuelve
+   `lib/ai/respuestaConLatido.js`, que empieza a responder A LA VEZ que el
+   trabajo y suelta un espacio cada 15 s (JSON admite espacios delante, así que
+   el `res.json()` del navegador parsea igual).
+3. **El parser**: una frase delante del JSON tiraba la respuesta entera.
+   `extraerJson()` lo busca dentro — tal cual, dentro de la valla de markdown, o
+   el primer objeto con las llaves equilibradas.
+4. **El error de Anthropic no se traducía**: clave caducada, modelo retirado y
+   proveedor saturado se veían todos igual. `lib/ai/errorLegible.js` los pasa a
+   una frase que dice qué pasa y dónde se toca.
+
+⚠️ **`generate` y `edit` contestan SIEMPRE 200.** Como el cuerpo empieza a
+viajar antes de saber cómo acaba, el código HTTP ya está mandado: el fallo va
+dentro (`{ ok: false, error }`). Todo lo que puede responder otro código
+—`hasModule`, `vetoAi`, validación del cuerpo, falta de clave— se comprueba
+ARRIBA, antes del latido. **Quien llame a estos dos tiene que mirar `j.ok`, no
+solo `res.ok`.** Los otros dos (`create`, `apply`) siguen igual: escriben en BD,
+tardan lo que tarda una transacción y responden con su código de siempre.
+
+Detalle completo en
+`../decisions/2026-09-01-la-portada-se-compone-con-los-modulos.md`.
+
 
 UI: `AiProjectModal.jsx` (listado, «Crear con IA») y `AiEditModal.jsx` (ficha,
 «Reorganizar con IA»). Lógica en `lib/projects/ai/` (§6).

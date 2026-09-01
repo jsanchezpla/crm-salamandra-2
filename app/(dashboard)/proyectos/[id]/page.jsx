@@ -6,6 +6,8 @@ import Link from "next/link";
 import StatusBadge, { STATUS_OPTIONS } from "../../../../components/projects/StatusBadge.jsx";
 import PriorityBadge, { PRIORITY_OPTIONS } from "../../../../components/projects/PriorityBadge.jsx";
 import AiEditModal from "../../../../components/projects/AiEditModal.jsx";
+import VistaFases from "../../../../components/projects/VistaFases.jsx";
+import { resumenDeFase, resumenSinFase, avanceGlobal, hoyMadrid } from "@/lib/projects/faseProgreso.js";
 import Select from "@/components/ui/Select.jsx";
 import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
@@ -55,6 +57,9 @@ export default function ProyectoDetallePage() {
   const [members, setMembers] = useState([]);
   const [phases, setPhases] = useState([]);
   const [milestones, setMilestones] = useState([]);
+  // Las tareas hacen falta para saber cuánto lleva hecha cada fase (01/09/2026):
+  // el porcentaje sale de sus tareas Y sus entregables juntos.
+  const [tasks, setTasks] = useState([]);
   const [columns, setColumns] = useState([]);
   const [teamMembers, setTeamMembers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -78,13 +83,14 @@ export default function ProyectoDetallePage() {
     setLoading(true);
     setError(null);
     try {
-      const [pRes, mRes, phRes, miRes, cRes, teamRes] = await Promise.all([
+      const [pRes, mRes, phRes, miRes, cRes, teamRes, tRes] = await Promise.all([
         fetch(`/api/projects/${id}`).then((r) => r.json()),
         fetch(`/api/projects/${id}/members`).then((r) => r.json()),
         fetch(`/api/projects/${id}/phases`).then((r) => r.json()),
         fetch(`/api/projects/${id}/milestones`).then((r) => r.json()),
         fetch(`/api/projects/${id}/columns`).then((r) => r.json()),
         fetch(`/api/team?limit=200`).then((r) => r.json()).catch(() => null),
+        fetch(`/api/projects/${id}/tasks`).then((r) => r.json()).catch(() => null),
       ]);
       if (!pRes?.ok) throw new Error(pRes?.error || "Proyecto no encontrado");
       setProject(pRes.data);
@@ -93,6 +99,7 @@ export default function ProyectoDetallePage() {
       setMilestones(miRes?.data ?? []);
       setColumns(cRes?.data ?? []);
       setTeamMembers(teamRes?.data?.members ?? teamRes?.data ?? []);
+      setTasks(tRes?.data?.tasks ?? []);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -105,11 +112,19 @@ export default function ProyectoDetallePage() {
   }, []);
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
+  /*
+   * El avance del proyecto. Contaba FASES CERRADAS A MANO (`completedAt`), que
+   * en la práctica nadie marcaba: un proyecto con las tres fases a medias salía
+   * al 0% y con las tres terminadas salía al 0% también hasta que alguien se
+   * acordaba de darles al botón. Desde el 01/09/2026 cuenta lo que de verdad
+   * hay hecho —tareas y entregables— con el mismo criterio que la vista de
+   * Fases, para que las dos cifras no se contradigan (lib/projects/faseProgreso.js).
+   */
   const phaseProgress = useMemo(() => {
-    if (phases.length === 0) return 0;
-    const done = phases.filter((p) => p.completedAt).length;
-    return Math.round((done / phases.length) * 100);
-  }, [phases]);
+    const hoy = hoyMadrid();
+    const resumenes = phases.map((p) => resumenDeFase(p, { tareas: tasks, entregables: milestones, hoy }));
+    return avanceGlobal([...resumenes, resumenSinFase({ tareas: tasks, entregables: milestones, hoy })]).porcentaje ?? 0;
+  }, [phases, tasks, milestones]);
 
   if (loading) return <div className="p-6 text-sm text-neutral-400">Cargando proyecto...</div>;
   if (error) return <div className="p-6 text-sm text-rose-700">{error}</div>;
@@ -197,7 +212,14 @@ export default function ProyectoDetallePage() {
         />
       )}
       {tab === "phases" && (
-        <PhasesTab projectId={project.id} phases={phases} onChange={fetchAll} />
+        <VistaFases
+          projectId={project.id}
+          phases={phases}
+          milestones={milestones}
+          tasks={tasks}
+          canEdit={canEdit}
+          onChange={fetchAll}
+        />
       )}
       {tab === "settings" && (
         <SettingsTab
@@ -437,70 +459,6 @@ function TeamTab({ projectId, members, teamMembers, onChange }) {
               <button onClick={() => remove(m.id)} className="text-xs text-rose-600 hover:text-rose-700">
                 Quitar
               </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Card>
-  );
-}
-
-// ─── Pestaña: Fases ───────────────────────────────────────────────────────
-
-function PhasesTab({ projectId, phases, onChange }) {
-  const [name, setName] = useState("");
-  const [color, setColor] = useState("#3B82F6");
-  const [startDate, setStart] = useState("");
-  const [endDate, setEnd] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
-  const submit = async (e) => {
-    e.preventDefault();
-    if (!name.trim()) return;
-    setSubmitting(true);
-    try {
-      await fetch(`/api/projects/${projectId}/phases`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, color, startDate: startDate || null, endDate: endDate || null }),
-      });
-      setName(""); setColor("#3B82F6"); setStart(""); setEnd("");
-      onChange();
-    } finally { setSubmitting(false); }
-  };
-
-  const remove = async (phaseId) => {
-    if (!confirm("¿Borrar la fase?")) return;
-    await fetch(`/api/projects/${projectId}/phases/${phaseId}`, { method: "DELETE" });
-    onChange();
-  };
-
-  return (
-    <Card title="Fases del proyecto">
-      <form onSubmit={submit} className="mb-4 grid grid-cols-1 sm:grid-cols-5 gap-2">
-        <input className={inputCls + " sm:col-span-2"} placeholder="Nombre de la fase" value={name} onChange={(e) => setName(e.target.value)} />
-        <input type="color" className="w-full h-10 rounded-lg border border-neutral-200" value={color} onChange={(e) => setColor(e.target.value)} />
-        <input type="date" className={inputCls} value={startDate} onChange={(e) => setStart(e.target.value)} />
-        <input type="date" className={inputCls} value={endDate} onChange={(e) => setEnd(e.target.value)} />
-        <button disabled={submitting || !name.trim()} className="sm:col-span-5 px-4 py-2 rounded-lg bg-neutral-800 text-white text-sm font-medium disabled:opacity-50">
-          {submitting ? "Añadiendo..." : "+ Añadir fase"}
-        </button>
-      </form>
-
-      {phases.length === 0 ? (
-        <p className="text-sm text-neutral-400">Sin fases definidas.</p>
-      ) : (
-        <ul className="space-y-2">
-          {phases.map((p) => (
-            <li key={p.id} className="flex items-center gap-3 p-3 rounded-lg border border-neutral-200 bg-white">
-              <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: p.color || "#94A3B8" }} />
-              <div className="flex-1 min-w-0">
-                <div className="font-medium text-neutral-800">{p.name}</div>
-                <div className="text-xs text-neutral-500">
-                  {p.startDate ? fmtDate(p.startDate) : "?"} → {p.endDate ? fmtDate(p.endDate) : "?"}
-                </div>
-              </div>
-              <button onClick={() => remove(p.id)} className="text-xs text-rose-600 hover:text-rose-700">Borrar</button>
             </li>
           ))}
         </ul>

@@ -17,7 +17,10 @@ export default function ProyectoBoardPage() {
   const [project, setProject] = useState(null);
   const [teamMembers, setTeamMembers] = useState([]);
   const [allTags, setAllTags] = useState([]);
-  const [filters, setFilters] = useState({ search: "", assigneeId: "", tag: "" });
+  // Las fases del proyecto: alimentan el filtro de esta barra y el desplegable
+  // de fase de cada fila de la Lista (01/09/2026, Rodrigo).
+  const [phases, setPhases] = useState([]);
+  const [filters, setFilters] = useState({ search: "", assigneeId: "", tag: "", phaseId: "" });
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [view, setView] = useState("kanban"); // "kanban" | "list"
 
@@ -25,13 +28,15 @@ export default function ProyectoBoardPage() {
   useEffect(() => {
     (async () => {
       try {
-        const [pRes, tmRes] = await Promise.all([
+        const [pRes, tmRes, phRes] = await Promise.all([
           fetch(`/api/projects/${id}`).then((r) => r.json()),
           fetch(`/api/team?limit=200`).then((r) => r.json()).catch(() => null),
+          fetch(`/api/projects/${id}/phases`).then((r) => r.json()).catch(() => null),
         ]);
         if (pRes?.ok) setProject(pRes.data);
         const members = tmRes?.data?.members ?? tmRes?.data ?? [];
         setTeamMembers(members);
+        setPhases(phRes?.ok ? (phRes.data ?? []) : []);
       } catch {}
     })();
   }, [id]);
@@ -64,6 +69,9 @@ export default function ProyectoBoardPage() {
     search: debouncedSearch || undefined,
     assigneeId: filters.assigneeId || undefined,
     tag: filters.tag || undefined,
+    // "sin" es un valor real: «las que nadie ha colocado en ninguna fase», que
+    // es justo lo que hay que colocar. Vacío = no filtres.
+    phaseId: filters.phaseId || undefined,
   };
 
   return (
@@ -144,9 +152,21 @@ export default function ProyectoBoardPage() {
             ...allTags.map((t) => ({ value: t, label: t })),
           ]}
         />
-        {(filters.search || filters.assigneeId || filters.tag) && (
+        {phases.length > 0 && (
+          <Select
+            className={inputCls + " w-44"}
+            value={filters.phaseId}
+            onChange={(v) => setFilters((f) => ({ ...f, phaseId: v }))}
+            options={[
+              { value: "", label: "Todas las fases" },
+              ...phases.map((p) => ({ value: p.id, label: p.name })),
+              { value: "sin", label: "— Sin fase —" },
+            ]}
+          />
+        )}
+        {(filters.search || filters.assigneeId || filters.tag || filters.phaseId) && (
           <button
-            onClick={() => setFilters({ search: "", assigneeId: "", tag: "" })}
+            onClick={() => setFilters({ search: "", assigneeId: "", tag: "", phaseId: "" })}
             className="text-xs text-neutral-500 hover:text-neutral-800 px-2 py-1"
           >
             Limpiar filtros
@@ -165,9 +185,9 @@ export default function ProyectoBoardPage() {
           /tasks (todas, incluidas las que no tienen columna). */}
       <div className="flex-1 overflow-hidden px-4 lg:px-8 py-4">
         {view === "kanban" ? (
-          <KanbanBoard projectId={id} filters={effective} teamMembers={teamMembers} />
+          <KanbanBoard projectId={id} filters={effective} teamMembers={teamMembers} phases={phases} />
         ) : (
-          <ProjectListView projectId={id} filters={effective} teamMembers={teamMembers} />
+          <ProjectListView projectId={id} filters={effective} teamMembers={teamMembers} phases={phases} />
         )}
       </div>
     </div>

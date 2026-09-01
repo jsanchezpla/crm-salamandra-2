@@ -19,6 +19,7 @@ import {
 import { normalizeGuardians } from "../../../lib/clients/guardians.js";
 import { entrarEnListaEspera } from "../../../lib/clients/listaEspera.js";
 import { filtroDeVisibilidad, normalizarCategoria, veTodasLasExternas } from "../../../lib/clients/consultaExterna.js";
+import { categoriaONull } from "../../../lib/booking/categorias.js";
 import { resolveCurrentTeamMemberId } from "../../../lib/team/currentTeamMember.js";
 import { filtroPorNombre } from "../../../lib/utils/busquedaDb.js";
 import { pacientesQueCasan } from "../../../lib/clients/familiasPorPaciente.js";
@@ -223,6 +224,11 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, ten
     origin: body.origin || "manual",
     leadId: body.leadId || null,
     seStatus: body.status || "new",
+    // De qué tipo es el contratante (`lib/booking/categorias.js`, 01/09/2026).
+    // Se acepta en PLANO —es como lo manda el formulario de alta— y anidado,
+    // por si llega de una importación. No se gatea por `booking`: la puerta es
+    // la lista cerrada, y un tipo válido guardado de más no lo mira nadie.
+    categoria: categoriaONull(body.categoria ?? extraCustom.categoria),
   };
 
   const emailN = normalizeContactValue("email", email);

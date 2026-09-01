@@ -32,18 +32,18 @@ function isOverdue(d) {
  * useSortable) dentro del <DragOverlay> de @dnd-kit para que el ghost
  * siga al cursor y no desaparezca al cruzar columnas.
  */
-export default function TaskCard({ task, onSelect, isDragOverlay = false }) {
+export default function TaskCard({ task, onSelect, isDragOverlay = false, fase = null }) {
   if (isDragOverlay) {
     return (
       <article className="bg-white rounded-lg border border-neutral-300 p-3 shadow-2xl rotate-2 cursor-grabbing">
-        <TaskCardBody task={task} />
+        <TaskCardBody task={task} fase={fase} />
       </article>
     );
   }
-  return <SortableTaskCard task={task} onSelect={onSelect} />;
+  return <SortableTaskCard task={task} onSelect={onSelect} fase={fase} />;
 }
 
-function SortableTaskCard({ task, onSelect }) {
+function SortableTaskCard({ task, onSelect, fase }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
     data: { type: "task", boardColumnId: task.boardColumnId, order: task.order },
@@ -73,12 +73,12 @@ function SortableTaskCard({ task, onSelect }) {
       }}
       className="group bg-white rounded-lg border border-neutral-200 p-3 cursor-grab active:cursor-grabbing hover:border-neutral-300 transition-colors"
     >
-      <TaskCardBody task={task} />
+      <TaskCardBody task={task} fase={fase} />
     </article>
   );
 }
 
-function TaskCardBody({ task }) {
+function TaskCardBody({ task, fase = null }) {
   const dueOverdue = isOverdue(task.dueDate);
   const checklistDone = Array.isArray(task.checklist)
     ? task.checklist.filter((it) => it.done).length
@@ -90,6 +90,15 @@ function TaskCardBody({ task }) {
 
   return (
     <>
+      {/* La FASE, arriba del todo y con su color (01/09/2026, Rodrigo). En el
+          tablero, una tarjeta suelta no dice de qué parte del proyecto es, y
+          «Revisión» significa una cosa en Diseño y otra en Entrega. */}
+      {fase && (
+        <div className="mb-1.5 flex items-center gap-1.5 min-w-0">
+          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: fase.color || "#A3A3A3" }} />
+          <span className="text-[10px] uppercase tracking-wide text-neutral-400 truncate">{fase.name}</span>
+        </div>
+      )}
       <h4 className="text-sm font-medium text-neutral-800 leading-snug line-clamp-2">
         {task.title}
       </h4>

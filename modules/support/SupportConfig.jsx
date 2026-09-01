@@ -353,7 +353,7 @@ export default function SupportConfig({ categorias, onCategoriasChange }) {
                 type="color"
                 value={nuevaCat.color}
                 onChange={(e) => setNuevaCat({ ...nuevaCat, color: e.target.value })}
-                className="w-9 h-9 rounded-lg border border-gray-200 p-1 bg-white cursor-pointer shrink-0"
+                className="muestra-redonda w-9 h-9 border border-gray-200 bg-white cursor-pointer shrink-0"
                 aria-label="Color de la categoría"
               />
               <input

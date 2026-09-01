@@ -15,6 +15,7 @@ import ClientModulesSection from "../../components/clients/ClientModulesSection.
 import ClientContactMethodsSection from "../../components/clients/ClientContactMethodsSection.jsx";
 import ClientFiscalSection from "../../components/clients/ClientFiscalSection.jsx";
 import { camposCliente, PERFIL_COMERCIAL } from "../../lib/clients/formularioAlta.js";
+import { rotuloCategoria } from "../../lib/booking/categorias.js";
 import { ACTIVO, estadosDeFicha, etiquetaDeEstado, tonoDeEstado, usaEstadoDePerfil } from "../../lib/clients/estados.js";
 import { avisoBorradoSegunModulos } from "../../lib/clients/avisoBorrado.js";
 import { enlaceDeVuelta } from "../../lib/clients/volver.js";
@@ -220,6 +221,10 @@ export default function ClientDetailModule({
   conPacientes = false,
   conFacturacion = false,
   conNutricion = false,
+  // ¿La ficha es la de un contratante (módulo `booking`)? Entonces pregunta de
+  // qué tipo es. Lo resuelve la página, como el resto: este componente es de
+  // cliente y no puede mirar los módulos del tenant.
+  conCategoria = false,
   // Qué paneles de consulta se montan (`lib/clients/piezasFicha.js`) y con qué
   // palabras. Sin ellos —la página no pudo decidir— no se monta ninguno.
   piezas = PIEZAS_NINGUNA,
@@ -341,6 +346,9 @@ export default function ClientDetailModule({
       city: client.customFields?.city || "",
       motivo: client.customFields?.motivo || "",
       parentescoTitular: client.customFields?.parentescoTitular || "",
+      // El tipo de contratante viaja solo donde se pregunta, por lo mismo que
+      // el embudo: en una clínica no significa nada y no hay que escribirlo.
+      ...(conCategoria ? { categoria: client.customFields?.categoria || "" } : {}),
     });
     setEditMode(true);
   }
@@ -491,7 +499,7 @@ export default function ClientDetailModule({
 
   // La ficha edita lo mismo que se pregunta en el mostrador, menos email y
   // teléfono: esos los gestiona la sección "Contactos", que admite varios.
-  const CAMPOS_FICHA = camposCliente(perfil, { conPacientes }).filter((c) => c.key !== "email" && c.key !== "phone");
+  const CAMPOS_FICHA = camposCliente(perfil, { conPacientes, conCategoria }).filter((c) => c.key !== "email" && c.key !== "phone");
 
   // El chip de la cabecera dice el ESTADO donde la ficha lo tiene (perfil
   // salud) y el embudo comercial donde no. Hasta el 26/08/2026 decía siempre el
@@ -743,6 +751,11 @@ export default function ClientDetailModule({
                     { label: "Ciudad", value: client.customFields?.city },
                     { label: "País", value: client.customFields?.country },
                     { label: "Empresa", value: client.customFields?.company },
+                    // El tipo, con su rótulo humano: en la base vive la clave
+                    // (`sala`), y aquí hay que leer «Sala / club». La fila se
+                    // filtra por `!!value`, así que a quien no tenga tipo —o no
+                    // tenga `booking`— no le aparece nada.
+                    { label: "Tipo", value: conCategoria && client.customFields?.categoria ? rotuloCategoria(client.customFields.categoria) : null },
                     { label: "Origen", value: client.customFields?.origin },
                   ]
                     .filter(({ value }) => !!value)

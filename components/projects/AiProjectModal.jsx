@@ -88,7 +88,10 @@ export default function AiProjectModal({ onClose }) {
         body: JSON.stringify({ prompt: prompt.trim(), clientId: clientId || undefined }),
       });
       const j = await r.json();
-      if (!r.ok) throw new Error(j?.error || "Error generando el proyecto");
+      // `j.ok` y no solo `r.ok`: /ai/generate contesta SIEMPRE 200 porque la
+      // respuesta empieza a viajar antes de saber cómo acaba (el latido que
+      // evita que nginx corte la conexión a los 60 s). El fallo viene dentro.
+      if (!r.ok || j?.ok === false) throw new Error(j?.error || "Error generando el proyecto");
       setPlan(j?.data?.plan ?? null);
       setFake(!!j?.data?.fake);
       setOpenPhases(new Set([0]));
