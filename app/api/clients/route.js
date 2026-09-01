@@ -21,7 +21,7 @@ import { entrarEnListaEspera } from "../../../lib/clients/listaEspera.js";
 import { filtroDeVisibilidad, normalizarCategoria, veTodasLasExternas } from "../../../lib/clients/consultaExterna.js";
 import { resolveCurrentTeamMemberId } from "../../../lib/team/currentTeamMember.js";
 import { filtroPorNombre } from "../../../lib/utils/busquedaDb.js";
-import { pacientesQueCasan } from "../../../lib/clients/buscarPorPaciente.js";
+import { pacientesQueCasan } from "../../../lib/clients/familiasPorPaciente.js";
 
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   if (!hasModule("clients")) return forbidden();
@@ -92,13 +92,13 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
    */
   // …y también por el nombre del PACIENTE (31/08/2026, Rodrigo): en un centro
   // clínico se conoce al niño, no al pagador. La regla compartida vive en
-  // lib/clients/buscarPorPaciente.js; sin módulo de pacientes no cambia nada.
+  // lib/clients/familiasPorPaciente.js; sin módulo de pacientes no cambia nada.
   let porPacienteMapa = null;
   if (search) {
     const porNombre = await filtroPorNombre(Client.sequelize, search, [
       "Client.name", "Client.email", "Client.phone",
     ]);
-    const casan = await pacientesQueCasan(tenantModels.Patient, search);
+    const casan = await pacientesQueCasan({ q: search, Patient: tenantModels.Patient, hasModule });
     const o = [];
     if (porNombre) o.push(porNombre);
     if (casan.length) o.push({ id: { [Op.in]: [...new Set(casan.map((x) => x.clientId))] } });

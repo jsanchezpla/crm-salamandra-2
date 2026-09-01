@@ -2,7 +2,7 @@ import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, forbidden, notFound, serverError } from "../../../../lib/utils/apiResponse.js";
 import { filtroPorNombre } from "../../../../lib/utils/busquedaDb.js";
-import { pacientesQueCasan } from "../../../../lib/clients/buscarPorPaciente.js";
+import { pacientesQueCasan } from "../../../../lib/clients/familiasPorPaciente.js";
 
 /**
  * El buscador de fichas DE FACTURACIÓN (31/08/2026).
@@ -15,7 +15,7 @@ import { pacientesQueCasan } from "../../../../lib/clients/buscarPorPaciente.js"
  * nunca la ficha entera.
  *
  * Busca por el nombre del pagador Y por el del paciente (la regla compartida,
- * lib/clients/buscarPorPaciente.js): Rosa conoce al niño, no al pagador.
+ * lib/clients/familiasPorPaciente.js): Rosa conoce al niño, no al pagador.
  *
  * Sin el filtro de consultas externas a propósito: quien cobra tiene que
  * poder cobrar a todo el centro, y aquí no viaja nada clínico.
@@ -49,7 +49,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
         "Client.name", "Client.email", "Client.phone",
       ]);
       if (porNombre) or.push(porNombre);
-      casan = await pacientesQueCasan(Patient, search);
+      casan = await pacientesQueCasan({ q: search, Patient, hasModule });
       if (casan.length) or.push({ id: { [Op.in]: [...new Set(casan.map((x) => x.clientId))] } });
       // Texto que no casa con nada buscable → nadie, no todo el centro.
       if (!or.length) return ok({ clients: [], total: 0 });
