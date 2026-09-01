@@ -8,7 +8,9 @@ import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMemb
 import { getClientDir } from "../../../../lib/clients/attachmentStorage.js";
 import { borrarRastroDelCliente } from "../../../../lib/clients/borrarRastro.js";
 import { entradaDeCliente } from "../../../../lib/clients/listaEspera.js";
+import { terapeutaAPacientesDeFamilia } from "../../../../lib/clients/profesionalFamilia.js";
 import { fechaONull } from "../../../../lib/clients/formularioAlta.js";
+import { categoriaONull } from "../../../../lib/booking/categorias.js";
 import { esEstadoDeFicha } from "../../../../lib/clients/estados.js";
 import { bonosDeCliente } from "../../../../lib/citas/packs.js";
 import {
@@ -153,6 +155,13 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
     ...(body.status !== undefined || base.seStatus !== undefined
       ? { seStatus: body.status ?? base.seStatus }
       : {}),
+    // El tipo de contratante (01/09/2026). Se mira `"categoria" in body` y no
+    // el valor por lo mismo que el embudo de aquí arriba: quien no lo pregunta
+    // —la ficha de una clínica, el botón que avanza el estado— no lo manda y no
+    // tiene por qué pisarlo. Cuando SÍ viene, `""` borra (es «Sin especificar»,
+    // la única forma de deshacer un tipo mal puesto) y una clave inventada no
+    // entra: `categoriaONull` la deja en null.
+    ...("categoria" in body ? { categoria: categoriaONull(body.categoria) } : {}),
   };
 
   // Datos fiscales (solo si vienen explícitos en el body).
@@ -298,6 +307,18 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
     }
     baseUpdate.assignedTeamMemberId = valor;
   }
+  /*
+   * Asignar profesional a la FAMILIA llega también a sus PACIENTES (31/08/2026,
+   * Rodrigo: «es confuso que no esté en los dos lados igual»). La regla y su
+   * límite —solo a los pacientes que no tengan terapeuta, nunca pisando uno
+   * puesto a propósito— viven en lib/clients/profesionalFamilia.js. Se decide
+   * AQUÍ, antes del update, comparando con lo que había: re-guardar la ficha
+   * con el mismo profesional no tiene que re-propagar nada.
+   */
+  const profesionalNuevo =
+    baseUpdate.assignedTeamMemberId && baseUpdate.assignedTeamMemberId !== (client.assignedTeamMemberId ?? null)
+      ? baseUpdate.assignedTeamMemberId
+      : null;
 
   // Transacción: datos base + upsert del principal (email/phone) → espejo en
   // Client.email/phone. Si el tenant aún no tiene client_contact_methods (42P01),
@@ -318,6 +339,22 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
   }
 
   await client.reload();
+
+  // El profesional nuevo, a los pacientes de la familia que no tengan terapeuta.
+  // DESPUÉS del guardado y en su propia transacción: si esto fallara, la ficha
+  // ya está guardada y volver a elegir al profesional lo reintenta.
+  let pacientesConProfesional = 0;
+  if (profesionalNuevo) {
+    pacientesConProfesional = await tenantSequelize.transaction((t) =>
+      terapeutaAPacientesDeFamilia({
+        ctx: { tenantModels, tenantSequelize, hasModule },
+        clientId: client.id,
+        terapeutaId: profesionalNuevo,
+        transaction: t,
+      })
+    );
+  }
+
   await auditar({
     tenantId: tenant.id,
     ...datosPeticion(request),
@@ -327,7 +364,10 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
     // `assignedTeamMemberId` en el resumen (10/08/2026): en una consulta externa
     // ese id decide quién ve la ficha, así que un cambio de profesional tiene
     // que dejar rastro de a quién se le pasó.
-    after: resumen(client, ["name", "email", "phone", "type", "status", "assignedTeamMemberId"]),
+    after: {
+      ...resumen(client, ["name", "email", "phone", "type", "status", "assignedTeamMemberId"]),
+      ...(profesionalNuevo ? { pacientesConProfesional } : {}),
+    },
   });
   return ok(client);
 });

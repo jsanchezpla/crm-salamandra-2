@@ -1,8 +1,7 @@
-import ExcelJS from "exceljs";
-
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { previsualizar, hashDeFichero } from "../../../../../lib/fichaje/importar.js";
+import { leerLibro } from "../../../../../lib/fichaje/leerLibro.js";
 
 const ADMIN = new Set(["admin", "superadmin"]);
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -32,12 +31,24 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(periodo)) return error("Falta el mes o no tiene formato AAAA-MM");
     if (file.size > MAX_BYTES) return error(`El fichero pasa de ${MAX_BYTES / 1024 / 1024} MB`);
 
+    // Los nombres ya asignados en el modal, para recontar con ellos puestos.
+    // Sigue sin escribirse NADA: el alias se guarda al aplicar, no aquí.
+    let mapeos = {};
+    const crudo = form.get("mapeos");
+    if (crudo) {
+      try {
+        mapeos = JSON.parse(String(crudo));
+      } catch {
+        return error("`mapeos` no es un JSON válido");
+      }
+    }
+
     const buffer = Buffer.from(await file.arrayBuffer());
-    const workbook = new ExcelJS.Workbook();
+    let workbook;
     try {
-      await workbook.xlsx.load(buffer);
+      workbook = await leerLibro(buffer);
     } catch {
-      return error("No se ha podido abrir el fichero: ¿es un .xlsx de verdad?", 422);
+      return error("No se ha podido abrir el fichero: ¿es un Excel de verdad (.xlsx o .xls)?", 422);
     }
 
     const preview = await previsualizar({
@@ -46,6 +57,7 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
       slug: request.headers.get("x-tenant"),
       tenantModels,
       fileHash: hashDeFichero(buffer),
+      mapeos,
     });
 
     return ok({ ...preview, fileName: file.name || null });

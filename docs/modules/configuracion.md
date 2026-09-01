@@ -62,7 +62,7 @@ El reparto es por PREGUNTA, no por orden de llegada:
 | **Agenda** | ¿Cómo funciona tu agenda? | Recordatorios · Agenda compartida · Color de bloqueos · Videollamada · Avisos por WhatsApp |
 | **Reserva online** | ¿Qué puede reservar la gente sola? | Reserva abierta/cerrada · Cancelación · Las cuatro puertas · Página de reservas |
 | **Portal del cliente** | ¿Qué ve luego en su área? | Área privada · Bloqueo por impago |
-| **Módulos** | Lo que solo aplica a algunos | Derivaciones · Empresas de consultas externas · Permisos de IA |
+| **Módulos** | Lo que solo aplica a algunos | Derivaciones · Plantillas de informes y registros · **Incidencia automática por falta** (01/09/2026: a quién se le abre —y se le manda— la incidencia cuando alguien marca una falta en la agenda; ids de `team_members` en `settings.citas.incidenciaPorFalta`, vacío = apagado. Va aquí y no en «Agenda» por lo que enciende —una incidencia, del módulo asistencial— y porque «Agenda» entera cuelga de Citas y se resume con un solo aviso arriba) · Empresas de consultas externas · Permisos de IA |
 
 El reparto vive en **`lib/configuracion/pestanas.js`**, no en el JSX: de ahí
 sale también qué módulo hace útil cada tarjeta, y eso es una regla por módulos

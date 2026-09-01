@@ -19,8 +19,10 @@ import {
 import { normalizeGuardians } from "../../../lib/clients/guardians.js";
 import { entrarEnListaEspera } from "../../../lib/clients/listaEspera.js";
 import { filtroDeVisibilidad, normalizarCategoria, veTodasLasExternas } from "../../../lib/clients/consultaExterna.js";
+import { categoriaONull } from "../../../lib/booking/categorias.js";
 import { resolveCurrentTeamMemberId } from "../../../lib/team/currentTeamMember.js";
 import { filtroPorNombre } from "../../../lib/utils/busquedaDb.js";
+import { pacientesQueCasan } from "../../../lib/clients/familiasPorPaciente.js";
 
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   if (!hasModule("clients")) return forbidden();
@@ -89,11 +91,20 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
    * «hugo díaz» no encontraban a «Hugo Castro Díaz», ni «diaz» sin tilde. El
    * porqué, en `lib/utils/busqueda.js`.
    */
+  // …y también por el nombre del PACIENTE (31/08/2026, Rodrigo): en un centro
+  // clínico se conoce al niño, no al pagador. La regla compartida vive en
+  // lib/clients/familiasPorPaciente.js; sin módulo de pacientes no cambia nada.
+  let porPacienteMapa = null;
   if (search) {
     const porNombre = await filtroPorNombre(Client.sequelize, search, [
       "Client.name", "Client.email", "Client.phone",
     ]);
-    if (porNombre) (where[Op.and] ||= []).push(porNombre);
+    const casan = await pacientesQueCasan({ q: search, Patient: tenantModels.Patient, hasModule });
+    const o = [];
+    if (porNombre) o.push(porNombre);
+    if (casan.length) o.push({ id: { [Op.in]: [...new Set(casan.map((x) => x.clientId))] } });
+    if (o.length) (where[Op.and] ||= []).push({ [Op.or]: o });
+    if (casan.length) porPacienteMapa = new Map(casan.map((x) => [String(x.clientId), x.nombre]));
   }
 
   // ── Ordenación (04/08/2026) ───────────────────────────────────────────────
@@ -149,7 +160,12 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   }
 
   const { rows, count } = result;
-  return ok({ clients: rows, total: count, page, pages: Math.ceil(count / limit) });
+  // Cuando la ficha salió por su paciente, se dice cuál: sin eso el resultado
+  // parece un error («busqué a Hugo y me sale Vanesa Muñoz»).
+  const clients = porPacienteMapa
+    ? rows.map((r) => ({ ...r.toJSON(), porPaciente: porPacienteMapa.get(String(r.id)) ?? null }))
+    : rows;
+  return ok({ clients, total: count, page, pages: Math.ceil(count / limit) });
 });
 
 export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, tenantSequelize, hasModule, tenantHasModule, hasFeatureFlag, user }) => {
@@ -208,6 +224,11 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, ten
     origin: body.origin || "manual",
     leadId: body.leadId || null,
     seStatus: body.status || "new",
+    // De qué tipo es el contratante (`lib/booking/categorias.js`, 01/09/2026).
+    // Se acepta en PLANO —es como lo manda el formulario de alta— y anidado,
+    // por si llega de una importación. No se gatea por `booking`: la puerta es
+    // la lista cerrada, y un tipo válido guardado de más no lo mira nadie.
+    categoria: categoriaONull(body.categoria ?? extraCustom.categoria),
   };
 
   const emailN = normalizeContactValue("email", email);

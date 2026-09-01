@@ -5,6 +5,8 @@ import { logBillingAudit, resumenImporte, datosPeticion } from "../../../../lib/
 import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { calculateInvoice } from "../../../../lib/billing/calculateInvoice.js";
 import { assignQuoteNumber } from "../../../../lib/billing/generateQuoteNumber.js";
+import { ivaPorDefecto } from "../../../../lib/billing/ivaPorDefecto.js";
+import { idsDeFamiliaPorPaciente } from "../../../../lib/clients/familiasPorPaciente.js";
 import { parseSortOrder } from "../../../../lib/billing/parseSort.js";
 
 import { ATRIBUTOS_CLIENTE_FACTURA } from "../../../../lib/billing/nifCliente.js";
@@ -36,7 +38,14 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
      */
     if (q) {
       const porNombre = await filtroPorNombre(Quote.sequelize, q, ["Quote.number", "client.name"]);
-      if (porNombre) (where[Op.and] ||= []).push(porNombre);
+      // También por el nombre del paciente (31/08/2026): al niño se le conoce
+      // por su nombre y la familia paga con otro. Mismo reparto que en Citas,
+      // vía lib/clients/familiasPorPaciente.js. La lista SOLO entra si tiene
+      // algo: un IN () vacío en el Op.or mataría la búsqueda por nombre.
+      const familias = await idsDeFamiliaPorPaciente({ q, Patient: tenantModels.Patient, hasModule });
+      const alternativas = [porNombre, familias.length ? { clientId: { [Op.in]: familias } } : null].filter(Boolean);
+      if (alternativas.length === 1) (where[Op.and] ||= []).push(alternativas[0]);
+      else if (alternativas.length > 1) (where[Op.and] ||= []).push({ [Op.or]: alternativas });
     }
 
     const allowedSort = {
@@ -93,7 +102,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     const issue = issueDate || new Date().toISOString().slice(0, 10);
 
     const settings = await TenantBillingSettings.findOne();
-    const defaultVat = settings ? Number(settings.defaultVatRate) : 21;
+    const defaultVat = ivaPorDefecto(settings);
     const linesWithVat = (Array.isArray(lines) ? lines : []).map((l) => ({
       ...l,
       vatRate: l.vatRate != null ? Number(l.vatRate) : defaultVat,

@@ -1,5 +1,6 @@
 import { esEstadoDeFicha } from "../../../../lib/clients/estados.js";
 import { filtroDeVisibilidad } from "../../../../lib/clients/consultaExterna.js";
+import { rotuloCategoria } from "../../../../lib/booking/categorias.js";
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
 import { filtroPorNombre } from "../../../../lib/utils/busquedaDb.js";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
@@ -80,9 +81,23 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   workbook.creator = "CRM Salamandra";
   const sheet = workbook.addWorksheet("Clientes");
 
+  /*
+   * La columna «Tipo», solo donde significa algo (01/09/2026, Rodrigo).
+   *
+   * Desde el 28/08/2026 este Excel FILTRA por tipo pero no lo sacaba: bajabas
+   * «festivales» y el fichero no decía de ninguna fila que lo fuera, así que
+   * fuera del CRM —que es a lo que va un Excel— el dato se perdía. Va detrás de
+   * Empresa, en el mismo orden que la pantalla (Contratante · Tipo · Email).
+   *
+   * Gateada por `booking` como en la lista: una columna vacía en las 1.083
+   * fichas de un centro clínico es una pregunta que nadie hizo.
+   */
+  const conCategoria = hasModule("booking");
+
   sheet.columns = [
     { header: "Nombre", key: "name", width: 25 },
     { header: "Empresa", key: "company", width: 28 },
+    ...(conCategoria ? [{ header: "Tipo", key: "tipo", width: 18 }] : []),
     { header: "Email", key: "email", width: 30 },
     { header: "Teléfono", key: "phone", width: 15 },
     { header: "País", key: "country", width: 18 },
@@ -103,6 +118,13 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     sheet.addRow({
       name: c.name || "",
       company: c.customFields?.company || "",
+      // El rótulo humano, no la clave: en la base vive `sala` y aquí se lee
+      // «Sala / club», lo mismo que en la columna de la pantalla. Sin tipo va
+      // vacía y no el «—» de la lista: en una hoja de cálculo ese guión es
+      // texto, y ordenar o filtrar por esa columna lo pondría por delante.
+      ...(conCategoria
+        ? { tipo: c.customFields?.categoria ? rotuloCategoria(c.customFields.categoria) : "" }
+        : {}),
       email: c.email || "",
       phone: c.phone || "",
       country: c.customFields?.country || "",

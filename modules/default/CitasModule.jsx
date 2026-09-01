@@ -7,6 +7,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import HelpTooltip from "../../components/ui/HelpTooltip.jsx";
 import FullCalendar from "@fullcalendar/react";
@@ -21,8 +22,13 @@ import { COLOR_BLOQUEO_POR_DEFECTO, colorTextoSobre } from "@/lib/citas/coloresB
 import { SIN_PROFESIONAL, COLOR_CITA_POR_DEFECTO } from "@/lib/citas/filtros.js";
 import { fmtDateTime, toDateInput, toTimeInput } from "./citas/chips.jsx";
 import { CitaDetalleModal } from "./citas/CitaDetalleModal.jsx";
+import { CitaMenuContextual } from "./citas/CitaMenuContextual.jsx";
+import { BloqueoModal } from "./citas/BloqueoModal.jsx";
+import { destinoDePegado, sePuedeMover } from "@/lib/citas/pegarCita.js";
+import { fichaDeLaCita } from "@/lib/citas/fichaDeLaCita.js";
 import { NuevaCitaDrawer } from "./citas/NuevaCitaDrawer.jsx";
 import { Waitlist } from "./citas/Waitlist.jsx";
+import MiniMeses from "./citas/MiniMeses.jsx";
 
 /**
  * `conClientes` y `vocabulario` los resuelve la página (servidor): son para el
@@ -30,6 +36,30 @@ import { Waitlist } from "./citas/Waitlist.jsx";
  */
 export default function CitasModule({ conClientes = false, vocabulario = undefined }) {
   const calendarRef = useRef(null);
+  const router = useRouter();
+  // Menú contextual de una cita (clic derecho sobre la caja): { x, y, titulo,
+  // cita: { id, startStr, props } } o null. Y el portapapeles de cortar/copiar:
+  // { modo: "cortar" | "copiar", cita } — el siguiente clic sobre el
+  // calendario pega (lib/citas/pegarCita.js).
+  const [menuCita, setMenuCita] = useState(null);
+  const [portapapeles, setPortapapeles] = useState(null);
+  // El bloqueo pulsado en el calendario, para su modal pequeño (31/08/2026):
+  // { id, titulo, label, categoryKey, start, end } o null.
+  const [bloqueoAbierto, setBloqueoAbierto] = useState(null);
+  /*
+   * Las categorías de bloqueo del centro (01/09/2026), que llegan junto al
+   * listado de bloqueos. En un `ref` y no en un `useState` a propósito: el
+   * listado se pide desde el `events` de FullCalendar, y un `setState` ahí
+   * dispara un render que vuelve a pedir eventos. El único que las lee es el
+   * modal, que se monta DESPUÉS de un clic: para entonces el ref ya está.
+   */
+  const categoriasBloqueoRef = useRef([]);
+  // Y el equipo, por lo mismo otra vez: al colgar un documento de un bloqueo se
+  // elige a quién se le pide que lo lea (01/09/2026). `administracionRef` son
+  // los ids de quien lleva la administración del centro, para el botón «Todos
+  // menos Administración» del selector.
+  const equipoRef = useRef([]);
+  const administracionRef = useRef([]);
   // Vista: "calendar" (por defecto) o "waitlist". La lista de espera son las
   // reservas en estado 'pending' (solicitudes de la web sin confirmar). El
   // globito rojo de la pestaña muestra cuántas hay sin atender.
@@ -72,6 +102,28 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
 
   const calViewRef = useRef({ view: "timeGridWeek", date: null });
   const [calView, setCalView] = useState({ view: "timeGridWeek", date: null });
+
+  /*
+   * La columna de meses «tipo Organízate» (31/08/2026, Rodrigo): dos meses en
+   * miniatura a la izquierda para saltar a un día de un clic. En Organízate
+   * está siempre; aquí se abre con el botón «Meses» de la botonera y se
+   * cierra para recuperar el calendario a todo lo ancho. Se queda como se
+   * dejó (localStorage): quien venía de Organízate la querrá siempre puesta.
+   * Arranca cerrada y el guardado se lee tras montar, que es como se evita
+   * que el HTML del servidor y el del navegador digan cosas distintas.
+   */
+  const [mesesAbiertos, setMesesAbiertos] = useState(false);
+  useEffect(() => {
+    try { setMesesAbiertos(localStorage.getItem("citas.miniMeses") === "1"); } catch { /* sin memoria, arranca cerrada */ }
+  }, []);
+  // Lo que enseña el calendario grande, en milisegundos, para que la columna
+  // marque esos días y pinte el mes que se está mirando (datesSet lo rellena).
+  const [vistaRango, setVistaRango] = useState(null);
+  // Al abrir o cerrar la columna cambia el ancho disponible sin que cambie la
+  // ventana, y FullCalendar solo se re-mide solo con la ventana: se le pide.
+  useEffect(() => {
+    calendarRef.current?.getApi()?.updateSize();
+  }, [mesesAbiertos]);
   const [eventTypes, setEventTypes] = useState([]);
   const [visibleEtIds, setVisibleEtIds] = useState(null); // null = todos
   const [openBooking, setOpenBooking] = useState(null); // booking abierto en modal detalle
@@ -99,7 +151,7 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
   const [festivosAbierto, setFestivosAbierto] = useState(false);
 
   // Preguntas y avisos, dentro del CRM y no del navegador (12/08/2026, Rodrigo).
-  const { confirmar, avisar, pedirTexto, elegir, dialogo } = useDialogo();
+  const { confirmar, avisar, pedirTexto, dialogo } = useDialogo();
 
   // Cuántas solicitudes pendientes hay (para el globito de la pestaña). No
   // cambia de vista: el usuario decidió arrancar SIEMPRE en el calendario.
@@ -235,6 +287,30 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
    */
   const miFichaDeEquipo = teamMembers.find((m) => m.userId === viewerUserId) ?? null;
 
+  /*
+   * ── LA AGENDA SE ABRE EN LA MÍA (01/09/2026, Rodrigo) ──────────────────────
+   *
+   * «Que de forma predeterminada salgan las que me atañen a mí.» Con la agenda
+   * compartida encendida, Aumenta pinta las citas de dieciocho personas a la
+   * vez: quien entra a mirar lo suyo tenía que filtrarse a sí mismo cada vez
+   * que abría la pantalla.
+   *
+   * Es un valor INICIAL, no una restricción: el filtro sigue ahí y «Todo el
+   * equipo» está a un clic. Por eso se pone una sola vez (`ref`) y no en cada
+   * repintado — si no, elegir «Todo el equipo» duraría hasta el siguiente
+   * render y la pantalla se sentiría embrujada.
+   *
+   * Solo cuando hay filtro que preseleccionar (`veTodaLaAgenda`) y quien mira
+   * TIENE ficha de equipo: dirección sin ficha propia sigue abriendo el centro
+   * entero, que es lo suyo.
+   */
+  const filtroInicialPuesto = useRef(false);
+  useEffect(() => {
+    if (filtroInicialPuesto.current || !veTodaLaAgenda || !miFichaDeEquipo) return;
+    filtroInicialPuesto.current = true;
+    setVisibleTmIds([miFichaDeEquipo.id]);
+  }, [veTodaLaAgenda, miFichaDeEquipo]);
+
   // Pacientes para asignar la cita (sólo tenants con módulo Clínica/Pacientes:
   // si el endpoint responde 403, `patients` queda vacío y el selector se oculta).
   useEffect(() => {
@@ -292,6 +368,9 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
         );
         const jb = await rb.json();
         if (jb.ok) {
+          categoriasBloqueoRef.current = jb.data.categorias ?? [];
+          equipoRef.current = jb.data.equipo ?? [];
+          administracionRef.current = jb.data.administracion ?? [];
           fondos = (jb.data.bloqueos ?? [])
             .filter((b) => {
               // Los cierres del centro (sin persona) los ve todo el mundo:
@@ -324,7 +403,24 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
                * centro no tienen persona, y decirlo con todas las letras evita
                * leerlos como el bloqueo de alguien.
                */
-              title: `${b.label} · ${b.teamMemberName || "Todo el centro"}`,
+              /*
+               * Y con su CATEGORÍA delante desde el 01/09/2026, cuando la
+               * tiene: el color ya la distingue, pero el color solo se entiende
+               * si en algún sitio pone qué es. No se repite si el motivo libre
+               * dice ya lo mismo («Descanso · Descanso» no informa de nada).
+               */
+              /*
+               * Y con un clip al final cuando cuelga algún documento
+               * (01/09/2026): el acta de la reunión se ve que está SIN abrir el
+               * bloqueo, que es justo lo que se pidió («si entran en la cita
+               * del bloqueo vean el documento aparejado»).
+               */
+              title:
+                [
+                  b.categoryLabel && b.categoryLabel !== b.label ? b.categoryLabel : null,
+                  b.label,
+                  b.teamMemberName || "Todo el centro",
+                ].filter(Boolean).join(" · ") + (b.documentos > 0 ? " 📎" : ""),
               start: b.startAt,
               end: b.endAt,
               /*
@@ -346,10 +442,19 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
               // La letra se calcula contra el fondo elegido: en un color claro
               // el blanco de antes no se leería.
               textColor: colorTextoSobre(b.color || COLOR_BLOQUEO_POR_DEFECTO),
-              // No se arrastra ni se cambia de hora tirando de él: se quita y
-              // se vuelve a poner desde Tipos de cita.
-              editable: false,
-              extendedProps: { esBloqueo: true },
+              /*
+               * Arrastrable desde el 31/08/2026 (Rodrigo): mover un bloqueo
+               * es reprogramarlo, igual que una cita — el PATCH de
+               * /api/citas/bloqueos pone las vallas (cada cual lo suyo, los
+               * cierres del centro solo dirección). Pulsar uno abre el modal
+               * pequeño (BloqueoModal) para concepto, fecha y duración; la
+               * gestión completa sigue en la pestaña de Bloqueos.
+               */
+              editable: true,
+              extendedProps: {
+                esBloqueo: true, bloqueoId: b.id, label: b.label,
+                categoryKey: b.categoryKey ?? null, tallerId: b.tallerId ?? null,
+              },
             }));
         }
       } catch { /* la agenda se ve igual, sin sombrear */ }
@@ -385,9 +490,20 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
    */
 
   async function handleEventClick(info) {
-    // Los bloqueos de vacaciones son fondo, no citas: no hay ficha que abrir y
-    // pedirla daría un 404. Se quitan desde Tipos de cita.
-    if (info.event.extendedProps?.esBloqueo) return;
+    // Un bloqueo no tiene ficha que abrir: pulsar abre su modal pequeño
+    // (concepto, fecha y duración — 31/08/2026).
+    if (info.event.extendedProps?.esBloqueo) {
+      setBloqueoAbierto({
+        id: info.event.extendedProps.bloqueoId,
+        titulo: info.event.title,
+        label: info.event.extendedProps.label,
+        categoryKey: info.event.extendedProps.categoryKey ?? null,
+        tallerId: info.event.extendedProps.tallerId ?? null,
+        start: info.event.start,
+        end: info.event.end ?? info.event.start,
+      });
+      return;
+    }
     const id = info.event.id;
     const res = await fetch(`/api/citas/bookings/${id}`, { cache: "no-store" });
     const j = await res.json();
@@ -405,12 +521,129 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
     setCreacion({ date, time });
   }
 
+  /*
+   * ── MENÚ CONTEXTUAL DE LA CITA (31/08/2026, Rodrigo en la formación) ──────
+   * Clic derecho sobre una cita → información del paciente, cortar, copiar y
+   * cobrar. Cortar y copiar dejan la cita en `portapapeles` y el SIGUIENTE
+   * clic sobre el calendario la pega (cortar reprograma la misma cita; copiar
+   * crea una nueva con los mismos datos). Cobrar salta a Cobros con el
+   * cliente ya puesto. Las reglas puras viven en lib/citas/pegarCita.js.
+   */
+  function handleEventContextMenu(e, info) {
+    if (info.event.extendedProps?.esBloqueo) return;
+    e.preventDefault();
+    setMenuCita({
+      x: e.clientX,
+      y: e.clientY,
+      titulo: info.event.title,
+      cita: { id: info.event.id, startStr: info.event.startStr, props: info.event.extendedProps },
+    });
+  }
+
+  function accionesDeMenu() {
+    if (!menuCita) return [];
+    const { cita } = menuCita;
+    const ficha = fichaDeLaCita(cita.props, { conClientes, vocabulario });
+    const viva = sePuedeMover(cita.props?.status);
+    const cerrar = () => setMenuCita(null);
+    return [
+      {
+        id: "ficha",
+        icono: "👤",
+        rotulo: ficha ? `Información de ${ficha.rotulo.toLowerCase()}` : "Información del paciente",
+        deshabilitada: !ficha,
+        motivo: "La cita no está enlazada a ninguna ficha",
+        onClick: () => { cerrar(); if (ficha) router.push(ficha.href); },
+      },
+      {
+        id: "cortar",
+        icono: "✂️",
+        rotulo: "Cortar (mover a otro hueco)",
+        deshabilitada: !viva,
+        motivo: "Una cita cancelada o pasada ya no se mueve",
+        onClick: () => { cerrar(); setPortapapeles({ modo: "cortar", cita }); },
+      },
+      {
+        id: "copiar",
+        icono: "📋",
+        rotulo: "Copiar a otro hueco",
+        deshabilitada: false,
+        onClick: () => { cerrar(); setPortapapeles({ modo: "copiar", cita }); },
+      },
+      {
+        id: "cobrar",
+        icono: "💶",
+        rotulo: "Cobrar",
+        deshabilitada: !cita.props?.clientId,
+        motivo: "Sin ficha enlazada no se sabe a quién cobrar",
+        onClick: () => {
+          cerrar();
+          router.push(`/facturacion/cobros?abrir=cuota&cliente=${cita.props.clientId}`);
+        },
+      },
+    ];
+  }
+
+  // Pegar lo cortado/copiado en el hueco pulsado. Cortar = reprogramar la
+  // MISMA cita (el PATCH ya valida solapamientos); copiar = alta nueva con los
+  // datos de la original (el POST valida festivos, bloqueos y solapes igual
+  // que el drawer de «Nueva cita»).
+  async function pegarEn(dateStr) {
+    const { modo, cita } = portapapeles;
+    setPortapapeles(null);
+    const destino = destinoDePegado(dateStr, cita.startStr);
+    if (!destino) return;
+    try {
+      if (modo === "cortar") {
+        const res = await fetch(`/api/citas/bookings/${cita.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scheduledAt: destino }),
+        });
+        const j = await res.json();
+        if (!j.ok) throw new Error(j.error || "No se pudo mover la cita");
+      } else {
+        const p = cita.props ?? {};
+        const res = await fetch("/api/citas/bookings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            eventTypeId: p.eventTypeId,
+            clientName: p.clientName,
+            clientId: p.clientId || null,
+            patientId: p.patientId || null,
+            clientEmail: p.clientEmail || null,
+            clientPhone: p.clientPhone || null,
+            teamMemberId: p.teamMemberId || null,
+            modality: p.modality,
+            scheduledAt: destino,
+          }),
+        });
+        const j = await res.json();
+        if (!j.ok) throw new Error(j.error || "No se pudo copiar la cita");
+      }
+      calendarRef.current?.getApi().refetchEvents();
+    } catch (err) {
+      await avisar({ titulo: modo === "cortar" ? "La cita no se ha movido" : "La cita no se ha copiado", texto: err.message });
+    }
+  }
+
+  // Con el portapapeles cargado, Escape cancela sin pegar nada.
+  useEffect(() => {
+    if (!portapapeles) return;
+    function tecla(e) { if (e.key === "Escape") setPortapapeles(null); }
+    document.addEventListener("keydown", tecla);
+    return () => document.removeEventListener("keydown", tecla);
+  }, [portapapeles]);
+
   // Doble clic en un hueco vacío → nueva cita lista para editar. FullCalendar
   // no distingue el doble clic, así que lo detectamos: dos `dateClick` sobre
   // la MISMA hora en menos de 400 ms. Un clic suelto no hace nada (evita abrir
   // el formulario cada vez que rozas el calendario).
   const lastClickRef = useRef({ at: 0, key: "" });
   function handleDateClick(info) {
+    // Con algo en el portapapeles, el clic PEGA en vez de crear.
+    if (portapapeles) { pegarEn(info.dateStr); return; }
     const key = info.dateStr;
     const now = Date.now();
     const prev = lastClickRef.current;
@@ -424,6 +657,11 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
 
   // Clic y arrastrar sobre un rango horario → nueva cita a esa hora de inicio.
   function handleDateSelect(info) {
+    // Un clic suelto también dispara `select` (además de `dateClick`): con el
+    // portapapeles cargado, ese clic está PEGANDO una cita — abrir encima el
+    // drawer de «Nueva cita» era un segundo efecto no pedido. El pegado ya lo
+    // hace handleDateClick; aquí solo se deshace la selección.
+    if (portapapeles) { info.view?.calendar?.unselect(); return; }
     abrirCreacionEn(info.startStr);
     info.view?.calendar?.unselect();
   }
@@ -435,7 +673,28 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
   // canceladas/completadas no son arrastrables (startEditable=false desde el
   // endpoint del calendario).
   async function handleEventDrop(info) {
-    if (info.event.extendedProps?.esBloqueo) { info.revert(); return; }
+    // Un bloqueo también se reprograma arrastrando (31/08/2026): FullCalendar
+    // ya movió inicio Y fin (la duración no cambia, resize desactivado); el
+    // PATCH valida permisos y orden de fechas, y si no deja, se revierte.
+    if (info.event.extendedProps?.esBloqueo) {
+      try {
+        const res = await fetch(`/api/citas/bloqueos?id=${info.event.extendedProps.bloqueoId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            startAt: info.event.start?.toISOString(),
+            endAt: info.event.end?.toISOString(),
+          }),
+        });
+        const j = await res.json();
+        if (!j.ok) throw new Error(j.error || "No se pudo mover el bloqueo");
+        calendarRef.current?.getApi().refetchEvents();
+      } catch (err) {
+        info.revert();
+        await avisar({ titulo: "El bloqueo no se ha movido", texto: err.message });
+      }
+      return;
+    }
     const nuevoIso = info.event.start ? info.event.start.toISOString() : null;
     if (!nuevoIso) { info.revert(); return; }
     try {
@@ -462,8 +721,10 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
           byte y ya divergiendo en una regla. Al ser CSS global daba igual dónde
           se declararan, así que la copia que quedó es una. */}
 
-      {/* Header */}
-      <div className="px-6 lg:px-10 pt-8 pb-5 flex items-end justify-between shrink-0 border-b border-[var(--ink-200)] gap-6 flex-wrap">
+      {/* Header. Más recogido que el resto de cabeceras (31/08/2026, Rodrigo):
+          aquí cada píxel de arriba se lo come al calendario, que es lo que se
+          viene a mirar. */}
+      <div className="px-6 lg:px-10 pt-5 pb-4 flex items-end justify-between shrink-0 border-b border-[var(--ink-200)] gap-6 flex-wrap">
         <div>
           <div className="eyebrow mb-1.5 lg:mb-2">Tiempo · Agenda de citas</div>
           <h1 className="font-display text-[24px] lg:text-[34px] leading-[1.05] text-[var(--ink-900)] tracking-tight">
@@ -501,57 +762,165 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
         </div>
       </div>
 
-      {/* Pestañas: Calendario · Lista de espera (con globito de pendientes) */}
-      <div className="px-6 lg:px-10 pt-3 flex items-center gap-1 shrink-0">
-        <button
-          onClick={() => { setCalView(calViewRef.current); setTab("calendar"); }}
-          className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-            tab === "calendar" ? "bg-[var(--color-primary,#0F0F0F)] text-white" : "text-neutral-600 hover:bg-neutral-100"
-          }`}
-        >
-          Calendario
-        </button>
-        <button
-          onClick={() => { setTab("waitlist"); setWaitlistKey((k) => k + 1); }}
-          className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-2 ${
-            tab === "waitlist" ? "bg-[var(--color-primary,#0F0F0F)] text-white" : "text-neutral-600 hover:bg-neutral-100"
-          }`}
-        >
-          Lista de espera
-          {pendingCount > 0 && (
-            <span className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold ${
-              tab === "waitlist" ? "bg-white/25 text-white" : "bg-red-500 text-white"
-            }`}>
-              {pendingCount}
-            </span>
-          )}
-        </button>
-        {/* Fuera del botón: leer qué es no debe obligar a cambiar de pestaña. */}
-        <HelpTooltip title="Lista de espera" placement="bottom">
-          Citas que alguien ha pedido desde la web y esperan tu visto bueno. Si la cita tiene
-          precio, aquí el paciente <strong className="text-white">ya tiene el dinero retenido en
-          su tarjeta, pero todavía no se le ha cobrado</strong>: se le cobra al confirmar, y si la
-          rechazas se le suelta.
-          {" "}
-          No la confundas con la lista de espera de admisión, en Clientes: esa es gente esperando
-          plaza, sin fecha ni hora.
-        </HelpTooltip>
-        {viewerIsAdmin && (
+      {/*
+        Pestañas y filtros en UNA sola fila (31/08/2026, Rodrigo). Eran tres
+        bandas apiladas —pestañas, debajo Tipo/Profesional, y Festivos con fila
+        propia ya dentro del calendario— y la agenda arrancaba tres dedos más
+        abajo de lo necesario. Todo lo que gobierna la vista comparte ahora
+        fila: pestañas a la izquierda, filtros y Festivos pegados a la derecha;
+        donde no caben (móvil), la fila envuelve sola.
+
+        Los filtros son dos desplegables y no chips desde el 12/08/2026: en
+        Aumenta eran 74 botones en 10 filas, más alto que el propio calendario.
+      */}
+      <div className="px-6 lg:px-10 py-2.5 flex items-center gap-x-4 gap-y-2 flex-wrap shrink-0 border-b border-neutral-100">
+        <div className="flex items-center gap-1">
           <button
-            onClick={() => { setTab("requests"); loadChangeRequests(); }}
-            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-2 ${
-              tab === "requests" ? "bg-[var(--color-primary,#0F0F0F)] text-white" : "text-neutral-600 hover:bg-neutral-100"
+            onClick={() => { setCalView(calViewRef.current); setTab("calendar"); }}
+            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+              tab === "calendar" ? "bg-[var(--color-primary,#0F0F0F)] text-white" : "text-neutral-600 hover:bg-neutral-100"
             }`}
           >
-            Solicitudes
-            {changeReqPending > 0 && (
+            Calendario
+          </button>
+          <button
+            onClick={() => { setTab("waitlist"); setWaitlistKey((k) => k + 1); }}
+            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-2 ${
+              tab === "waitlist" ? "bg-[var(--color-primary,#0F0F0F)] text-white" : "text-neutral-600 hover:bg-neutral-100"
+            }`}
+          >
+            Lista de espera
+            {pendingCount > 0 && (
               <span className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold ${
-                tab === "requests" ? "bg-white/25 text-white" : "bg-red-500 text-white"
+                tab === "waitlist" ? "bg-white/25 text-white" : "bg-red-500 text-white"
               }`}>
-                {changeReqPending}
+                {pendingCount}
               </span>
             )}
           </button>
+          {/* Fuera del botón: leer qué es no debe obligar a cambiar de pestaña. */}
+          <HelpTooltip title="Lista de espera" placement="bottom">
+            Citas que alguien ha pedido desde la web y esperan tu visto bueno. Si la cita tiene
+            precio, aquí el paciente <strong className="text-white">ya tiene el dinero retenido en
+            su tarjeta, pero todavía no se le ha cobrado</strong>: se le cobra al confirmar, y si la
+            rechazas se le suelta.
+            {" "}
+            No la confundas con la lista de espera de admisión, en Clientes: esa es gente esperando
+            plaza, sin fecha ni hora.
+          </HelpTooltip>
+          {viewerIsAdmin && (
+            <button
+              onClick={() => { setTab("requests"); loadChangeRequests(); }}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-2 ${
+                tab === "requests" ? "bg-[var(--color-primary,#0F0F0F)] text-white" : "text-neutral-600 hover:bg-neutral-100"
+              }`}
+            >
+              Solicitudes
+              {changeReqPending > 0 && (
+                <span className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold ${
+                  tab === "requests" ? "bg-white/25 text-white" : "bg-red-500 text-white"
+                }`}>
+                  {changeReqPending}
+                </span>
+              )}
+            </button>
+          )}
+        </div>
+
+        {/* Lo que gobierna el calendario, solo con el calendario delante.
+            Sin rotulitos «TIPO»/«PROFESIONAL» delante de los desplegables
+            (31/08/2026): lo que enseñan ya lo dice — «Todos los tipos»,
+            «Todo el equipo», «3 tipos»… — y sus ~110 px eran justo los que
+            hacían saltar la fila a dos líneas en un portátil. */}
+        {tab === "calendar" && (
+          <div className="flex items-center gap-x-4 gap-y-2 flex-wrap lg:ml-auto">
+            {eventTypes.length > 0 && (
+            <>
+            <div className="w-[190px]">
+              <MultiSelect
+                aria-label="Filtrar por tipo de cita"
+                value={visibleEtIds}
+                onChange={setVisibleEtIds}
+                options={eventTypes.map((et) => ({
+                  value: et.id,
+                  label: et.name,
+                  color: et.color ?? "#3F6E5B",
+                }))}
+                etiquetaTodos="Todos los tipos"
+                resumen={(n) => `${n} tipos`}
+                // Con 57 tipos, encontrar uno a ojo es el trabajo de verdad.
+                searchable={eventTypes.length > 8}
+              />
+            </div>
+
+            {/* El filtro es de quien ve más de una agenda, no de quien manda:
+                con agenda compartida una terapeuta ve las de todo el centro y
+                necesita separarlas igual que dirección. */}
+            {veTodaLaAgenda && teamMembers.length > 1 && (
+              <div className="w-[190px]">
+                <MultiSelect
+                  aria-label="Filtrar por profesional"
+                  value={visibleTmIds}
+                  onChange={setVisibleTmIds}
+                  options={[
+                    ...teamMembers.map((m) => ({
+                      value: m.id,
+                      label: m.displayName,
+                      // El color casa con el de sus citas en el calendario.
+                      color: m.avatarColor ?? COLOR_CITA_POR_DEFECTO,
+                    })),
+                    /*
+                     * «Sin asignar», una más de la lista (25/08/2026, Rodrigo).
+                     *
+                     * Hasta hoy las citas sin profesional se colaban SIEMPRE al
+                     * filtrar por una persona, sin manera de apagarlas: 70 de
+                     * las 103 que veía en pantalla. Ahora no salen salvo que se
+                     * pidan, y se piden aquí. Repartirlas sigue siendo trabajo
+                     * de «Citas → Sin profesional», que es donde viven.
+                     */
+                    { value: SIN_PROFESIONAL, label: "Sin asignar", color: COLOR_CITA_POR_DEFECTO },
+                  ]}
+                  etiquetaTodos="Todo el equipo"
+                  resumen={(n) => `${n} profesionales`}
+                  searchable={teamMembers.length > 8}
+                />
+              </div>
+            )}
+
+            {/* Y si solo ve la suya, su nombre fijo en el mismo sitio: no se
+                elige porque no hay nada que elegir. Iba por rol y mentía —con
+                agenda compartida ponía «solo tus citas» encima de las citas de
+                todo el centro—, así que ahora pregunta lo mismo que el filtro. */}
+            {!veTodaLaAgenda && miFichaDeEquipo && (
+              <span
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[12px] text-neutral-600 bg-neutral-50 border border-neutral-200"
+                title="Ves tu agenda. Para ver la de otra persona hace falta dirección."
+              >
+                <span
+                  className="w-1.5 h-1.5 rounded-full shrink-0"
+                  style={{ background: miFichaDeEquipo.avatarColor ?? "#3F6E5B" }}
+                />
+                {miFichaDeEquipo.displayName}
+                <span className="text-neutral-400">· solo tus citas</span>
+              </span>
+            )}
+            </>
+            )}
+
+            {/* Festivos y cierres del centro. Solo admin: cerrar un día afecta
+                a la agenda de todo el equipo y a la reserva pública. El
+                recuento de días cerrados en la vista va dentro del botón. */}
+            {viewerIsAdmin && (
+              <button
+                type="button"
+                onClick={() => setFestivosAbierto(true)}
+                title={festivos.size > 0 ? `${festivos.size} día(s) cerrado(s) en la vista actual` : undefined}
+                className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-neutral-200 text-neutral-600 hover:bg-neutral-50 transition-colors whitespace-nowrap"
+              >
+                Festivos y cierres{festivos.size > 0 ? ` · ${festivos.size}` : ""}
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -623,94 +992,6 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
       )}
 
       {/*
-        Filtros de la agenda — una sola línea, dos desplegables (12/08/2026).
-        Antes eran dos bandas de chips: en Aumenta, 74 botones en 10 filas y
-        379 px de alto, más que los 335 px que le quedaban al calendario.
-        El de profesional sigue siendo solo del jefe y solo si hay más de uno.
-      */}
-      {tab === "calendar" && eventTypes.length > 0 && (
-        <div className="px-6 lg:px-10 py-2.5 flex items-center gap-x-5 gap-y-2 flex-wrap shrink-0 border-b border-neutral-100">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-[11px] uppercase tracking-wider text-neutral-400">Tipo</span>
-            <div className="w-[190px]">
-              <MultiSelect
-                aria-label="Filtrar por tipo de cita"
-                value={visibleEtIds}
-                onChange={setVisibleEtIds}
-                options={eventTypes.map((et) => ({
-                  value: et.id,
-                  label: et.name,
-                  color: et.color ?? "#3F6E5B",
-                }))}
-                etiquetaTodos="Todos los tipos"
-                resumen={(n) => `${n} tipos`}
-                // Con 57 tipos, encontrar uno a ojo es el trabajo de verdad.
-                searchable={eventTypes.length > 8}
-              />
-            </div>
-          </div>
-
-          {/* El filtro es de quien ve más de una agenda, no de quien manda:
-              con agenda compartida una terapeuta ve las de todo el centro y
-              necesita separarlas igual que dirección. */}
-          {veTodaLaAgenda && teamMembers.length > 1 && (
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-[11px] uppercase tracking-wider text-neutral-400">Profesional</span>
-              <div className="w-[190px]">
-                <MultiSelect
-                  aria-label="Filtrar por profesional"
-                  value={visibleTmIds}
-                  onChange={setVisibleTmIds}
-                  options={[
-                    ...teamMembers.map((m) => ({
-                      value: m.id,
-                      label: m.displayName,
-                      // El color casa con el de sus citas en el calendario.
-                      color: m.avatarColor ?? COLOR_CITA_POR_DEFECTO,
-                    })),
-                    /*
-                     * «Sin asignar», una más de la lista (25/08/2026, Rodrigo).
-                     *
-                     * Hasta hoy las citas sin profesional se colaban SIEMPRE al
-                     * filtrar por una persona, sin manera de apagarlas: 70 de
-                     * las 103 que veía en pantalla. Ahora no salen salvo que se
-                     * pidan, y se piden aquí. Repartirlas sigue siendo trabajo
-                     * de «Citas → Sin profesional», que es donde viven.
-                     */
-                    { value: SIN_PROFESIONAL, label: "Sin asignar", color: COLOR_CITA_POR_DEFECTO },
-                  ]}
-                  etiquetaTodos="Todos"
-                  resumen={(n) => `${n} profesionales`}
-                  searchable={teamMembers.length > 8}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Y si solo ve la suya, su nombre fijo en el mismo sitio: no se
-              elige porque no hay nada que elegir. Iba por rol y mentía —con
-              agenda compartida ponía «solo tus citas» encima de las citas de
-              todo el centro—, así que ahora pregunta lo mismo que el filtro. */}
-          {!veTodaLaAgenda && miFichaDeEquipo && (
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-[11px] uppercase tracking-wider text-neutral-400">Profesional</span>
-              <span
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[12px] text-neutral-600 bg-neutral-50 border border-neutral-200"
-                title="Ves tu agenda. Para ver la de otra persona hace falta dirección."
-              >
-                <span
-                  className="w-1.5 h-1.5 rounded-full shrink-0"
-                  style={{ background: miFichaDeEquipo.avatarColor ?? "#3F6E5B" }}
-                />
-                {miFichaDeEquipo.displayName}
-                <span className="text-neutral-400">· solo tus citas</span>
-              </span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/*
         Calendario.
 
         ⚠️ SIN SCROLL EN LA PÁGINA (12/08/2026, Rodrigo). Antes el alto de
@@ -722,29 +1003,20 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
         no puede desbordar.
       */}
       {tab === "calendar" && (
-        <div className="flex-1 min-h-0 flex flex-col px-6 lg:px-10 pt-3 pb-4">
+        <div className={`flex-1 min-h-0 flex flex-col px-6 lg:px-10 pt-3 pb-4 ${mesesAbiertos ? "meses-abiertos" : ""}`}>
           <p className="text-[11px] text-neutral-400 mb-2 lg:hidden shrink-0">
             Toca una cita para ver su ficha. Para crear o mover citas, mejor desde el ordenador.
           </p>
-          {/* Festivos y cierres del centro. Solo admin: cerrar un día afecta a
-              la agenda de todo el equipo y a la reserva pública. */}
-          {viewerIsAdmin && (
-            <div className="flex items-center gap-2 mb-2 flex-wrap shrink-0">
-              <button
-                type="button"
-                onClick={() => setFestivosAbierto(true)}
-                className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-neutral-200 text-neutral-600 hover:bg-neutral-50 transition-colors"
-              >
-                Festivos y cierres
-              </button>
-              {festivos.size > 0 && (
-                <span className="text-[11px] text-neutral-400">
-                  {festivos.size} día(s) cerrado(s) en la vista actual
-                </span>
-              )}
-            </div>
+          <div className="flex-1 min-h-0 flex gap-4">
+          {/* La columna de meses, cuando está desplegada: achata el calendario
+              y desaparece al cerrarla. En móvil nunca: no cabe. */}
+          {mesesAbiertos && !esMovil && (
+            <MiniMeses
+              vista={vistaRango}
+              alPulsarDia={(d) => calendarRef.current?.getApi()?.gotoDate(d)}
+            />
           )}
-          <div className="flex-1 min-h-0">
+          <div className="flex-1 min-w-0 min-h-0">
           <FullCalendar
             ref={calendarRef}
             plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
@@ -753,6 +1025,20 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
             datesSet={(arg) => {
               calViewRef.current = { view: arg.view.type, date: arg.startStr };
               cargarFestivos(arg.startStr.slice(0, 10), arg.endStr.slice(0, 10));
+              /*
+               * Para la columna de meses. OJO: `render()` también dispara
+               * datesSet (ver la nota de firmaFestivos), así que si la vista
+               * no ha cambiado se devuelve el MISMO objeto — un objeto nuevo
+               * con los mismos números re-renderizaría a cada repintado.
+               */
+              const s = arg.view.activeStart.getTime();
+              const e = arg.view.activeEnd.getTime();
+              const c = arg.view.currentStart.getTime();
+              setVistaRango((prev) =>
+                prev && prev.start === s && prev.end === e && prev.current === c
+                  ? prev
+                  : { start: s, end: e, current: c }
+              );
             }}
             // Los festivos se pintan atenuados y con la etiqueta del cierre.
             dayCellClassNames={(arg) => (festivos.has(ymdLocal(arg.date)) ? ["dia-festivo"] : [])}
@@ -774,8 +1060,26 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
             headerToolbar={
               esMovil
                 ? { left: "prev,next", center: "title", right: "listWeek,timeGridTresDias,timeGridDay" }
-                : { left: "prev,next today", center: "title", right: "dayGridMonth,timeGridWeek,timeGridTresDias,timeGridDay,listWeek" }
+                : { left: "meses prev,next today", center: "title", right: "dayGridMonth,timeGridWeek,timeGridTresDias,timeGridDay,listWeek" }
             }
+            /*
+             * El botón que abre y cierra la columna de meses. Va DENTRO de la
+             * botonera de FullCalendar y no suelto por la página: es un mando
+             * del calendario y ahí queda pegado a lo que gobierna. En móvil ni
+             * aparece: la columna no cabe y no se pinta.
+             */
+            customButtons={{
+              meses: {
+                text: "Meses",
+                hint: "Enseñar u ocultar los meses para saltar a un día",
+                click: () => {
+                  setMesesAbiertos((v) => {
+                    try { localStorage.setItem("citas.miniMeses", v ? "0" : "1"); } catch { /* sin memoria, solo esta visita */ }
+                    return !v;
+                  });
+                },
+              },
+            }}
             /*
              * Vista «3 días» (30/08/2026, Rodrigo): entre el día suelto y la
              * semana entera faltaba el término medio con el que se trabaja una
@@ -803,9 +1107,32 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
              * quepa) es CSS y vive en app/globals.css.
              */
             displayEventEnd={false}
+            /*
+             * Citas pegadas SIN montarse (31/08/2026, Rodrigo). FullCalendar
+             * estira toda caja hasta un mínimo de 15 px y usa la caja YA
+             * estirada para decidir si dos eventos chocan (computeSegVCoords
+             * de timegrid, con un «:(» del propio autor en esa línea). Un
+             * bloqueo de un cuarto de hora medía ~12 px, se estiraba, e
+             * invadía a la cita de las «y cuarto», que salía montada encima,
+             * a media anchura y con el nombre cortado. Tres piezas que van
+             * juntas: la rejilla es más alta (`.fc-timegrid-slot` en
+             * globals.css) para que un cuarto de hora ya mida más de 15 px y
+             * le quepa su línea de texto; el mínimo baja a 8 px para que una
+             * caja nunca ocupe más tiempo del que dura; y los solapes DE
+             * VERDAD (dos citas a la misma hora) se reparten lado a lado en
+             * vez de pintarse una tapando a la otra.
+             */
+            eventMinHeight={8}
+            slotEventOverlap={false}
             allDaySlot={false}
             events={fetchEvents}
             eventClick={handleEventClick}
+            // Clic derecho sobre la caja → menú contextual. FullCalendar no
+            // trae onContextMenu: se engancha al montarse cada evento (el
+            // listener muere con el elemento, no hay que soltarlo a mano).
+            eventDidMount={(info) => {
+              info.el.addEventListener("contextmenu", (e) => handleEventContextMenu(e, info));
+            }}
             selectable={true}
             selectMirror={true}
             dateClick={handleDateClick}
@@ -826,6 +1153,38 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
             buttonText={{ today: "Hoy", month: "Mes", week: "Semana", day: "Día", list: "Lista" }}
           />
           </div>
+          </div>
+        </div>
+      )}
+
+      {/* El modal pequeño del bloqueo pulsado (concepto, fecha, duración). */}
+      {bloqueoAbierto && (
+        <BloqueoModal
+          key={bloqueoAbierto.id}
+          bloqueo={bloqueoAbierto}
+          categorias={categoriasBloqueoRef.current}
+          equipo={equipoRef.current}
+          administracion={administracionRef.current}
+          onClose={() => setBloqueoAbierto(null)}
+          onSaved={() => {
+            setBloqueoAbierto(null);
+            calendarRef.current?.getApi().refetchEvents();
+          }}
+        />
+      )}
+
+      {/* Menú contextual de la cita (clic derecho) y el aviso del pegado. */}
+      {menuCita && (
+        <CitaMenuContextual menu={menuCita} acciones={accionesDeMenu()} onCerrar={() => setMenuCita(null)} />
+      )}
+      {portapapeles && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-neutral-900 text-white text-xs rounded-full px-4 py-2 shadow-pop flex items-center gap-3">
+          <span>
+            {portapapeles.modo === "cortar" ? "✂️ Cortando" : "📋 Copiando"} «{portapapeles.cita.props?.clientName ?? "cita"}» — haz clic en el hueco de destino
+          </span>
+          <button type="button" onClick={() => setPortapapeles(null)} className="text-white/60 hover:text-white transition-colors">
+            Cancelar (Esc)
+          </button>
         </div>
       )}
 
@@ -846,7 +1205,6 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
           confirmar={confirmar}
           avisar={avisar}
           pedirTexto={pedirTexto}
-          elegir={elegir}
           onClose={() => setOpenBooking(null)}
           onChanged={(data) => {
             setOpenBooking(data);

@@ -1,6 +1,8 @@
 import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
+import { mesesSeguidosSinPagar } from "../../../../lib/billing/mesesSinPagar.js";
+import { mesVigente, debeElMes } from "../../../../lib/billing/cuotas.js";
 
 /**
  * GET /api/billing/morosidad?mes=AAAA-MM — quién no ha pagado el mes
@@ -47,8 +49,15 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     }
 
     const sp = new URL(request.url).searchParams;
-    const mes = sp.get("mes") || mesDe(new Date());
+    const mes = sp.get("mes") || mesVigente();
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mes)) return error("El mes debe ser 'AAAA-MM'", 422);
+
+    // La morosidad de un mes NO EXISTE hasta su día 1 (01/09/2026, Rodrigo,
+    // universal): nadie debe septiembre en agosto. Salta sola el día 1 porque
+    // este es el freno y la pantalla abre en el mes vigente.
+    if (mes > mesVigente()) {
+      return ok({ mes, morosos: [], alDia: 0, aplicable: true, futuro: true });
+    }
 
     const pacientes = await Patient.findAll({
       where: { status: "active", clientId: { [Op.ne]: null } },
@@ -58,8 +67,44 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     for (const p of pacientes) {
       porCliente.set(String(p.clientId), (porCliente.get(String(p.clientId)) ?? 0) + 1);
     }
-    const ids = [...porCliente.keys()];
+    // ── LA VIGENCIA DE LAS CUOTAS MANDA (01/09/2026, Rodrigo) ──────────────
+    // Una familia con cuotas asignadas debe el mes M solo si alguna lo cubre:
+    // la de «enero a marzo» sale en enero, febrero y marzo, y en abril
+    // desaparece sola aunque el paciente siga de alta. Una familia SIN cuotas
+    // asignadas sigue con la regla de siempre (paciente activo): a esas no se
+    // les puede aplicar una vigencia que nadie escribió.
+    const { Cuota } = ctx.tenantModels;
+    const cuotasPorCliente = new Map();
+    if (Cuota) {
+      const filas = await Cuota.findAll({ attributes: ["clientId", "startDate", "endDate", "active"], raw: true });
+      for (const f of filas) {
+        if (!f.clientId) continue;
+        const cid = String(f.clientId);
+        if (!cuotasPorCliente.has(cid)) cuotasPorCliente.set(cid, []);
+        cuotasPorCliente.get(cid).push(f);
+      }
+    }
+    const poblacion = new Set(porCliente.keys());
+    for (const [cid, filas] of cuotasPorCliente) {
+      if (debeElMes(filas, mes)) poblacion.add(cid);
+      else poblacion.delete(cid);
+    }
+
+    const ids = [...poblacion];
     if (ids.length === 0) return ok({ mes, morosos: [], alDia: 0, aplicable: true });
+
+    // ¿Desde cuándo cobra este centro por el CRM? Con CERO cobros registrados
+    // la pantalla no acusa a nadie: dice que la caja está de estreno
+    // (31/08/2026 — el día que Aumenta la estrenó, esta lista pintaba a las
+    // 1.083 familias como morosas de 6 meses). Y con cobros, los «meses
+    // seguidos» no cuentan más atrás del primer mes cobrado.
+    const primerPeriodo = await Payment.min("periodMonth", {
+      where: { status: "completed", periodMonth: { [Op.ne]: null } },
+    });
+    if (!primerPeriodo) {
+      return ok({ mes, morosos: [], alDia: 0, aplicable: true, familias: ids.length, sinCobros: true });
+    }
+    const primerMes = String(primerPeriodo).slice(0, 7);
 
     const meses = ventana(mes, MESES_ATRAS);
     const desde = `${meses[meses.length - 1]}-01`;
@@ -97,12 +142,21 @@ export const GET = withTenant(async (request, _rc, ctx) => {
         alDia++;
         continue;
       }
-      // Meses seguidos sin pagar, contando hacia atrás desde el mes pedido.
-      let seguidos = 0;
-      for (const m of meses) {
-        if (suyos.has(m)) break;
-        seguidos++;
+      // Meses seguidos sin pagar, hacia atrás desde el mes pedido y sin
+      // acusar de meses anteriores al primer cobro del centro (regla con
+      // nombre y prueba: lib/billing/mesesSinPagar.js). Con cuota asignada,
+      // tampoco de antes de que SU cuota empezara: la de enero no debe
+      // diciembre.
+      let primerMesCliente = primerMes;
+      const filasCuota = cuotasPorCliente.get(cid);
+      if (filasCuota?.length) {
+        const inicios = filasCuota
+          .map((f) => String(f.startDate ?? "").slice(0, 7))
+          .filter((m) => /^\d{4}-\d{2}$/.test(m))
+          .sort();
+        if (inicios.length && inicios[0] > primerMesCliente) primerMesCliente = inicios[0];
       }
+      const seguidos = mesesSeguidosSinPagar({ meses, pagados: suyos, primerMes: primerMesCliente });
       const cli = nombres.get(cid);
       morosos.push({
         clientId: cid,
@@ -117,7 +171,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     // Primero quien más meses acumula: es a quien hay que llamar hoy.
     morosos.sort((a, b) => b.mesesSeguidos - a.mesesSeguidos || a.name.localeCompare(b.name));
 
-    return ok({ mes, morosos, alDia, aplicable: true, familias: ids.length });
+    return ok({ mes, morosos, alDia, aplicable: true, familias: ids.length, primerMes });
   } catch (err) {
     return serverError(err);
   }

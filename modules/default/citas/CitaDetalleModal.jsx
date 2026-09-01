@@ -10,9 +10,15 @@
 // antes hacían los resets de handleEventClick). Guardar avisa por onChanged
 // (el padre refresca calendario y pendientes), borrar por onDeleted.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import SelectorPaciente from "../../../components/citas/SelectorPaciente.jsx";
+import PanelTallerCita from "../../../components/citas/PanelTallerCita.jsx";
+import SesionTallerDrawer from "../../../components/clinica/SesionTallerDrawer.jsx";
 import { colaDePreparacion } from "../../../lib/clinica/prepararSesion.js";
 import { fichaDeLaCita } from "../../../lib/citas/fichaDeLaCita.js";
+import { esRecuperable, rotuloFalta, citasQuePuedenRecuperar } from "../../../lib/citas/recuperacionFalta.js";
+import { esPresunta, estadoEfectivo } from "../../../lib/citas/asistencia.js";
+import { cuerpoDelResultado, resultadoPorClave } from "../../../lib/citas/resultadoCita.js";
 import {
   ModalityChip,
   PagoChip,
@@ -66,7 +72,6 @@ export function CitaDetalleModal({
   confirmar,
   avisar,
   pedirTexto,
-  elegir,
   onClose,
   onChanged,
   onDeleted,
@@ -80,6 +85,9 @@ export function CitaDetalleModal({
   const [suggestNote, setSuggestNote] = useState(null);
   const [suggestSent, setSuggestSent] = useState(null); // confirmación tras enviar propuesta al centro
   const [saving, setSaving] = useState(false);
+  // Buscador de paciente: acotado a la familia de la cita (lo normal) o
+  // abierto a todo el centro. Ver la fila «Paciente» más abajo.
+  const [pacienteEnTodos, setPacienteEnTodos] = useState(false);
   const [formError, setFormError] = useState(null);
   const [detailNotes, setDetailNotes] = useState(openBooking.notes ?? "");
   // Fecha y hora editables desde la propia tarjeta (07/08/2026, Rodrigo):
@@ -97,6 +105,53 @@ export function CitaDetalleModal({
   const [avisoCuerpo, setAvisoCuerpo] = useState("");
   const [enviandoAviso, setEnviandoAviso] = useState(false);
   const [avisoResultado, setAvisoResultado] = useState(null);
+  // Recuperación de una falta recuperable (31/08/2026): las citas candidatas
+  // a recuperarla (mismo cliente, vivas, posteriores — la regla en
+  // lib/citas/recuperacionFalta.js) y, si ya está enlazada, la cita que la
+  // recupera para poder decir CUÁNDO.
+  const [candidatas, setCandidatas] = useState(null);
+  const [recuperadora, setRecuperadora] = useState(null);
+  // ¿Esta cita ya tiene registro de sesión? (01/09/2026, Rodrigo). Solo para
+  // que el botón diga la verdad —«Seguir con la sesión» en vez de «Preparar
+  // sesión»—: quien lo pulsa acaba en el mismo sitio de todas formas, porque
+  // la regla «una cita, un registro» la aplica la pantalla de destino. Por eso
+  // un fallo aquí no se enseña ni se reintenta: se queda el rótulo de siempre.
+  const [sesionDeEstaCita, setSesionDeEstaCita] = useState(null);
+  /*
+   * El registro de una cita de TALLER (01/09/2026). No es el mismo formulario
+   * que el de una sesión individual —el cuerpo es del grupo y cada asistente
+   * lleva su nota privada—, así que abre su propio drawer.
+   * `{ grupo, sesionId }` o null.
+   */
+  const [tallerSesion, setTallerSesion] = useState(null);
+
+  useEffect(() => {
+    if (!openBooking.patientId) return;
+    let vivo = true;
+    fetch(`/api/clinica/sessions?bookingId=${encodeURIComponent(openBooking.id)}&limit=1`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (vivo) setSesionDeEstaCita(j?.data?.sessions?.[0] ?? null); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [openBooking.id, openBooking.patientId]);
+
+  useEffect(() => {
+    if (!esRecuperable(openBooking)) return;
+    let vivo = true;
+    if (openBooking.recoveredByBookingId) {
+      fetch(`/api/citas/bookings/${openBooking.recoveredByBookingId}`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((j) => { if (vivo) setRecuperadora(j.ok ? j.data : null); })
+        .catch(() => {});
+    } else if (openBooking.clientId) {
+      setRecuperadora(null);
+      fetch(`/api/citas/bookings?clientId=${openBooking.clientId}&limit=100`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((j) => { if (vivo) setCandidatas(citasQuePuedenRecuperar(j.data?.bookings ?? [], openBooking)); })
+        .catch(() => {});
+    }
+    return () => { vivo = false; };
+  }, [openBooking.id, openBooking.status, openBooking.noShowJustified, openBooking.recoveredByBookingId, openBooking.clientId]);
 
   /*
    * Guardar la fecha y la hora tecleadas.
@@ -209,53 +264,32 @@ export function CitaDetalleModal({
       setSaving(false);
     }
   }
-  async function markCompleted() { await patchBooking({ status: "completed" }); }
+  async function markCompleted() { await patchBooking(cuerpoDelResultado("completada")); }
   /**
-   * Falta: se pregunta si estaba JUSTIFICADA (punto 6.1 del sprint). No es lo
-   * mismo un niño con fiebre que una familia que no aparece sin avisar; y solo
-   * las NO justificadas avisan a administración.
+   * Falta justificada o injustificada: DOS BOTONES (01/09/2026, Rodrigo).
+   *
+   * Antes había uno solo —«No asistió»— y detrás salía un diálogo preguntando
+   * cuál de las dos era. Dos respuestas distintas escondidas tras un botón que
+   * no decía ninguna: mirando la ficha no se sabía qué se iba a apuntar, y la
+   * diferencia no es cosmética (una se recupera; la otra abre incidencia y
+   * avisa a administración).
+   *
+   * Lo que se manda al servidor lo arma `lib/citas/resultadoCita.js`, que es lo
+   * que comparten esta ficha y las citas de la ficha del paciente.
    */
-  async function markNoShow() {
-    /*
-     * Las dos respuestas, cada una con su frase. Antes esto era un `confirm`
-     * con «Aceptar = justificada · Cancelar = sin justificar» dentro: dos
-     * respuestas distintas metidas a la fuerza en un sí/no, donde además
-     * cancelar no cancelaba nada — marcaba la falta como injustificada.
-     */
-    const respuesta = await elegir({
-      titulo: "Marcar la falta",
-      texto: "No es lo mismo un niño con fiebre que una familia que no aparece sin avisar: solo las faltas sin justificar avisan a administración.",
-      opciones: [
-        { valor: "justificada", label: "Estaba justificada", pista: "Avisaron, enfermedad, un imprevisto…" },
-        { valor: "sin_justificar", label: "No avisaron", tono: "peligro" },
-      ],
-    });
-    if (respuesta === null) return;
-    const justificada = respuesta === "justificada";
+  async function marcarFalta(clave) {
+    const resultado = resultadoPorClave(clave);
     const motivo = await pedirTexto({
-      titulo: justificada ? "Motivo de la falta" : "¿Qué ha pasado?",
-      etiqueta: "Opcional",
-      confirmar: "Marcar la falta",
-      tono: justificada ? "normal" : "peligro",
+      ...resultado.motivo,
+      tono: clave === "falta_injustificada" ? "peligro" : "normal",
     });
     if (motivo === null) return;
-    await patchBooking({
-      status: "no_show",
-      noShowJustified: justificada,
-      noShowReason: motivo.trim() || null,
-    });
+    await patchBooking(cuerpoDelResultado(clave, motivo));
   }
   async function cancelBooking() {
-    const reason = await pedirTexto({
-      titulo: "Cancelar la cita",
-      texto: "Se le avisará por correo si tiene consentimiento y correo en su ficha.",
-      etiqueta: "Motivo (opcional)",
-      confirmar: "Cancelar la cita",
-      cancelar: "Volver",
-      tono: "peligro",
-    });
+    const reason = await pedirTexto({ ...resultadoPorClave("cancelada").motivo, tono: "peligro" });
     if (reason === null) return;
-    await patchBooking({ status: "cancelled", cancellationReason: reason.trim() || null });
+    await patchBooking(cuerpoDelResultado("cancelada", reason));
   }
   async function saveNotes() { await patchBooking({ notes: detailNotes.trim() || null }); }
   /**
@@ -379,14 +413,17 @@ export function CitaDetalleModal({
           style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
           onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
         >
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[92vh] flex flex-col">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[92dvh] flex flex-col">
             <div className="px-5 py-4 border-b border-neutral-100 flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
                 <div className="text-base font-semibold text-neutral-900 truncate">
                   {openBooking.clientName}
                 </div>
                 <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-                  <StatusChip value={openBooking.status} />
+                  {/* El estado con el que se TRATA la cita: una confirmada que
+                      ya terminó se da por asistida (lib/citas/asistencia.js).
+                      Abajo, junto a los botones, se dice que es una suposición. */}
+                  <StatusChip value={estadoEfectivo(openBooking)} />
                   <PagoChip
                     estado={openBooking.paymentStatus}
                     motivoCancelacion={openBooking.cancellationReason}
@@ -420,6 +457,20 @@ export function CitaDetalleModal({
                 </div>
               )}
 
+              {/*
+                ── SI ES UN TALLER, LO PRIMERO ES LA LISTA (01/09/2026) ───────
+                Una cita de taller no tiene UN paciente: tiene ocho. Lo que se
+                hace al abrirla es pasar lista, así que va arriba del todo, por
+                delante de la fecha y de los botones de estado — que en un taller
+                dicen poco: el estado de verdad lo lleva cada asistente.
+              */}
+              {openBooking.tallerGrupoId && (
+                <PanelTallerCita
+                  bookingId={openBooking.id}
+                  onRegistrar={(d) => setTallerSesion({ grupo: d.grupo, sesionId: d.sesion?.id ?? null })}
+                />
+              )}
+
               <div className="grid grid-cols-1 gap-2 text-[13px]">
                 {/*
                   DE LA CITA A LA FICHA (27/08/2026, Jorge).
@@ -451,18 +502,25 @@ export function CitaDetalleModal({
                     </a>
                   </div>
                 )}
-                <div className="flex">
-                  <span className="w-24 text-neutral-400">Email</span>
-                  <a className="text-neutral-800 hover:underline" href={`mailto:${openBooking.clientEmail}`}>
-                    {openBooking.clientEmail}
-                  </a>
-                </div>
-                <div className="flex">
-                  <span className="w-24 text-neutral-400">Teléfono</span>
-                  <a className="text-neutral-800 hover:underline" href={`tel:${openBooking.clientPhone}`}>
-                    {openBooking.clientPhone}
-                  </a>
-                </div>
+                {/* Un taller no tiene UN contacto: tiene ocho, y cada uno
+                    está en la ficha de su paciente. Dos rayas vacías aquí solo
+                    harían pensar que falta un dato. */}
+                {!openBooking.tallerGrupoId && (
+                  <>
+                    <div className="flex">
+                      <span className="w-24 text-neutral-400">Email</span>
+                      <a className="text-neutral-800 hover:underline" href={`mailto:${openBooking.clientEmail}`}>
+                        {openBooking.clientEmail}
+                      </a>
+                    </div>
+                    <div className="flex">
+                      <span className="w-24 text-neutral-400">Teléfono</span>
+                      <a className="text-neutral-800 hover:underline" href={`tel:${openBooking.clientPhone}`}>
+                        {openBooking.clientPhone}
+                      </a>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="grid grid-cols-1 gap-2 text-[13px] pt-3 border-t border-neutral-100">
@@ -584,20 +642,75 @@ export function CitaDetalleModal({
                     </select>
                   </div>
                 )}
-                {patients.length > 0 && (
+                {/* En un taller no hay UN paciente: la lista está arriba, con
+                    su asistencia. Un «Paciente: sin asignar» aquí invitaría a
+                    ponerle uno, y esa cita no es de nadie en concreto. */}
+                {patients.length > 0 && !openBooking.tallerGrupoId && (
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="w-24 text-neutral-400 shrink-0">Paciente</span>
-                    <select
-                      value={openBooking.patientId ?? ""}
-                      onChange={(e) => assignPatient(e.target.value)}
-                      disabled={saving}
-                      className="flex-1 min-w-0 text-[13px] px-2 py-1 border border-neutral-200 rounded-md bg-white text-neutral-800 disabled:opacity-50"
-                    >
-                      <option value="">Sin asignar</option>
-                      {patients.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name || `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim()}</option>
-                      ))}
-                    </select>
+                    {/*
+                      UN BUSCADOR, NO UN DESPLEGABLE (01/09/2026, Rodrigo).
+
+                      Aquí se elegía sobre `patients`, la lista que el padre se
+                      baja de `/api/pacientes` — y ese endpoint corta en 300.
+                      Con los 1.174 pacientes de Aumenta, 874 NO estaban en el
+                      desplegable: no salir se lee exactamente igual que no
+                      existir, así que la cita se quedaba sin paciente o se le
+                      colgaba el que sí aparecía. Es el mismo agujero que se
+                      tapó en el alta de citas (28/08) y en las incidencias del
+                      equipo (31/08); esta ficha se había quedado atrás.
+
+                      Ahora se pregunta al SERVIDOR según se escribe, o sea que
+                      llega a todos. `patients` se queda solo de PUERTA: si el
+                      centro no lleva pacientes, la fila ni se pinta.
+                    */}
+                    <div className="flex-1 min-w-[11rem]">
+                      <SelectorPaciente
+                        /*
+                          La `key` no es adorno: el selector guarda la función
+                          de buscar en una ref y solo repregunta cuando cambia
+                          lo TECLEADO, así que al darle al interruptor la lista
+                          se quedaba con los resultados del ámbito anterior —
+                          decía «solo esta familia» enseñando los 1.174 del
+                          centro. Cambiar la key lo remonta y vuelve a
+                          preguntar con el ámbito nuevo.
+                        */
+                        key={pacienteEnTodos ? "todos" : "familia"}
+                        value={openBooking.patientId ?? ""}
+                        familia={pacienteEnTodos ? null : openBooking.clientId || null}
+                        onChange={(v) => assignPatient(v)}
+                        disabled={saving}
+                        aria-label="Paciente de la cita"
+                        placeholder="Sin asignar"
+                        // Poder volver a «ninguno»: una cita de la familia sin
+                        // atribuir a un hijo concreto es un caso real.
+                        opcionesFijas={[{ value: "", label: "Sin asignar" }]}
+                        className="text-[13px] px-2 py-1 border border-neutral-200 rounded-md bg-white text-neutral-800"
+                      />
+                    </div>
+                    {/*
+                      LA SALIDA DEL ACOTADO. Con la familia puesta se enseñan
+                      SUS hijos, que es lo que se busca casi siempre y ahorra
+                      teclear. Pero acotar sin salida crea un callejón: si esa
+                      ficha no tiene pacientes colgados, o la cita se enlazó a
+                      la familia equivocada, no habría forma de asignar a nadie
+                      —y eso sería peor que el desplegable que quitamos—. De ahí
+                      el interruptor.
+                    */}
+                    {openBooking.clientId && (
+                      <button
+                        type="button"
+                        onClick={() => setPacienteEnTodos((v) => !v)}
+                        title={
+                          pacienteEnTodos
+                            ? "Volver a enseñar solo los pacientes de esta familia"
+                            : "Buscar entre todos los pacientes del centro, no solo los de esta familia"
+                        }
+                        className="shrink-0 text-[11px] text-neutral-500 hover:text-neutral-800 underline underline-offset-2"
+                      >
+                        {pacienteEnTodos ? "solo esta familia" : "buscar en todos"}
+                      </button>
+                    )}
                     {/*
                       DE LA CITA A LO CLÍNICO (26/08/2026, Jorge y Aumenta).
 
@@ -617,6 +730,20 @@ export function CitaDetalleModal({
                       paciente: preparar la del jueves y que la sesión nazca con
                       la fecha de hoy sería apuntarla en el sitio equivocado, y
                       nadie lo miraría al corregirlo.
+
+                      Y desde el 01/09/2026 lleva también la CITA (Rodrigo):
+                      «si salgo y entro no me tiene que generar una sesión
+                      nueva, tiene que seguir editando la misma hasta que le dé
+                      a finalizar». Sin ese id, cada vuelta abría un formulario
+                      en blanco y guardarlo creaba otra sesión del mismo día.
+
+                      Y el PROFESIONAL de la cita, del desplegable de aquí
+                      arriba (01/09/2026, Rodrigo): el registro que se prepara
+                      desde esta cita nace a nombre de quien la da, no del
+                      terapeuta de referencia del paciente. Se lee de
+                      `openBooking`, que el padre repone con lo que devuelve el
+                      PATCH: asignar a alguien y pulsar «Preparar sesión» a
+                      continuación se lleva a la persona recién puesta.
                     */}
                     {openBooking.patientId && (
                       <>
@@ -630,13 +757,17 @@ export function CitaDetalleModal({
                           Ver ficha
                         </a>
                         <a
-                          href={`/pacientes/${openBooking.patientId}/sesiones/nueva${colaDePreparacion(openBooking.scheduledAt)}`}
+                          href={`/pacientes/${openBooking.patientId}/sesiones/nueva${colaDePreparacion(openBooking.scheduledAt, { bookingId: openBooking.id, profesionalId: openBooking.teamMemberId })}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          title="Escribe la preparación de esta sesión antes de darla. Se guarda como borrador con el día y la hora de la cita."
+                          title={
+                            sesionDeEstaCita
+                              ? "Sigue con el registro que ya empezaste para esta cita. No se crea uno nuevo."
+                              : "Escribe la preparación de esta sesión antes de darla. Se guarda como borrador con el día y la hora de la cita."
+                          }
                           className="shrink-0 text-[12px] px-2 py-1 rounded-md border border-neutral-200 text-neutral-600 hover:border-neutral-400 hover:text-neutral-800 transition-colors"
                         >
-                          Preparar sesión
+                          {sesionDeEstaCita ? "Seguir con la sesión" : "Preparar sesión"}
                         </a>
                       </>
                     )}
@@ -922,29 +1053,76 @@ export function CitaDetalleModal({
 
             <div className="px-5 py-3 border-t border-neutral-100 flex flex-wrap gap-2 justify-between">
               <div className="flex flex-wrap gap-2">
-                {openBooking.status !== "completed" && (
-                  <button
-                    onClick={markCompleted}
-                    disabled={saving}
-                    className="text-[12px] px-3 py-1.5 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
-                  >
-                    Marcar completada
-                  </button>
+                {/*
+                 * Una cita confirmada que ya terminó SE DA POR ASISTIDA
+                 * (01/09/2026, Rodrigo). Aquí se dice con todas las letras que
+                 * es una suposición del programa y no algo que comprobara
+                 * nadie: si se pintara un «Completada» a secas, «No asistió»
+                 * parecería un cambio de opinión en vez de la corrección que
+                 * es. El botón verde sigue estando, ahora para dar el visto
+                 * bueno de verdad.
+                 */}
+                {esPresunta(openBooking) ? (
+                  <>
+                    <span className="text-[12px] px-2.5 py-1.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100">
+                      Se da por asistida
+                    </span>
+                    <button
+                      onClick={markCompleted}
+                      disabled={saving}
+                      className="text-[12px] px-3 py-1.5 rounded-md border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                    >
+                      Confirmar asistencia
+                    </button>
+                  </>
+                ) : (
+                  openBooking.status !== "completed" && (
+                    <button
+                      onClick={markCompleted}
+                      disabled={saving}
+                      className="text-[12px] px-3 py-1.5 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                      Marcar completada
+                    </button>
+                  )
                 )}
                 {openBooking.status === "no_show" && (
                   <span className={`text-[12px] px-2.5 py-1.5 rounded-md ${openBooking.noShowJustified ? "bg-neutral-100 text-neutral-600" : "bg-red-50 text-red-700"}`}>
-                    {openBooking.noShowJustified ? "Falta justificada" : "Falta sin justificar"}
+                    {rotuloFalta(openBooking)}
                     {openBooking.noShowReason ? ` · ${openBooking.noShowReason}` : ""}
                   </span>
                 )}
-                {openBooking.status !== "no_show" && (
-                  <button
-                    onClick={markNoShow}
-                    disabled={saving}
-                    className="text-[12px] px-3 py-1.5 rounded-md bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50"
-                  >
-                    No asistió
-                  </button>
+                {/*
+                 * Las dos faltas, cada una con su botón (01/09/2026, Rodrigo):
+                 * «así queda claro cuándo han venido y cuándo no». Antes era un
+                 * «No asistió» que abría un diálogo para elegir cuál de las dos
+                 * era; la diferencia se decide igual, pero ahora se ve.
+                 */}
+                {/*
+                 * En un TALLER estos dos botones no se enseñan (01/09/2026):
+                 * la falta es de un niño, no de la cita entera, y se marca
+                 * arriba, uno a uno. Dar por «no asistida» la tarde entera
+                 * porque faltó uno sería justo lo contrario de lo que se pidió.
+                 */}
+                {openBooking.status !== "no_show" && !openBooking.tallerGrupoId && (
+                  <>
+                    <button
+                      onClick={() => marcarFalta("falta_justificada")}
+                      disabled={saving}
+                      title={resultadoPorClave("falta_justificada").ayuda}
+                      className="text-[12px] px-3 py-1.5 rounded-md bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50"
+                    >
+                      Falta justificada
+                    </button>
+                    <button
+                      onClick={() => marcarFalta("falta_injustificada")}
+                      disabled={saving}
+                      title={resultadoPorClave("falta_injustificada").ayuda}
+                      className="text-[12px] px-3 py-1.5 rounded-md bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50"
+                    >
+                      Falta injustificada
+                    </button>
+                  </>
                 )}
                 {openBooking.status !== "cancelled" && (
                   <button
@@ -973,7 +1151,80 @@ export function CitaDetalleModal({
                 Eliminar
               </button>
             </div>
+
+            {/* Recuperación de la falta (31/08/2026): una recuperable puede
+                quedar enlazada a la cita que la recupera. */}
+            {esRecuperable(openBooking) && (
+              <div className="mt-3 bg-neutral-50 border border-neutral-100 rounded-lg px-3 py-2.5 text-xs space-y-1.5">
+                {openBooking.recoveredByBookingId ? (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-emerald-700">
+                      ✓ Recuperada con la cita{recuperadora ? ` del ${fmtDateTime(recuperadora.scheduledAt)}` : ""}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={() => patchBooking({ recoveredByBookingId: null })}
+                      className="text-neutral-400 hover:text-red-600 transition-colors shrink-0"
+                    >
+                      Quitar enlace
+                    </button>
+                  </div>
+                ) : !openBooking.clientId ? (
+                  <span className="text-neutral-400">
+                    Sin ficha enlazada no se puede apuntar con qué cita se recupera.
+                  </span>
+                ) : candidatas === null ? (
+                  <span className="text-neutral-400">Buscando citas que puedan recuperarla…</span>
+                ) : candidatas.length === 0 ? (
+                  <span className="text-neutral-500">
+                    Pendiente de recuperar: este cliente no tiene citas posteriores. Crea la cita
+                    de recuperación y enlázala desde aquí.
+                  </span>
+                ) : (
+                  <label className="flex items-center gap-2">
+                    <span className="text-neutral-500 shrink-0">Recuperada con…</span>
+                    <select
+                      disabled={saving}
+                      defaultValue=""
+                      onChange={(e) => e.target.value && patchBooking({ recoveredByBookingId: e.target.value })}
+                      className="flex-1 rounded-md border border-neutral-200 bg-white px-2 py-1 text-xs text-neutral-700"
+                    >
+                      <option value="">Elegir la cita que la recupera…</option>
+                      {candidatas.map((c) => (
+                        <option key={c.id} value={c.id}>{fmtDateTime(c.scheduledAt)}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </div>
+            )}
           </div>
+
+          {/* ── El registro de la sesión del taller (01/09/2026) ───────────
+              Va fuera del cuerpo con scroll y con su propia capa: es un drawer
+              a pantalla completa, no un trozo más del modal. */}
+          {tallerSesion && (
+            <SesionTallerDrawer
+              key={tallerSesion.sesionId ?? "nueva"}
+              tallerId={tallerSesion.grupo?.tallerId}
+              tallerName={
+                [tallerSesion.grupo?.tallerName, tallerSesion.grupo?.name].filter(Boolean).join(" · ")
+              }
+              grupoId={tallerSesion.grupo?.id ?? null}
+              bookingId={openBooking.id}
+              // La fecha y la duración son las de LA CITA, no las de hoy: un
+              // taller se apunta a menudo días después de darlo.
+              cuando={openBooking.scheduledAt}
+              duracionCita={openBooking.duration}
+              sesionId={tallerSesion.sesionId}
+              onClose={() => setTallerSesion(null)}
+              onSaved={() => {
+                setTallerSesion(null);
+                onChanged?.();
+              }}
+            />
+          )}
         </div>
   );
 }

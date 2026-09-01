@@ -7,21 +7,22 @@
 | | |
 | --- | --- |
 | **moduleKey** | `fichaje` · requiere `team` (`lib/provisioning/catalogo.js`; las jornadas cuelgan de `team_members`). A propósito NO requiere `team_avanzado`. En el menú es `adminOnly` (`components/layout/Sidebar.jsx`). |
-| **Reina** | `aumenta`: el doc la llama «tenant de referencia». El módulo se escribió sobre su Excel real de marzo de 2026 y el único lector a medida que existe es el suyo (`lib/fichaje/parsers/aumenta.js`). |
+| **Reina** | `aumenta`: el doc la llama «tenant de referencia». El módulo se escribió sobre su Excel real de marzo de 2026 y los únicos lectores a medida que existen son los suyos: la hoja semanal a mano (`lib/fichaje/parsers/aumenta.js`) y, desde julio de 2026, el volcado mensual del reloj de fichar (`parsers/aumentaReloj.js`, un `.xls`); el lector `aumenta` reconoce cuál de los dos le han subido y delega solo. |
 | **Pantallas** | `app/(dashboard)/equipo/fichaje/page.jsx` (`/equipo/fichaje`): server component que hace `notFound()` si el rol no es admin/superadmin o el tenant no tiene `fichaje` (segunda de las tres puertas), y monta `modules/fichaje/FichajeModule.jsx`. |
 | **Endpoints** | `app/api/fichaje/**` — 7 `route.js`, todos con `hasModule("fichaje")` + solo admin/superadmin: `route.js` (GET del mes con filas + resumen + avisos; POST alta manual), `[id]/route.js` (PATCH corregir, DELETE baja blanda), `export/route.js` (xlsx con los mismos totales que la pantalla). |
 | | `import/preview/route.js` (no escribe nada), `import/route.js` (commit en una transacción; en la demo devuelve 403 por `lib/demo/isDemo.js`), `imports/route.js` (histórico de volcados), `imports/[id]/revertir/route.js`. Sin públicos ni webhooks. |
-| **Lógica** | `lib/fichaje/importar.js` (`previsualizar`, `aplicar`, `revertir`, `hashDeFichero`: las tres garantías del volcado) · `mapeo.js` (nombre del Excel → persona del CRM: exacto con UNA persona, sugerencia, o pendiente sin sugerencia si el nombre o el alias apuntan a DOS —19/08/2026, antes casaba en silencio con la primera/última—; alias en `team_members.custom_fields.fichajeNombres`) · `totales.js` (`resumirPorPersona`, `totalesDelMes`, `avisosDelMes`, `rangoDelPeriodo`: puras, nada se guarda; desde el 20/08/2026 un tramo con `deletedAt` tampoco suma en `resumirPorPersona` —lo ignoraba solo `avisosDelMes`— y el aviso «sin fichajes», que no lleva fecha, se ordena DETRÁS de los errores con día) · `parseHora.js` (las cinco formas en que llega una hora en un Excel) |
-| | `lib/fichaje/parsers/index.js` (`POR_TENANT`: qué lector usa cada cliente; `parserDeTenant`, `describirParser`) · `parsers/aumenta.js` (el Excel de Aumenta, por semanas) · `parsers/generico.js` (`Persona · Fecha · Entrada · Salida · Horas · Nota`, el de quien no tiene lector propio). Los festivos los pide a `lib/citas/festivos.js` si el tenant tiene Citas. |
+| **Lógica** | `lib/fichaje/importar.js` (`previsualizar`, `aplicar`, `revertir`, `hashDeFichero`: las tres garantías del volcado; desde el 31/08/2026 `previsualizar` acepta los `mapeos` ya elegidos en el modal y recuenta con ellos EN MEMORIA, sin guardar alias — sin eso, un fichero cuyos nombres no casan con NADIE, como el primer volcado del reloj, dejaba `listas` en 0 y el botón apagado por mucho que se asignaran los nombres) · `mapeo.js` (nombre del Excel → persona del CRM: exacto con UNA persona, sugerencia, o pendiente sin sugerencia si el nombre o el alias apuntan a DOS —19/08/2026, antes casaba en silencio con la primera/última—; alias en `team_members.custom_fields.fichajeNombres`) · `totales.js` (`resumirPorPersona`, `totalesDelMes`, `avisosDelMes`, `rangoDelPeriodo`: puras, nada se guarda; desde el 20/08/2026 un tramo con `deletedAt` tampoco suma en `resumirPorPersona` —lo ignoraba solo `avisosDelMes`— y el aviso «sin fichajes», que no lleva fecha, se ordena DETRÁS de los errores con día) · `parseHora.js` (las cinco formas en que llega una hora en un Excel) · `puntualidad.js` (31/08/2026: llegó tarde / salió pronto contra la AGENDA — la primera y última cita o bloqueo de esa persona ese día, tolerancia 10 min; pura, el endpoint aplana las citas a hora de Madrid; sus avisos se mezclan con los de `avisosDelMes` con `ordenarAvisos`, extraído para que el orden sea uno) |
+| | `lib/fichaje/parsers/index.js` (`POR_TENANT`: qué lector usa cada cliente; `parserDeTenant`, `describirParser`) · `parsers/aumenta.js` (el Excel semanal a mano de Aumenta, y quien detecta el formato) · `parsers/aumentaReloj.js` (el volcado mensual del reloj de fichar de Aumenta: solo la hoja «Registro asistencia», los marcajes en crudo; el resto de hojas se ignoran a propósito) · `parsers/generico.js` (`Persona · Fecha · Entrada · Salida · Horas · Nota`, el de quien no tiene lector propio). Los festivos los pide a `lib/citas/festivos.js` si el tenant tiene Citas. |
+| | `lib/fichaje/leerLibro.js` (31/08/2026): abre el fichero por sus BYTES —`.xls` binario del reloj con SheetJS (dependencia `xlsx`, anclada al tarball del CDN oficial: el paquete de npm está congelado en 0.18.5 con CVEs) y lo convierte a Workbook de ExcelJS; `.xlsx` por el camino de siempre—. Las dos rutas de import lo usan en vez de `workbook.xlsx.load`. |
 | | Auditoría desde los endpoints: `fichaje.volcado`, `fichaje.corregido`, `fichaje.creado_a_mano`, `fichaje.dado_de_baja`, `fichaje.volcado_deshecho`, siempre con resumen y nunca la fila. Con frase propia y módulo «Fichaje» en `lib/actividad/etiquetas.js` desde el 19/08/2026 (antes salían por el traductor genérico); lo vigila `_smoke-actividad-etiquetas.mjs`. |
-| **UI** | `modules/fichaje/FichajeModule.jsx` (lista por persona, día a día debajo, avisos `error`/`revisar`) · `ImportarFichajeModal.jsx` (preview → mapeo → aplicar) · `CorregirFichajeModal.jsx`. No hay `components/fichaje/`. |
-| **Modelos** | `models/tenant/Fichaje.model.js` (`fichajes`: un TRAMO, `tipo` trabajo/pausa/ausencia/festivo, `origen` import/manual/corregido, `minutosOriginal`, `deletedAt`; FK a `team_members` **RESTRICT**). |
+| **UI** | `modules/fichaje/FichajeModule.jsx` (lista por persona, día a día debajo, avisos `error`/`revisar`) · `ImportarFichajeModal.jsx` (preview → mapeo → aplicar) · `CorregirFichajeModal.jsx` · `ApuntarExtraModal.jsx` (31/08/2026: horas extra a mano por el POST manual con `tipo: "extra"`, nota obligatoria; chip verde en la persona y etiqueta en el tramo). No hay `components/fichaje/`. |
+| **Modelos** | `models/tenant/Fichaje.model.js` (`fichajes`: un TRAMO, `tipo` trabajo/pausa/ausencia/festivo/**extra** —horas extra apuntadas a mano, 31/08/2026: suman como trabajo y se cuentan aparte (`extrasApuntadas`), migración `migrate-fichaje-tipo-extra` (las fotos doradas usan el enum de su vivo)—, `origen` import/manual/corregido, `minutosOriginal`, `deletedAt`; FK a `team_members` **RESTRICT**). |
 | | `models/tenant/FichajeImport.model.js` (`fichaje_imports`: el lote, con `periodo`, `fileHash`, `status` applied/superseded/reverted y `resumen`, la foto de los totales del día que se pagó). Asociaciones en `lib/db/tenantDb.js`, bloque `TeamMember.hasMany(Fichaje…)`. |
 | **Interruptores y parámetros** | ninguno que lea el código. Lo que cambia por cliente es el LECTOR del Excel, y se declara en `lib/` (`POR_TENANT` en `lib/fichaje/parsers/index.js`), no en `featureFlags`. |
 | **Pantallas propias** | ninguna (nunca las ha habido: el módulo es el mismo para todos y solo cambia el lector) |
 | **Scripts** | Activación: `node scripts/enable-module.js <slug> fichaje` (corre `migrate-fichaje-module`, declarada en `scripts/_module-migrations.js`; `scripts/_migration-order.js` la pone DESPUÉS de `migrate-team-fields` porque `fichajes.team_member_id` apunta a `team_members`) · después, `npm run db:check-access`. |
 | | Semilla del escaparate: `scripts/seed-fichaje-demo.js` (el mes en curso y el anterior, con los seis casos que la pantalla detecta; está en la lista de `scripts/reset-demo-tenant.js`), y luego `scripts/demo-golden-snapshot.js demo` para que la foto dorada no lo vacíe. Sin cron ni ONE_OFF. |
-| **Pruebas** | `scripts/_smoke-fichaje-horas.mjs` (`node:test`, 19/08/2026, en `npm test`): lo que devuelven `parseHora.js` (celdas de ExcelJS, Date en UTC, fracción de día, «8:30»/«8.30»/«8,5»/«7.5» —la regla del punto—, duraciones negativas rechazadas, turno de noche) y `totales.js` (resumen por persona, totales del mes, los seis avisos, rango del periodo; y desde el 20/08/2026 que un tramo dado de baja no aporta ni minutos ni día ni corrección, y que el aviso «sin fichajes» sale detrás de los errores con fecha y delante de los `revisar`). · `scripts/_smoke-fichaje-mapeo.mjs` (`node:test`, 19/08/2026, en `npm test`): `mapeo.js` —exacto, alias de `custom_fields.fichajeNombres`, sugerencia, «APELLIDO, NOMBRE», dos personas con el mismo nombre de pila→nadie, el mismo nombre o alias en dos personas→pendiente sin sugerencia—. · `scripts/_smoke-fichaje-parsers.mjs` (`node:test`, 19/08/2026, en `npm test`): los dos lectores de `parsers/`, con libros de ExcelJS fabricados a mano (sin abrir ningún fichero, fechas en UTC) —`aumenta.js`: `diasDeLaHoja` saca los días del nombre de la hoja («02-6», «9-13»), el periodo lo pone quien importa y el primer día tiene que caer en lunes, los bloques van de nombre a nombre y una anotación en la columna de nombres («BAJA», «MÉDICO», una con día L bajo un nombre) no es una persona, los minutos se recalculan de las horas reales y el total del Excel solo vale cuando no hay horas (y se dice de dónde salió), «M-1»/«M-2» son dos tramos del mismo día; `generico.js`: la cabecera se busca por NOMBRE en las diez primeras filas, una fila de otro mes se rechaza, dos filas del mismo día son dos tramos; y desde el 19/08, en los dos, una salida anterior a la entrada ENTRA como jornada que cruza la medianoche (turno de noche) pero con un aviso en el preview de que la salida es anterior a la entrada (lo más probable: celdas cambiadas). Desde el 21/08/2026 fija además: que un total que no se entiende («abc», «8 horas») **no** hace desaparecer la jornada —la fila sale con el error, diciendo qué celda, y el texto va recortado para que una celda enorme no infle la respuesta—, que lo mismo vale para las columnas de entrada y salida, que un horario PREVISTO con la salida antes que la entrada suma 24 h pero **avisa** igual que su gemelo de las horas reales (y un horario normal no avisa, y uno de noche de verdad avisa una sola vez), que una anotación de una semana que se sale del mes NO se guarda con una fecha que no existe (y la que sí cabe se sigue guardando), y —en el genérico— que una fila sin persona cuya fecha son solo espacios se salta como fila en blanco, mientras que con una de las dos cosas sigue saliendo con su error—. |
+| **Pruebas** | `scripts/_smoke-fichaje-horas.mjs` (`node:test`, 19/08/2026, en `npm test`): lo que devuelven `parseHora.js` (celdas de ExcelJS, Date en UTC, fracción de día, «8:30»/«8.30»/«8,5»/«7.5» —la regla del punto—, duraciones negativas rechazadas, turno de noche) y `totales.js` (resumen por persona, totales del mes, los seis avisos, rango del periodo; y desde el 20/08/2026 que un tramo dado de baja no aporta ni minutos ni día ni corrección, y que el aviso «sin fichajes» sale detrás de los errores con fecha y delante de los `revisar`). · `scripts/_smoke-fichaje-mapeo.mjs` (`node:test`, 19/08/2026, en `npm test`): `mapeo.js` —exacto, alias de `custom_fields.fichajeNombres`, sugerencia, «APELLIDO, NOMBRE», dos personas con el mismo nombre de pila→nadie, el mismo nombre o alias en dos personas→pendiente sin sugerencia—. · `scripts/_smoke-fichaje-preview-mapeos.mjs` (`node:test`, 31/08/2026, en `npm test`): `previsualizar` con modelos falsos — sin mapeos el nombre que no casa bloquea y no se puede aplicar; con el mapeo puesto las mismas filas quedan listas y `puedeAplicarse` se enciende; un mapeo a alguien de fuera del equipo se ignora; un mapeo no pisa un nombre que ya casaba exacto—. · `scripts/_smoke-fichaje-parser-reloj.mjs` (`node:test`, 31/08/2026, en `npm test`): el lector del volcado del reloj —emparejar marcajes en orden (dos = un tramo, cuatro = mañana y tarde), el marcaje suelto que entra con 0 min y su nota, el mes del fichero (americano) contra el periodo, la hoja que falta, el texto ilegible que bloquea diciendo qué ponía, quien está en el reloj sin marcajes avisa pero no exige mapeo, marcajes sin nombre se saltan, medianoche y jornadas de más de 16 h, la delegación desde `aumenta.js`— y `leerLibro` con un `.xls` BINARIO de verdad (round-trip con SheetJS, comprobando los bytes `D0 CF 11 E0`), un `.xlsx`, y lo que no es un Excel. · `scripts/_smoke-fichaje-parsers.mjs` (`node:test`, 19/08/2026, en `npm test`): los dos lectores originales de `parsers/`, con libros de ExcelJS fabricados a mano (sin abrir ningún fichero, fechas en UTC) —`aumenta.js`: `diasDeLaHoja` saca los días del nombre de la hoja («02-6», «9-13»), el periodo lo pone quien importa y el primer día tiene que caer en lunes, los bloques van de nombre a nombre y una anotación en la columna de nombres («BAJA», «MÉDICO», una con día L bajo un nombre) no es una persona, los minutos se recalculan de las horas reales y el total del Excel solo vale cuando no hay horas (y se dice de dónde salió), «M-1»/«M-2» son dos tramos del mismo día; `generico.js`: la cabecera se busca por NOMBRE en las diez primeras filas, una fila de otro mes se rechaza, dos filas del mismo día son dos tramos; y desde el 19/08, en los dos, una salida anterior a la entrada ENTRA como jornada que cruza la medianoche (turno de noche) pero con un aviso en el preview de que la salida es anterior a la entrada (lo más probable: celdas cambiadas). Desde el 21/08/2026 fija además: que un total que no se entiende («abc», «8 horas») **no** hace desaparecer la jornada —la fila sale con el error, diciendo qué celda, y el texto va recortado para que una celda enorme no infle la respuesta—, que lo mismo vale para las columnas de entrada y salida, que un horario PREVISTO con la salida antes que la entrada suma 24 h pero **avisa** igual que su gemelo de las horas reales (y un horario normal no avisa, y uno de noche de verdad avisa una sola vez), que una anotación de una semana que se sale del mes NO se guarda con una fecha que no existe (y la que sí cabe se sigue guardando), y —en el genérico— que una fila sin persona cuya fecha son solo espacios se salta como fila en blanco, mientras que con una de las dos cosas sigue saliendo con su error—. |
 | **Decisiones** | — |
 | **En este doc** | La frase que manda sobre todo el módulo · Universal por dentro, de cada cliente por fuera · El Excel de Aumenta, y por qué muerde · Modelo de datos · Identificar a la persona · Pantallas y endpoints · Alta en un cliente · Lo que queda fuera de esta primera versión |
 
@@ -147,6 +148,67 @@ descarta y la fila sale con su aviso «Fila saltada». Antes se escribía
 Excel (Date con época 1899, texto `13:50`, texto `8:30:00`, fracción de día,
 fórmula) y devuelve siempre `{ok, valor, motivo}` — nunca lanza, nunca devuelve
 un número a medias.
+
+---
+
+## El volcado del reloj (desde julio de 2026)
+
+Desde julio Aumenta ya no rellena la hoja semanal a mano: sube TAL CUAL el
+fichero que exporta su máquina de fichar («Julio 2026.xls»). Dos cosas cambian
+y una no:
+
+- **Es un `.xls`**, el formato binario de Excel 97-2003, que ExcelJS no abre.
+  Lo abre `lib/fichaje/leerLibro.js` (SheetJS, solo para esto) y lo convierte a
+  un Workbook de ExcelJS: los lectores siguen hablando un solo idioma. El
+  formato se decide por los primeros bytes, no por la extensión.
+- **Trae cinco hojas y solo una dice la verdad.** `parsers/aumentaReloj.js` lee
+  ÚNICAMENTE «Registro asistencia»: un bloque por persona (fila de días 1..31,
+  fila `ID :`/`Nombre :`, y debajo los marcajes en crudo del día separados por
+  saltos de línea, `08:46\n14:05`). Las otras cuatro —«Resum. de asis.»,
+  «Anormal», «Detalle de formulario», «Tabla de información»— son CÁLCULOS del
+  reloj contra su cuadro de turnos, y se ignoran a propósito porque se
+  equivocan: en el fichero real de julio, a Estefanía el día 3 la hoja
+  «Anormal» le pone «salida: Falta» cuando los marcajes en crudo dicen 09:00 y
+  14:20, y a Rosa la hoja de resumen le cuenta 37 h en un mes en que sus
+  marcajes suman 85. **Los totales del CRM saldrán distintos (y mayores) que
+  los del reloj, y es lo correcto**: el reloj descarta marcajes que no le casan
+  con el turno; el CRM cuenta lo que se fichó.
+- **La regla de siempre no cambia**: los minutos se recalculan de los marcajes.
+  Se emparejan EN ORDEN (1º-2º un tramo, 3º-4º otro: mañana y tarde son dos
+  tramos, como el «M-1/M-2» del formato antiguo).
+
+Tres decisiones que conviene saber defender:
+
+**1. El marcaje suelto entra con 0 minutos, no se bloquea ni se adivina.** El
+día de UN solo fichaje (olvidó fichar la salida: en julio hay 7) entra como
+jornada de 0 min con la hora suelta como entrada y una nota, y la pantalla del
+mes la pinta en rojo («Entrada sin salida») para corregirla ahí con motivo.
+Bloquearla en el preview la escondería del sitio donde se repasa el mes;
+inventarle horas sería peor. El preview lo cuenta en un aviso agregado.
+
+**2. El mes del fichero se comprueba.** El reloj escribe su rango en la
+cabecera —`07/01/2026 ~ 07/31/2026`, EN FORMATO AMERICANO, el 07/31 lo
+delata—. Si no cuadra con el periodo elegido al importar, no se lee nada. La
+hoja semanal no sabía su mes; este fichero sí, y se aprovecha.
+
+**3. Quien está en el reloj sin un solo marcaje avisa, pero no exige mapeo.**
+En julio: `cristina`, `isa` y `laura barrionue` (el reloj trunca los nombres a
+15 caracteres). No aportan horas que proteger, y exigir mapearlas bloquearía el
+volcado entero. Quien SÍ tiene horas sigue sin entrar hasta que su nombre esté
+mapeado, como siempre.
+
+El mismo tenant tiene ahora dos formatos según la época que se re-importe, así
+que `parsers/aumenta.js` detecta cuál le han subido (la hoja «Registro
+asistencia» solo existe en el del reloj) y delega. `POR_TENANT` sigue diciendo
+`aumenta: "aumenta"`; `aumenta_reloj` está en `PARSERS` pero ningún tenant
+apunta ahí directo.
+
+Este formato no trae horario previsto por día, así que `minutosPrevistos` va a
+NULL, la columna «Previstas» de la pantalla enseña «—» y las horas extra no se
+calculan (sin horario teórico no hay «de más»). Las anotaciones («BAJA»,
+«MÉDICO») tampoco existen aquí; el cuadro de turnos de «Tabla de información»
+(25 licencia, 26 viaje) podría dar algo parecido el día que traiga algo más que
+turno normal.
 
 Texto con punto, la regla desde el 19/08/2026 (`trozosDeReloj`): punto + DOS
 dígitos es reloj (`8.30` = 8:30, `8.05`), punto + uno o tres o más es decimal

@@ -69,7 +69,7 @@ export default function BorrarFichaModal({ member, onCerrar, onBorrada }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="borrar-ficha-titulo"
-        className="fixed top-14 lg:top-1/2 left-1/2 -translate-x-1/2 lg:-translate-y-1/2 w-[calc(100%-2rem)] sm:w-[440px] max-h-[80vh] overflow-y-auto ink-scroll bg-white rounded-2xl shadow-pop z-[70] p-6"
+        className="fixed top-14 lg:top-1/2 left-1/2 -translate-x-1/2 lg:-translate-y-1/2 w-[calc(100%-2rem)] sm:w-[440px] max-h-[80dvh] overflow-y-auto ink-scroll bg-white rounded-2xl shadow-pop z-[70] p-6"
       >
         <div className="eyebrow">Borrar ficha</div>
         <h3 id="borrar-ficha-titulo" className="font-display text-xl text-neutral-900 mt-1">

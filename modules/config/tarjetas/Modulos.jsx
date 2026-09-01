@@ -93,6 +93,10 @@ export function DerivacionesCard() {
 const DOCS_PLANTILLA = [
   { key: "informe", titulo: "Informes clínicos", pista: "Los apartados que se redactan en un informe y se imprimen en su PDF." },
   { key: "registro", titulo: "Registros de sesión", pista: "Los apartados del punto 2 del registro. La preparación, la devolución de la familia y las notas internas no son apartados de plantilla: van siempre aparte." },
+  // 01/09/2026, Rodrigo: el acta de una reunión de equipo se dicta y la escribe
+  // el CRM, igual que un registro de sesión. Las notas internas del equipo no
+  // son apartado de plantilla, como en el registro: van siempre aparte.
+  { key: "acta", titulo: "Actas de reunión", pista: "Los apartados del acta que el CRM redacta de una Reunión de equipo a partir del audio o de las notas. Las notas internas van siempre aparte." },
 ];
 const TIPO_OPCIONES = [{ value: "texto", label: "Párrafo" }, { value: "lista", label: "Lista" }];
 const inputPlantilla = "px-2 py-1.5 text-xs border border-neutral-200 rounded-lg focus:outline-none focus:border-neutral-400";

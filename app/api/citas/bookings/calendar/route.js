@@ -4,6 +4,7 @@ import { ok, forbidden, error, serverError } from "../../../../../lib/utils/apiR
 import { resolveCurrentTeamMemberId } from "../../../../../lib/team/currentTeamMember.js";
 import { noEsCarritoAbandonado } from "../../../../../lib/citas/booking.js";
 import { veTodaLaAgenda, soloLoSuyo, filtroDeProfesionales } from "../../../../../lib/citas/visibilidad.js";
+import { citasDeTallerQueImparte, conteoDeAsistentes } from "../../../../../lib/clinica/citaDeTaller.js";
 
 const STATUS_COLOR_DIM = {
   cancelled: "#9ca3af",
@@ -80,7 +81,23 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
         // Un profesional ve SU agenda y las citas que no son de nadie (la regla
         // entera, con su porqué, en lib/citas/visibilidad.js).
         const myId = await resolveCurrentTeamMemberId(request, tenantModels);
-        where.teamMemberId = soloLoSuyo(myId);
+        /*
+         * …Y los TALLERES que imparte aunque no figure como dueño de la cita
+         * (01/09/2026). Una cita de taller solo puede tener un `team_member_id`
+         * —hace falta para el color y para el solape—, así que la segunda
+         * terapeuta de un taller no lo vería en su calendario. Y estuvo dándolo.
+         */
+        const mios = await citasDeTallerQueImparte({
+          tenantModels,
+          teamMemberId: myId,
+          desde: startDate,
+          hasta: endDate,
+        });
+        if (mios.length) {
+          where[Op.or] = [{ teamMemberId: soloLoSuyo(myId) }, { id: { [Op.in]: mios } }];
+        } else {
+          where.teamMemberId = soloLoSuyo(myId);
+        }
       }
     }
 
@@ -99,6 +116,14 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
       order: [["scheduledAt", "ASC"]],
     });
 
+    /*
+     * Cuánta gente hay en cada taller de la semana, de una sola consulta
+     * (01/09/2026). Es lo que pinta el «(8)» de la caja: en una agenda, un
+     * taller sin saber cuántos van no dice lo suficiente para decidir nada.
+     */
+    const idsDeTaller = rows.filter((b) => b.tallerGrupoId).map((b) => b.id);
+    const asistentes = await conteoDeAsistentes({ tenantModels, bookingIds: idsDeTaller });
+
     const events = rows.map((b) => {
       const startIso = new Date(b.scheduledAt);
       const endIso = new Date(startIso.getTime() + b.duration * 60 * 1000);
@@ -114,9 +139,17 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
       const numero = Number(b.sessionNumber) || 0;
       const sesion = numero > 0 ? (total > 1 ? `${numero}/${total}` : `${numero}`) : null;
 
+      // Un taller se lee por cuánta gente lleva: «Habilidades sociales · Grupo
+      // 1 (8)». Cuando ya se ha pasado lista, dice los dos números —«(6/8)»—,
+      // que es lo que hace ver de un vistazo la tarde que faltaron dos.
+      const cuenta = b.tallerGrupoId ? asistentes.get(b.id) ?? null : null;
+      const rotuloTaller = cuenta
+        ? `${b.clientName} (${cuenta.vinieron > 0 ? `${cuenta.vinieron}/${cuenta.total}` : cuenta.total})`
+        : null;
+
       return {
         id: b.id,
-        title: sesion ? `${sesion} · ${b.clientName}` : b.clientName,
+        title: rotuloTaller ?? (sesion ? `${sesion} · ${b.clientName}` : b.clientName),
         start: startIso.toISOString(),
         end: endIso.toISOString(),
         backgroundColor: color,
@@ -125,6 +158,10 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
         extendedProps: {
           status: b.status,
           modality: b.modality,
+          // Para el menú contextual (31/08/2026): saltar a la ficha y cobrar
+          // necesitan saber DE QUIÉN es la cita sin otro viaje al servidor.
+          clientId: b.clientId ?? null,
+          patientId: b.patientId ?? null,
           clientEmail: b.clientEmail,
           clientPhone: b.clientPhone,
           eventTypeId: b.eventTypeId,
@@ -139,6 +176,11 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
           sessionNumber: numero || null,
           sessionsTotal: total > 1 ? total : null,
           sessionLabel: sesion,
+          // Taller (01/09/2026): con esto el modal sabe que tiene que abrir la
+          // lista de asistencia en vez del panel de una cita individual.
+          tallerGrupoId: b.tallerGrupoId ?? null,
+          tallerAsistentes: cuenta?.total ?? null,
+          tallerVinieron: cuenta?.vinieron ?? null,
         },
       };
     });

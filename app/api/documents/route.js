@@ -7,6 +7,8 @@ import {
   logDocumentsAudit,
   resolveOwnerNames,
   visibilityWhere,
+  whereCarpetasVisibles,
+  whereDocumentosVisibles,
   canCreateInside,
   ownerSegmentFor,
   serializeDocument,
@@ -23,6 +25,8 @@ import {
   sanitizeFileName,
   extFromFileName,
 } from "@/lib/documents/documentStorage.js";
+import { sincronizaLectores, avisaALosLectores } from "@/lib/documents/lecturas.js";
+import { carpetasCompartidasCon } from "@/lib/documents/carpetasCompartidas.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -37,7 +41,10 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     const sp = new URL(request.url).searchParams;
     const visibility = ["private", "shared", "all"].includes(sp.get("visibility")) ? sp.get("visibility") : "all";
 
-    const where = visibilityWhere(userId, visibility);
+    // Lo que le han compartido a quien mira (01/09/2026): un documento se ve
+    // también si vive en una carpeta que está en su lista.
+    const { todas: carpetasCompartidas } = await carpetasCompartidasCon({ tenantModels: ctx.tenantModels, userId });
+    const where = whereDocumentosVisibles(userId, visibility, carpetasCompartidas);
 
     // Modo BÚSQUEDA (archivo central): filtrar por cliente, origen o texto
     // recorre TODO el archivo, ignorando la carpeta. `all=1` es lo mismo sin
@@ -79,7 +86,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     let rutaDeCarpeta = null;
     if (modoBusqueda) {
       const folders = await DocumentFolder.findAll({
-        where: visibilityWhere(userId, visibility),
+        where: whereCarpetasVisibles(userId, visibility, carpetasCompartidas),
         attributes: ["id", "name", "parentFolderId"],
       });
       const porId = new Map(folders.map((f) => [f.id, f]));
@@ -208,8 +215,34 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     const clientId = typeof clientIdRaw === "string" && UUID_RE.test(clientIdRaw) ? clientIdRaw : null;
     const patientIdRaw = form.get("patientId");
     const patientId = typeof patientIdRaw === "string" && UUID_RE.test(patientIdRaw) ? patientIdRaw : null;
-    // Origen: si va enganchado a un paciente, 'paciente'; si no, 'manual'.
-    const source = patientId ? "paciente" : "manual";
+    /*
+     * El BLOQUEO de agenda al que se apareja (01/09/2026, Rodrigo): la otra
+     * dirección de «subir el acta desde el modal del bloqueo». Desde aquí se
+     * cuelga un documento que YA está en el archivo del tramo que toque.
+     * Se comprueba contra la tabla: un id inventado desde el navegador se
+     * guardaría como una pareja fantasma que no se puede abrir desde ningún
+     * sitio. Lo que no cuela se queda a null, sin rechazar la subida — el
+     * documento es lo importante, la pareja es un añadido.
+     */
+    const teamBlockRaw = form.get("teamBlockId");
+    let teamBlockId = typeof teamBlockRaw === "string" && UUID_RE.test(teamBlockRaw) ? teamBlockRaw : null;
+    if (teamBlockId) {
+      // El try/catch NO es decorativo: `documents` ya no exige `citas`
+      // (24/08/2026), así que hay clientes con archivo y SIN tabla
+      // `team_blocks`. Ahí esta consulta da 42P01, y un 500 al subir un PDF
+      // porque venía un campo que ese cliente no puede usar sería absurdo.
+      try {
+        const { TeamBlock } = ctx.tenantModels;
+        const existe = TeamBlock ? await TeamBlock.findByPk(teamBlockId, { attributes: ["id"] }) : null;
+        if (!existe) teamBlockId = null;
+      } catch {
+        teamBlockId = null;
+      }
+    }
+
+    // Origen: el bloqueo manda sobre el paciente (es de dónde VIENE), y si no
+    // hay ninguno de los dos, 'manual'.
+    const source = teamBlockId ? "bloqueo" : patientId ? "paciente" : "manual";
 
     let row;
     try {
@@ -224,6 +257,7 @@ export const POST = withTenant(async (request, _rc, ctx) => {
         mimeType: declaredMime,
         clientId,
         patientId,
+        teamBlockId,
         source,
       });
     } catch (dbErr) {
@@ -243,6 +277,20 @@ export const POST = withTenant(async (request, _rc, ctx) => {
       after: { mimeType: declaredMime, fileSize: realSize, visibility, folderId, clientId, patientId, source },
       ip: request.headers.get("x-forwarded-for"),
     });
+
+    /*
+     * A quién hay que pedirle que lo lea (01/09/2026, Rodrigo: «tagear a los
+     * miembros de mi equipo para que les salte un aviso»). Va al FINAL y fuera
+     * del camino crítico: si esto fallara, el documento ya está subido y la
+     * lectura se puede pedir después desde el propio archivo.
+     */
+    const { nuevos } = await sincronizaLectores({
+      tenantModels: ctx.tenantModels,
+      documentId: row.id,
+      teamMemberIds: form.get("lectores"),
+      assignedById: userId,
+    });
+    await avisaALosLectores({ tenantModels: ctx.tenantModels, teamMemberIds: nuevos, documento: row });
 
     return created(serializeDocument(row, null));
   } catch (err) {

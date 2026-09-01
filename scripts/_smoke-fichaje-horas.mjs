@@ -516,6 +516,7 @@ describe("resumirPorPersona: el resumen del mes por persona", () => {
         minutos: 0,
         minutosPrevistos: 0,
         extras: 0,
+        extrasApuntadas: 0,
         correcciones: 0,
         filas: 0,
       });
@@ -664,6 +665,7 @@ describe("totalesDelMes: los números de cabecera, sumados del resumen", () => {
       minutos: 0,
       minutosPrevistos: 0,
       extras: 0,
+      extrasApuntadas: 0,
       correcciones: 0,
     });
   });

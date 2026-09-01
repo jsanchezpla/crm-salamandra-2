@@ -1,14 +1,15 @@
-import { fn, col } from "sequelize";
+import { Op, fn, col } from "sequelize";
 import { withTenant } from "@/lib/tenant/withTenant.js";
 import { ok, created, error, forbidden, unauthorized, serverError } from "@/lib/utils/apiResponse.js";
 import { MODULE_KEYS } from "@/lib/tenant/moduleKeys.js";
 import {
   logDocumentsAudit,
   resolveOwnerNames,
-  visibilityWhere,
+  whereCarpetasVisibles,
   canCreateInside,
   serializeFolder,
 } from "@/lib/documents/helpers.js";
+import { carpetasCompartidasCon, contarMiembros } from "@/lib/documents/carpetasCompartidas.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_LEVEL = 3; // 0..3 → máximo 4 niveles
@@ -24,15 +25,54 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     const sp = new URL(request.url).searchParams;
     const visibility = ["private", "shared", "all"].includes(sp.get("visibility")) ? sp.get("visibility") : "all";
 
-    const where = visibilityWhere(userId, visibility);
+    /*
+     * Lo que le han compartido a quien mira (01/09/2026). `todas` incluye las
+     * subcarpetas de lo compartido: compartir «Protocolos» y que dentro no se
+     * vea nada sería compartir un cartel.
+     */
+    const { directas, todas } = await carpetasCompartidasCon({ tenantModels: ctx.tenantModels, userId });
+
+    const base = whereCarpetasVisibles(userId, visibility, todas);
     // Navegación por nivel: sin parentFolderId (o "null") → raíz.
     const parentParam = sp.get("parentFolderId");
-    if (parentParam && parentParam !== "null") {
-      if (!UUID_RE.test(parentParam)) return error("parentFolderId inválido", 400);
-      where.parentFolderId = parentParam;
-    } else {
-      where.parentFolderId = null;
+    const enRaiz = !(parentParam && parentParam !== "null");
+    if (!enRaiz && !UUID_RE.test(parentParam)) return error("parentFolderId inválido", 400);
+
+    /*
+     * UNA CARPETA COMPARTIDA APARECE EN LA RAÍZ de quien la recibe, aunque por
+     * dentro cuelgue de otra: para llegar a ella por el camino normal habría
+     * que poder abrir a su madre, que no ve. Solo se sube a la raíz cuando esa
+     * madre NO le es visible; si puede abrirla, la carpeta ya sale dentro y
+     * ponerla también arriba la enseñaría dos veces.
+     */
+    let subenALaRaiz = [];
+    if (enRaiz && directas.length) {
+      const cands = await DocumentFolder.findAll({
+        where: { id: directas },
+        attributes: ["id", "parentFolderId"],
+        raw: true,
+      });
+      const padres = [...new Set(cands.map((c) => c.parentFolderId).filter(Boolean))];
+      const filasPadre = padres.length
+        ? await DocumentFolder.findAll({
+            where: { id: padres },
+            attributes: ["id", "visibility", "ownerUserId"],
+            raw: true,
+          })
+        : [];
+      const compartidas = new Set(todas);
+      const padreVisible = new Map(
+        filasPadre.map((p) => [p.id, p.visibility === "shared" || p.ownerUserId === userId || compartidas.has(p.id)])
+      );
+      subenALaRaiz = cands
+        .filter((c) => c.parentFolderId && !padreVisible.get(c.parentFolderId))
+        .map((c) => c.id);
     }
+
+    const enSuSitio = { [Op.and]: [base, { parentFolderId: enRaiz ? null : parentParam }] };
+    const where = subenALaRaiz.length
+      ? { [Op.or]: [enSuSitio, { id: { [Op.in]: subenALaRaiz } }] }
+      : enSuSitio;
 
     const rows = await DocumentFolder.findAll({ where, order: [["name", "ASC"]], limit: 1000 });
     const ids = rows.map((r) => r.id);
@@ -59,10 +99,17 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     }
 
     const names = await resolveOwnerNames(rows.map((r) => r.ownerUserId));
+    // Con cuánta gente está compartida cada una, para poder decirlo en la ficha
+    // de la carpeta sin abrirla. Una consulta para toda la lista.
+    const compartidasCon = await contarMiembros({ tenantModels: ctx.tenantModels, folderIds: ids });
+    const mias = new Set(todas);
     const folders = rows.map((f) =>
       serializeFolder(f, names.get(f.ownerUserId), {
         documentCount: docCounts.get(f.id) ?? 0,
         subfolderCount: subCounts.get(f.id) ?? 0,
+        sharedWith: compartidasCon.get(f.id) ?? 0,
+        // «Me la han pasado»: ni es mía ni es de todo el centro.
+        compartidaConmigo: f.ownerUserId !== userId && f.visibility !== "shared" && mias.has(f.id),
       })
     );
     return ok({ folders });

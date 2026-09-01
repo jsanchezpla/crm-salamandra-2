@@ -75,7 +75,11 @@ export default function ProyectoBoardPage() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem)] lg:h-screen">
+    /* El alto es el del hueco que ya da el armazón (`main`), no una resta al
+       alto de la ventana: en tablet `100vh` mide de más —lo que ocupa la barra
+       del navegador— y el tablero se salía por abajo. Y de paso desaparece el
+       `-3.5rem` de la barra móvil, que `main` ya tenía descontada. */
+    <div className="flex flex-col h-full">
       {/* Header */}
       <header className="px-4 lg:px-8 py-3 lg:py-4 border-b border-neutral-200 bg-white">
         <div className="text-xs text-neutral-400 mb-1">

@@ -36,7 +36,8 @@ const INCLUDES = (M) => [
 
 /**
  * GET /api/clinica/incidencias — lista con filtros.
- * ?status= ?category= ?patientId= ?assignedToId= ?mine=1
+ * ?status= ?category= ?patientId= ?assignedToId= ?reportedById= ?mine=1
+ * Devuelve tambien `yoSoy`: el miembro del equipo que esta mirando (o null).
  */
 export const GET = withTenant(async (request, _rc, ctx) => {
   if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
@@ -55,9 +56,30 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   const patientId = sp.get("patientId");
   if (patientId && UUID_RE.test(patientId)) where.patientId = patientId;
 
+  // Quién la registró (31/08/2026, Rodrigo): la pareja del filtro de
+  // responsable — «las que he mandado yo u otra persona a una persona
+  // concreta» son los dos filtros combinados. Este es columna directa: a
+  // diferencia del responsable, quien registra es siempre UNO.
+  const reportedById = sp.get("reportedById");
+  if (reportedById && UUID_RE.test(reportedById)) where.reportedById = reportedById;
+
+  /*
+   * Quien mira, para que la pantalla pueda abrirse en LAS MIAS (01/09/2026,
+   * Rodrigo: «que de forma predeterminada salgan las que me atanen a mi»). Se
+   * devuelve abajo, en `yoSoy`, porque el navegador no tiene forma de saber que
+   * miembro del equipo es: /api/auth/me da el usuario, no la ficha de equipo.
+   */
+  const yoSoy = await resolveCurrentTeamMemberId(request, M);
+
   let assignedToId = sp.get("assignedToId");
   if (sp.get("mine") === "1") {
-    assignedToId = (await resolveCurrentTeamMemberId(request, M)) || "00000000-0000-0000-0000-000000000000";
+    /*
+     * Sin ficha de equipo —direccion, o quien entra con un usuario que no esta
+     * en la plantilla— «las mias» no significa nada, y antes esto ponia un id
+     * imposible que devolvia CERO incidencias: la pantalla se abria vacia y
+     * parecia que no habia ninguna. Ahora, en ese caso, no se filtra.
+     */
+    assignedToId = yoSoy || null;
   }
   if (assignedToId && UUID_RE.test(assignedToId)) {
     // Filtra por la tabla PIVOTE, no por `assignedToId`: ese campo solo guarda
@@ -119,6 +141,8 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     counts,
     therapists,
     patients,
+    // Quien mira, si esta en la plantilla. `null` = no tiene ficha de equipo.
+    yoSoy,
   });
 });
 

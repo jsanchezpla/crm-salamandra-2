@@ -7,7 +7,8 @@
 
 import { useEffect, useState } from "react";
 import { COLOR_BLOQUEO_POR_DEFECTO, colorTextoSobre } from "../../../lib/citas/coloresBloqueo.js";
-import { PrimaryButton } from "./ui.jsx";
+import { CATEGORIAS_CLINICA_BASE, MAX_CATEGORIAS } from "../../../lib/citas/categoriasBloqueo.js";
+import { PrimaryButton, inputCls } from "./ui.jsx";
 export function RecordatoriosCard({ activo, readOnly, onChange }) {
   return (
     <div className="bg-white border border-neutral-200 rounded-xl p-5">
@@ -162,6 +163,176 @@ export function ColorBloqueosCard({ color, readOnly, onGuardar }) {
   );
 }
 
+/**
+ * Categorías de bloqueo (01/09/2026, Rodrigo).
+ *
+ * «Dentro de bloqueos, poder hacer categorías […] con color personalizable
+ * desde Admin para que a todo el equipo le salga igual.»
+ *
+ * La lista es del CENTRO y por eso vive aquí y no en la pantalla de Bloqueos:
+ * si cada cual pudiera añadir la suya, en dos semanas habría cuatro formas de
+ * escribir «trabajo interno» y volveríamos al texto libre del que esto sale.
+ *
+ * ── Dos detalles que parecen menores y no lo son ───────────────────────────
+ *  · **Renombrar conserva la categoría.** Cambiar el título de una fila no
+ *    mueve de sitio a los bloqueos que ya la usaban: el servidor conserva su
+ *    clave (`normalizarCategorias`). Por eso la fila se edita en el sitio y no
+ *    se borra y se vuelve a crear — eso sí los dejaría huérfanos.
+ *  · **El color de la categoría gana al de la persona** en la agenda. La
+ *    tarjeta lo dice, porque si no alguien cambia esto, ve que el bloqueo de
+ *    una compañera con color propio ya no lo respeta y piensa que hay un fallo.
+ */
+export function CategoriasBloqueoCard({ categorias, readOnly, onGuardar }) {
+  const [borrador, setBorrador] = useState(categorias ?? []);
+  const [guardando, setGuardando] = useState(false);
+
+  /*
+   * La config llega asíncrona: sin esto la tarjeta se quedaría con la lista
+   * vacía del primer render y «guardar» borraría las categorías del centro.
+   *
+   * Se sigue el CONTENIDO y no la identidad del array a propósito. La pantalla
+   * de Configuración se vuelve a pintar por cualquier cosa —un aviso, un
+   * cambio de pestaña, guardar otra tarjeta— y ahí llega un array nuevo con lo
+   * mismo dentro; con `[categorias]` como dependencia, cada uno de esos
+   * repintados le borraría al admin las categorías que estuviera escribiendo
+   * sin haber guardado todavía. Al guardar SÍ se repone, y con lo normalizado
+   * por el servidor, que es lo que de verdad queda escrito.
+   */
+  const guardadasJson = JSON.stringify(categorias ?? []);
+  useEffect(() => { setBorrador(JSON.parse(guardadasJson)); }, [guardadasJson]);
+
+  const sinCambios = JSON.stringify(borrador) === guardadasJson;
+  const validas = borrador.every((c) => c.label.trim() && /^#[0-9a-fA-F]{6}$/.test(c.color));
+  const lleno = borrador.length >= MAX_CATEGORIAS;
+
+  function cambiar(i, campo, valor) {
+    setBorrador((prev) => prev.map((c, n) => (n === i ? { ...c, [campo]: valor } : c)));
+  }
+  function quitar(i) {
+    setBorrador((prev) => prev.filter((_, n) => n !== i));
+  }
+  function anadir() {
+    // Sin `key`: se la pone el servidor a partir del título. Una clave inventada
+    // aquí sería una clave más que mantener sincronizada por nada.
+    setBorrador((prev) => [...prev, { label: "", color: COLOR_BLOQUEO_POR_DEFECTO }]);
+  }
+
+  async function guardar() {
+    setGuardando(true);
+    await onGuardar(borrador);
+    setGuardando(false);
+  }
+
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl p-5">
+      <div className="text-sm font-semibold text-neutral-800">Categorías de bloqueo</div>
+      <p className="text-xs text-neutral-400 mt-0.5 max-w-lg">
+        De qué es cada hora bloqueada: reunión de equipo, trabajo interno, gestión documental… Se
+        eligen de esta lista al apuntar el bloqueo, y cada una se pinta de su color{" "}
+        <strong>en la agenda de todo el equipo</strong>. Sin categorías, un bloqueo funciona como
+        siempre: su texto y el color de siempre.
+      </p>
+
+      {borrador.length === 0 ? (
+        <div className="mt-3 rounded-lg border border-dashed border-neutral-200 px-4 py-5 text-center">
+          <p className="text-xs text-neutral-400">Todavía no hay categorías.</p>
+          {!readOnly && (
+            <div className="mt-2 flex flex-wrap gap-2 justify-center">
+              <button
+                type="button"
+                onClick={() => setBorrador(CATEGORIAS_CLINICA_BASE.map((c) => ({ ...c })))}
+                className="px-3 py-1.5 rounded-lg text-[11px] font-semibold uppercase tracking-wide border border-neutral-200 text-neutral-600 hover:border-neutral-400 transition"
+              >
+                Empezar con las de un centro clínico
+              </button>
+              <button
+                type="button"
+                onClick={anadir}
+                className="px-3 py-1.5 rounded-lg text-[11px] font-semibold uppercase tracking-wide border border-neutral-200 text-neutral-600 hover:border-neutral-400 transition"
+              >
+                Crear una en blanco
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <ul className="mt-3 space-y-2">
+          {borrador.map((c, i) => {
+            const color = /^#[0-9a-fA-F]{6}$/.test(c.color) ? c.color : COLOR_BLOQUEO_POR_DEFECTO;
+            return (
+              <li key={c.key ?? `nueva-${i}`} className="flex gap-2 items-center flex-wrap">
+                <input
+                  type="color"
+                  value={color}
+                  disabled={readOnly}
+                  onChange={(e) => cambiar(i, "color", e.target.value.toUpperCase())}
+                  className="h-9 w-11 shrink-0 border border-neutral-200 rounded-lg p-1 disabled:opacity-40 cursor-pointer"
+                  aria-label={`Color de ${c.label || "la categoría"}`}
+                />
+                <input
+                  type="text"
+                  value={c.label}
+                  disabled={readOnly}
+                  maxLength={60}
+                  placeholder="Nombre de la categoría"
+                  onChange={(e) => cambiar(i, "label", e.target.value)}
+                  className="flex-1 min-w-[140px] text-sm border border-neutral-200 rounded-lg px-3 py-2 disabled:bg-neutral-50"
+                />
+                {/* Cómo queda de verdad: mismo cálculo de letra que la agenda. */}
+                <span
+                  className="rounded px-2 py-1 text-[11px] font-medium shrink-0 max-w-[180px] truncate"
+                  style={{ backgroundColor: color, color: colorTextoSobre(color) }}
+                >
+                  {c.label.trim() || "Sin nombre"}
+                </span>
+                {!readOnly && (
+                  <button
+                    type="button"
+                    onClick={() => quitar(i)}
+                    className="shrink-0 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-400 hover:text-rose-600 transition"
+                    aria-label={`Quitar ${c.label || "la categoría"}`}
+                  >
+                    Quitar
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {!readOnly && borrador.length > 0 && (
+        <div className="mt-3 flex gap-2 flex-wrap items-center">
+          <button
+            type="button"
+            onClick={anadir}
+            disabled={lleno}
+            className="px-3 py-1.5 rounded-lg text-[11px] font-semibold uppercase tracking-wide border border-neutral-200 text-neutral-600 hover:border-neutral-400 disabled:opacity-40 transition"
+          >
+            Añadir categoría
+          </button>
+          <PrimaryButton onClick={() => validas && !guardando && guardar()}>
+            {guardando ? "Guardando..." : "Guardar"}
+          </PrimaryButton>
+          {!validas && (
+            <span className="text-[11px] text-rose-600">
+              Cada categoría necesita un nombre y un color tipo <span className="font-mono">#0F0F0F</span>.
+            </span>
+          )}
+          {validas && !sinCambios && <span className="text-[10px] text-neutral-400">Sin guardar todavía.</span>}
+        </div>
+      )}
+
+      <p className="text-[10px] text-neutral-400 mt-3">
+        Al cambiar el nombre de una categoría, los bloqueos que ya la tenían se quedan en ella
+        (solo cambia el rótulo). Al <strong>quitarla</strong>, esos bloqueos se quedan sin categoría
+        y vuelven a pintarse con el color de siempre; no se borra ninguno. El color de la categoría
+        manda sobre el color propio de cada profesional — para eso está.
+      </p>
+    </div>
+  );
+}
+
 export function VideollamadaCard({ meetModo, salas = [], readOnly, onChange }) {
   const auto = meetModo === "automatico";
   const opciones = [
@@ -296,6 +467,107 @@ export function AvisosWhatsappCard({ activo, readOnly, configurado, onChange, ir
         Meta cobra por conversación iniciada por el negocio, y si la persona no te ha escrito en las
         últimas 24 h exige una <strong>plantilla aprobada</strong>: esos mensajes los rechaza hasta
         que la tengas dada de alta.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * A quién se le abre una incidencia cuando se marca una falta (01/09/2026,
+ * Rodrigo: «que se abra una incidencia y se le mande automáticamente a Olga»).
+ *
+ * La tarjeta existe para que ese «Olga» sea un DATO del centro y no una línea
+ * de código: quien lo lleve mañana se elige aquí, sin desplegar nada. Sin nadie
+ * elegido no se abre ninguna incidencia, que es como nace cualquier cliente.
+ *
+ * Se baja la plantilla ella sola (`/api/team`): es la única tarjeta de
+ * Configuración que necesita la lista de personas, y bajarla en `ConfigModule`
+ * la pediría también a los clientes que no tienen Equipo.
+ */
+export function IncidenciaPorFaltaCard({ responsables = [], readOnly, onGuardar }) {
+  const [equipo, setEquipo] = useState([]);
+  const [disponible, setDisponible] = useState(true);
+  const [guardando, setGuardando] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/team?status=active&limit=500", { cache: "no-store" })
+      .then(async (r) => {
+        if (!r.ok) { setDisponible(false); return null; }
+        return r.json();
+      })
+      .then((j) => setEquipo(j?.data?.members ?? []))
+      .catch(() => setDisponible(false));
+  }, []);
+
+  // Sin módulo de Equipo no hay a quién mandársela: la tarjeta no se enseña en
+  // vez de quedarse con un desplegable vacío que no explica nada.
+  if (!disponible) return null;
+
+  const elegidos = Array.isArray(responsables) ? responsables : [];
+  const nombreDe = (id) => equipo.find((m) => m.id === id)?.displayName ?? "Alguien que ya no está en el equipo";
+
+  async function cambiar(lista) {
+    setGuardando(true);
+    await onGuardar(lista);
+    setGuardando(false);
+  }
+
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl p-5">
+      <div className="text-sm font-semibold text-neutral-800">Incidencia automática por falta</div>
+      <p className="text-xs text-neutral-400 mt-0.5 max-w-lg">
+        Cuando alguien marca una falta en la agenda —justificada o no— se abre una incidencia
+        (Administrativa · Citas) y se le manda a estas personas. Las dos faltas dejan trabajo
+        pendiente: una hay que recuperarla y la otra, reclamarla. Sin nadie elegido no se abre
+        ninguna.
+      </p>
+
+      {elegidos.length > 0 && (
+        <ul className="mt-3 flex flex-wrap gap-1.5">
+          {elegidos.map((id) => (
+            <li key={id} className="flex items-center gap-1.5 rounded-full bg-neutral-100 pl-3 pr-1.5 py-1 text-xs text-neutral-700">
+              {nombreDe(id)}
+              {!readOnly && (
+                <button
+                  type="button"
+                  disabled={guardando}
+                  onClick={() => cambiar(elegidos.filter((x) => x !== id))}
+                  className="text-neutral-400 hover:text-red-600 transition-colors disabled:opacity-40"
+                  aria-label={`Quitar a ${nombreDe(id)}`}
+                >
+                  ✕
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {!readOnly && (
+        <select
+          value=""
+          disabled={guardando}
+          onChange={(e) => e.target.value && cambiar([...elegidos, e.target.value])}
+          className={`${inputCls} mt-3 max-w-sm`}
+          aria-label="Añadir a quien recibe las incidencias por falta"
+        >
+          <option value="">{elegidos.length ? "Añadir a otra persona…" : "Elegir a quién se le manda…"}</option>
+          {equipo
+            .filter((m) => !elegidos.includes(m.id))
+            .map((m) => (
+              <option key={m.id} value={m.id}>{m.displayName}</option>
+            ))}
+        </select>
+      )}
+
+      <div className="mt-2 text-[11px] font-medium">
+        {elegidos.length
+          ? <span className="text-emerald-700">Activo: cada falta abrirá una incidencia con {elegidos.length === 1 ? "esa persona" : "esas personas"} al cargo.</span>
+          : <span className="text-neutral-400">Apagado: marcar una falta no abre ninguna incidencia.</span>}
+      </div>
+      <p className="text-[10px] text-neutral-400 mt-2">
+        La falta <strong>sin justificar</strong> entra con prioridad alta y sigue avisando por la
+        campana, como hasta ahora. La justificada entra con prioridad media.
       </p>
     </div>
   );

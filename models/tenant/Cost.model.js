@@ -52,6 +52,18 @@ export function defineCost(sequelize) {
         allowNull: false,
         defaultValue: true,
       },
+      // ── Retención de IRPF (31/08/2026) ──────────────────────────────────
+      // La de la factura del profesional que nos la pasa: reduce lo que se le
+      // paga (total = base + IVA − retención) y se ingresa a Hacienda. Los
+      // euros los calcula SIEMPRE lib/billing/totalesGasto.js, nunca el body.
+      irpfRate: {
+        type: DataTypes.DECIMAL(5, 2),
+        allowNull: true,
+      },
+      irpfAmount: {
+        type: DataTypes.DECIMAL(12, 2),
+        allowNull: true,
+      },
       // ── Compatibilidad: campo legacy `amount` mantenido en BD ───────────
       // Sequelize NO lo expone aquí para evitar uso accidental en código nuevo.
       // Migración futura: eliminar la columna definitivamente.

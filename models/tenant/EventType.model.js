@@ -210,6 +210,37 @@ export function defineEventType(sequelize) {
         allowNull: false,
         defaultValue: false,
       },
+      /**
+       * ── ESTE TIPO DE CITA ES UN TALLER (01/09/2026, Aumenta por Rodrigo) ──
+       *
+       * «Hay que preparar los talleres de tal forma que en las citas se pueda
+       * seleccionar los talleres. No como bloqueos sino como un tipo más de
+       * cita. **Solo que estos tipos de cita se crean desde la pestaña de
+       * talleres.**»
+       *
+       * Apunta al grupo (`taller_grupos`), no a la actividad: lo que se apunta
+       * en la agenda es «Habilidades sociales · Grupo A», con su hora, su gente
+       * y quien lo da. Un tipo de cita por grupo.
+       *
+       * ── POR QUÉ EL PUNTERO ESTÁ AQUÍ Y NO EN EL GRUPO ────────────────────
+       * Porque la pregunta que se hace mil veces al día es la de ida: el
+       * desplegable de tipos de cita, el calendario y el alta de una cita
+       * necesitan saber, de un tipo cualquiera, si es un taller. Con el puntero
+       * en el grupo eso serían dos consultas en cada pantalla de agenda —y en
+       * los tenants sin Clínica, una consulta a una tabla que no existe—. Al
+       * revés se lee de la fila que ya está cargada.
+       *
+       * Sin FK dura, y esto no es la coartada de siempre: `taller_grupos` es
+       * del módulo Clínica y `event_types` del de Citas, así que hay schemas
+       * con esta tabla y sin aquella. Una FK de verdad no se podría ni crear.
+       *
+       * Null en los 62 tipos de cita de Aumenta y en los de todos los demás:
+       * un tipo sin esto se comporta exactamente como antes de que existiera.
+       */
+      tallerGrupoId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       active: {
         type: DataTypes.BOOLEAN,
         allowNull: false,

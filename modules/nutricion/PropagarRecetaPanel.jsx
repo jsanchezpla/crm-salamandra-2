@@ -117,7 +117,7 @@ export default function PropagarRecetaPanel({ recipeId, recipeName, onDone }) {
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" />
-      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col">
+      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[85dvh] flex flex-col">
         <header className="px-6 py-4 border-b border-gray-100 shrink-0">
           <div className="text-[11px] uppercase tracking-[0.18em] text-gray-400">Receta guardada</div>
           <h2 className="text-lg font-semibold text-gray-900 mt-0.5">

@@ -23,6 +23,7 @@ import { emailCancelacionAlCliente } from "../../../../../lib/citas/notificarCan
 import { getTenantResendConfig } from "../../../../../lib/outreach/resendConfig.js";
 import { reembolsarCitaSiProcede } from "../../../../../lib/citas/reembolsoCita.js";
 import { tieneRetencionPendiente } from "../../../../../lib/citas/cobroCita.js";
+import { abrirIncidenciaPorFalta } from "../../../../../lib/citas/incidenciaPorFalta.js";
 
 /*
  * Aquí vivía una segunda copia del «tu cita ha sido cancelada», y era la que se
@@ -357,6 +358,37 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
       updates.cancellationReason = body.cancellationReason != null ? String(body.cancellationReason) : null;
     }
 
+    /*
+     * ── LA CITA QUE RECUPERA UNA FALTA (31/08/2026) ─────────────────────────
+     * Solo se enlaza sobre una falta RECUPERABLE (justificada): la regla del
+     * nombre vive en lib/citas/recuperacionFalta.js. La cita enlazada tiene
+     * que existir, ser del MISMO cliente y no ser la propia falta. `null`
+     * desenlaza. Sin FK dura: validar aquí es la valla.
+     */
+    if ("recoveredByBookingId" in body) {
+      const v = body.recoveredByBookingId;
+      const statusFinalFalta = updates.status ?? row.status;
+      const justificadaFinal = "noShowJustified" in updates ? updates.noShowJustified : row.noShowJustified;
+      if (v == null) {
+        updates.recoveredByBookingId = null;
+      } else {
+        if (statusFinalFalta !== "no_show" || justificadaFinal !== true) {
+          return error("Solo una falta recuperable (justificada) se puede enlazar a la cita que la recupera", 422);
+        }
+        const idRec = String(v).trim();
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idRec)) {
+          return error("recoveredByBookingId inválido", 422);
+        }
+        if (idRec === row.id) return error("Una falta no se recupera consigo misma", 422);
+        const recuperadora = await Booking.findByPk(idRec, { attributes: ["id", "clientId", "status"] });
+        if (!recuperadora) return error("Esa cita no existe", 422);
+        if (row.clientId && recuperadora.clientId !== row.clientId) {
+          return error("La cita que recupera tiene que ser del mismo cliente", 422);
+        }
+        updates.recoveredByBookingId = idRec;
+      }
+    }
+
     // Validar solapamiento. Antes solo se comprobaba al cambiar la hora; eso
     // dejaba pasar dos casos que también pueden crear un solape real del MISMO
     // profesional: (a) reasignar la cita a otro profesional que ya tiene esa
@@ -433,6 +465,32 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
           dedupe: true,
         });
       }
+    }
+
+    /*
+     * Y LAS DOS FALTAS ABREN UNA INCIDENCIA (01/09/2026, Rodrigo).
+     *
+     * El aviso de campana de arriba es solo para la que no avisó. Esto es otra
+     * cosa: la falta —justificada o no— deja trabajo pendiente en
+     * administración (cuadrar la recuperación, decidir si se cobra, llamar a la
+     * familia), y ese trabajo tiene que quedar registrado y con dueño, no en la
+     * cabeza de quien vio la falta.
+     *
+     * A quién se le manda lo dice `settings.citas.incidenciaPorFalta` (una lista
+     * de miembros del equipo, Configuración → Agenda). Vacía = no se abre nada,
+     * que es como nace cualquier centro. El módulo se pregunta con
+     * `tenantHasModule`: la incidencia es del CENTRO, y quien marca la falta
+     * puede ser una terapeuta que no tenga Clínica en sus accesos.
+     */
+    if (statusChanged && updates.status === "no_show") {
+      await abrirIncidenciaPorFalta({
+        tenant,
+        tenantModels,
+        hasModule: tenantHasModule,
+        booking: row,
+        reportedById: await resolveCurrentTeamMemberId(request, tenantModels),
+        notificar: (aviso) => notifyUsers({ tenantModels, dedupe: true, ...aviso }),
+      });
     }
 
     await logCitasAudit({

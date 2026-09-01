@@ -270,6 +270,35 @@ const navigation = [
         key: "billing",
         label: "Facturación",
         href: "/facturacion",
+        /*
+         * Facturación era el ÚNICO módulo grande sin desplegable (01/09/2026,
+         * Rodrigo: «necesito poder ver los submódulos de Facturación, que no hay
+         * ninguno»): Clientes, Interesados, Citas, Equipo y Clínica abren su
+         * lista desde el menú, y aquí había que entrar en el módulo y buscar en
+         * la barra de pestañas. Con nueve pantallas de trabajo diario, eso son
+         * dos clics a ciegas para lo que se usa cada mañana.
+         *
+         * Va lo de la OPERATIVA, en el mismo orden que sus pestañas, más el
+         * Resumen. Lo demás (Recurrentes, Proveedores, las analíticas,
+         * Cumplimiento y Configuración) se queda solo en la barra: no se abre a
+         * diario y un submenú de diecisiete líneas no lo lee nadie.
+         *
+         * El único hijo con `moduleKey` es Banco, que es el submódulo de verdad
+         * (`billing_banco`, se vende aparte). Los demás no llevan clave: quien
+         * ve Facturación los ve todos, que es lo que hacen los otros módulos.
+         */
+        children: [
+          { key: "billing-presupuestos", label: "Presupuestos", href: "/facturacion/presupuestos" },
+          { key: "billing-facturas", label: "Facturas", href: "/facturacion/facturas" },
+          { key: "billing-cobros", label: "Cobros", href: "/facturacion/cobros" },
+          // Las cuotas mensuales asignadas (01/09/2026): van pegadas a Cobros
+          // porque es donde nacen — la cuota genera el cobro del mes.
+          { key: "billing-cuotas", label: "Cuotas", href: "/facturacion/cuotas" },
+          { key: "billing-gastos", label: "Gastos", href: "/facturacion/costes" },
+          { key: "billing-arqueo", label: "Arqueo", href: "/facturacion/arqueo" },
+          { key: "billing-banco", label: "Banco", href: "/facturacion/banco", moduleKey: "billing_banco" },
+          { key: "billing-resumen", label: "Resumen", href: "/facturacion/resumen" },
+        ],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
             <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 6v.75m0 3v.75m0 3v.75m0 3V18m-9-5.25h5.25M7.5 15h3M3.375 5.25c-.621 0-1.125.504-1.125 1.125v3.026a2.999 2.999 0 010 5.198v3.026c0 .621.504 1.125 1.125 1.125h17.25c.621 0 1.125-.504 1.125-1.125v-3.026a2.999 2.999 0 010-5.198V6.375c0-.621-.504-1.125-1.125-1.125H3.375z" />
@@ -328,6 +357,14 @@ const navigation = [
         key: "documents",
         label: "Documentos",
         href: "/documentos",
+        // El archivo sigue siendo la pantalla del padre; el hijo es la lista de
+        // lo que hay que LEER (01/09/2026, Rodrigo). Sin `moduleKey` a
+        // propósito: quien tiene una lectura pendiente tiene que poder llegar a
+        // ella, tenga o no el módulo Equipo en sus accesos — lo que la esconde
+        // donde no puede haber nada es `hijosOcultosSegunModulos`.
+        children: [
+          { key: "documents-lecturas", label: "Para leer", href: "/documentos/lecturas" },
+        ],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z" />
@@ -513,8 +550,25 @@ const TENANT_LABEL_OVERRIDES = {
  * pantalla que a ese cliente no le dice nada.
  */
 function hijosOcultosSegunModulos(modules) {
+  const ocultos = [];
   const training = modules.find((m) => m.moduleKey === "training" && m.enabled);
-  return esFormacionAbierta(training?.featureFlags) ? HIJOS_OCULTOS_FORMACION_ABIERTA : [];
+  if (esFormacionAbierta(training?.featureFlags)) ocultos.push(...HIJOS_OCULTOS_FORMACION_ABIERTA);
+
+  /*
+   * «Para leer» (01/09/2026): pedirle a alguien que lea un documento es
+   * pedírselo a una FICHA DE EQUIPO, así que en un cliente sin el módulo Equipo
+   * esa pantalla no puede tener nada dentro nunca.
+   *
+   * Se decide por el módulo del TENANT y NO por los accesos de quien mira: un
+   * usuario sin `team` en su `moduleAccess` sigue teniendo sus lecturas
+   * pendientes (el caso de Rocío, `lib/citas/visibilidad.js`), y por eso la
+   * entrada NO lleva `moduleKey` — con él, a quien le hace falta no le saldría.
+   * Con la lista de módulos vacía (SSR de borde) no se esconde nada.
+   */
+  const conEquipo = modules.some((m) => m.moduleKey === "team" && m.enabled);
+  if (modules.length > 0 && !conEquipo) ocultos.push("documents-lecturas");
+
+  return ocultos;
 }
 
 export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClose }) {
@@ -728,7 +782,7 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
       {/* Sidebar */}
       <aside
         className={`
-          fixed lg:sticky top-0 left-0 h-screen z-50 lg:z-auto
+          fixed lg:sticky top-0 left-0 alto-ventana z-50 lg:z-auto
           w-[260px] lg:w-[220px] flex flex-col shrink-0
           transition-transform duration-300 ease-in-out
           ${mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}

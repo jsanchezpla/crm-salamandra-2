@@ -9,6 +9,7 @@ function gate(ctx) {
   return ctx.hasModule("clinica") || ctx.hasModule("pacientes");
 }
 const STATUSES = ["draft", "ai_pending", "registered", "published"];
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const GET = withTenant(async (request, _rc, ctx) => {
   if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
@@ -17,6 +18,10 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   const where = {};
   if (sp.get("patientId")) where.patientId = sp.get("patientId");
   if (sp.get("therapistId")) where.therapistId = sp.get("therapistId");
+  // De qué CITA (01/09/2026): lo pregunta el modal de la cita para saber si
+  // esa cita ya tiene registro —y decir «Seguir con la sesión» en vez de
+  // «Preparar sesión»— sin tener que traerse las 22.045 del paciente.
+  if (sp.get("bookingId")) where.bookingId = sp.get("bookingId");
   const limit = Math.min(200, Math.max(1, parseInt(sp.get("limit") ?? "100", 10) || 100));
   const rows = await ClinicSession.findAll({
     where,
@@ -75,6 +80,11 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     // llegando por sus campos de arriba — el formulario los reparte con
     // `repartirValoresDeSesion`, así que este cuerpo es el de siempre MÁS esto.
     contentSections: limpiarContentSections(body.contentSections),
+    // De qué CITA sale este registro (01/09/2026). Sin FK a `bookings`: borrar
+    // una cita del calendario no puede llevarse por delante la nota clínica de
+    // la sesión que sí se dio. Null cuando la sesión se escribe desde la ficha
+    // del paciente, que es lo normal en las 22.045 de Aumenta.
+    bookingId: typeof body.bookingId === "string" && UUID_RE.test(body.bookingId.trim()) ? body.bookingId.trim() : null,
     status: STATUSES.includes(body.status) ? body.status : "registered",
     // Cliente/pagador del paciente (foto al crear la sesión).
     clientId: await clientIdOfPatient(ctx.tenantModels, body.patientId),

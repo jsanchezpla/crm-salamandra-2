@@ -42,11 +42,13 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
       if (!proveedor) return notFound("Proveedor no encontrado");
     }
 
-    // Si cambian taxBase o vatRate, recalcular taxAmount y total
-    if ("taxBase" in body || "vatRate" in body) {
+    // Si cambian base, IVA o retención, recalcular importes (la regla, una:
+    // lib/billing/totalesGasto.js).
+    if ("taxBase" in body || "vatRate" in body || "irpfRate" in body) {
       const totals = computeCostTotals({
         taxBase: body.taxBase ?? cost.taxBase,
         vatRate: body.vatRate ?? cost.vatRate,
+        irpfRate: "irpfRate" in body ? body.irpfRate : cost.irpfRate,
       });
       Object.assign(updates, totals);
     }

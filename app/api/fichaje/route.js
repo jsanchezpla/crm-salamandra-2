@@ -3,7 +3,8 @@ import { Op } from "sequelize";
 import { withTenant } from "../../../lib/tenant/withTenant.js";
 import { ok, created, error, forbidden, serverError } from "../../../lib/utils/apiResponse.js";
 import { auditar, datosPeticion } from "../../../lib/utils/auditoria.js";
-import { resumirPorPersona, totalesDelMes, avisosDelMes, rangoDelPeriodo } from "../../../lib/fichaje/totales.js";
+import { resumirPorPersona, totalesDelMes, avisosDelMes, ordenarAvisos, rangoDelPeriodo } from "../../../lib/fichaje/totales.js";
+import { avisosDePuntualidad } from "../../../lib/fichaje/puntualidad.js";
 import { cargarFestivos, esFestivo } from "../../../lib/citas/festivos.js";
 import { describirParser } from "../../../lib/fichaje/parsers/index.js";
 
@@ -19,6 +20,71 @@ const ADMIN = new Set(["admin", "superadmin"]);
  * CRM ya tiene el patrón: `withTenant` reescribe `x-user-role` con el rol
  * fresco de base de datos, así que degradar a alguien surte efecto al instante.
  */
+
+/**
+ * La agenda del mes aplanada para la puntualidad (31/08/2026): citas activas
+ * y bloqueos por persona, cada uno como { teamMemberId, fecha, inicio, fin }
+ * EN HORA DE MADRID — el reloj de fichar y el Excel viven en hora de pared,
+ * y el servidor va en UTC, así que aquí se convierte y la regla
+ * (lib/fichaje/puntualidad.js) solo compara minutos. Sin módulo Citas no hay
+ * tablas y la pantalla sigue: se pierde el aviso, no el módulo.
+ */
+const enMadrid = new Intl.DateTimeFormat("es-ES", {
+  timeZone: "Europe/Madrid",
+  year: "numeric", month: "2-digit", day: "2-digit",
+  hour: "2-digit", minute: "2-digit", hour12: false,
+});
+function fechaHoraMadrid(instante) {
+  const p = Object.fromEntries(enMadrid.formatToParts(new Date(instante)).map((x) => [x.type, x.value]));
+  return { fecha: `${p.year}-${p.month}-${p.day}`, hora: `${p.hour}:${p.minute}` };
+}
+
+async function agendaDelPeriodo(tenantModels, rango) {
+  const { Booking, TeamBlock } = tenantModels;
+  const agenda = [];
+  const desde = new Date(`${rango.desde}T00:00:00Z`);
+  const hasta = new Date(`${rango.hasta}T23:59:59Z`);
+  try {
+    if (Booking) {
+      const citas = await Booking.findAll({
+        where: {
+          teamMemberId: { [Op.ne]: null },
+          scheduledAt: { [Op.between]: [desde, hasta] },
+          status: { [Op.notIn]: ["cancelled"] },
+        },
+        attributes: ["teamMemberId", "scheduledAt", "duration"],
+      });
+      for (const c of citas) {
+        const ini = fechaHoraMadrid(c.scheduledAt);
+        const fin = fechaHoraMadrid(new Date(new Date(c.scheduledAt).getTime() + (Number(c.duration) || 0) * 60000));
+        agenda.push({ teamMemberId: c.teamMemberId, fecha: ini.fecha, inicio: ini.hora, fin: fin.hora });
+      }
+    }
+    if (TeamBlock) {
+      const bloqueos = await TeamBlock.findAll({
+        where: {
+          teamMemberId: { [Op.ne]: null },
+          startAt: { [Op.lt]: hasta },
+          endAt: { [Op.gt]: desde },
+        },
+        attributes: ["teamMemberId", "startAt", "endAt"],
+      });
+      for (const b of bloqueos) {
+        const ini = fechaHoraMadrid(b.startAt);
+        const fin = fechaHoraMadrid(b.endAt);
+        // Un bloqueo de varios días cuenta en su día de inicio y en el de fin;
+        // los días de en medio no dicen nada de puntualidad (no se ficha).
+        agenda.push({ teamMemberId: b.teamMemberId, fecha: ini.fecha, inicio: ini.hora, fin: ini.fecha === fin.fecha ? fin.hora : "23:59" });
+        if (fin.fecha !== ini.fecha) {
+          agenda.push({ teamMemberId: b.teamMemberId, fecha: fin.fecha, inicio: "00:00", fin: fin.hora });
+        }
+      }
+    }
+  } catch {
+    return [];
+  }
+  return agenda;
+}
 
 /** Festivos del periodo como Set de 'YYYY-MM-DD'. Tolera que no haya módulo Citas. */
 async function festivosDelPeriodo(tenantModels, rango) {
@@ -69,6 +135,8 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     const planas = filas.map((f) => f.toJSON());
     const festivos = await festivosDelPeriodo(tenantModels, rango);
     const resumen = resumirPorPersona(planas, personas);
+    const agenda = await agendaDelPeriodo(tenantModels, rango);
+    const nombres = new Map(personas.map((p) => [p.id, p.displayName || p.email || "(sin nombre)"]));
 
     return ok({
       periodo: mes,
@@ -76,7 +144,10 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       filas: planas,
       resumen,
       totales: totalesDelMes(resumen),
-      avisos: avisosDelMes(planas, personas, { festivos }),
+      avisos: ordenarAvisos([
+        ...avisosDelMes(planas, personas, { festivos }),
+        ...avisosDePuntualidad(planas, agenda, { nombres }),
+      ]),
       parser: describirParser(request.headers.get("x-tenant")),
     });
   } catch (err) {

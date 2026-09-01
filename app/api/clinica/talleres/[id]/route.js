@@ -7,13 +7,23 @@ import { Op } from "sequelize";
 export const GET = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
   if (!hasModule("clinica")) return forbidden();
 
-  const { Taller, TallerInscripcion, Patient, TeamMember } = tenantModels;
+  const { Taller, TallerInscripcion, Patient, TeamMember, BillingConcept } = tenantModels;
   const { id } = await params;
 
   const taller = await Taller.findByPk(id, {
     include: [{ model: TeamMember, as: "responsable", attributes: ["id", "displayName"] }],
   });
   if (!taller) return notFound("Taller no encontrado");
+
+  // El concepto de cobro, a mano (FK suave a propósito): el detalle es donde
+  // se apunta a la gente, y ahí es donde hay que decir qué se cobrará.
+  let concepto = null;
+  if (taller.conceptId && BillingConcept) {
+    concepto = await BillingConcept.findByPk(taller.conceptId, {
+      attributes: ["id", "name", "unitPrice", "periodicity"],
+      raw: true,
+    });
+  }
 
   const inscripciones = await TallerInscripcion.findAll({
     where: { tallerId: id },
@@ -23,6 +33,7 @@ export const GET = withTenant(async (request, { params }, { tenantModels, hasMod
 
   return ok({
     ...taller.toJSON(),
+    concepto,
     // Separados a propósito: al abrir un taller lo que se quiere ver es quién
     // está AHORA; los que pasaron por él son consulta de histórico.
     apuntados: inscripciones.filter((i) => !i.leftAt),
@@ -53,6 +64,18 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
   for (const c of ["description", "schedule", "notes"]) if (c in body) cambios[c] = body[c]?.trim() || null;
   if ("teamMemberId" in body) cambios.teamMemberId = body.teamMemberId || null;
   if ("active" in body) cambios.active = !!body.active;
+  // El concepto de cobro (31/08/2026): null desenlaza; un id que no existe se
+  // descarta en vez de guardar un enlace roto.
+  if ("conceptId" in body) {
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const { BillingConcept } = tenantModels;
+    if (body.conceptId == null || body.conceptId === "") {
+      cambios.conceptId = null;
+    } else if (typeof body.conceptId === "string" && UUID_RE.test(body.conceptId) && BillingConcept) {
+      const c = await BillingConcept.findByPk(body.conceptId, { attributes: ["id"] });
+      if (c) cambios.conceptId = body.conceptId;
+    }
+  }
 
   await taller.update(cambios);
   await auditar({

@@ -474,23 +474,60 @@ async function main() {
   });
 
   // ── 11. PACIENTES ───────────────────────────────────────────────────────────
+  // Cada paciente cuelga de su FAMILIA (una ficha de cliente que paga) por
+  // patients.client_id. Sin ese enlace, todo lo que cruza paciente↔pagador sale
+  // vacío en la demo: el buscador por paciente de facturas y presupuestos
+  // (lib/clients/familiasPorPaciente.js), el reparto de cuotas y el portal
+  // (comprobado en producción el 31/08/2026: los 9 de crm_demo con client_id
+  // NULL). Y sus citas van a nombre de la familia CON el paciente puesto — la
+  // cadena pagador → paciente → cita que anuncia la demo de clínica.
   let pacientes = [];
   await tryModule("Pacientes", async () => {
-    const { Patient } = models;
-    for (let i = 0; i < 9; i++) {
-      const p = await Patient.create({
-        firstName: pick(NOMBRES), lastName: `${pick(APELLIDOS)} ${pick(APELLIDOS)}`,
-        birthDate: daysAgo(rand(2500, 6000)), age: rand(7, 16),
-        educationCenter: pick(["Colegio Aurora", "CEIP Las Palmeras", "IES Norte"]),
-        educationLevel: pick(["Primaria", "ESO", "Infantil"]),
-        referralReason: pick(["Dificultades de atención", "Apoyo en lectoescritura", "Regulación emocional"]),
-        referredBy: pick(["Orientador escolar", "Pediatra", "Familia"]),
-        mainTherapistId: pick(equipo)?.id ?? null, enrollmentDate: daysAgo(rand(30, 400)),
-        attendanceFrequency: pick(["semanal", "quincenal"]), status: pick(["active", "active", "paused"]),
+    const { Patient, Client, Booking } = models;
+    const FAMILIAS = [2, 2, 1, 1, 1, 1, 1]; // 9 pacientes; dos familias con hermanos
+    let nCitas = 0;
+    for (const nHijos of FAMILIAS) {
+      const apellido = pick(APELLIDOS);
+      const familia = await Client.create({
+        type: "individual",
+        name: `${pick(NOMBRES)} ${apellido} ${pick(APELLIDOS)}`,
+        email: `familia.${slugify(apellido)}${rand(10, 99)}@example.com`,
+        phone: `+34 ${rand(600, 699)} ${rand(100, 999)} ${rand(100, 999)}`,
+        status: "active",
+        customFields: { showcase: "familia" },
       });
-      pacientes.push(p);
+      clientes.push(familia);
+      for (let h = 0; h < nHijos; h++) {
+        const p = await Patient.create({
+          clientId: familia.id, relationship: pick(["hijo", "hija"]),
+          firstName: pick(NOMBRES), lastName: `${apellido} ${pick(APELLIDOS)}`,
+          birthDate: daysAgo(rand(2500, 6000)), age: rand(7, 16),
+          educationCenter: pick(["Colegio Aurora", "CEIP Las Palmeras", "IES Norte"]),
+          educationLevel: pick(["Primaria", "ESO", "Infantil"]),
+          referralReason: pick(["Dificultades de atención", "Apoyo en lectoescritura", "Regulación emocional"]),
+          referredBy: pick(["Orientador escolar", "Pediatra", "Familia"]),
+          mainTherapistId: pick(equipo)?.id ?? null, enrollmentDate: daysAgo(rand(30, 400)),
+          attendanceFrequency: pick(["semanal", "quincenal"]), status: pick(["active", "active", "paused"]),
+        });
+        pacientes.push(p);
+        if (!tiposCita.length) continue;
+        const offsets = [-rand(3, 25)];
+        if (p.status === "active") offsets.push(rand(2, 12)); // solo el activo tiene próxima cita
+        for (const off of offsets) {
+          const et = pick(tiposCita);
+          const d = new Date(); d.setDate(d.getDate() + off); d.setHours(rand(16, 19), pick([0, 30]), 0, 0);
+          await Booking.create({
+            eventTypeId: et.id, teamMemberId: p.mainTherapistId,
+            patientId: p.id, clientId: familia.id,
+            clientName: familia.name, clientEmail: familia.email, clientPhone: familia.phone,
+            scheduledAt: d, duration: et.duration, modality: pick(et.modalities),
+            status: off < 0 ? "completed" : "confirmed",
+          });
+          nCitas++;
+        }
+      }
     }
-    return `${pacientes.length} pacientes`;
+    return `${pacientes.length} pacientes · ${FAMILIAS.length} familias pagadoras · ${nCitas} citas con paciente`;
   });
 
   // ── 12. CLÍNICA ─────────────────────────────────────────────────────────────
@@ -500,12 +537,13 @@ async function main() {
     for (const pac of pacientes) {
       const sesiones = rand(2, 5);
       for (let s = 0; s < sesiones; s++) {
-        await ClinicSession.create({ patientId: pac.id, therapistId: pac.mainTherapistId, sessionDate: daysAgo(rand(1, 120)), duration: 50, objectives: "Trabajar atención sostenida y autorregulación.", activities: "Ejercicios de atención + juego simbólico.", performance: pick(["Buena evolución", "Estable", "Mejora leve"]), observations: "El menor participó activamente.", status: pick(["published", "published", "draft"]) });
+        // clientId: foto del pagador al crearse, como hace la app (lib/clinica/patientClient.js).
+        await ClinicSession.create({ patientId: pac.id, clientId: pac.clientId, therapistId: pac.mainTherapistId, sessionDate: daysAgo(rand(1, 120)), duration: 50, objectives: "Trabajar atención sostenida y autorregulación.", activities: "Ejercicios de atención + juego simbólico.", performance: pick(["Buena evolución", "Estable", "Mejora leve"]), observations: "El menor participó activamente.", status: pick(["published", "published", "draft"]) });
         ns++;
       }
-      if (Math.random() < 0.6) { await ClinicalReport.create({ patientId: pac.id, therapistId: pac.mainTherapistId, reportType: pick(["evolution", "admission"]), reportDate: daysAgo(rand(10, 90)), aiGenerated: false, contentSections: { resumen: "Informe de ejemplo." }, status: pick(["draft", "reviewed", "delivered"]) }); nr++; }
+      if (Math.random() < 0.6) { await ClinicalReport.create({ patientId: pac.id, clientId: pac.clientId, therapistId: pac.mainTherapistId, reportType: pick(["evolution", "admission"]), reportDate: daysAgo(rand(10, 90)), aiGenerated: false, contentSections: { resumen: "Informe de ejemplo." }, status: pick(["draft", "reviewed", "delivered"]) }); nr++; }
     }
-    await Coordination.create({ coordinationType: "colegio", participants: ["Orientador", "Familia", "Terapeuta"], coordinationDate: daysAgo(rand(5, 60)), topics: "Seguimiento del caso.", agreements: "Reforzar pautas en casa.", nextActions: "Revisión en 1 mes.", relatedPatientId: pacientes[0]?.id ?? null, createdById: pick(equipo)?.id ?? null }).catch(() => {});
+    await Coordination.create({ coordinationType: "colegio", participants: ["Orientador", "Familia", "Terapeuta"], coordinationDate: daysAgo(rand(5, 60)), topics: "Seguimiento del caso.", agreements: "Reforzar pautas en casa.", nextActions: "Revisión en 1 mes.", relatedPatientId: pacientes[0]?.id ?? null, clientId: pacientes[0]?.clientId ?? null, createdById: pick(equipo)?.id ?? null }).catch(() => {});
     for (const em of equipo.slice(0, 3)) await PerformanceMetric.create({ therapistId: em.id, periodMonth: 6, periodYear: 2026, totalScore: rand(60, 95), proposedIncentive: rand(100, 500, 2) }).catch(() => {});
     return `${ns} sesiones · ${nr} informes`;
   });

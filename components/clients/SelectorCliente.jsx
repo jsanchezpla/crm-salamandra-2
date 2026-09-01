@@ -2,7 +2,7 @@
 
 import { useCallback } from "react";
 import SelectorRemoto from "../ui/SelectorRemoto.jsx";
-import { urlDeFichas } from "../../lib/clients/buscarFichas.js";
+import { urlDeFichas, etiquetaDeFicha } from "../../lib/clients/buscarFichas.js";
 
 /**
  * SelectorCliente — elegir una ficha de cliente preguntando al SERVIDOR.
@@ -55,30 +55,38 @@ export default function SelectorCliente({
   id,
   "aria-label": ariaLabel,
   opcionesFijas = [],
+  // "billing": pregunta a /api/billing/fichas, la puerta de facturación.
+  // Rosa y Olga cobran con `billing` pero sin `clients` en su module_access:
+  // contra /api/clients este selector les volvía VACÍO (31/08/2026).
+  fuente = "clients",
 }) {
   // `params` suele venir escrito en el JSX (`params={{ assignedTo: "x" }}`), o
   // sea un objeto nuevo en cada render. Se fija por su contenido para que el
   // selector no vuelva a preguntar sin motivo.
   const clave = JSON.stringify(params || {});
 
+  const base = fuente === "billing" ? "/api/billing/fichas" : "/api/clients";
+
   const buscar = useCallback(
     async (texto) => {
-      const r = await fetch(urlDeFichas(texto, JSON.parse(clave)), { cache: "no-store" });
+      const r = await fetch(urlDeFichas(texto, JSON.parse(clave), base), { cache: "no-store" });
       if (!r.ok) return { items: [], total: 0 };
       const j = await r.json();
       return { items: j?.data?.clients || [], total: j?.data?.total ?? 0 };
     },
-    [clave]
+    [clave, base]
   );
 
   const traerUna = useCallback(async (idFicha) => {
     // La ficha ENTERA, no solo su nombre: quien la pide puede necesitar su
     // razón social o su NIF, y volver a pedirla sería otra vuelta al servidor.
-    const r = await fetch(`/api/clients/${idFicha}`, { cache: "no-store" });
+    // Por la puerta de facturación viaja solo lo que el dinero necesita.
+    const url = base === "/api/clients" ? `/api/clients/${idFicha}` : `${base}?id=${idFicha}`;
+    const r = await fetch(url, { cache: "no-store" });
     if (!r.ok) return null;
     const j = await r.json();
     return j?.data ?? null;
-  }, []);
+  }, [base]);
 
   return (
     <SelectorRemoto
@@ -89,7 +97,7 @@ export default function SelectorCliente({
       onElegida={onFicha}
       buscar={buscar}
       traerUna={traerUna}
-      etiqueta={etiqueta || ((c) => c.name)}
+      etiqueta={etiqueta || etiquetaDeFicha}
       plural="fichas"
       dondeSeCrean="Clientes"
       placeholder={placeholder}

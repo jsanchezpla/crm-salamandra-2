@@ -48,6 +48,87 @@ export default function ConfiguracionPage() {
 
   function setField(k, v) { setSettings((s) => ({ ...s, [k]: v })); }
 
+  // ── Catálogo de conceptos y cuotas (31/08/2026) ────────────────────────────
+  const CONCEPTO_VACIO = { name: "", description: "", unitPrice: "", vatRate: "0", category: "", periodicity: "" };
+  const [conceptos, setConceptos] = useState([]);
+  const [nuevoConcepto, setNuevoConcepto] = useState(CONCEPTO_VACIO);
+  const [guardandoConcepto, setGuardandoConcepto] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/billing/conceptos?todos=1", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => j.ok && setConceptos(j.data.conceptos ?? []))
+      .catch(() => {});
+  }, []);
+
+  async function crearConcepto() {
+    if (guardandoConcepto || !nuevoConcepto.name.trim()) return;
+    setGuardandoConcepto(true);
+    setErrorMsg(null);
+    try {
+      const r = await fetch("/api/billing/conceptos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...nuevoConcepto, unitPrice: Number(nuevoConcepto.unitPrice || 0), vatRate: Number(nuevoConcepto.vatRate || 0) }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "No se pudo crear el concepto");
+      setConceptos((cs) => [...cs, j.data]);
+      setNuevoConcepto(CONCEPTO_VACIO);
+    } catch (e) { setErrorMsg(e.message); } finally { setGuardandoConcepto(false); }
+  }
+
+  /*
+   * EDITAR un concepto (01/09/2026, petición de Aumenta: «poder dar de baja,
+   * MODIFICAR, eliminar una cuota»). El PATCH ya existía desde el 31/08; lo que
+   * faltaba era la puerta: se podía apagar y borrar, pero no corregir un precio
+   * sin dar de alta otro concepto y dejar el viejo apagado.
+   *
+   * Importa especialmente ahora: las cuotas asignadas con importe a NULL toman
+   * el precio de AQUÍ, así que subir la tarifa es editar un concepto y no
+   * repasar 260 familias.
+   */
+  const [editandoConcepto, setEditandoConcepto] = useState(null);
+
+  async function guardarConcepto() {
+    const c = editandoConcepto;
+    if (!c || !String(c.name ?? "").trim()) return;
+    setErrorMsg(null);
+    try {
+      const r = await fetch(`/api/billing/conceptos/${c.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: c.name,
+          description: c.description || null,
+          unitPrice: Number(c.unitPrice || 0),
+          vatRate: Number(c.vatRate || 0),
+          category: c.category || null,
+          periodicity: c.periodicity || null,
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "No se pudo guardar el concepto");
+      setConceptos((cs) => cs.map((x) => (x.id === c.id ? j.data : x)));
+      setEditandoConcepto(null);
+    } catch (e) { setErrorMsg(e.message); }
+  }
+
+  async function alternarConcepto(c) {
+    const r = await fetch(`/api/billing/conceptos/${c.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ active: !c.active }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (j.ok) setConceptos((cs) => cs.map((x) => (x.id === c.id ? j.data : x)));
+  }
+
+  async function borrarConcepto(c) {
+    const r = await fetch(`/api/billing/conceptos/${c.id}`, { method: "DELETE" });
+    const j = await r.json().catch(() => ({}));
+    if (j.ok) setConceptos((cs) => cs.filter((x) => x.id !== c.id));
+  }
+
   async function save() {
     setSaving(true); setErrorMsg(null); setOkMsg(null);
     try {
@@ -65,6 +146,9 @@ export default function ConfiguracionPage() {
           defaultPaymentTermsDays: Number(settings.defaultPaymentTermsDays),
           invoiceFooterText: settings.invoiceFooterText,
           logoUrl: settings.logoUrl,
+          quoteFooterText: settings.quoteFooterText,
+          quoteLogoUrl: settings.quoteLogoUrl,
+          stampUrl: settings.stampUrl,
         }),
       });
       const j = await res.json();
@@ -178,13 +262,136 @@ export default function ConfiguracionPage() {
           <Field label="Días de vencimiento por defecto">
             <input disabled={!puedeFacturar} type="number" min="0" value={settings.defaultPaymentTermsDays} onChange={(e) => setField("defaultPaymentTermsDays", Number(e.target.value))} className={inputCls} />
           </Field>
-          <Field label="URL del logo">
-            <input disabled={!puedeFacturar} value={settings.logoUrl ?? ""} onChange={(e) => setField("logoUrl", e.target.value)} className={inputCls} />
+          <Field label="URL del logo (facturas)">
+            <input disabled={!puedeFacturar} value={settings.logoUrl ?? ""} onChange={(e) => setField("logoUrl", e.target.value)} placeholder="https://… (PNG o JPG)" className={inputCls} />
+          </Field>
+          <Field label="URL del sello del centro">
+            <input disabled={!puedeFacturar} value={settings.stampUrl ?? ""} onChange={(e) => setField("stampUrl", e.target.value)} placeholder="https://… (PNG o JPG); sale junto a los totales" className={inputCls} />
+          </Field>
+          <Field label="URL del logo (presupuestos)">
+            <input disabled={!puedeFacturar} value={settings.quoteLogoUrl ?? ""} onChange={(e) => setField("quoteLogoUrl", e.target.value)} placeholder="Vacío = el de las facturas" className={inputCls} />
           </Field>
           <Field label="Texto al pie de la factura" full>
             <textarea disabled={!puedeFacturar} rows={2} value={settings.invoiceFooterText ?? ""} onChange={(e) => setField("invoiceFooterText", e.target.value)} className={inputCls + " resize-y"} />
           </Field>
+          <Field label="Texto al pie del presupuesto" full>
+            <textarea disabled={!puedeFacturar} rows={2} placeholder="Vacío = el de las facturas" value={settings.quoteFooterText ?? ""} onChange={(e) => setField("quoteFooterText", e.target.value)} className={inputCls + " resize-y"} />
+          </Field>
         </div>
+      </Section>
+
+      {/* Catálogo de conceptos y cuotas (31/08/2026) */}
+      <Section
+        title="Conceptos y cuotas"
+        help={
+          <HelpTooltip title="Conceptos y cuotas" placement="top">
+            Los conceptos habituales del centro, con su texto de factura, importe e IVA. Al hacer
+            una factura se eligen del desplegable y la línea se rellena sola —{" "}
+            <strong className="text-white">como las cuotas del Organízate</strong>. La periodicidad
+            es orientativa: la cuota mensual real la lleva el cobro con su mes.
+          </HelpTooltip>
+        }
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[720px]">
+            <thead>
+              <tr className="border-b border-neutral-100">
+                <th className="text-left px-2 py-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Nombre</th>
+                <th className="text-left px-2 py-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Texto en la factura</th>
+                <th className="text-right px-2 py-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Importe</th>
+                <th className="text-right px-2 py-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">IVA %</th>
+                <th className="text-left px-2 py-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Categoría</th>
+                <th className="text-left px-2 py-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Period.</th>
+                <th className="px-2 py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {conceptos.map((c) => editandoConcepto?.id === c.id ? (
+                <tr key={c.id} className="border-b border-neutral-50 bg-neutral-50/70">
+                  <td className="px-2 py-2">
+                    <input className={inputCls} value={editandoConcepto.name ?? ""}
+                      onChange={(e) => setEditandoConcepto((v) => ({ ...v, name: e.target.value }))} />
+                  </td>
+                  <td className="px-2 py-2">
+                    <input className={inputCls} placeholder="Vacío = el nombre" value={editandoConcepto.description ?? ""}
+                      onChange={(e) => setEditandoConcepto((v) => ({ ...v, description: e.target.value }))} />
+                  </td>
+                  <td className="px-2 py-2">
+                    <input type="number" step="0.01" className={inputCls} value={editandoConcepto.unitPrice ?? ""}
+                      onChange={(e) => setEditandoConcepto((v) => ({ ...v, unitPrice: e.target.value }))} />
+                  </td>
+                  <td className="px-2 py-2">
+                    <input type="number" min="0" max="100" step="0.01" className={inputCls} value={editandoConcepto.vatRate ?? ""}
+                      onChange={(e) => setEditandoConcepto((v) => ({ ...v, vatRate: e.target.value }))} />
+                  </td>
+                  <td className="px-2 py-2">
+                    <input className={inputCls} value={editandoConcepto.category ?? ""}
+                      onChange={(e) => setEditandoConcepto((v) => ({ ...v, category: e.target.value }))} />
+                  </td>
+                  <td className="px-2 py-2">
+                    <input className={inputCls} value={editandoConcepto.periodicity ?? ""}
+                      onChange={(e) => setEditandoConcepto((v) => ({ ...v, periodicity: e.target.value }))} />
+                  </td>
+                  <td className="px-2 py-2 text-right whitespace-nowrap">
+                    <button onClick={guardarConcepto} disabled={!String(editandoConcepto.name ?? "").trim()}
+                      className="text-[11px] font-semibold text-[var(--color-primary,#1B3A2D)] hover:underline disabled:opacity-40 mr-2">Guardar</button>
+                    <button onClick={() => setEditandoConcepto(null)} className="text-[11px] text-neutral-400 hover:text-neutral-700">Cancelar</button>
+                  </td>
+                </tr>
+              ) : (
+                <tr key={c.id} className={`border-b border-neutral-50 ${c.active ? "" : "opacity-40"}`}>
+                  {/* Nombre y texto de factura ENTEROS (01/09/2026, Rodrigo:
+                      «en la configuración de las cuotas se ve todo cortado»):
+                      lo que no cabe baja de línea en vez de cortarse. */}
+                  <td className="px-2 py-2 font-medium text-neutral-800 min-w-[180px] break-words">{c.name}</td>
+                  <td className="px-2 py-2 text-neutral-500 max-w-[320px] break-words" title={c.description || ""}>{c.description || "—"}</td>
+                  {/* Un concepto a 0 € se marca: las cuotas que solo lo lleven a él
+                      no se pueden generar, y así se ve dónde hay que poner precio. */}
+                  <td className={`px-2 py-2 text-right tabular-nums ${Number(c.unitPrice) === 0 ? "text-amber-600 font-semibold" : ""}`}
+                    title={Number(c.unitPrice) === 0 ? "Sin precio: una cuota que solo lleve este concepto no se puede generar" : undefined}>
+                    {Number(c.unitPrice).toLocaleString("es-ES", { minimumFractionDigits: 2 })} €
+                  </td>
+                  <td className="px-2 py-2 text-right tabular-nums">{Number(c.vatRate)}</td>
+                  <td className="px-2 py-2 text-neutral-500">{c.category || "—"}</td>
+                  <td className="px-2 py-2 text-neutral-500">{c.periodicity || "—"}</td>
+                  <td className="px-2 py-2 text-right whitespace-nowrap">
+                    {puedeFacturar && (
+                      <>
+                        <button onClick={() => setEditandoConcepto({ ...c })} className="text-[11px] text-neutral-500 hover:text-neutral-800 mr-2">Editar</button>
+                        <button onClick={() => alternarConcepto(c)} className="text-[11px] text-neutral-500 hover:text-neutral-800 mr-2">
+                          {c.active ? "Apagar" : "Encender"}
+                        </button>
+                        <button onClick={() => borrarConcepto(c)} className="text-[11px] text-rose-500 hover:text-rose-700">Borrar</button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {conceptos.length === 0 && (
+                <tr><td colSpan={7} className="px-2 py-6 text-center text-neutral-400 text-sm">Sin conceptos todavía. Da de alta el primero aquí debajo.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        {puedeFacturar && (
+          /* Dos filas de cuatro, no siete campos en una (01/09/2026, Rodrigo:
+             «en la configuración de las cuotas se ve todo cortado»): a siete
+             columnas cada caja medía 36 px y los rótulos se quedaban en «Im» y
+             «me» — no se leía ni lo que estabas tecleando. */
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 items-end">
+            <input className={`${inputCls} lg:col-span-2`} placeholder="Nombre *" value={nuevoConcepto.name} onChange={(e) => setNuevoConcepto((v) => ({ ...v, name: e.target.value }))} />
+            <input className={`${inputCls} lg:col-span-2`} placeholder="Texto en la factura (vacío = el nombre)" value={nuevoConcepto.description} onChange={(e) => setNuevoConcepto((v) => ({ ...v, description: e.target.value }))} />
+            <input type="number" min="0" step="0.01" className={inputCls} placeholder="Importe €" value={nuevoConcepto.unitPrice} onChange={(e) => setNuevoConcepto((v) => ({ ...v, unitPrice: e.target.value }))} />
+            <input type="number" min="0" max="100" step="0.01" className={inputCls} placeholder="IVA %" value={nuevoConcepto.vatRate} onChange={(e) => setNuevoConcepto((v) => ({ ...v, vatRate: e.target.value }))} />
+            <input className={inputCls} placeholder="Categoría" value={nuevoConcepto.category} onChange={(e) => setNuevoConcepto((v) => ({ ...v, category: e.target.value }))} />
+            <div className="flex gap-2">
+              <input className={inputCls} placeholder="mensual…" value={nuevoConcepto.periodicity} onChange={(e) => setNuevoConcepto((v) => ({ ...v, periodicity: e.target.value }))} />
+              <button onClick={crearConcepto} disabled={guardandoConcepto || !nuevoConcepto.name.trim()} className="shrink-0 px-3 py-2 rounded-lg text-xs font-bold text-white disabled:opacity-40" style={{ background: "var(--color-primary, #1B3A2D)" }}>
+                {guardandoConcepto ? "…" : "Añadir"}
+              </button>
+            </div>
+          </div>
+        )}
       </Section>
 
       {/* Series */}

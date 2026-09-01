@@ -245,7 +245,7 @@ function ConfirmarTick({ tarea, resuelta, ocupada, fallo, onConfirmar, onCancela
         aria-modal="true"
         aria-labelledby="confirmar-tick-titulo"
         onClick={(e) => e.stopPropagation()}
-        className="relative z-50 w-full max-w-md rounded-xl p-5 max-h-[85vh] overflow-auto"
+        className="relative z-50 w-full max-w-md rounded-xl p-5 max-h-[85dvh] overflow-auto"
         style={{
           background: "var(--panel)",
           border: "1px solid var(--line)",

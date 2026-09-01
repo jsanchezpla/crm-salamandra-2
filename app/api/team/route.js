@@ -4,6 +4,7 @@ import { withTenant } from "../../../lib/tenant/withTenant.js";
 import { ok, created, error, forbidden, serverError } from "../../../lib/utils/apiResponse.js";
 import { getMasterModels } from "../../../lib/db/masterDb.js";
 import { serializeTeamMember, serializeProfesional } from "../../../lib/team/serializeTeamMember.js";
+import { idsDeAdministracion } from "../../../lib/team/departamentos.js";
 import { normalizeSpecialties } from "../../../lib/clinica/specialties.js";
 import { correoDeCuenta } from "../../../lib/auth/correoCuenta.js";
 import { limpiaColorBloqueo } from "../../../lib/citas/coloresBloqueo.js";
@@ -250,6 +251,17 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
       viewerIsAdmin: isAdmin && !listaReducida,
       // Que la pantalla pueda decirlo en vez de dar por hecho que lo trae todo.
       listaReducida,
+      /*
+       * Quiénes de esta página son ADMINISTRACIÓN (01/09/2026, Rodrigo): lo
+       * usa el botón «Todos menos Administración» de los selectores de equipo.
+       *
+       * Viajan los IDs y no el departamento de cada ficha: `department` está en
+       * `CAMPOS_FUERA_DE_LA_LISTA` a propósito (la lista recortada no destapa
+       * fichas), y para pintar el botón basta con saber a quién no marcar. La
+       * regla de qué cuenta como administración vive en
+       * `lib/team/departamentos.js`, no aquí.
+       */
+      administracion: idsDeAdministracion(rows.map((m) => ({ id: m.id, department: m.department }))),
     });
   } catch (err) {
     return serverError(err);

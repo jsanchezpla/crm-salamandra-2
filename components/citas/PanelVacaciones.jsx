@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { colorTextoSobre } from "@/lib/citas/coloresBloqueo.js";
 
 /**
  * PanelVacaciones — «Vacaciones» y ausencias del equipo (06/08/2026, Rodrigo).
@@ -93,6 +94,15 @@ function partirEnMadrid(valor) {
 
 export default function PanelVacaciones() {
   const [bloqueos, setBloqueos] = useState([]);
+  /**
+   * Las categorías del centro (01/09/2026). Llegan con el listado, no con una
+   * llamada aparte: la lista es corta, la decide dirección y va en el JSONB del
+   * tenant que el servidor ya tiene cacheado. Vacía = el centro no las usa y el
+   * desplegable no se enseña.
+   */
+  const [categorias, setCategorias] = useState([]);
+  /** Los talleres del centro, para marcar que un tramo es un taller. */
+  const [talleres, setTalleres] = useState([]);
   const [equipo, setEquipo] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [abierto, setAbierto] = useState(false);
@@ -105,7 +115,7 @@ export default function PanelVacaciones() {
   const [editando, setEditando] = useState(null);
 
   const [form, setForm] = useState({
-    teamMemberId: "", label: "Vacaciones",
+    teamMemberId: "", label: "Vacaciones", categoryKey: "", tallerId: "",
     fechaIni: "", horaIni: "00:00", fechaFin: "", horaFin: "23:59",
   });
 
@@ -119,6 +129,8 @@ export default function PanelVacaciones() {
       const json = await res.json();
       if (json.ok) {
         setBloqueos(json.data.bloqueos ?? []);
+        setCategorias(json.data.categorias ?? []);
+        setTalleres(json.data.talleres ?? []);
         const quien = json.data.yo ?? null;
         setYo(quien);
         /*
@@ -156,6 +168,10 @@ export default function PanelVacaciones() {
     setForm({
       teamMemberId: b.teamMemberId || "",
       label: b.label || "Vacaciones",
+      // La clave tal cual está guardada, aunque su categoría ya no exista: así,
+      // corregirle la fecha a un bloqueo viejo no le quita de paso la categoría.
+      categoryKey: b.categoryKey || "",
+      tallerId: b.tallerId || "",
       fechaIni: ini.fecha, horaIni: ini.hora,
       fechaFin: fin.fecha, horaFin: fin.hora,
     });
@@ -174,6 +190,7 @@ export default function PanelVacaciones() {
       ...f,
       teamMemberId: yo?.teamMemberId ?? "",
       label: "Vacaciones",
+      categoryKey: "",
       fechaIni: "", horaIni: "00:00", fechaFin: "", horaFin: "23:59",
     }));
   }
@@ -197,6 +214,10 @@ export default function PanelVacaciones() {
         endDate: fechaFin,
         endTime: form.horaFin || "23:59",
         startAt, endAt,
+        // Siempre, también vacía: mandarla vacía es como se le quita la
+        // categoría a un bloqueo que la tenía.
+        categoryKey: form.categoryKey || null,
+        tallerId: form.tallerId || null,
       };
       // De quién es solo se manda si se puede cambiar. Sin ser dirección no se
       // manda NUNCA al corregir: el servidor responde 403 al verlo, aunque sea
@@ -263,7 +284,9 @@ export default function PanelVacaciones() {
 
       {abierto && (
         <div className="px-4 lg:px-5 py-4 border-b border-[var(--ink-200)] bg-white">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {/* Una columna más cuando el centro usa categorías, para que «Hasta»
+              no se quede solo en su fila. */}
+          <div className={`grid gap-3 sm:grid-cols-2 ${categorias.length || talleres.length ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
             <label className="text-xs">
               <span className="block text-neutral-500 mb-1">Quién</span>
               {yo?.esAdmin ? (
@@ -288,6 +311,41 @@ export default function PanelVacaciones() {
                 </p>
               )}
             </label>
+            {/* La categoría (01/09/2026). Solo si el centro tiene alguna dada
+                de alta en Configuración → Agenda: donde no se usen, el
+                formulario se queda exactamente como estaba. */}
+            {categorias.length > 0 && (
+              <label className="text-xs">
+                <span className="block text-neutral-500 mb-1">Categoría</span>
+                <select
+                  value={form.categoryKey}
+                  onChange={(e) => setForm((f) => ({ ...f, categoryKey: e.target.value }))}
+                  className="w-full border border-neutral-200 rounded-md px-2 py-1.5 text-sm bg-white"
+                >
+                  <option value="">Sin categoría</option>
+                  {categorias.map((c) => (
+                    <option key={c.key} value={c.key}>{c.label}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {/* ¿Es un TALLER? (01/09/2026). Solo con el módulo Clínica y con
+                talleres dados de alta; donde no los haya, ni aparece. */}
+            {talleres.length > 0 && (
+              <label className="text-xs">
+                <span className="block text-neutral-500 mb-1">Taller</span>
+                <select
+                  value={form.tallerId}
+                  onChange={(e) => setForm((f) => ({ ...f, tallerId: e.target.value }))}
+                  className="w-full border border-neutral-200 rounded-md px-2 py-1.5 text-sm bg-white"
+                >
+                  <option value="">No es un taller</option>
+                  {talleres.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
             <label className="text-xs">
               <span className="block text-neutral-500 mb-1">Motivo</span>
               <input
@@ -355,10 +413,27 @@ export default function PanelVacaciones() {
         {bloqueos.map((b) => (
           <div key={b.id} className="px-4 lg:px-5 py-3 flex items-center justify-between gap-3 text-sm">
             <div className="min-w-0">
-              <p className="font-medium text-[var(--ink-900)] truncate">
-                {b.label}
-                <span className="font-normal text-neutral-500">
-                  {" · "}{b.teamMemberName || "Todo el centro"}
+              <p className="font-medium text-[var(--ink-900)] truncate flex items-center gap-2">
+                {/* El punto de color de la categoría: es lo que hace que la
+                    lista se lea igual que la agenda, donde el bloqueo entero se
+                    pinta de ese color. Una categoría borrada no llega con
+                    rótulo, así que aquí no sale nada. */}
+                {b.categoryLabel && (
+                  <span
+                    className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                    style={{ backgroundColor: b.color, color: colorTextoSobre(b.color) }}
+                  >
+                    {b.categoryLabel}
+                  </span>
+                )}
+                <span className="truncate">
+                  {/* El taller, cuando el tramo es uno: es lo que hace que deje
+                      de ser «una hora tachada y ya». */}
+                  {b.tallerName && <span className="text-neutral-700">{b.tallerName}{" · "}</span>}
+                  {b.label}
+                  <span className="font-normal text-neutral-500">
+                    {" · "}{b.teamMemberName || "Todo el centro"}
+                  </span>
                 </span>
               </p>
               <p className="text-xs text-neutral-500">

@@ -342,7 +342,7 @@ function ConfirmarBaja({ cliente, onHecho, onCancelar }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: "rgba(15,23,42,0.55)" }}
       role="dialog" aria-modal="true" aria-labelledby="baja-titulo">
-      <div className="w-full max-w-lg rounded-xl bg-white shadow-xl p-6 space-y-4 max-h-[85vh] overflow-auto">
+      <div className="w-full max-w-lg rounded-xl bg-white shadow-xl p-6 space-y-4 max-h-[85dvh] overflow-auto">
         <div>
           <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">
             Vas a cerrar la cuenta de
@@ -473,7 +473,7 @@ function ConfirmarEliminar({ baja, onHecho, onCancelar }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: "rgba(15,23,42,0.55)" }}
       role="dialog" aria-modal="true" aria-labelledby="eliminar-titulo">
-      <div className="w-full max-w-lg rounded-xl bg-white shadow-xl p-6 space-y-4 max-h-[85vh] overflow-auto">
+      <div className="w-full max-w-lg rounded-xl bg-white shadow-xl p-6 space-y-4 max-h-[85dvh] overflow-auto">
         <div>
           <div className="text-[10px] font-semibold text-red-500 uppercase tracking-widest">
             Esto no se puede deshacer
@@ -1690,7 +1690,7 @@ export default function AltaClientesPage() {
       {baja && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: "rgba(15,23,42,0.55)" }}
           role="dialog" aria-modal="true">
-          <div className="w-full max-w-xl rounded-xl bg-white shadow-xl p-6 space-y-4 max-h-[85vh] overflow-auto">
+          <div className="w-full max-w-xl rounded-xl bg-white shadow-xl p-6 space-y-4 max-h-[85dvh] overflow-auto">
             <div>
               <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Cuenta cerrada</div>
               <h2 className="text-xl font-semibold text-neutral-900 mt-1">{baja.nombre}</h2>

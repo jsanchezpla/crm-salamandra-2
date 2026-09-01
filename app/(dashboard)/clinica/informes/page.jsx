@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Select from "@/components/ui/Select.jsx";
+import SelectorPaciente from "@/components/citas/SelectorPaciente.jsx";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import PreviewBanner from "../_components/PreviewBanner.jsx";
 import InformeDrawer from "@/components/clinica/InformeDrawer.jsx";
@@ -30,7 +31,15 @@ const EMPTY_FORM = { patientId: "", reportType: "evolution", dueDate: "" };
 
 export default function InformesPage() {
   const [reports, setReports] = useState([]);
-  const [patients, setPatients] = useState([]);
+  // El paciente ELEGIDO, no la lista de pacientes (01/09/2026, Rodrigo). Antes
+  // esta pantalla se bajaba `/api/pacientes` al abrirse y montaba el desplegable
+  // encima; ese endpoint corta en 300 y Aumenta tiene 1.178, así que 878 —el
+  // 75%— no salían, y no salir se lee igual que no existir. Es el mismo agujero
+  // que se tapó en el alta de citas (28/08), en las incidencias (31/08) y en el
+  // modal de la cita (01/09); esta se había quedado atrás. Ahora se pregunta al
+  // servidor según se escribe y solo se guarda el que se elige, que es de quien
+  // hace falta el terapeuta para crear el informe.
+  const [pacienteElegido, setPacienteElegido] = useState(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState(null);
   const [statusFilter, setStatusFilter] = useState("all");
@@ -56,10 +65,6 @@ export default function InformesPage() {
 
   useEffect(() => {
     load();
-    fetch("/api/pacientes", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => j.ok && setPatients(j.data.patients ?? []))
-      .catch(() => {});
   }, []);
 
   const overdueCount = useMemo(() => reports.filter((r) => r.overdue).length, [reports]);
@@ -89,7 +94,9 @@ export default function InformesPage() {
 
   const submitCreate = async (e) => {
     e.preventDefault();
-    const patient = patients.find((p) => p.id === form.patientId);
+    // El paciente viene del selector, no de una lista descargada: lo trae
+    // entero al elegirlo, y de él sale el terapeuta que lleva el informe.
+    const patient = pacienteElegido && pacienteElegido.id === form.patientId ? pacienteElegido : null;
     if (!patient) {
       setFormError("Elige un paciente");
       return;
@@ -107,6 +114,7 @@ export default function InformesPage() {
       if (!r.ok) throw new Error(j.error || "No se pudo crear");
       setShowCreate(false);
       setForm(EMPTY_FORM);
+      setPacienteElegido(null);
       load();
     } catch (e2) {
       setFormError(e2.message);
@@ -145,6 +153,7 @@ export default function InformesPage() {
         <button
           onClick={() => {
             setForm(EMPTY_FORM);
+            setPacienteElegido(null);
             setFormError(null);
             setShowCreate(true);
           }}
@@ -265,10 +274,15 @@ export default function InformesPage() {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
             <h3 className="font-display text-xl text-[var(--ink-900)] mb-3">Nuevo informe</h3>
             <form onSubmit={submitCreate} className="space-y-3">
-              <Select
+              <SelectorPaciente
                 value={form.patientId}
-                onChange={(v) => setForm({ ...form, patientId: v })}
-                options={[{ value: "", label: "— Paciente —" }, ...patients.map((p) => ({ value: p.id, label: p.name }))]}
+                onChange={(v, paciente) => {
+                  setForm((f) => ({ ...f, patientId: v }));
+                  setPacienteElegido(paciente ?? null);
+                }}
+                disabled={saving}
+                aria-label="Paciente del informe"
+                placeholder="— Paciente —"
                 className={inputCls}
               />
               <div className="grid grid-cols-2 gap-3">

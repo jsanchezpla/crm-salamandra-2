@@ -16,7 +16,17 @@ import { avisarCambioDeConfiguracion } from "../../../../lib/configuracion/aviso
 import { exigeIdentidad } from "../../../../lib/citas/puertaIdentidad.js";
 import { centroVacio, normalizarCentro } from "../../../../lib/tenant/normalizarCentro.js";
 import { limpiaColorBloqueo, COLOR_BLOQUEO_POR_DEFECTO } from "../../../../lib/citas/coloresBloqueo.js";
+// Con alias: `categoriasDe` ya está cogido arriba por las categorías de
+// consulta externa de los clientes, que no tienen nada que ver con estas.
+import {
+  categoriasDe as categoriasBloqueoDe,
+  normalizarCategorias,
+} from "../../../../lib/citas/categoriasBloqueo.js";
 import { isValidHexColor } from "../../../../lib/citas/validation.js";
+import {
+  responsablesDeIncidenciaPorFalta,
+  limpiarResponsables,
+} from "../../../../lib/citas/incidenciaPorFalta.js";
 import {
   listarCuentas,
   listarRemitentes,
@@ -146,6 +156,18 @@ function resumenSedes(v) {
 }
 
 /**
+ * Las categorías de bloqueo (01/09/2026), con la MISMA lección de arriba: el
+ * resumen lleva la clave, el título y el color de cada una porque es lo que se
+ * compara. Reducirlas a «6 categorías» dejaría `antes === después` al cambiarle
+ * el color a una, y esa es justo la operación que se hace desde Admin.
+ */
+function resumenCategorias(v) {
+  if (!Array.isArray(v) || v.length === 0) return "(ninguna)";
+  const una = (c) => `${c?.key ?? "?"}/${c?.label ?? "?"}/${c?.color ?? "?"}`;
+  return `${v.length}: ${v.map(una).join(" | ")}`;
+}
+
+/**
  * El párrafo legal, resumido pero SIN colisiones: dos textos distintos que
  * empiecen igual y midan lo mismo daban el mismo resumen, y entonces cambiarlo
  * tampoco dejaba rastro. Se añaden los últimos caracteres.
@@ -236,6 +258,23 @@ function diffConfiguracion(antes, despues, nombreAntes, nombreDespues) {
   anota("citas.portalUrl", antes?.citas?.portalUrl, despues?.citas?.portalUrl);
   anota("citas.reservaUrl", antes?.citas?.reservaUrl, despues?.citas?.reservaUrl);
   anota("citas.colorBloqueos", antes?.citas?.colorBloqueos, despues?.citas?.colorBloqueos);
+  // Las categorías de bloqueo van RESUMIDAS a la auditoría: son texto del
+  // centro y no hace falta duplicarlas en el log compartido de master. Se
+  // compara la lista entera (título y color incluidos), así que renombrar una
+  // categoría deja rastro aunque el resumen se lea igual.
+  // Quien recibe las incidencias de las faltas: se audita CUANTOS son, no
+  // quienes. Es un reparto de trabajo interno y el log vive en master, donde no
+  // se duplican nombres de personas del cliente.
+  anota(
+    "citas.incidenciaPorFalta",
+    (antes?.citas?.incidenciaPorFalta ?? []).length,
+    (despues?.citas?.incidenciaPorFalta ?? []).length
+  );
+  anota(
+    "citas.categoriasBloqueo",
+    resumenCategorias(antes?.citas?.categoriasBloqueo),
+    resumenCategorias(despues?.citas?.categoriasBloqueo)
+  );
 
   const huboSecretos = Object.keys(secretos).length > 0;
   const huboAbiertos = Object.keys(after).length > 0;
@@ -369,6 +408,14 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
     // Color de los tramos bloqueados en la agenda. Se devuelve ya resuelto al
     // negro de siempre para que el selector nunca arranque en blanco.
     colorBloqueos: t.settings?.citas?.colorBloqueos ?? COLOR_BLOQUEO_POR_DEFECTO,
+    // Las categorías de bloqueo del centro (01/09/2026). Vacío = no las usa;
+    // NO se cae a las de fábrica, que se cargan con un botón (ver
+    // lib/citas/categoriasBloqueo.js).
+    categoriasBloqueo: categoriasBloqueoDe(t),
+    // A quien se le abre una incidencia cuando se marca una falta en la agenda
+    // (01/09/2026). Lista vacia = apagado, que es como nace cualquier centro
+    // (lib/citas/incidenciaPorFalta.js).
+    incidenciaPorFalta: responsablesDeIncidenciaPorFalta(t),
     brand: {
       primaryColor: brand.primaryColor ?? null,
       secondaryColor: brand.secondaryColor ?? null,
@@ -801,6 +848,47 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
     settings.citas = { ...(settings.citas ?? {}), colorBloqueos: color };
   }
 
+  /*
+   * Las CATEGORÍAS de bloqueo del centro (01/09/2026, Rodrigo): reunión de
+   * equipo, trabajo interno, gestión documental… Cada una con su color, «para
+   * que a todo el equipo le salga igual».
+   *
+   * Viven aquí y no en una tabla por lo mismo que las plantillas de informe:
+   * son una lista corta del centro, la escribe dirección y se lee en cada
+   * pintado de la agenda, donde el JSONB del tenant ya viene cacheado.
+   *
+   * `normalizarCategorias` CONSERVA la clave de las que solo cambian de título:
+   * los bloqueos ya guardados apuntan a esa clave y regenerarla los dejaría
+   * huérfanos. Una lista vacía es una respuesta legítima —«no uso
+   * categorías»—, así que aquí no se rechaza: se guarda.
+   */
+  if (Array.isArray(body.categoriasBloqueo)) {
+    const previas = Array.isArray(settings.citas?.categoriasBloqueo)
+      ? settings.citas.categoriasBloqueo
+      : [];
+    settings.citas = {
+      ...(settings.citas ?? {}),
+      categoriasBloqueo: normalizarCategorias(body.categoriasBloqueo, { previas }),
+    };
+  }
+
+  /*
+   * A quien se le manda la incidencia de una falta (01/09/2026, Rodrigo).
+   *
+   * Se guarda la lista tal cual la manda la pantalla, ya limpia: ids de
+   * `team_members`, sin repetidos. Vacia es una respuesta legitima —«no quiero
+   * incidencias por falta»— y por eso se guarda igual en vez de ignorarse; es
+   * ademas el estado de fabrica. Que las personas EXISTAN se comprueba al
+   * abrir la incidencia, no aqui: alguien puede darse de baja del equipo
+   * despues de haberse elegido, y ese caso hay que soportarlo de todas formas.
+   */
+  if (Array.isArray(body.incidenciaPorFalta)) {
+    settings.citas = {
+      ...(settings.citas ?? {}),
+      incidenciaPorFalta: limpiarResponsables(body.incidenciaPorFalta),
+    };
+  }
+
   // Candado de la IA para empleados (no es un secreto): lista cerrada.
   if (body.aiAccess === "libre" || body.aiAccess === "restringido") {
     settings.aiAccess = body.aiAccess;
@@ -866,6 +954,8 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
     // vacías fuera, los textos recortados—, que es lo que de verdad se imprime.
     centro: normalizarCentro(settings.centro),
     colorBloqueos: settings.citas?.colorBloqueos ?? COLOR_BLOQUEO_POR_DEFECTO,
+    categoriasBloqueo: categoriasBloqueoDe({ settings }),
+    incidenciaPorFalta: responsablesDeIncidenciaPorFalta({ settings }),
     brand: {
       primaryColor: settings.brand.primaryColor ?? null,
       secondaryColor: settings.brand.secondaryColor ?? null,

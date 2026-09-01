@@ -4,6 +4,8 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { logBillingAudit, resumenFactura, datosPeticion } from "../../../../lib/billing/audit.js";
 import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { calculateInvoice } from "../../../../lib/billing/calculateInvoice.js";
+import { ivaPorDefecto } from "../../../../lib/billing/ivaPorDefecto.js";
+import { idsDeFamiliaPorPaciente } from "../../../../lib/clients/familiasPorPaciente.js";
 import { parseSortOrder } from "../../../../lib/billing/parseSort.js";
 import { withEffectiveStatusList } from "../../../../lib/billing/invoiceStatus.js";
 import { resolveInvoicePatientId, invoicePatientInclude } from "../../../../lib/billing/patientLink.js";
@@ -31,6 +33,9 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       if (searchParams.get("from")) where.issueDate[Op.gte] = searchParams.get("from");
       if (searchParams.get("to")) where.issueDate[Op.lte] = searchParams.get("to");
     }
+    // Se calcula una vez: lo usan el include Y la lista de ordenaciones válidas.
+    const patientInclude = invoicePatientInclude(tenantModels, hasModule);
+
     const q = (searchParams.get("q") || "").trim();
     /*
      * Todas las palabras, cada una en cualquiera de los campos (28/08/2026):
@@ -43,7 +48,14 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
      */
     if (q) {
       const porNombre = await filtroPorNombre(Invoice.sequelize, q, ["Invoice.number", "client.name"]);
-      if (porNombre) (where[Op.and] ||= []).push(porNombre);
+      // También por el nombre del paciente (31/08/2026): al niño se le conoce
+      // por su nombre y la familia paga con otro. Mismo reparto que en Citas,
+      // vía lib/clients/familiasPorPaciente.js. La lista SOLO entra si tiene
+      // algo: un IN () vacío en el Op.or mataría la búsqueda por nombre.
+      const familias = await idsDeFamiliaPorPaciente({ q, Patient: tenantModels.Patient, hasModule });
+      const alternativas = [porNombre, familias.length ? { clientId: { [Op.in]: familias } } : null].filter(Boolean);
+      if (alternativas.length === 1) (where[Op.and] ||= []).push(alternativas[0]);
+      else if (alternativas.length > 1) (where[Op.and] ||= []).push({ [Op.or]: alternativas });
     }
 
     const allowedSort = {
@@ -55,6 +67,18 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       paidAmount: "paidAmount",
       "client.name": [{ model: Client, as: "client" }, "name"],
       "employee.displayName": [{ model: TeamMember, as: "employee" }, "displayName"],
+      /*
+       * Ordenar por paciente es lo que hace posible AGRUPAR POR PACIENTE en la
+       * lista (01/09/2026, petición de Aumenta). Agrupar solo lo que cabe en la
+       * página sería mentira: con el orden puesto, los grupos siguen enteros
+       * aunque la lista pase de página.
+       *
+       * Va condicionado al módulo, como el include: sin tabla de pacientes esta
+       * clave no puede ni ofrecerse (Sequelize pediría un alias que no existe).
+       */
+      ...(patientInclude.length
+        ? { "patient.lastName": [{ model: tenantModels.Patient, as: "patient" }, "lastName"] }
+        : {}),
     };
     const order = parseSortOrder(
       searchParams.get("sortBy"),
@@ -68,7 +92,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       include: [
         { model: Client, as: "client", attributes: ATRIBUTOS_CLIENTE_FACTURA },
         { model: TeamMember, as: "employee", attributes: ["id", "displayName"] },
-        ...invoicePatientInclude(tenantModels, hasModule),
+        ...patientInclude,
       ],
       order,
       limit,
@@ -130,7 +154,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     // Exención general de IVA: si el emisor no repercute IVA, las líneas sin tipo
     // explícito nacen a 0 y se congela la nota legal en la factura.
     const vatExempt = !!(settings && settings.vatExempt);
-    const defaultVat = vatExempt ? 0 : settings ? Number(settings.defaultVatRate) : 21;
+    const defaultVat = ivaPorDefecto(settings);
     const defaultIrpf = settings ? Number(settings.defaultIrpfRate ?? 0) : 0;
     const termsDays = settings ? Number(settings.defaultPaymentTermsDays ?? 30) : 30;
     const linesWithVat = lines.map((l) => ({

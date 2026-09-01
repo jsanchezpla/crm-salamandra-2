@@ -191,6 +191,37 @@ describe("el selector de pacientes", () => {
   });
 });
 
+test("la incidencia tampoco elige paciente sobre una lista descargada (31/08/2026)", () => {
+  const modal = readFileSync(
+    new URL("../app/(dashboard)/equipo/_components/IncidenciaModal.jsx", import.meta.url),
+    "utf8"
+  );
+  assert.ok(modal.includes("<SelectorPaciente"), "el campo Paciente de la incidencia tiene que preguntar al servidor");
+  assert.ok(
+    !/options=\{\[\{ value: "", label: "Ninguno" \}, \.\.\.patients\.map/.test(modal),
+    "el desplegable viejo cortaba en 1.000 y con 1.174 pacientes dejaba fuera a 174 sin avisar"
+  );
+});
+
+test("el informe nuevo tampoco elige paciente sobre una lista descargada (01/09/2026)", () => {
+  const pantalla = readFileSync(
+    new URL("../app/(dashboard)/clinica/informes/page.jsx", import.meta.url),
+    "utf8"
+  );
+  assert.ok(
+    pantalla.includes("<SelectorPaciente"),
+    "«Nuevo informe» elige paciente: tiene que preguntar al servidor"
+  );
+  assert.ok(
+    !/fetch\("\/api\/pacientes"/.test(pantalla),
+    "bajarse la lista entera deja fuera al 75% (300 de 1.178 en Aumenta) y no salir se lee igual que no existir"
+  );
+  assert.ok(
+    !/\.\.\.patients\.map/.test(pantalla),
+    "el desplegable viejo se montaba sobre la lista cortada"
+  );
+});
+
 test("el alta de cita ya no elige sobre una lista descargada", () => {
   const drawer = readFileSync(
     new URL("../modules/default/citas/NuevaCitaDrawer.jsx", import.meta.url),
@@ -207,4 +238,40 @@ test("el alta de cita ya no elige sobre una lista descargada", () => {
   );
   const padre = readFileSync(new URL("../modules/default/CitasModule.jsx", import.meta.url), "utf8");
   assert.ok(!padre.includes("patientOptions"), "el padre ya no monta las opciones");
+});
+
+// ─── Buscar por PACIENTE y la puerta de facturación (31/08/2026) ────────────
+//
+// Rosa y Olga cobran con `billing` pero sin `clients` en su module_access:
+// contra /api/clients el selector volvía VACÍO. Y en un centro clínico se
+// busca por el nombre del niño, no por el del pagador.
+
+test("la puerta de facturación es otra base, con los mismos parámetros", () => {
+  const url = urlDeFichas("hugo", null, "/api/billing/fichas");
+  assert.ok(url.startsWith("/api/billing/fichas?"), url);
+  const p = new URL("http://x" + url.slice(url.indexOf("?"))).searchParams;
+  assert.equal(p.get("search"), "hugo");
+});
+
+test("la etiqueta dice el niño cuando fue la llave, y calla cuando no", async () => {
+  const { etiquetaDeFicha } = await import("../lib/clients/buscarFichas.js");
+  assert.equal(
+    etiquetaDeFicha({ name: "Vanesa Muñoz Álvarez", porPaciente: "Hugo Castro" }),
+    // Primero el paciente y luego quien paga (01/09/2026, Rodrigo): quien cobra
+    // busca por el nombre del niño y tiene que reconocerlo al principio de la
+    // línea, no al final de veinte apellidos distintos.
+    "Hugo Castro — Vanesa Muñoz Álvarez"
+  );
+  assert.equal(etiquetaDeFicha({ name: "Vanesa Muñoz Álvarez", porPaciente: null }), "Vanesa Muñoz Álvarez");
+  assert.equal(etiquetaDeFicha(null), "");
+});
+
+test("las pantallas de dinero preguntan por la puerta de facturación", () => {
+  for (const pantalla of ["facturas", "presupuestos", "recurrentes", "costes", "cobros"]) {
+    const fuente = readFileSync(
+      new URL(`../app/(dashboard)/facturacion/${pantalla}/page.jsx`, import.meta.url),
+      "utf8"
+    );
+    assert.ok(fuente.includes('fuente="billing"'), `${pantalla} sigue preguntando a /api/clients`);
+  }
 });

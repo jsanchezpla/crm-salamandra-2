@@ -203,6 +203,27 @@ export const CORE = [
   // de tabla `documents`; la FK a `incidencias` solo donde esa tabla existe.
   "migrate-documents-incidencia-link",
 
+  // El documento que HAY QUE LEER y el bloqueo al que va aparejado
+  // (`documents.team_block_id` + tabla `document_reads`, 01/09/2026, Rodrigo).
+  // CORE por el mismo criterio que su hermana de aquí arriba: la columna vive
+  // en `documents` y el MODELO Document la declara para TODOS los tenants, así
+  // que sin ella cualquier lectura del archivo central da 42703 — tenga el
+  // cliente Citas o no. La tabla va con ella y por el mismo conjunto: el modelo
+  // DocumentRead también está registrado para todos y la portada lo consulta en
+  // cada carga. Aditiva y por existencia de tabla `documents`; las FK a
+  // `team_blocks` (SET NULL) y a `team_members` (CASCADE), solo donde existen.
+  "migrate-documentos-lecturas",
+
+  // Con quién está compartida una carpeta del archivo (tabla
+  // `document_folder_members`, 01/09/2026, Rodrigo: «un selector de equipo»).
+  // CORE por el mismo criterio que la de arriba: el modelo
+  // `DocumentFolderMember` está registrado para TODOS los tenants y el archivo
+  // lo consulta en cada carga para saber qué carpetas ve quien mira. NO toca
+  // `document_folders.visibility` —que es un ENUM de Postgres— a propósito.
+  // Por existencia de tabla `document_folders`; la FK a `team_members`, solo
+  // donde esa tabla existe.
+  "migrate-carpetas-compartidas",
+
   // Alinea el ON DELETE de las cuatro FKs de `team_members` que decían cosas
   // distintas en cada cliente (26/08/2026). CORE porque el destrozo no depende
   // del módulo sino de CÓMO NACIÓ el schema: el alta lanza `sync()` antes que
@@ -319,6 +340,10 @@ export const MODULES = {
     "migrate-booking-change-requests",
     // Marca de "ya se le mandó el recordatorio de la víspera".
     "migrate-booking-reminder",
+    // La falta recuperable apunta a la cita que la recupera (31/08/2026). Sin
+    // esta columna el modelo pide recovered_by_booking_id y toda lectura de
+    // citas da 42703.
+    "migrate-bookings-recuperacion",
     // Retención de tarjeta (autorizado sin cobrar): valores nuevos del enum de
     // payment_status y `authorization_expires_at`. Va aquí porque un tenant que
     // estrene Citas nace con `bookings`, y sin esta migración el modelo pide una
@@ -362,6 +387,30 @@ export const MODULES = {
     // Preguntas propias del tipo de cita (04/08/2026), en vez de enganchar un
     // formulario del módulo Formularios.
     "migrate-preguntas-cita",
+    // La categoría de un bloqueo (01/09/2026): reunión de equipo, trabajo
+    // interno, gestión documental… El modelo declara `category_key`, así que
+    // sin esta columna CUALQUIER lectura de bloqueos da 42703. VA ANTES del
+    // despliegue.
+    "migrate-citas-categorias-bloqueo",
+    // Qué TALLER se da en un tramo bloqueado (01/09/2026). Va aquí y no con el
+    // resto del encargo de talleres (bloque `clinica`) porque `team_blocks` es
+    // de Citas y el modelo declara `taller_id` para todos: un centro con Citas
+    // y sin Clínica se quedaría sin la columna. VA ANTES del despliegue.
+    "migrate-citas-bloqueo-taller",
+    // El ACTA de una reunión de equipo (01/09/2026): tres columnas más en
+    // `team_blocks` —el acta escrita, de qué texto salió y cuándo—. Mismo aviso
+    // que sus dos vecinas: el modelo `TeamBlock` las declara para todos, así
+    // que sin ellas CUALQUIER lectura de bloqueos da 42703. VA ANTES del
+    // despliegue. El porqué del sitio, en `lib/reuniones/acta.js`.
+    "migrate-reuniones-acta",
+    /*
+     * Los talleres pasan a ser CITAS (01/09/2026): `bookings.taller_grupo_id` y
+     * `event_types.taller_grupo_id`. Aquí por lo mismo que sus vecinas —los
+     * modelos las declaran para todos y sin ellas la agenda da 42703—; el resto
+     * de lo que crea vive en el bloque `clinica`, donde está la tabla
+     * `talleres`. VA ANTES del despliegue.
+     */
+    "migrate-talleres-grupos",
   ],
 
   calendar: ["migrate-calendar-citas-fks"],
@@ -384,6 +433,12 @@ export const MODULES = {
     // tabla `patient_therapists`: `main_therapist_id` se queda y sigue siendo el
     // de referencia, así que no hay nada que rellenar para que funcione.
     "migrate-patients-terapeutas",
+    // De qué CITA es un registro de sesión (01/09/2026): `clinic_sessions.
+    // booking_id`. Está en los DOS bloques —aquí y en `clinica`— porque los
+    // endpoints de sesiones abren con «clinica O pacientes» y el MODELO
+    // declara la columna: a un tenant con `pacientes` suelto le reventaría
+    // igual con 42703. VA ANTES del despliegue.
+    "migrate-clinica-sesion-de-cita",
   ],
 
   clinica: [
@@ -396,6 +451,28 @@ export const MODULES = {
     // Talleres: actividades de grupo (02/08/2026). Necesita `patients`, que la
     // crea migrate-pacientes-sprint-1; el orden lo resuelve el analizador.
     "migrate-talleres",
+    // El concepto de cobro del taller (31/08/2026): sin concept_id el modelo
+    // lo pide y todo GET de talleres da 42703.
+    "migrate-talleres-concepto",
+    // El REGISTRO DE SESIÓN de un taller (01/09/2026): la tabla
+    // `taller_sesiones` y el puntero `clinic_sessions.taller_sesion_id`. El
+    // modelo de sesiones declara esa columna, así que sin ella toda lectura de
+    // la historia clínica da 42703. VA ANTES del despliegue.
+    "migrate-taller-sesiones",
+    /*
+     * Los GRUPOS de un taller y todo lo que cuelga de una cita de taller
+     * (01/09/2026): «hay que poder poner varios grupos distintos para la misma
+     * actividad», con varios terapeutas y lista de asistencia.
+     *
+     * Está también en el bloque `citas` y NO es un descuido: crea cuatro tablas
+     * donde hay `talleres` (esto es Clínica) pero además añade
+     * `bookings.taller_grupo_id` y `event_types.taller_grupo_id`, que los
+     * modelos `Booking` y `EventType` declaran para TODOS los tenants. Un
+     * centro con Citas y sin Clínica se quedaría sin ellas y toda lectura de su
+     * agenda daría 42703. El analizador de orden deduplica.
+     * VA ANTES del despliegue.
+     */
+    "migrate-talleres-grupos",
     "migrate-clinica-module",
     // El autor del acta puede no estar en la plantilla (02/08/2026): campo de
     // texto libre y created_by_id opcional.
@@ -431,13 +508,19 @@ export const MODULES = {
     // MODELO las declara, así que sin esta migración el primer SELECT de
     // /pacientes/[id] revienta con 42703 en el schema que no las tenga.
     "migrate-clinica-registro-enviado",
+    // Una cita, un registro (01/09/2026, Aumenta): `clinic_sessions.booking_id`
+    // + su índice. El MODELO ClinicSession la declara, así que sin esta
+    // migración el primer SELECT de /pacientes/[id] revienta con 42703 en el
+    // schema que no la tenga. VA ANTES del despliegue.
+    "migrate-clinica-sesion-de-cita",
   ],
 
   // Control horario. Depende de `team_members`, que crea el módulo Equipo: la
   // arista está declarada en _migration-order.js porque la migración se salta
   // sola el schema que no tenga esa tabla, y saltarse algo en silencio es
   // justo lo que no se puede permitir aquí.
-  fichaje: ["migrate-fichaje-module"],
+  // tipo-extra (31/08/2026): valor 'extra' en el enum — las horas extra a mano.
+  fichaje: ["migrate-fichaje-module", "migrate-fichaje-tipo-extra"],
 
   team: [
     "migrate-team-fields",
@@ -466,6 +549,22 @@ export const MODULES = {
     "migrate-billing-tax-regime",
     "migrate-billing-vat-exempt",
     "migrate-billing-irpf-partners",
+    "migrate-billing-membretes",
+    "migrate-billing-sello",
+    "migrate-billing-conceptos",
+    // De quién y de qué terapia es cada cobro (31/08/2026): sin estas dos
+    // columnas el modelo pide patient_id/concept_id y todo GET de cobros da 42703.
+    "migrate-payments-terapia",
+    "migrate-clients-cuota",
+    // Las cuotas asignadas (quien paga que todos los meses) y payments.cuota_id.
+    // 01/09/2026, ANTES del despliegue: el modelo pide las columnas por nombre.
+    "migrate-billing-cuotas",
+    // Entradas y salidas de caja: lo que pasa por el cajon y no es un cobro.
+    // 01/09/2026, ANTES del despliegue.
+    "migrate-arqueo-movimientos",
+    // La retención de IRPF del gasto (31/08/2026): sin irpf_rate/irpf_amount
+    // el modelo las pide y todo GET de gastos da 42703.
+    "migrate-costs-irpf",
     "migrate-rename-therapist-to-employee",
     // A quién se le emitió cada factura, congelado al emitir. Sin esta columna
     // el modelo pide `fiscal_snapshot` y toda lectura de factura da 42703.

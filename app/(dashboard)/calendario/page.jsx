@@ -914,7 +914,12 @@ export default function CalendarioPage() {
         </div>
       )}
 
-      {/* Calendario */}
+      {/* El alto del calendario sale del hueco que queda, no de una resta al
+         alto de la ventana. El contenedor es `flex-1 min-h-0` dentro de una
+         columna con alto real, así que `height="100%"` es una medida y no una
+         estimación. Es la misma lección de CitasModule (12/08/2026); aquí
+         seguía la resta a ojo (`calc(100vh - 180px)`) y en tablet se pasaba
+         justo de lo que mide la barra del navegador, que no entra en `vh`. */}
       <div className="flex-1 p-6 min-h-0">
         <FullCalendar
           ref={calendarRef}
@@ -940,7 +945,7 @@ export default function CalendarioPage() {
           eventClick={handleEventClick}
           eventDrop={handleEventDrop}
           eventResize={handleEventResize}
-          height="calc(100vh - 180px)"
+          height="100%"
           buttonText={{
             today: "Hoy",
             month: "Mes",
@@ -1028,7 +1033,7 @@ export default function CalendarioPage() {
             style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
             onClick={(e) => { if (e.target === e.currentTarget) setDetalle(null); }}
           >
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[92vh] flex flex-col">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[92dvh] flex flex-col">
               <div className="px-5 py-4 border-b border-neutral-100 flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="text-base font-semibold text-neutral-900 leading-snug">{form.title}</div>
@@ -1294,7 +1299,7 @@ export default function CalendarioPage() {
           style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
           onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}
         >
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[92vh] flex flex-col">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[92dvh] flex flex-col">
             {/* Header modal */}
             <div className="px-5 py-4 border-b border-[#F0F0F0] flex items-center justify-between shrink-0">
               <h2 className="text-sm font-semibold text-[#111827]">

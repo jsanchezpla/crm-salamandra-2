@@ -35,9 +35,13 @@ import {
   paraInputLocal,
   payloadDePreparacion,
   pidePreparar,
+  profesionalDePreparacion,
 } from "../lib/clinica/prepararSesion.js";
 
 const AHORA = new Date("2026-08-26T12:00:00.000Z");
+// La profesional que da la cita, que no es la terapeuta de referencia del
+// paciente: el caso que trajo Rodrigo el 01/09/2026.
+const SILVIA = "6c1f3a12-9d84-4b77-8e21-0a5f2c7d4b90";
 
 describe("fechaDePreparacion — llega por la URL, así que se acota", () => {
   it("una fecha buena se lee tal cual", () => {
@@ -71,7 +75,7 @@ describe("fechaDePreparacion — llega por la URL, así que se acota", () => {
 describe("colaDePreparacion — lo que cuelga el modal de la cita", () => {
   it("lleva la fecha de la cita", () => {
     assert.equal(
-      colaDePreparacion("2026-08-28T17:00:00.000Z", AHORA),
+      colaDePreparacion("2026-08-28T17:00:00.000Z", { ahora: AHORA }),
       "?preparar=1&fecha=2026-08-28T17%3A00%3A00.000Z"
     );
   });
@@ -79,17 +83,87 @@ describe("colaDePreparacion — lo que cuelga el modal de la cita", () => {
   it("sin fecha válida sigue llevando a preparar", () => {
     // Un enlace que no lleva a ninguna parte es peor que uno que abre el
     // formulario con la fecha de hoy: eso se corrige de un vistazo.
-    assert.equal(colaDePreparacion(null, AHORA), "?preparar=1");
-    assert.equal(colaDePreparacion("el jueves", AHORA), "?preparar=1");
+    assert.equal(colaDePreparacion(null, { ahora: AHORA }), "?preparar=1");
+    assert.equal(colaDePreparacion("el jueves", { ahora: AHORA }), "?preparar=1");
+  });
+
+  it("y lleva la CITA, que es lo que evita duplicar el registro", () => {
+    // 01/09/2026: sin este id, volver a la misma cita abría un formulario en
+    // blanco y guardarlo creaba otra sesión del mismo día.
+    const q = new URLSearchParams(
+      colaDePreparacion("2026-08-28T17:00:00.000Z", { bookingId: "b-1", ahora: AHORA })
+    );
+    assert.equal(q.get("cita"), "b-1");
+  });
+
+  it("sin cita no cuelga el parámetro vacío", () => {
+    // Un `cita=` a secas obligaría a la pantalla a distinguir «no viene» de
+    // «viene vacío», que es justo la clase de detalle que se olvida.
+    assert.equal(new URLSearchParams(colaDePreparacion(null, { ahora: AHORA })).has("cita"), false);
+    assert.equal(
+      new URLSearchParams(colaDePreparacion(null, { bookingId: "   ", ahora: AHORA })).has("cita"),
+      false
+    );
+  });
+
+  it("y lleva el PROFESIONAL de la cita, que es quien firma el registro", () => {
+    // 01/09/2026, Rodrigo: «si la cita desde la que se prepara la sesión está
+    // asignada a Silvia Hernández, el registro debe estar a cargo de Silvia
+    // Hernández», aunque el terapeuta de referencia del paciente sea otro.
+    const q = new URLSearchParams(
+      colaDePreparacion("2026-08-28T17:00:00.000Z", {
+        bookingId: "b-1",
+        profesionalId: SILVIA,
+        ahora: AHORA,
+      })
+    );
+    assert.equal(q.get("prof"), SILVIA);
+  });
+
+  it("una cita SIN profesional no cuelga el parámetro", () => {
+    // Y así la pantalla cae en el terapeuta del paciente, que es lo correcto:
+    // una cita sin asignar no sabe nada mejor que su ficha.
+    for (const nadie of [null, undefined, "", "   ", "no-es-un-id"]) {
+      const q = new URLSearchParams(
+        colaDePreparacion("2026-08-28T17:00:00.000Z", { profesionalId: nadie, ahora: AHORA })
+      );
+      assert.equal(q.has("prof"), false, `${nadie}`);
+    }
   });
 
   it("ida y vuelta: lo que cuelga la cita es lo que entiende la pantalla", () => {
-    const q = new URLSearchParams(colaDePreparacion("2026-08-28T17:00:00.000Z", AHORA));
+    const q = new URLSearchParams(
+      colaDePreparacion("2026-08-28T17:00:00.000Z", {
+        bookingId: "b-1",
+        profesionalId: SILVIA,
+        ahora: AHORA,
+      })
+    );
     assert.equal(pidePreparar(q.get("preparar")), true);
     assert.equal(
       fechaDePreparacion(q.get("fecha"), AHORA).toISOString(),
       "2026-08-28T17:00:00.000Z"
     );
+    assert.equal(q.get("cita"), "b-1");
+    assert.equal(profesionalDePreparacion(q.get("prof")), SILVIA);
+  });
+});
+
+describe("profesionalDePreparacion — la firma también llega por la barra de direcciones", () => {
+  it("un id de verdad se lee tal cual", () => {
+    assert.equal(profesionalDePreparacion(SILVIA), SILVIA);
+    assert.equal(profesionalDePreparacion(`  ${SILVIA}  `), SILVIA);
+    // Mayúsculas incluidas: un UUID es el mismo id se escriba como se escriba.
+    assert.equal(profesionalDePreparacion(SILVIA.toUpperCase()), SILVIA.toUpperCase());
+  });
+
+  it("lo que no es un id es «», nunca una firma inventada", () => {
+    // Aquí se decide QUIÉN firma una nota clínica: ante la duda, nadie, y la
+    // pantalla cae en el terapeuta del paciente. La otra reja —que ese id sea
+    // del EQUIPO del centro— la pone la pantalla contra /api/team.
+    for (const malo of ["", null, undefined, "   ", "silvia", "1", "b-1", "<script>", `${SILVIA}x`]) {
+      assert.equal(profesionalDePreparacion(malo), "", `${malo}`);
+    }
   });
 });
 
@@ -155,6 +229,16 @@ describe("payloadDePreparacion — lo que se manda al alta de sesión", () => {
     assert.throws(() => payloadDePreparacion({ ...base, patientId: null }), /paciente/i);
     assert.throws(() => payloadDePreparacion({ ...base, therapistId: null }), /terapeuta/i);
     assert.throws(() => payloadDePreparacion(), /paciente/i);
+  });
+
+  it("con cita, la lleva; sin cita, ni la menciona", () => {
+    // 01/09/2026: `bookingId` es lo que hace que volver a esa cita traiga ESTE
+    // registro. Y una sesión escrita desde la ficha del paciente no sale de
+    // ninguna cita: mandar la clave a null obligaría al endpoint a distinguir
+    // «no viene» de «viene vacío».
+    assert.equal(payloadDePreparacion({ ...base, bookingId: "b-1" }).bookingId, "b-1");
+    assert.equal("bookingId" in payloadDePreparacion(base), false);
+    assert.equal("bookingId" in payloadDePreparacion({ ...base, bookingId: "  " }), false);
   });
 
   it("las observaciones van completas y vacías, como en el alta con audio", () => {

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
+import MovimientosCaja from "../_components/MovimientosCaja.jsx";
+import ResumenCaja from "../_components/ResumenCaja.jsx";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -19,6 +21,10 @@ export default function ArqueoPage() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const [soloDescuadres, setSoloDescuadres] = useState(false);
+  // Tres cosas distintas sobre el mismo cajon: los cierres de siempre, los
+  // apuntes de entrada/salida y el resumen por dia (01/09/2026). Pestanas y no
+  // tres pantallas: se miran seguidas, cuadrando el dia.
+  const [vista, setVista] = useState("cierres");
 
   const [showCaja, setShowCaja] = useState(false);
   const [nombreCaja, setNombreCaja] = useState("");
@@ -205,14 +211,36 @@ export default function ArqueoPage() {
               ))}
             </select>
           )}
-          <label className="flex items-center gap-2 text-[12.5px] text-neutral-600">
-            <input type="checkbox" checked={soloDescuadres} onChange={(e) => setSoloDescuadres(e.target.checked)} />
-            Solo los días que no cuadraron
-          </label>
+          <div className="flex items-center gap-1 rounded-lg border border-neutral-200 bg-white p-0.5">
+            {[
+              ["cierres", "Cierres"],
+              ["movimientos", "Entradas y salidas"],
+              ["resumen", "Resumen por día"],
+            ].map(([k, lbl]) => (
+              <button
+                key={k}
+                onClick={() => setVista(k)}
+                className={`text-[12.5px] px-3 py-1 rounded-md transition ${
+                  vista === k ? "bg-[var(--color-primary,#1B3A2D)] text-white font-medium" : "text-neutral-600 hover:bg-neutral-50"
+                }`}
+              >
+                {lbl}
+              </button>
+            ))}
+          </div>
+          {vista === "cierres" && (
+            <label className="flex items-center gap-2 text-[12.5px] text-neutral-600">
+              <input type="checkbox" checked={soloDescuadres} onChange={(e) => setSoloDescuadres(e.target.checked)} />
+              Solo los días que no cuadraron
+            </label>
+          )}
         </div>
       )}
 
-      {cierres.length > 0 && (
+      {vista === "movimientos" && <MovimientosCaja cajaId={cajaId} cajas={cajas} />}
+      {vista === "resumen" && <ResumenCaja cajaId={cajaId} />}
+
+      {vista === "cierres" && cierres.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="rounded-xl border border-neutral-200 bg-white px-4 py-3">
             <div className="text-[11px] uppercase tracking-wide text-neutral-400">Cierres</div>
@@ -231,6 +259,7 @@ export default function ArqueoPage() {
         </div>
       )}
 
+      {vista === "cierres" && (
       <div className="rounded-xl border border-neutral-200 bg-white overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-[12.5px]">
@@ -277,6 +306,7 @@ export default function ArqueoPage() {
           </table>
         </div>
       </div>
+      )}
 
       {showCaja && (
         <>
@@ -333,6 +363,15 @@ export default function ArqueoPage() {
                     <span>Cobros en efectivo del día ({previo.numCobros})</span>
                     <span>{fmt(previo.efectivoDelDia)}</span>
                   </div>
+                  {/* Las entradas y salidas apuntadas ese día también mueven el
+                      cajón (01/09/2026): sin enseñarlas, el esperado sale de
+                      una cuenta que la persona no puede seguir. */}
+                  {previo.numMovimientos > 0 && (
+                    <div className="flex justify-between text-neutral-600">
+                      <span>Entradas y salidas de caja ({previo.numMovimientos})</span>
+                      <span>{fmt(Number(previo.entradas || 0) - Number(previo.salidas || 0))}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-neutral-600">
                     <span>Debería haber</span>
                     <span>{fmt(previo.esperado)}</span>

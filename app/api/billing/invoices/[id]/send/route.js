@@ -3,6 +3,9 @@ import { ok, error, forbidden, notFound, serverError } from "../../../../../../l
 import { getMasterModels } from "../../../../../../lib/db/masterDb.js";
 import { withEffectiveStatus } from "../../../../../../lib/billing/invoiceStatus.js";
 import { buildInvoicePdfBuffer, invoicePdfFilename } from "../../../../../../lib/billing/invoicePdf.js";
+import { membreteDe } from "../../../../../../lib/billing/membrete.js";
+import { cargarLogo } from "../../../../../../lib/billing/logoMembrete.js";
+import { invoicePatientInclude } from "../../../../../../lib/billing/patientLink.js";
 import { invoiceSentTemplate } from "../../../../../../lib/email/templates/billing/invoiceSent.js";
 import { sendEmail } from "../../../../../../lib/email/resendClient.js";
 import { getTenantResendConfig } from "../../../../../../lib/outreach/resendConfig.js";
@@ -43,7 +46,9 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     const viaParam = searchParams.get("via");
     const via = viaParam && VALID_VIA.has(viaParam) ? viaParam : null;
 
-    const invoice = await Invoice.findByPk(id);
+    const invoice = await Invoice.findByPk(id, {
+      include: [...invoicePatientInclude(tenantModels, hasModule)],
+    });
     if (!invoice) return notFound("Factura no encontrada");
     if (invoice.status !== "issued") {
       return error(`Solo se pueden marcar como enviadas las facturas en estado 'issued'. Estado actual: '${invoice.status}'.`, 422);
@@ -69,7 +74,15 @@ export const POST = withTenant(async (request, { params }, ctx) => {
         const partnerName = invoice.partnerId
           ? partners.find((p) => p.id === invoice.partnerId)?.name || null
           : null;
-        const pdf = await buildInvoicePdfBuffer({ invoice, client: cliente, settings, partnerName });
+        const logo = await cargarLogo(membreteDe(settings, "factura").logoUrl);
+        // El correo lleva el PDF con los valores por defecto: paciente si la
+        // factura lo tiene, sello si está configurado (quitarlos es cosa de la
+        // descarga a mano, ?paciente=0 / ?sello=0).
+        const patientName = invoice.patient
+          ? `${invoice.patient.firstName || ""} ${invoice.patient.lastName || ""}`.trim() || null
+          : null;
+        const stamp = await cargarLogo(settings.stampUrl);
+        const pdf = await buildInvoicePdfBuffer({ invoice, client: cliente, settings, partnerName, logo, patientName, stamp });
 
         const total = `${Number(invoice.total ?? 0).toLocaleString("es-ES", {
           minimumFractionDigits: 2,

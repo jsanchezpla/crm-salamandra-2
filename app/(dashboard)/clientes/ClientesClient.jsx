@@ -8,6 +8,7 @@ import HelpTooltip from "../../../components/ui/HelpTooltip.jsx";
 import PacientesDelAlta, { PACIENTE_VACIO } from "../../../components/clients/PacientesDelAlta.jsx";
 import ProgenitoresDelAlta, { PROGENITOR_VACIO } from "../../../components/clients/ProgenitoresDelAlta.jsx";
 import FacturacionDelAlta from "../../../components/clients/FacturacionDelAlta.jsx";
+import { CAMPOS_FISCALES } from "../../../lib/clients/camposFiscales.js";
 import { camposCliente, PERFIL_COMERCIAL } from "../../../lib/clients/formularioAlta.js";
 import { VOCABULARIO_CLIENTE } from "../../../lib/clients/vocabulario.js";
 import { CATEGORIAS, rotuloCategoria } from "../../../lib/booking/categorias.js";
@@ -126,7 +127,7 @@ export default function ClientesClient({
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [newClientOpen, setNewClientOpen] = useState(false);
-  const CAMPOS_ALTA = camposCliente(perfil, { conPacientes });
+  const CAMPOS_ALTA = camposCliente(perfil, { conPacientes, conCategoria });
   const ALTA_VACIA = Object.fromEntries(CAMPOS_ALTA.map((c) => [c.key, ""]));
   // La ficha edita lo mismo que se pregunta en el alta: si no, el código
   // postal que acaba de teclear recepción no se podría corregir nunca.
@@ -223,6 +224,16 @@ export default function ClientesClient({
       country: client.customFields?.country || "",
       city: client.customFields?.city || "",
       postalCode: client.customFields?.postalCode || "",
+      // Datos de facturación (31/08/2026): el panel los edita donde hay módulo
+      // de facturación. El PUT solo los toca si viajan explícitos, así que en
+      // tenants sin facturación ni se mandan.
+      ...(conFacturacion
+        ? Object.fromEntries(CAMPOS_FISCALES.map((c) => [c.key, client[c.key] || ""]))
+        : {}),
+      // El tipo de contratante, donde lo hay. Lo que NO se siembra aquí sale
+      // vacío al abrir el panel y se guarda vacío al pulsar «Guardar», así que
+      // sin esta línea corregir un teléfono borraría el tipo de la ficha.
+      ...(conCategoria ? { categoria: client.customFields?.categoria || "" } : {}),
     });
   }
 
@@ -815,6 +826,31 @@ export default function ClientesClient({
                   ))}
                 </div>
               </div>
+              {conFacturacion && (
+                <div className="pt-3 border-t border-gray-100">
+                  <div className="text-xs font-semibold text-gray-600 mb-2">Datos de facturación</div>
+                  <p className="text-[11px] text-gray-400 mb-3">
+                    A nombre de quién se emite la factura: puede ser el otro progenitor o una
+                    empresa con CIF. El DNI de la persona, arriba, no cambia.
+                  </p>
+                  <div className="space-y-3">
+                    {CAMPOS_FISCALES.map(({ key, label, placeholder }) => (
+                      <div key={key}>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
+                        <CampoAlta
+                          tipo="text"
+                          valor={editForm[key] || ""}
+                          placeholder={placeholder}
+                          onChange={(v) => {
+                            setEditForm((f) => ({ ...f, [key]: v }));
+                            if (editError) setEditError(null);
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="text-xs text-gray-400 pt-2 border-t border-gray-100">
                 Alta: {formatDate(selected.createdAt)}
               </div>
@@ -859,7 +895,7 @@ export default function ClientesClient({
       {/* New client modal */}
       {newClientOpen && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className={`bg-white rounded-2xl shadow-2xl w-full ${conPacientes ? "max-w-lg" : "max-w-md"} max-h-[90vh] flex flex-col`}>
+          <div className={`bg-white rounded-2xl shadow-2xl w-full ${conPacientes ? "max-w-lg" : "max-w-md"} max-h-[90dvh] flex flex-col`}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <h2 className="font-semibold text-gray-900">Nuevo {vocab.singular}</h2>
               <button

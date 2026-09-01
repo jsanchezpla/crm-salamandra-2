@@ -92,6 +92,46 @@ async function buscar(ref) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+// La forma en la que se le enseña un aviso a una skill.
+//
+// Estaba escrita a mano dentro del `map` de `fallos`. Se saca aquí (31/08/2026)
+// porque ahora la usan DOS listas, y dos copias del mismo objeto acaban
+// divergiendo: se le añade un campo a una, se olvida en la otra, y la skill que
+// lee la otra deja de ver algo sin que nadie se entere.
+function resumenDelAviso(a) {
+  return {
+    ref: a.ref,
+    id: a.id,
+    cliente: a.tenantNombre,
+    slug: a.tenantSlug,
+    quien: a.usuarioNombre || a.usuarioRol || null,
+    asunto: a.asunto,
+    cuerpo: a.cuerpo,
+    leBloquea: a.bloquea,
+    estado: a.estado,
+    // La pantalla desde la que escribió: la mitad de las veces dice el fichero
+    // por dónde empezar a mirar.
+    pantalla: a.pantalla,
+    navegador: a.contexto?.navegador ?? null,
+    ventana: a.contexto?.ventana ?? null,
+    escrito: a.createdAt,
+    ultimoDelCliente: a.clienteEscribioAt,
+    loAbrimos: a.leidoAt,
+    leContestamos: a.respondidoAt,
+    nosEspera: a.pendiente,
+    hilo: a.mensajes.map((m) => ({
+      de: m.autorTipo === "salamandra" ? m.autorNombre || "Salamandra" : "el cliente",
+      interno: m.interno,
+      cuando: m.createdAt,
+      texto: m.cuerpo,
+    })),
+    // La skill no puede VER una captura, pero tiene que saber que existe: si el
+    // aviso no se entiende sin ella, eso es lo que hay que decir en vez de
+    // adivinar.
+    capturas: a.adjuntos.map((x) => x.nombre),
+  };
+}
+
 if (ACCION === "listar") {
   // «todos» y no «activos»: un aviso RESUELTO también hace falta verlo, porque
   // es la prueba de que algo ya se arregló y de que no hay que apuntarlo otra
@@ -102,10 +142,13 @@ if (ACCION === "listar") {
   const todos = avisos.map((a) => serializarAviso(a, { para: "salamandra" }));
   const fallos = todos.filter((a) => a.tipo === "error");
 
-  // Las dudas y las mejoras NO se triaguen (decisión de Jorge): una duda se
-  // contesta, no se apunta en el backlog, y una mejora la prioriza una persona.
-  // Pero se DICEN, porque un número que no sale por ningún lado acaba siendo un
-  // cajón donde se pierden cosas.
+  // Las dudas y las mejoras no las tría `incidencias-buzon` (decisión de Jorge):
+  // una duda se contesta, no se apunta en el backlog, y una mejora la prioriza
+  // una persona.
+  //
+  // Desde el 31/08/2026 se devuelven ENTERAS y no solo contadas, porque la skill
+  // `mailbox` las baja todas al Registro y no puede apuntar lo que no ve. Quien
+  // no las quiera sigue leyendo solo `fallos`, que no ha cambiado de forma.
   const otros = todos.filter((a) => a.tipo !== "error");
 
   console.log(
@@ -113,38 +156,12 @@ if (ACCION === "listar") {
       {
         soloLectura,
         // Lo que la skill tiene que triar.
-        fallos: fallos.map((a) => ({
-          ref: a.ref,
-          id: a.id,
-          cliente: a.tenantNombre,
-          slug: a.tenantSlug,
-          quien: a.usuarioNombre || a.usuarioRol || null,
-          asunto: a.asunto,
-          cuerpo: a.cuerpo,
-          leBloquea: a.bloquea,
-          estado: a.estado,
-          // La pantalla desde la que escribió: la mitad de las veces dice el
-          // fichero por dónde empezar a mirar.
-          pantalla: a.pantalla,
-          navegador: a.contexto?.navegador ?? null,
-          ventana: a.contexto?.ventana ?? null,
-          escrito: a.createdAt,
-          ultimoDelCliente: a.clienteEscribioAt,
-          loAbrimos: a.leidoAt,
-          leContestamos: a.respondidoAt,
-          nosEspera: a.pendiente,
-          hilo: a.mensajes.map((m) => ({
-            de: m.autorTipo === "salamandra" ? m.autorNombre || "Salamandra" : "el cliente",
-            interno: m.interno,
-            cuando: m.createdAt,
-            texto: m.cuerpo,
-          })),
-          // La skill no puede VER una captura, pero tiene que saber que existe:
-          // si el aviso no se entiende sin ella, eso es lo que hay que decir en
-          // vez de adivinar.
-          capturas: a.adjuntos.map((x) => x.nombre),
-        })),
-        // Solo el recuento: no se triaguen, pero que no sean invisibles.
+        fallos: fallos.map(resumenDelAviso),
+        // Dudas y mejoras, con el mismo detalle. Cada una lleva su `tipo`
+        // porque, a diferencia de los fallos, aquí van dos clases mezcladas.
+        otros: otros.map((a) => ({ ...resumenDelAviso(a), tipo: a.tipo })),
+        // El recuento se queda aunque ahora vaya el contenido: es lo que lee
+        // `incidencias-buzon` para decir cuántas quedan sin mirar.
         sinTriar: { dudas: otros.filter((a) => a.tipo === "duda").length, mejoras: otros.filter((a) => a.tipo === "mejora").length },
       },
       null,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import StatusBadge, { INVOICE_STATUS_LABELS } from "../_components/StatusBadge.jsx";
@@ -10,11 +10,21 @@ import Select from "@/components/ui/Select.jsx";
 import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
 
 import { nifDeCliente } from "../../../../lib/billing/nifCliente.js";
+import { ivaPorDefecto } from "../../../../lib/billing/ivaPorDefecto.js";
+import PatientReparto from "@/components/billing/PatientReparto.jsx";
+import { ordenarConSugeridos } from "../../../../lib/billing/empleadosSugeridos.js";
+import { lineaDesdeConcepto } from "../../../../lib/billing/conceptosCatalogo.js";
+import { cuotasQueEntran, conceptosDeCuotas, huellaLineas, sePuedeRellenar } from "../../../../lib/billing/cuotaParaRellenar.js";
+import { prorrateoDeCuota, rotuloDeProrrateo } from "../../../../lib/billing/prorrateo.js";
+import { haySocios } from "../../../../lib/billing/socios.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
 
-const EMPTY_LINE = { description: "", quantity: 1, unitPrice: 0, discountPct: 0, vatRate: 21, productId: "", kind: "" };
+// `inicioServicio`/`precioCompleto` son de la PANTALLA: al guardar, el precio
+// viaja ya prorrateado y el desglose escrito en el texto de la línea (el
+// motor del servidor, calculateInvoice, tira los campos que no conoce).
+const EMPTY_LINE = { description: "", quantity: 1, unitPrice: 0, discountPct: 0, vatRate: 21, productId: "", kind: "", inicioServicio: "", precioCompleto: null };
 
 function addDaysIso(isoDate, days) {
   if (!isoDate || !Number.isFinite(days) || days <= 0) return "";
@@ -38,6 +48,18 @@ function emptyForm(defaultVat = 21, termsDays = 30, defaultIrpf = 0) {
   };
 }
 
+/**
+ * ¿Las líneas siguen como nacieron? Una sola, sin texto y a cero. Es la vara
+ * para decidir si la cuota de la familia puede rellenarlas sola: en cuanto hay
+ * algo escrito, no se toca.
+ */
+function lineasEnBlanco(lines) {
+  if (!Array.isArray(lines) || lines.length === 0) return true;
+  if (lines.length > 1) return false;
+  const [l] = lines;
+  return !String(l.description ?? "").trim() && !Number(l.unitPrice) && !l.productId;
+}
+
 function calcLine(line) {
   const q = Number(line.quantity ?? 0);
   const p = Number(line.unitPrice ?? 0);
@@ -56,11 +78,59 @@ export default function FacturasPage() {
   const [errorMsg, setErrorMsg] = useState(null);
 
   const [filterStatus, setFilterStatus] = useState("");
+  /*
+   * Rango de fechas y AGRUPAR POR PACIENTE (01/09/2026, petición de Aumenta:
+   * «poder descargarlas una a una, de un paciente concreto y de una fecha
+   * concreta»). La fecha de cada factura ya salía en su columna; lo que
+   * faltaba era poder acotar el periodo y juntar las de un mismo niño.
+   */
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
+  const [agrupar, setAgrupar] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const limit = 20;
   const { sortKey, sortDir, toggle: toggleSort } = useSortState("issueDate", "desc");
+
+  /*
+   * ¿Hay pacientes que agrupar? Se le pregunta al MÓDULO, no a la página de
+   * facturas que se está viendo: mirando solo las 20 filas cargadas, la casilla
+   * aparecía y desaparecía según la página (Aumenta tiene 14.243 facturas y las
+   * primeras son de antes del enlace con el paciente). Sin módulo asistencial el
+   * endpoint responde 403 y la casilla no sale, como en el resto de la pantalla.
+   */
+  const [hayPacientes, setHayPacientes] = useState(false);
+  useEffect(() => {
+    fetch("/api/pacientes?limit=1", { cache: "no-store" })
+      .then((r) => setHayPacientes(r.ok))
+      .catch(() => {});
+  }, []);
+
+  /*
+   * Las filas de la tabla, con una CABECERA por paciente cuando se agrupa.
+   * Se apoya en que la lista viene ordenada por paciente desde el servidor
+   * (ver el `if` de la casilla): agrupar solo lo que cabe en la página
+   * partiría los grupos al pasar de página.
+   */
+  const filas = useMemo(() => {
+    if (!agrupar) return invoices.map((inv) => ({ tipo: "factura", inv }));
+    const out = [];
+    let anterior = null;
+    for (const inv of invoices) {
+      const clave = inv.patient ? String(inv.patient.id) : "__sin__";
+      if (clave !== anterior) {
+        anterior = clave;
+        out.push({
+          tipo: "grupo",
+          clave,
+          etiqueta: inv.patient ? `${inv.patient.firstName} ${inv.patient.lastName}` : "Sin paciente",
+        });
+      }
+      out.push({ tipo: "factura", inv });
+    }
+    return out;
+  }, [invoices, agrupar]);
 
   // Datos auxiliares
   // La ficha del pagador, tal y como la resuelve SelectorCliente: se usa para
@@ -73,7 +143,18 @@ export default function FacturasPage() {
   const [employees, setEmployees] = useState([]);
   const [series, setSeries] = useState([]);
   const [settings, setSettings] = useState(null);
+  const [showReparto, setShowReparto] = useState(false);
+  const [terapeutasSugeridos, setTerapeutasSugeridos] = useState([]);
   const [outboundCatalog, setOutboundCatalog] = useState([]);
+  // Catálogo de conceptos y cuotas (31/08/2026).
+  const [conceptosCatalogo, setConceptosCatalogo] = useState([]);
+  useEffect(() => {
+    fetch("/api/billing/conceptos", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => j.ok && setConceptosCatalogo(j.data.conceptos ?? []))
+      .catch(() => {});
+  }, []);
+
   const [me, setMe] = useState(null);
   /*
    * Facturar lo hace quien tiene el MÓDULO de Facturación, no solo quien manda
@@ -92,9 +173,124 @@ export default function FacturasPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState(() => emptyForm(21, 30));
+  // Los terapeutas del paciente elegido, para sugerirlos arriba en «Empleado»
+  // (31/08/2026). VA DESPUÉS de declarar `form`: leerlo antes tumba la página
+  // entera con «Cannot access before initialization» (pasó en el primer
+  // despliegue de esta pieza, minutos el 31/08).
+  useEffect(() => {
+    if (!form.patientId) { setTerapeutasSugeridos([]); return; }
+    let vivo = true;
+    fetch(`/api/pacientes/${form.patientId}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { data: {} }))
+      .then((j) => {
+        if (!vivo) return;
+        // La lista viene con `teamMemberId` (terapeutasEfectivos), no `id`.
+        const ids = (j?.data?.therapists ?? []).map((t) => t.teamMemberId ?? t.id).filter(Boolean);
+        setTerapeutasSugeridos(ids);
+        // Si aún no hay empleado elegido, entra el de referencia (el primero).
+        if (ids.length) setForm((f) => (f.employeeId ? f : { ...f, employeeId: ids[0] }));
+      })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [form.patientId]);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
   const [rectifyOpen, setRectifyOpen] = useState(false); // modal de rectificación
+
+  /*
+   * LA CUOTA DE LA FAMILIA RELLENA LAS LÍNEAS (01/09/2026, petición de Aumenta:
+   * «en las facturas tienen que salir los conceptos predeterminados que tiene
+   * cada paciente y que van asociados a su cuota»).
+   *
+   * Manda la cuota ASIGNADA (`billing_cuotas`, la que se programa cada mes) y,
+   * si esa familia no tiene, la APRENDIDA de la ficha
+   * (`clients.cuota_concept_ids`: lo último que se le cobró).
+   *
+   * ── CUÁNTAS CUOTAS ENTRAN (01/09/2026) ────────────────────────────────────
+   * Con paciente elegido, las DE ESE paciente: dos hermanos pagan cosas
+   * distintas y la factura es de uno. Sin paciente, TODAS las de la familia,
+   * porque la factura es de la familia y la familia paga las dos.
+   *
+   * Esto era `cuotas[0]`: la familia con dos hijos facturaba solo al primero,
+   * en silencio. Y no bastaba con mirar el paciente, porque una cuota puede no
+   * tener paciente asignado —las 260 de Aumenta vienen así del volcado—: si
+   * ninguna casa con el elegido, entran todas las de la familia, que es lo que
+   * de verdad se sabe.
+   *
+   * ── CUÁNDO SE PISAN LAS LÍNEAS ────────────────────────────────────────────
+   * Se rellena cuando las líneas están EN BLANCO o cuando son EXACTAMENTE las
+   * que puso esta misma cuota (nadie las ha tocado). Lo escrito a mano no se
+   * pisa nunca; para eso está el botón «Poner su cuota».
+   *
+   * La segunda mitad es lo que arregla cambiar de familia: antes, las líneas
+   * puestas para la familia anterior ya no estaban «en blanco», así que se
+   * quedaban tal cual y la nueva factura salía con los conceptos de otra.
+   */
+  const [cuotaSugerida, setCuotaSugerida] = useState(null); // { lineas, origen, n, porPaciente }
+
+  // Quién decide todo esto: `lib/billing/cuotaParaRellenar.js`, con su prueba
+  // (`_smoke-cuota-para-rellenar.mjs`). `lineasRef` tiene las líneas frescas
+  // sin ser dependencia del efecto (si no, se recalcularía a cada tecla).
+  const lineasRef = useRef(form.lines);
+  lineasRef.current = form.lines;
+  const puestoPorLaCuota = useRef(null); // huella de lo último que rellenó la cuota
+
+  const lineasDesdeConceptos = useCallback(
+    (ids) => (Array.isArray(ids) ? ids : [])
+      .map((id) => lineaDesdeConcepto(conceptosCatalogo.find((c) => String(c.id) === String(id))))
+      .filter(Boolean)
+      .map((l) => ({ ...EMPTY_LINE, ...l })),
+    [conceptosCatalogo]
+  );
+
+  useEffect(() => {
+    // Solo al CREAR: en una factura que ya existe, sus líneas son las suyas.
+    if (openInvoice || !editing || !form.clientId || conceptosCatalogo.length === 0) return;
+    let cancelado = false;
+    fetch(`/api/billing/cuotas?clientId=${encodeURIComponent(form.clientId)}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (cancelado) return;
+        const cuotas = j?.data?.cuotas ?? [];
+        const usadas = cuotasQueEntran(cuotas, form.patientId);
+        const ids = usadas.length ? conceptosDeCuotas(usadas) : clienteElegido?.cuotaConceptIds;
+        const lineas = lineasDesdeConceptos(ids);
+
+        const actuales = lineasRef.current;
+        const reemplazable = sePuedeRellenar({
+          lineas: actuales,
+          enBlanco: lineasEnBlanco(actuales),
+          huellaPuesta: puestoPorLaCuota.current,
+        });
+
+        if (!lineas.length) {
+          setCuotaSugerida(null);
+          // La familia nueva no tiene cuota: si lo que hay puesto lo puso la
+          // cuota de la anterior, se quita. Facturar a esta familia los
+          // conceptos de otra es peor que no rellenar nada.
+          if (reemplazable && !lineasEnBlanco(actuales)) {
+            puestoPorLaCuota.current = null;
+            setForm((f) => ({ ...f, lines: [{ ...EMPTY_LINE, vatRate: ivaPorDefecto(settings) }] }));
+          }
+          return;
+        }
+
+        setCuotaSugerida({
+          lineas,
+          origen: usadas.length ? "cuota" : "aprendida",
+          n: usadas.length,
+          // Si se ha filtrado por el paciente, decirlo: explica por qué no
+          // salen los conceptos de su hermano.
+          porPaciente: Boolean(form.patientId) && usadas.length < cuotas.length,
+        });
+        if (reemplazable) {
+          puestoPorLaCuota.current = huellaLineas(lineas);
+          setForm((f) => ({ ...f, lines: lineas.map((l) => ({ ...l })) }));
+        }
+      })
+      .catch(() => {});
+    return () => { cancelado = true; };
+  }, [openInvoice, editing, form.clientId, form.patientId, conceptosCatalogo, clienteElegido, lineasDesdeConceptos, settings]);
 
   // Debounce búsqueda
   useEffect(() => {
@@ -124,6 +320,8 @@ export default function FacturasPage() {
       const params = new URLSearchParams({ page, limit, sortBy: sortKey, sortDir });
       if (filterStatus) params.set("status", filterStatus);
       if (search) params.set("q", search);
+      if (desde) params.set("from", desde);
+      if (hasta) params.set("to", hasta);
       const res = await fetch(`/api/billing/invoices?${params}`, { cache: "no-store" });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error");
@@ -134,7 +332,7 @@ export default function FacturasPage() {
     } finally {
       setLoading(false);
     }
-  }, [filterStatus, search, page, sortKey, sortDir]);
+  }, [filterStatus, search, desde, hasta, page, sortKey, sortDir]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -171,7 +369,7 @@ export default function FacturasPage() {
   function openCreate() {
     setOpenInvoice(null);
     setForm(emptyForm(
-      settings?.defaultVatRate ?? 21,
+      ivaPorDefecto(settings),
       Number(settings?.defaultPaymentTermsDays ?? 30),
       Number(settings?.defaultIrpfRate ?? 0)
     ));
@@ -188,6 +386,7 @@ export default function FacturasPage() {
     if (!openInvoice) return;
     setForm({
       clientId: openInvoice.clientId ?? "",
+      patientId: openInvoice.patientId ?? "",
       employeeId: openInvoice.employeeId ?? "",
       partnerId: openInvoice.partnerId ?? "",
       irpfRate: openInvoice.irpfRate ?? settings?.defaultIrpfRate ?? 0,
@@ -200,7 +399,7 @@ export default function FacturasPage() {
         quantity: l.quantity ?? 0,
         unitPrice: l.unitPrice ?? 0,
         discountPct: l.discountPct ?? 0,
-        vatRate: l.vatRate ?? settings?.defaultVatRate ?? 21,
+        vatRate: l.vatRate ?? ivaPorDefecto(settings),
         productId: l.productId ?? "",
         kind: l.kind ?? "",
       })),
@@ -215,8 +414,31 @@ export default function FacturasPage() {
       return { ...f, lines };
     });
   }
+  // Fecha de inicio POR SERVICIO (31/08/2026, Rodrigo): empezó el 13 con
+  // logopedia y el 17 con psicología → cada línea se prorratea sola desde su
+  // precio de mes entero (`precioCompleto`, que se guarda al poner la fecha
+  // para que cambiarla después no prorratee sobre lo ya prorrateado).
+  function setInicioLinea(idx, fecha) {
+    setForm((f) => {
+      const lines = [...f.lines];
+      const l = { ...lines[idx], inicioServicio: fecha };
+      const base = l.precioCompleto ?? (Number(l.unitPrice) || 0);
+      if (!fecha) {
+        if (l.precioCompleto != null) l.unitPrice = l.precioCompleto;
+        l.precioCompleto = null;
+      } else {
+        const p = prorrateoDeCuota(base, fecha);
+        if (p) {
+          l.precioCompleto = base;
+          l.unitPrice = p.importe;
+        }
+      }
+      lines[idx] = l;
+      return { ...f, lines };
+    });
+  }
   function addLine() {
-    setForm((f) => ({ ...f, lines: [...f.lines, { ...EMPTY_LINE, vatRate: settings?.defaultVatRate ?? 21 }] }));
+    setForm((f) => ({ ...f, lines: [...f.lines, { ...EMPTY_LINE, vatRate: ivaPorDefecto(settings) }] }));
   }
   function removeLine(idx) {
     setForm((f) => ({ ...f, lines: f.lines.filter((_, i) => i !== idx) }));
@@ -249,6 +471,7 @@ export default function FacturasPage() {
 
       const payload = {
         clientId: form.clientId,
+        patientId: form.patientId || null,
         employeeId: form.employeeId || null,
         partnerId: form.partnerId || null,
         issueDate: form.issueDate,
@@ -256,15 +479,22 @@ export default function FacturasPage() {
         series: form.series,
         irpfRate: Number(form.irpfRate || 0),
         notes: form.notes || null,
-        lines: form.lines.map((l) => ({
-          description: l.description,
-          quantity: Number(l.quantity),
-          unitPrice: Number(l.unitPrice),
-          discountPct: Number(l.discountPct),
-          vatRate: Number(l.vatRate),
-          productId: l.productId || null,
-          kind: l.kind || null,
-        })),
+        lines: form.lines.map((l) => {
+          // El prorrateo viaja HORNEADO: precio ya prorrateado y el desglose
+          // escrito en el texto de la línea, que es lo que imprime el PDF y
+          // lo que la familia entiende. El campo de fecha no sale de aquí.
+          const rotulo = l.inicioServicio ? rotuloDeProrrateo(l.inicioServicio) : null;
+          return {
+            description: rotulo ? `${l.description} · ${rotulo}` : l.description,
+            quantity: Number(l.quantity),
+            unitPrice: Number(l.unitPrice),
+            discountPct: Number(l.discountPct),
+            vatRate: Number(l.vatRate),
+            productId: l.productId || null,
+            kind: l.kind || null,
+            employeeId: l.employeeId || null,
+          };
+        }),
       };
 
       const url = openInvoice ? `/api/billing/invoices/${openInvoice.id}` : "/api/billing/invoices";
@@ -398,7 +628,7 @@ export default function FacturasPage() {
         <input
           value={searchInput}
           onChange={(e) => { setSearchInput(e.target.value); setPage(1); }}
-          placeholder="Buscar por número o cliente..."
+          placeholder="Buscar por número, cliente o paciente..."
           className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition w-full sm:w-72"
         />
         <Select
@@ -410,8 +640,35 @@ export default function FacturasPage() {
           ]}
           className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition"
         />
-        {(filterStatus || searchInput) && (
-          <button onClick={() => { setSearchInput(""); setFilterStatus(""); setPage(1); }}
+        <label className="flex items-center gap-1.5 text-xs text-neutral-500">
+          Desde
+          <input type="date" value={desde} onChange={(e) => { setDesde(e.target.value); setPage(1); }}
+            className="rounded-lg px-2 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition" />
+        </label>
+        <label className="flex items-center gap-1.5 text-xs text-neutral-500">
+          Hasta
+          <input type="date" value={hasta} onChange={(e) => { setHasta(e.target.value); setPage(1); }}
+            className="rounded-lg px-2 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition" />
+        </label>
+        {hayPacientes && (
+          <label className="flex items-center gap-2 text-xs text-neutral-600">
+            <input
+              type="checkbox"
+              checked={agrupar}
+              onChange={(e) => {
+                setAgrupar(e.target.checked);
+                setPage(1);
+                // Agrupar es ORDENAR por paciente: si no, los grupos se
+                // partirían al cambiar de página y no serían grupos.
+                if (e.target.checked && sortKey !== "patient.lastName") toggleSort("patient.lastName");
+                else if (!e.target.checked && sortKey === "patient.lastName") toggleSort("issueDate");
+              }}
+            />
+            Agrupar por paciente
+          </label>
+        )}
+        {(filterStatus || searchInput || desde || hasta) && (
+          <button onClick={() => { setSearchInput(""); setFilterStatus(""); setDesde(""); setHasta(""); setPage(1); }}
             className="text-xs text-neutral-400 hover:text-neutral-600 px-2 py-1.5 transition-colors">Limpiar</button>
         )}
       </div>
@@ -429,25 +686,29 @@ export default function FacturasPage() {
         {!loading && invoices.length === 0 && (
           <div className="bg-white border border-neutral-100 rounded-xl py-10 text-center text-xs text-neutral-400">Sin facturas</div>
         )}
-        {invoices.map((inv) => (
+        {filas.map((fila) => fila.tipo === "grupo" ? (
+          <div key={`g-${fila.clave}`} className="pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+            {fila.etiqueta}
+          </div>
+        ) : (
           <button
-            key={inv.id}
-            onClick={() => openDetail(inv)}
+            key={fila.inv.id}
+            onClick={() => openDetail(fila.inv)}
             className="w-full text-left bg-white border border-neutral-100 rounded-xl p-3 active:bg-neutral-50 transition-colors"
           >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <div className="font-medium text-neutral-800 truncate">{inv.client?.name ?? "—"}</div>
+                <div className="font-medium text-neutral-800 truncate">{fila.inv.client?.name ?? "—"}</div>
                 <div className="text-[11px] text-neutral-400 font-mono">
-                  {inv.status === "draft" ? <span className="italic">borrador</span> : inv.number} · {fmtDate(inv.issueDate)}
+                  {fila.inv.status === "draft" ? <span className="italic">borrador</span> : fila.inv.number} · {fmtDate(fila.inv.issueDate)}
                 </div>
               </div>
-              <StatusBadge status={inv.status} />
+              <StatusBadge status={fila.inv.status} />
             </div>
             <div className="flex items-baseline justify-between gap-2 mt-2">
-              <span className="text-lg font-semibold text-neutral-900 tabular">{fmtMoney(inv.total)}</span>
-              {Number(inv.paidAmount) > 0 && (
-                <span className="text-[11px] text-emerald-700 tabular">Cobrado {fmtMoney(inv.paidAmount)}</span>
+              <span className="text-lg font-semibold text-neutral-900 tabular">{fmtMoney(fila.inv.total)}</span>
+              {Number(fila.inv.paidAmount) > 0 && (
+                <span className="text-[11px] text-emerald-700 tabular">Cobrado {fmtMoney(fila.inv.paidAmount)}</span>
               )}
             </div>
           </button>
@@ -468,25 +729,49 @@ export default function FacturasPage() {
                 <SortableTh k="taxBase" label="Base" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
                 <SortableTh k="total" label="Total" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
                 <SortableTh k="paidAmount" label="Cobrado" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
+                <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody>
               {loading && invoices.length === 0 && (
-                <tr><td colSpan={8} className="text-center py-12 text-xs text-neutral-400">Cargando...</td></tr>
+                <tr><td colSpan={9} className="text-center py-12 text-xs text-neutral-400">Cargando...</td></tr>
               )}
               {!loading && invoices.length === 0 && (
-                <tr><td colSpan={8} className="text-center py-12 text-xs text-neutral-400">Sin facturas</td></tr>
+                <tr><td colSpan={9} className="text-center py-12 text-xs text-neutral-400">Sin facturas</td></tr>
               )}
-              {invoices.map((inv) => (
-                <tr key={inv.id} onClick={() => openDetail(inv)} className="border-b border-neutral-50 hover:bg-neutral-50/70 transition-colors cursor-pointer">
-                  <td className="px-4 py-3 font-mono text-xs text-neutral-500">{inv.status === "draft" ? <span className="italic text-neutral-400">borrador</span> : inv.number}</td>
-                  <td className="px-4 py-3 text-neutral-800">{inv.client?.name ?? "—"}</td>
-                  <td className="px-4 py-3 text-neutral-500 text-xs">{inv.employee?.displayName ?? "—"}</td>
-                  <td className="px-4 py-3 text-neutral-500 text-xs">{fmtDate(inv.issueDate)}</td>
-                  <td className="px-4 py-3"><StatusBadge status={inv.status} /></td>
-                  <td className="px-4 py-3 text-right text-neutral-700 tabular">{fmtMoney(inv.taxBase)}</td>
-                  <td className="px-4 py-3 text-right font-semibold text-neutral-900 tabular">{fmtMoney(inv.total)}</td>
-                  <td className="px-4 py-3 text-right text-emerald-700 tabular">{fmtMoney(inv.paidAmount)}</td>
+              {filas.map((fila) => fila.tipo === "grupo" ? (
+                <tr key={`g-${fila.clave}`} className="bg-neutral-50/80 border-b border-neutral-100">
+                  <td colSpan={9} className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+                    {fila.etiqueta}
+                  </td>
+                </tr>
+              ) : (
+                <tr key={fila.inv.id} onClick={() => openDetail(fila.inv)} className="border-b border-neutral-50 hover:bg-neutral-50/70 transition-colors cursor-pointer">
+                  <td className="px-4 py-3 font-mono text-xs text-neutral-500">{fila.inv.status === "draft" ? <span className="italic text-neutral-400">borrador</span> : fila.inv.number}</td>
+                  <td className="px-4 py-3 text-neutral-800">{fila.inv.client?.name ?? "—"}</td>
+                  <td className="px-4 py-3 text-neutral-500 text-xs">{fila.inv.employee?.displayName ?? "—"}</td>
+                  <td className="px-4 py-3 text-neutral-500 text-xs">{fmtDate(fila.inv.issueDate)}</td>
+                  <td className="px-4 py-3"><StatusBadge status={fila.inv.status} /></td>
+                  <td className="px-4 py-3 text-right text-neutral-700 tabular">{fmtMoney(fila.inv.taxBase)}</td>
+                  <td className="px-4 py-3 text-right font-semibold text-neutral-900 tabular">{fmtMoney(fila.inv.total)}</td>
+                  <td className="px-4 py-3 text-right text-emerald-700 tabular">{fmtMoney(fila.inv.paidAmount)}</td>
+                  {/* Descargar UNA (01/09/2026): el ZIP de todas ya estaba; lo
+                      que faltaba era el PDF de esta fila sin abrir la factura.
+                      `stopPropagation` para que el clic no abra el cajón. */}
+                  <td className="px-4 py-3 text-right">
+                    {fila.inv.status !== "draft" && (
+                      <a
+                        href={`/api/billing/invoices/${fila.inv.id}/pdf`}
+                        onClick={(e) => e.stopPropagation()}
+                        title={`Descargar ${fila.inv.number}`}
+                        className="inline-flex items-center text-neutral-400 hover:text-[var(--color-primary,#1B3A2D)] transition-colors"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                        </svg>
+                      </a>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -573,6 +858,7 @@ export default function FacturasPage() {
                       <div className="flex items-center gap-2">
                         <div className="flex-1 min-w-0">
                           <SelectorCliente
+                            fuente="billing"
                             value={form.clientId}
                             onChange={(v) => setForm((f) => ({ ...f, clientId: v }))}
                             onFicha={setClienteElegido}
@@ -598,25 +884,44 @@ export default function FacturasPage() {
                         </div>
                       )}
                     </FormRow>
-                    {openInvoice?.patient && (
-                      <FormRow label="Paciente">
-                        <div className="text-sm text-neutral-700 px-1 py-1.5">
-                          {openInvoice.patient.firstName} {openInvoice.patient.lastName}
-                          <span className="block text-[10px] text-neutral-400">La factura es de este paciente; el pagador es el cliente de arriba (editable).</span>
-                        </div>
-                      </FormRow>
-                    )}
+    {/* El paciente ya se ELIGE (31/08/2026): una factura a una fundación
+        o a un tutor dice de qué niño es. El pagador sigue siendo el
+        cliente de arriba. Sin módulo de pacientes, el buscador se esconde
+        solo (el endpoint responde 403). */}
+                    <FormRow label="Paciente (beneficiario)">
+                      <PacientePicker
+                        elegido={openInvoice?.patient ?? null}
+                        value={form.patientId ?? ""}
+                        onChange={(id) => setForm((f) => ({ ...f, patientId: id }))}
+                      />
+                      {/* Repartir entre pagadores (31/08/2026): 50/50, por
+                          porcentajes o por importes — una factura por pagador. */}
+                      {!openInvoice && form.patientId ? (
+                        <button
+                          type="button"
+                          onClick={() => setShowReparto(true)}
+                          className="mt-1 text-[11px] font-medium text-[var(--color-primary,#1B3A2D)] hover:underline"
+                        >
+                          Repartir entre varios pagadores (50/50, %, importes)…
+                        </button>
+                      ) : null}
+                    </FormRow>
                     <FormRow label="Empleado">
                       <Select
                         value={form.employeeId}
                         onChange={(v) => setForm((f) => ({ ...f, employeeId: v }))}
                         options={[
                           { value: "", label: "Sin asignar" },
-                          ...employees.map((m) => ({ value: m.id, label: m.displayName })),
+                          ...ordenarConSugeridos(employees, terapeutasSugeridos).map((m) => ({
+                            value: m.id,
+                            label: m.sugerido ? `★ ${m.displayName} · del paciente` : m.displayName,
+                          })),
                         ]}
                         className={inputCls}
                       />
                     </FormRow>
+                    {/* Solo en centros con socios configurados (lib/billing/socios.js) */}
+                    {haySocios(settings) && (
                     <FormRow label="Socio (quién factura)">
                       <Select
                         value={form.partnerId}
@@ -628,6 +933,7 @@ export default function FacturasPage() {
                         className={inputCls}
                       />
                     </FormRow>
+                    )}
                     <FormRow label="IRPF % (retención sobre base)">
                       <input type="number" min="0" max="47" step="0.01" value={form.irpfRate}
                         onChange={(e) => setForm((f) => ({ ...f, irpfRate: e.target.value }))} className={inputCls} />
@@ -652,13 +958,79 @@ export default function FacturasPage() {
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <h3 className="eyebrow">Líneas</h3>
-                      <button type="button" onClick={addLine} className="text-xs font-semibold text-[var(--color-primary,#1B3A2D)] hover:underline">+ Añadir línea</button>
+                      <div className="flex items-center gap-3">
+                        {!openInvoice && cuotaSugerida && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // Puestas por la cuota: si luego se cambia de
+                              // familia sin haberlas tocado, se reemplazan solas.
+                              puestoPorLaCuota.current = huellaLineas(cuotaSugerida.lineas);
+                              setForm((f) => ({ ...f, lines: cuotaSugerida.lineas.map((l) => ({ ...l })) }));
+                            }}
+                            className="text-xs font-semibold text-neutral-500 hover:text-neutral-800 hover:underline"
+                            title={cuotaSugerida.origen === "cuota"
+                              ? "Los conceptos de la cuota mensual de esta familia"
+                              : "Los conceptos del último cobro de cuota de esta familia"}
+                          >
+                            Poner su cuota ({cuotaSugerida.lineas.length})
+                          </button>
+                        )}
+                        <button type="button" onClick={addLine} className="text-xs font-semibold text-[var(--color-primary,#1B3A2D)] hover:underline">+ Añadir línea</button>
+                      </div>
                     </div>
+                    {!openInvoice && cuotaSugerida && (
+                      <p className="text-[11px] text-neutral-400 mb-2">
+                        {cuotaSugerida.origen !== "cuota"
+                          ? "Los conceptos vienen del último cobro de cuota de esta familia."
+                          : cuotaSugerida.porPaciente
+                            ? `Los conceptos vienen de la cuota del paciente elegido${cuotaSugerida.n > 1 ? ` (${cuotaSugerida.n} cuotas suyas)` : ""}.`
+                            : cuotaSugerida.n > 1
+                              ? `Los conceptos vienen de las ${cuotaSugerida.n} cuotas de esta familia: están todas. Elige el paciente para facturar solo la suya.`
+                              : "Los conceptos vienen de la cuota mensual de esta familia."}
+                      </p>
+                    )}
                     <div className="space-y-2">
                       {form.lines.map((l, idx) => {
                         const c = calcLine(l);
                         return (
                           <div key={idx} className="bg-neutral-50/70 border border-neutral-100 rounded-lg p-3 space-y-2">
+                            {/* Catálogo de conceptos y cuotas (31/08/2026):
+                                elegir uno rellena texto, precio e IVA de una vez. */}
+                            {conceptosCatalogo.length > 0 && (
+                              <Select
+                                value=""
+                                onChange={(v) => {
+                                  const concepto = conceptosCatalogo.find((c2) => c2.id === v);
+                                  const linea = lineaDesdeConcepto(concepto);
+                                  if (!linea) return;
+                                  setForm((f) => {
+                                    const lines = [...f.lines];
+                                    const next = { ...lines[idx], ...linea, precioCompleto: null };
+                                    // Si la línea ya tenía fecha de inicio, el
+                                    // precio nuevo del catálogo se prorratea al
+                                    // momento con esa misma fecha.
+                                    if (next.inicioServicio) {
+                                      const p = prorrateoDeCuota(linea.unitPrice, next.inicioServicio);
+                                      if (p) {
+                                        next.precioCompleto = linea.unitPrice;
+                                        next.unitPrice = p.importe;
+                                      }
+                                    }
+                                    lines[idx] = next;
+                                    return { ...f, lines };
+                                  });
+                                }}
+                                options={[
+                                  { value: "", label: "— Elegir del catálogo de conceptos —" },
+                                  ...conceptosCatalogo.map((c2) => ({
+                                    value: c2.id,
+                                    label: `${c2.category ? c2.category + " · " : ""}${c2.name} — ${Number(c2.unitPrice).toLocaleString("es-ES", { minimumFractionDigits: 2 })} €${c2.periodicity ? " /" + c2.periodicity : ""}`,
+                                  })),
+                                ]}
+                                className={inputCls + " text-xs"}
+                              />
+                            )}
                             <div className="flex items-start gap-2">
                               <input value={l.description} placeholder="Concepto" onChange={(e) => setLine(idx, "description", e.target.value)} className={inputCls} />
                               {form.lines.length > 1 && (
@@ -720,7 +1092,10 @@ export default function FacturasPage() {
                                 <input type="number" min="0" step="0.01" value={l.quantity} onChange={(e) => setLine(idx, "quantity", e.target.value)} className={inputCls} />
                               </FormRow>
                               <FormRow label="Precio">
-                                <input type="number" min="0" step="0.01" value={l.unitPrice} onChange={(e) => setLine(idx, "unitPrice", e.target.value)} className={inputCls} />
+                                {/* Sin min=0 (31/08/2026): un precio NEGATIVO es una línea de
+                                    descuento por importe fijo — «Reserva ya abonada: −30 €».
+                                    El motor ya los suma bien (las rectificativas viven de ello). */}
+                                <input type="number" step="0.01" value={l.unitPrice} onChange={(e) => setLine(idx, "unitPrice", e.target.value)} className={inputCls} />
                               </FormRow>
                               <FormRow label="Dto %">
                                 <input type="number" min="0" max="100" step="0.01" value={l.discountPct} onChange={(e) => setLine(idx, "discountPct", e.target.value)} className={inputCls} />
@@ -734,6 +1109,47 @@ export default function FacturasPage() {
                                 />
                               </FormRow>
                             </div>
+                            {/* Fecha de inicio POR SERVICIO (31/08/2026): si el
+                                paciente empezó a mitad de mes, la línea se
+                                prorratea sola y el desglose queda escrito en la
+                                factura. Sin fecha, nada cambia. */}
+                            {l.kind !== "titulo" && l.kind !== "shipping" && (
+                              <div className="flex flex-wrap items-center gap-2">
+                                <label className="text-[11px] text-neutral-500 shrink-0">Empezó a mitad de mes:</label>
+                                <input
+                                  type="date"
+                                  value={l.inicioServicio || ""}
+                                  onChange={(e) => setInicioLinea(idx, e.target.value)}
+                                  className="rounded-md border border-neutral-200 bg-white px-2 py-1 text-xs text-neutral-600 focus:outline-none focus:border-neutral-400"
+                                />
+                                {l.inicioServicio && l.precioCompleto != null && (() => {
+                                  const p = prorrateoDeCuota(l.precioCompleto, l.inicioServicio);
+                                  return p ? (
+                                    <span className="text-[10px] text-neutral-400">
+                                      {p.diasCobrados} de {p.diasDelMes} días → {fmtMoney(p.importe)} (el mes entero son {fmtMoney(l.precioCompleto)})
+                                    </span>
+                                  ) : null;
+                                })()}
+                              </div>
+                            )}
+                            {/* Empleado POR LÍNEA (31/08/2026): una factura con
+                                sesiones de dos terapeutas reparte cada línea al
+                                suyo en Analítica → Por empleado. Vacío = el de
+                                la factura, como siempre. */}
+                            {employees.length > 0 && l.kind !== "titulo" && (
+                              <Select
+                                value={l.employeeId || ""}
+                                onChange={(v) => setLine(idx, "employeeId", v)}
+                                options={[
+                                  { value: "", label: "Empleado: el de la factura" },
+                                  ...ordenarConSugeridos(employees, terapeutasSugeridos).map((m) => ({
+                                    value: m.id,
+                                    label: (m.sugerido ? "★ " : "") + m.displayName,
+                                  })),
+                                ]}
+                                className={inputCls + " text-xs"}
+                              />
+                            )}
                             <div className="grid grid-cols-3 gap-2 text-xs text-neutral-500 tabular pt-1 border-t border-neutral-100">
                               <div>Base: <span className="text-neutral-800 font-medium">{fmtMoney(c.base)}</span></div>
                               <div>IVA: <span className="text-neutral-800 font-medium">{fmtMoney(c.vat)}</span></div>
@@ -798,6 +1214,103 @@ export default function FacturasPage() {
           onSubmit={submitRectify}
         />
       )}
+
+      {/* MODAL REPARTO ENTRE PAGADORES (31/08/2026) */}
+      {showReparto && form.patientId && (
+        <PatientReparto
+          patientId={form.patientId}
+          defaultPayerClientId={form.clientId || ""}
+          onClose={() => setShowReparto(false)}
+          onCreated={async (n) => {
+            setShowReparto(false);
+            closePanel();
+            await load();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * PacientePicker — buscar y elegir el paciente beneficiario de la factura
+ * (31/08/2026). Busca contra /api/pacientes (mismo buscador por palabras que
+ * la pantalla de Pacientes); si el tenant no tiene el módulo, el endpoint
+ * responde 403 y el campo se esconde solo, como ClientFiscalSection.
+ */
+function PacientePicker({ elegido, value, onChange }) {
+  const [disponible, setDisponible] = useState(true);
+  const [texto, setTexto] = useState("");
+  const [resultados, setResultados] = useState([]);
+  const [etiqueta, setEtiqueta] = useState(
+    elegido ? `${elegido.firstName || ""} ${elegido.lastName || ""}`.trim() : ""
+  );
+
+  useEffect(() => {
+    setEtiqueta(elegido ? `${elegido.firstName || ""} ${elegido.lastName || ""}`.trim() : "");
+  }, [elegido]);
+
+  useEffect(() => {
+    if (!texto.trim()) { setResultados([]); return; }
+    const t = setTimeout(() => {
+      fetch(`/api/pacientes?q=${encodeURIComponent(texto.trim())}&limit=8`, { cache: "no-store" })
+        .then(async (r) => {
+          if (r.status === 403) { setDisponible(false); return { data: {} }; }
+          return r.json();
+        })
+        .then((j) => setResultados(j?.data?.patients ?? []))
+        .catch(() => {});
+    }, 300);
+    return () => clearTimeout(t);
+  }, [texto]);
+
+  if (!disponible) return null;
+
+  if (value && etiqueta) {
+    return (
+      <div className="flex items-center gap-2 px-1 py-1.5">
+        <span className="text-sm text-neutral-700">{etiqueta}</span>
+        <button
+          type="button"
+          onClick={() => { onChange(""); setEtiqueta(""); setTexto(""); }}
+          className="text-[11px] text-neutral-400 hover:text-red-500"
+        >
+          Quitar
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <input
+        value={texto}
+        onChange={(e) => setTexto(e.target.value)}
+        placeholder="Buscar paciente por nombre…"
+        className={inputCls}
+      />
+      {resultados.length > 0 && (
+        <div className="absolute z-20 mt-1 w-full bg-white border border-neutral-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
+          {resultados.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => {
+                onChange(p.id);
+                setEtiqueta(`${p.firstName || ""} ${p.lastName || ""}`.trim());
+                setResultados([]);
+                setTexto("");
+              }}
+              className="block w-full text-left px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50"
+            >
+              {(p.firstName || "") + " " + (p.lastName || "")}
+            </button>
+          ))}
+        </div>
+      )}
+      <span className="block text-[10px] text-neutral-400 mt-1">
+        Opcional: de qué paciente es la factura. El pagador es el cliente de arriba.
+      </span>
     </div>
   );
 }
@@ -812,6 +1325,10 @@ function FormRow({ label, children }) {
 }
 
 function DetailView({ invoice, puedeFacturar, onAction, onEdit, onOpenLinked, saving }) {
+  // La descarga del PDF puede llevar u omitir el nombre del paciente y el
+  // sello (31/08/2026); por defecto salen los dos si existen.
+  const [conPaciente, setConPaciente] = useState(true);
+  const [conSello, setConSello] = useState(true);
   const totalPaid = Number(invoice.paidAmount || 0);
   const remaining = Math.max(0, Number(invoice.total) - totalPaid);
   const lineBreakdown = (invoice.lines ?? []).reduce((map, l) => {
@@ -923,9 +1440,12 @@ function DetailView({ invoice, puedeFacturar, onAction, onEdit, onOpenLinked, sa
       )}
 
       {invoice.status !== "draft" && (
-        <div className="pt-1">
+        <div className="pt-1 space-y-1.5">
           <a
-            href={`/api/billing/invoices/${invoice.id}/pdf`}
+            href={`/api/billing/invoices/${invoice.id}/pdf${[
+              !conPaciente ? "paciente=0" : null,
+              !conSello ? "sello=0" : null,
+            ].filter(Boolean).length ? "?" + [!conPaciente ? "paciente=0" : null, !conSello ? "sello=0" : null].filter(Boolean).join("&") : ""}`}
             className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide border border-neutral-300 text-neutral-700 hover:bg-neutral-50 transition"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
@@ -933,6 +1453,19 @@ function DetailView({ invoice, puedeFacturar, onAction, onEdit, onOpenLinked, sa
             </svg>
             Descargar PDF
           </a>
+          {/* Con o sin nombre del paciente y sello, eligiéndolo (31/08/2026). */}
+          <div className="flex items-center gap-4 text-[11px] text-neutral-500">
+            {invoice.patient && (
+              <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" checked={conPaciente} onChange={(e) => setConPaciente(e.target.checked)} className="rounded border-neutral-300" />
+                Nombre del paciente
+              </label>
+            )}
+            <label className="inline-flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" checked={conSello} onChange={(e) => setConSello(e.target.checked)} className="rounded border-neutral-300" />
+              Sello del centro
+            </label>
+          </div>
         </div>
       )}
 

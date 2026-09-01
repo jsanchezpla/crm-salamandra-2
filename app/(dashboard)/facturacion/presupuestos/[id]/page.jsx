@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import HelpTooltip from "../../../../../components/ui/HelpTooltip.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
+import { ivaPorDefecto } from "../../../../../lib/billing/ivaPorDefecto.js";
 
 const STATUS = {
   draft: { label: "Borrador", cls: "bg-neutral-100 text-neutral-600" },
@@ -41,6 +42,16 @@ export default function PresupuestoDetallePage() {
   const [lines, setLines] = useState([]);
   const [validUntil, setValidUntil] = useState("");
   const [notes, setNotes] = useState("");
+  const [settings, setSettings] = useState(null);
+
+  // El IVA de una línea nueva sale de la configuración del emisor (exento → 0),
+  // la misma regla que aplica el servidor: lib/billing/ivaPorDefecto.js.
+  useEffect(() => {
+    fetch("/api/billing/settings", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => setSettings(j.data))
+      .catch(() => {});
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -79,7 +90,12 @@ export default function PresupuestoDetallePage() {
     setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
   }
   function addLine() {
-    setLines((prev) => [...prev, { description: "", quantity: 1, unitPrice: 0, discountPct: 0, vatRate: 21 }]);
+    setLines((prev) => [...prev, { description: "", quantity: 1, unitPrice: 0, discountPct: 0, vatRate: ivaPorDefecto(settings) }]);
+  }
+  // Apartado con título (31/08/2026): un rótulo de sección («Septiembre»,
+  // «Material»…) que no suma — para presupuestos largos desglosados por meses.
+  function addTitulo() {
+    setLines((prev) => [...prev, { kind: "titulo", description: "" }]);
   }
   function removeLine(idx) {
     setLines((prev) => prev.filter((_, i) => i !== idx));
@@ -93,13 +109,17 @@ export default function PresupuestoDetallePage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          lines: lines.map((l) => ({
-            description: l.description,
-            quantity: Number(l.quantity || 0),
-            unitPrice: Number(l.unitPrice || 0),
-            discountPct: Number(l.discountPct || 0),
-            vatRate: Number(l.vatRate || 0),
-          })),
+          lines: lines.map((l) =>
+            l.kind === "titulo"
+              ? { kind: "titulo", description: l.description }
+              : {
+                  description: l.description,
+                  quantity: Number(l.quantity || 0),
+                  unitPrice: Number(l.unitPrice || 0),
+                  discountPct: Number(l.discountPct || 0),
+                  vatRate: Number(l.vatRate || 0),
+                }
+          ),
           validUntil: validUntil || null,
           notes: notes?.trim() || null,
         }),
@@ -111,6 +131,31 @@ export default function PresupuestoDetallePage() {
       setError(err.message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  const [avisoEnvio, setAvisoEnvio] = useState(null);
+
+  // Envío REAL por correo con el PDF adjunto (31/08/2026). Best-effort como en
+  // facturas: si el correo falla, el presupuesto queda marcado y se dice.
+  async function enviarPorCorreo() {
+    setBusy(true);
+    setError(null);
+    setAvisoEnvio(null);
+    try {
+      const res = await fetch(`/api/billing/quotes/${id}/send`, { method: "POST" });
+      const j = await res.json();
+      if (!j.ok) throw new Error(j.error || "Error enviando");
+      setAvisoEnvio(
+        j.data?.emailEnviado
+          ? `Enviado por correo a ${j.data?.customFields?.sentTo || "su email"}.`
+          : `Marcado como enviado, pero el correo no ha salido: ${j.data?.emailError || "sin detalle"}.`
+      );
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -180,7 +225,12 @@ export default function PresupuestoDetallePage() {
           <div className="bg-white border border-neutral-200 rounded-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-neutral-100 flex items-center justify-between">
               <h2 className="font-semibold text-neutral-800 text-sm">Líneas</h2>
-              {!readOnly && <button onClick={addLine} className="text-xs px-2.5 py-1 rounded-md border border-neutral-200 text-neutral-700 hover:bg-neutral-50">+ Añadir línea</button>}
+              {!readOnly && (
+                <div className="flex items-center gap-1.5">
+                  <button onClick={addTitulo} className="text-xs px-2.5 py-1 rounded-md border border-neutral-200 text-neutral-500 hover:bg-neutral-50">+ Apartado</button>
+                  <button onClick={addLine} className="text-xs px-2.5 py-1 rounded-md border border-neutral-200 text-neutral-700 hover:bg-neutral-50">+ Añadir línea</button>
+                </div>
+              )}
             </div>
             {lines.length === 0 ? (
               <div className="px-4 py-8 text-sm text-neutral-400 text-center">Sin líneas todavía.</div>
@@ -190,13 +240,32 @@ export default function PresupuestoDetallePage() {
                   <span>Descripción</span><span className="text-right">Cant.</span><span className="text-right">Precio</span><span className="text-right">Dto%</span><span className="text-right">IVA%</span><span className="text-right">Total</span><span />
                 </div>
                 {lines.map((l, idx) => {
+                  if (l.kind === "titulo") {
+                    return (
+                      <div key={idx} className="grid grid-cols-[1fr_28px] gap-2 px-4 py-2 items-center bg-neutral-50/60">
+                        <input
+                          value={l.description || ""}
+                          onChange={(e) => updateLine(idx, { description: e.target.value })}
+                          disabled={readOnly}
+                          placeholder="Título del apartado (Septiembre, Material…)"
+                          className={`${inputCls} font-semibold`}
+                        />
+                        {!readOnly ? (
+                          <button onClick={() => removeLine(idx)} className="text-neutral-400 hover:text-red-500" aria-label="Eliminar">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        ) : <span />}
+                      </div>
+                    );
+                  }
                   const base = Number(l.quantity || 0) * Number(l.unitPrice || 0) * (1 - Number(l.discountPct || 0) / 100);
                   const lineTotal = base * (1 + Number(l.vatRate || 0) / 100);
                   return (
                     <div key={idx} className="grid grid-cols-[1fr_60px_84px_56px_60px_84px_28px] gap-2 px-4 py-2 items-center">
                       <input value={l.description || ""} onChange={(e) => updateLine(idx, { description: e.target.value })} disabled={readOnly} placeholder="Concepto" className={inputCls} />
                       <input type="number" min="0" step="0.01" value={l.quantity} onChange={(e) => updateLine(idx, { quantity: e.target.value })} disabled={readOnly} className={`${inputCls} text-right`} />
-                      <input type="number" min="0" step="0.01" value={l.unitPrice} onChange={(e) => updateLine(idx, { unitPrice: e.target.value })} disabled={readOnly} className={`${inputCls} text-right`} />
+                      {/* Sin min=0: un precio negativo es un descuento fijo (31/08/2026). */}
+                      <input type="number" step="0.01" value={l.unitPrice} onChange={(e) => updateLine(idx, { unitPrice: e.target.value })} disabled={readOnly} className={`${inputCls} text-right`} />
                       <input type="number" min="0" max="100" step="1" value={l.discountPct ?? 0} onChange={(e) => updateLine(idx, { discountPct: e.target.value })} disabled={readOnly} className={`${inputCls} text-right`} />
                       <input type="number" min="0" step="1" value={l.vatRate ?? 21} onChange={(e) => updateLine(idx, { vatRate: e.target.value })} disabled={readOnly} className={`${inputCls} text-right`} />
                       <span className="text-right tabular-nums text-sm text-neutral-800">{fmtMoney(lineTotal)}</span>
@@ -251,14 +320,29 @@ export default function PresupuestoDetallePage() {
             </ul>
           </div>
 
+          <div className="bg-white border border-neutral-200 rounded-xl p-4 space-y-2">
+            <a
+              href={`/api/billing/quotes/${id}/pdf`}
+              className="block text-center w-full px-3 py-2 text-xs font-medium rounded-md border border-neutral-200 text-neutral-700 hover:bg-neutral-50"
+            >
+              Descargar PDF
+            </a>
+            {avisoEnvio && (
+              <div className="text-[11px] text-neutral-500 bg-neutral-50 border border-neutral-100 rounded-md px-2.5 py-1.5">{avisoEnvio}</div>
+            )}
+          </div>
+
           {!readOnly && (
             <div className="bg-white border border-neutral-200 rounded-xl p-4 space-y-2">
               <button onClick={save} disabled={saving} className="w-full px-3 py-2 text-xs font-medium rounded-md border border-neutral-200 text-neutral-700 hover:bg-neutral-50 disabled:opacity-50">
                 {saving ? "Guardando…" : "Guardar cambios"}
               </button>
+              <button onClick={enviarPorCorreo} disabled={busy} className="w-full px-3 py-2 text-xs font-medium rounded-md border border-sky-200 text-sky-700 bg-sky-50 hover:bg-sky-100 disabled:opacity-50">
+                {busy ? "Enviando…" : "Enviar por correo (PDF adjunto)"}
+              </button>
               {!quote.sentAt && (
-                <button onClick={() => action("", { status: "sent" })} disabled={busy} className="w-full px-3 py-2 text-xs font-medium rounded-md border border-sky-200 text-sky-700 bg-sky-50 hover:bg-sky-100 disabled:opacity-50">
-                  Marcar como enviado
+                <button onClick={() => action("", { status: "sent" })} disabled={busy} className="w-full px-3 py-1.5 text-[11px] font-medium rounded-md text-neutral-400 hover:text-neutral-600">
+                  Marcar como enviado sin mandar correo
                 </button>
               )}
               {quote.status !== "accepted" && (

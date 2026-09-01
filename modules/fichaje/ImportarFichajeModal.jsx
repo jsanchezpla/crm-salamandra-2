@@ -23,7 +23,7 @@
  * veces que haga falta.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { formatearMinutos } from "@/lib/fichaje/parseHora.js";
 
@@ -31,14 +31,51 @@ export default function ImportarFichajeModal({ periodo: periodoInicial, onClose,
   const [periodo, setPeriodo] = useState(periodoInicial);
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
+  // La lista de nombres por asignar del PRIMER preview. El preview se vuelve a
+  // pedir con los mapeos puestos (y entonces ya no los trae como pendientes),
+  // pero los desplegables tienen que seguir a la vista para poder revisarlos.
+  const [pendientesOriginales, setPendientesOriginales] = useState([]);
   const [mapeos, setMapeos] = useState({});
   const [ocupado, setOcupado] = useState(false);
+  const [recalculando, setRecalculando] = useState(false);
   const [error, setError] = useState(null);
   const [resultado, setResultado] = useState(null);
 
-  const pendientes = preview?.pendientesDeMapeo || [];
+  const pendientes = pendientesOriginales;
   const sinResolver = pendientes.filter((p) => !mapeos[p.nombre]);
-  const puedeAplicar = preview && preview.totales.listas > 0 && sinResolver.length === 0;
+  const puedeAplicar =
+    preview && !recalculando && preview.totales.listas > 0 && sinResolver.length === 0;
+
+  // Cada nombre asignado cambia cuántas jornadas quedan listas, y quien cuenta
+  // eso es el servidor: se re-pide el preview con los mapeos puestos (sigue sin
+  // escribir nada). Sin esto, un fichero cuyos nombres no casan con NADIE
+  // —el volcado del reloj, la primera vez— dejaba `listas` en 0 para siempre y
+  // el botón nunca se encendía por mucho que se asignara a todo el mundo.
+  useEffect(() => {
+    if (!file || resultado) return;
+    const asignados = Object.fromEntries(Object.entries(mapeos).filter(([, v]) => v));
+    if (Object.keys(asignados).length === 0) return;
+    const t = setTimeout(async () => {
+      setRecalculando(true);
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        fd.append("periodo", periodo);
+        fd.append("mapeos", JSON.stringify(asignados));
+        const r = await fetch("/api/fichaje/import/preview", { method: "POST", body: fd });
+        const j = await r.json();
+        if (j?.ok) setPreview(j.data);
+      } catch {
+        // El preview que ya había sigue en pantalla; aplicar re-valida igual.
+      } finally {
+        setRecalculando(false);
+      }
+    }, 400);
+    return () => clearTimeout(t);
+    // `preview` fuera a propósito: este efecto lo REESCRIBE, y tenerlo de
+    // dependencia sería pedirse a sí mismo en bucle.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapeos, file, periodo, resultado]);
 
   async function pedirPreview() {
     if (!file) return setError("Elige el fichero");
@@ -55,6 +92,7 @@ export default function ImportarFichajeModal({ periodo: periodoInicial, onClose,
         return;
       }
       setPreview(j.data);
+      setPendientesOriginales(j.data.pendientesDeMapeo || []);
       // Las sugerencias vienen premarcadas: son un ahorro real (9 de 14 en el
       // fichero de Aumenta) y siguen siendo revisables antes de confirmar.
       const iniciales = {};
@@ -94,7 +132,7 @@ export default function ImportarFichajeModal({ periodo: periodoInicial, onClose,
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={ocupado ? undefined : onClose} />
-      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[88vh] flex flex-col">
+      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[88dvh] flex flex-col">
         <header className="px-6 py-4 border-b border-gray-100 shrink-0">
           <div className="text-[11px] uppercase tracking-[0.18em] text-gray-400">Fichaje</div>
           <h2 className="text-lg font-semibold text-gray-900">Importar el Excel del mes</h2>
@@ -149,7 +187,7 @@ export default function ImportarFichajeModal({ periodo: periodoInicial, onClose,
                   </span>
                   <input
                     type="file"
-                    accept=".xlsx"
+                    accept=".xlsx,.xls"
                     onChange={(e) => {
                       setFile(e.target.files?.[0] || null);
                       setPreview(null);
@@ -159,8 +197,8 @@ export default function ImportarFichajeModal({ periodo: periodoInicial, onClose,
                 </label>
               </div>
               <p className="text-xs text-gray-500">
-                El mes no se saca del fichero: las hojas se llaman «02-6» o «9-13» y ahí no pone
-                marzo por ningún lado. Elígelo tú.
+                El mes lo eliges tú, no se adivina del fichero. Si el fichero sí dice de qué mes es
+                (el volcado del reloj lo dice), se comprueba y no te deja equivocarte.
               </p>
 
               {!preview && (
@@ -329,7 +367,9 @@ export default function ImportarFichajeModal({ periodo: periodoInicial, onClose,
                 ? "Importando…"
                 : sinResolver.length
                   ? `Faltan ${sinResolver.length} por asignar`
-                  : `Importar ${preview.totales.listas} jornadas`}
+                  : recalculando
+                    ? "Recalculando…"
+                    : `Importar ${preview.totales.listas} jornadas`}
             </button>
           )}
         </footer>

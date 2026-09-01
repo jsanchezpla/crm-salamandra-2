@@ -122,7 +122,7 @@ export default function AssignPlanModal({ onClose, onAssigned }) {
         aria-modal="true"
         className="
           relative bg-white shadow-2xl flex flex-col overflow-hidden
-          w-full h-full lg:max-w-2xl lg:max-h-[85vh] lg:rounded-xl
+          w-full h-full lg:max-w-2xl lg:max-h-[85dvh] lg:rounded-xl
           mt-14 lg:mt-0
         "
       >

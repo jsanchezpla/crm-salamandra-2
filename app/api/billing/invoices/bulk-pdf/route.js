@@ -5,6 +5,9 @@ import { withTenant } from "@/lib/tenant/withTenant.js";
 import { forbidden, error, serverError } from "@/lib/utils/apiResponse.js";
 import { contentDisposition } from "@/lib/documents/helpers.js";
 import { buildInvoicePdfBuffer, invoicePdfFilename } from "@/lib/billing/invoicePdf.js";
+import { membreteDe } from "@/lib/billing/membrete.js";
+import { cargarLogo } from "@/lib/billing/logoMembrete.js";
+import { invoicePatientInclude } from "@/lib/billing/patientLink.js";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -27,13 +30,20 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
     const { Invoice, Client, TenantBillingSettings } = tenantModels;
     const settings = (await TenantBillingSettings.findOne()) || {};
     const partners = Array.isArray(settings.partners) ? settings.partners : [];
+    // El logo y el sello se traen UNA vez para todo el lote: mismo membrete
+    // que el PDF suelto, con sus valores por defecto.
+    const logo = await cargarLogo(membreteDe(settings, "factura").logoUrl);
+    const stamp = await cargarLogo(settings.stampUrl);
 
     const invoices = await Invoice.findAll({
       where: {
         status: { [Op.ne]: "draft" },
         issueDate: { [Op.between]: [from, to] },
       },
-      include: [{ model: Client, as: "client" }],
+      include: [
+        { model: Client, as: "client" },
+        ...invoicePatientInclude(tenantModels, hasModule),
+      ],
       order: [["issueDate", "ASC"], ["number", "ASC"]],
     });
 
@@ -55,6 +65,11 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
             client: inv.client,
             settings,
             partnerName,
+            logo,
+            patientName: inv.patient
+              ? `${inv.patient.firstName || ""} ${inv.patient.lastName || ""}`.trim() || null
+              : null,
+            stamp,
           });
           archive.append(buf, { name: invoicePdfFilename(inv) });
         } catch {

@@ -8,15 +8,15 @@
 | --- | --- |
 | **moduleKey** | `documents` (básico: SOLO el Contrato de Prestación de Servicios) · requiere `citas` y `clients` (`lib/provisioning/catalogo.js`: sin área privada nadie lo firma) · `documents_avanzado` (el archivo completo: carpetas, buscador, subida, cuota) · requiere `documents` · claves en `lib/tenant/moduleKeys.js` (`MODULE_KEYS.DOCUMENTS`, `MODULE_KEYS.DOCUMENTS_AVANZADO`) |
 | **Reina** | — (ninguna declarada en el doc ni en el código; el básico nació para `nutri_laura`, que no podía subir su contrato) |
-| **Pantallas** | `app/(dashboard)/documentos/page.jsx` → `/documentos` (server component: mira `documents_avanzado` en master y pasa `avanzado`; con el básico solo se ve la tarjeta del contrato) · `app/(dashboard)/documentos/todos/page.jsx` → `/documentos/todos` (30/08/2026, Rodrigo: el archivo entero agolpado —también lo de dentro de las carpetas— con buscador por nombre; mismo gateo, y sin `documents_avanzado` redirige a `/documentos`) · el mismo archivo `documents` se asoma desde otras fichas: pestaña Documentos de `/clientes/[id]` (`components/clients/ClientAttachmentsPanel.jsx`, montada según `lib/clients/piezasFicha.js`: se ESCONDE si hay `documents_avanzado`) y documentos del paciente en `/pacientes/[id]` |
-| **Endpoints** | `app/api/documents/**` — 9 `route.js`: `contrato-servicios/route.js` y `contrato-servicios/download/route.js` exigen `documents` (básico); `route.js`, `[id]`, `[id]/download`, `[id]/preview`, `folders`, `folders/[id]` y `quota` exigen `documents_avanzado` · otras puertas al mismo archivo, gateadas por SU módulo y no por este: `app/api/clients/[id]/attachments/**` (3, `source='ficha'`), `app/api/clients/[id]/contract/**` (3), `app/api/pacientes/[id]/documents/**` (3, `source='paciente'`; desde el 26/08/2026 lista y descarga también los `source='incidencia'` del paciente, que solo se borran desde su incidencia), `app/api/clinica/incidencias/[id]/documents/**` (3, `source='incidencia'`, 26/08/2026: adjuntos de una incidencia; con paciente heredan su `patient_id`/`client_id`), `app/api/pacientes/contract-template/**` (2: la misma `contratoServicios.js` desde el módulo clínico), `app/api/team/me/documents/**` (2) · públicos: `app/api/public/c/[tenantSlug]/citas-portal/documents/**` (2) y `.../citas-portal/contract/**` (3), el área privada del paciente, gateados por `citas` |
-| **Lógica** | `lib/documents/`: `documentStorage.js` (disco `documents/{slug}/{owner\|shared}/{uuid}.{ext}`, magic bytes, 25 MB por fichero y 1 GB por tenant, `UPLOADS_ROOT`), `helpers.js` (ACL `visibilityWhere`, serializers, auditoría best-effort), `contratoServicios.js` (el contrato del centro: fila de `documents` con `source='contract_template'`, compartida con `/api/pacientes/contract-template`), `contratoFirmadoPdf.js` (la copia PDF de quien firma, pdfkit + Poppins), `contratoFirmadoArchivo.js` (mete ese PDF firmado en el archivo) · `lib/tenant/moduleKeys.js` (las claves) · `lib/clients/piezasFicha.js` (`documents_avanzado` esconde el panel Documentos de la ficha) · el storage se clonó de `lib/clients/attachmentStorage.js` en vez de reutilizarlo (regla #2) |
-| **UI** | `modules/documents/DocumentsModule.jsx` (recibe `avanzado`; tabs Privados/Compartidos, breadcrumb, cuota; desde el 30/08/2026 en la raíz corta la lista de archivos a 4 —`DOCS_EN_PORTADA`— con botón «Ver todos», para que las carpetas se vean sin scroll) · `modules/documents/TodosLosDocumentosModule.jsx` (la pantalla `/documentos/todos`: tabs, buscador con debounce, cada fila dice su carpeta) · `components/documents/`: `ContratoServiciosCard.jsx` (lo único del básico), `UploadDropzone.jsx`, `FileTypeIcon.jsx`, `PdfPreviewModal.jsx` (`top-14 lg:top-0`, regla #13), `formato.js` (`fmtSize`/`fmtDate` compartidos por las dos pantallas) · menú: `components/layout/Sidebar.jsx` (`key: "documents"`, `/documentos`) |
-| **Modelos** | `models/tenant/DocumentFolder.model.js` (`document_folders`: árbol de hasta 4 niveles, `visibility`, `owner_user_id`) · `models/tenant/Document.model.js` (`documents`: el ARCHIVO CENTRAL del CRM desde el 23/07/2026 — MIME libre, `client_id`, `patient_id`, `incidencia_id`, `source` (`manual` / `ficha` / `paciente` / `contract_template` / `incidencia`…), `client_visible`, `uploaded_by_client`) · asociaciones en `lib/db/tenantDb.js` |
+| **Pantallas** | `app/(dashboard)/documentos/page.jsx` → `/documentos` (server component: mira `documents_avanzado` en master y pasa `avanzado`; con el básico solo se ve la tarjeta del contrato) · `app/(dashboard)/documentos/todos/page.jsx` → `/documentos/todos` (30/08/2026, Rodrigo: el archivo entero agolpado —también lo de dentro de las carpetas— con buscador por nombre; mismo gateo, y sin `documents_avanzado` redirige a `/documentos`) · `app/(dashboard)/documentos/lecturas/page.jsx` → `/documentos/lecturas` (01/09/2026: lo que me han pedido LEER, y con pestaña «El centro» para dirección; **sin gate de módulo en la página** —quien tiene una lectura pendiente tiene que poder llegar a ella—, el endpoint es la puerta) · el mismo archivo `documents` se asoma desde otras fichas: pestaña Documentos de `/clientes/[id]` (`components/clients/ClientAttachmentsPanel.jsx`, montada según `lib/clients/piezasFicha.js`: se ESCONDE si hay `documents_avanzado`) y documentos del paciente en `/pacientes/[id]` |
+| **Endpoints** | `app/api/documents/**` — 9 `route.js`: `contrato-servicios/route.js` y `contrato-servicios/download/route.js` exigen `documents` (básico); `route.js`, `[id]`, `[id]/download`, `[id]/preview`, `folders`, `folders/[id]` y `quota` exigen `documents_avanzado` · otras puertas al mismo archivo, gateadas por SU módulo y no por este: `app/api/clients/[id]/attachments/**` (3, `source='ficha'`), `app/api/clients/[id]/contract/**` (3), `app/api/pacientes/[id]/documents/**` (3, `source='paciente'`; desde el 26/08/2026 lista y descarga también los `source='incidencia'` del paciente, que solo se borran desde su incidencia), `app/api/clinica/incidencias/[id]/documents/**` (3, `source='incidencia'`, 26/08/2026: adjuntos de una incidencia; con paciente heredan su `patient_id`/`client_id`), `app/api/citas/bloqueos/[id]/documents/**` (3, `source='bloqueo'`, 01/09/2026: lo aparejado a un tramo de la agenda; gateado por `citas`), `app/api/documents/lecturas/route.js` (01/09/2026: GET mías / del centro / de un documento, POST a quién se le pide, PATCH marcar la mía; gateado por `team` DEL TENANT y **no** por `documents_avanzado`), `app/api/documents/folders/[id]/miembros/route.js` (01/09/2026: GET con quién está compartida una carpeta, PUT deja la lista así; ver la lista es de quien ve la carpeta, cambiarla solo del DUEÑO), `app/api/pacientes/contract-template/**` (2: la misma `contratoServicios.js` desde el módulo clínico), `app/api/team/me/documents/**` (2) · públicos: `app/api/public/c/[tenantSlug]/citas-portal/documents/**` (2) y `.../citas-portal/contract/**` (3), el área privada del paciente, gateados por `citas` |
+| **Lógica** | `lib/documents/`: `documentStorage.js` (disco `documents/{slug}/{owner\|shared}/{uuid}.{ext}`, magic bytes, 25 MB por fichero y 1 GB por tenant, `UPLOADS_ROOT`), `helpers.js` (ACL `visibilityWhere`, serializers, auditoría best-effort), `contratoServicios.js` (el contrato del centro: fila de `documents` con `source='contract_template'`, compartida con `/api/pacientes/contract-template`), `contratoFirmadoPdf.js` (la copia PDF de quien firma, pdfkit + Poppins), `contratoFirmadoArchivo.js` (mete ese PDF firmado en el archivo), `lecturas.js` (01/09/2026: normalizar los lectores que llegan del navegador, el resumen de un documento, sincronizar la lista sin borrar acuses, sellar la lectura y contar lo pendiente), `carpetasCompartidas.js` (01/09/2026: qué carpetas ve cada uno — el ÚNICO sitio donde se cruza el `ownerUserId` de master con el `teamMemberId` del tenant, vía `TeamMember.userId`) · `lib/team/departamentos.js` (quién es «Administración», para el botón de los selectores) · `lib/tenant/moduleKeys.js` (las claves) · `lib/clients/piezasFicha.js` (`documents_avanzado` esconde el panel Documentos de la ficha) · el storage se clonó de `lib/clients/attachmentStorage.js` en vez de reutilizarlo (regla #2) |
+| **UI** | `modules/documents/DocumentsModule.jsx` (recibe `avanzado`; tabs Privados/Compartidos, breadcrumb, cuota; desde el 30/08/2026 en la raíz corta la lista de archivos a 4 —`DOCS_EN_PORTADA`— con botón «Ver todos», para que las carpetas se vean sin scroll) · `modules/documents/TodosLosDocumentosModule.jsx` (la pantalla `/documentos/todos`: tabs, buscador con debounce, cada fila dice su carpeta) · `components/documents/`: `ContratoServiciosCard.jsx` (lo único del básico), `UploadDropzone.jsx`, `FileTypeIcon.jsx`, `PdfPreviewModal.jsx` (`top-14 lg:top-0`, regla #13), `formato.js` (`fmtSize`/`fmtDate` compartidos por las dos pantallas), `LectoresPicker.jsx` (01/09/2026: EL selector de equipo con casillas del CRM — se busca el equipo solo si no se lo dan, y trae los botones «Todo el equipo» y «Todos menos Administración»), `PedirLecturaModal.jsx` (a quién se le pide leer un documento) y `CompartirCarpetaModal.jsx` (quién ve una carpeta) — los dos montan el MISMO picker · `modules/default/citas/BloqueoModal.jsx` monta el picker para subir el acta desde el bloqueo · menú: `components/layout/Sidebar.jsx` (`key: "documents"`, `/documentos`) |
+| **Modelos** | `models/tenant/DocumentFolder.model.js` (`document_folders`: árbol de hasta 4 niveles, `visibility`, `owner_user_id`) · `models/tenant/Document.model.js` (`documents`: el ARCHIVO CENTRAL del CRM desde el 23/07/2026 — MIME libre, `client_id`, `patient_id`, `incidencia_id`, `team_block_id` (01/09/2026), `source` (`manual` / `ficha` / `paciente` / `contract_template` / `incidencia` / `bloqueo`…), `client_visible`, `uploaded_by_client`) · `models/tenant/DocumentRead.model.js` (`document_reads`: una fila por documento×persona, `read_at` NULL = pendiente, UNIQUE (document_id, team_member_id)) · `models/tenant/DocumentFolderMember.model.js` (`document_folder_members`: con quién está compartida una carpeta; `visibility` NO se toca — es un ENUM de Postgres) · asociaciones en `lib/db/tenantDb.js` |
 | **Interruptores y parámetros** | ninguno que lea el código (ni `hasFeatureFlag` ni `getLogicOverride` en `app/api/documents/**` ni en `lib/documents/`). `MAX_FILE_SIZE_BYTES` sigue siendo constante; la CUOTA es por tenant desde el 26/08/2026: `logicOverrides.quotaBytes` del módulo `documents` (`quotaBytesDe(ctx)` en `documentStorage.js`, con el giga de serie como caída) — la leen los 10 endpoints que comprueban cuota |
 | **Pantallas propias** | ninguna (`app/(dashboard)/documentos/page.jsx` no tiene mapa `UI_OVERRIDES`; en producción el letrero `ui_override` no tiene ninguna fila de documents) |
-| **Scripts** | activar: `node scripts/enable-module.js <slug> documents` (o `documents_avanzado`; las dos claves comparten las cinco migraciones que declara `scripts/_module-migrations.js`) · migraciones vivas, en orden: `migrate-documents-sprint-1.js` (tablas), `migrate-documents-client-link.js` (`client_id`), `migrate-documents-transversal.js` (archivo central: MIME libre, `source`), `migrate-documents-patient-link.js` (`patient_id`), `migrate-documents-client-portal.js` (`client_visible`, `uploaded_by_client`), `migrate-documents-incidencia-link.js` (`incidencia_id`; **CORE**, no de este módulo: la columna la declara el modelo para todos) · MASTER one-off: `migrate-documents-avanzado.js` (reparte básico/avanzado; idempotente) · datos, a mano: `_hechos/migrate-attachments-to-documents.js` (adjuntos viejos → archivo central), `migrate-contract-patient-to-client.js` (`--confirm`), `seed-contrato-tunutrilaura.js` (clausulado de Laura en `contract_templates`) · histórico: `_hechos/enable-documents-all-tenants.js` (da `documents` a TODOS los tenants; anterior a `enable-module.js` y al reparto básico/avanzado; sigue detrás de `npm run db:enable:documents`) |
-| **Pruebas** | `smoke-test-documents.mjs` (servidor + base de datos; 21 checks del archivo; entra en `npm run test:todo` y en `npm run smoke:documents`) · `_smoke-contrato-estructurado.mjs` (base de datos; usa `lib/documents/contratoFirmadoPdf.js`) · `_smoke-piezas-ficha.mjs` (`@prueba ligera`, en `npm test`: con `documents_avanzado` la ficha no monta su panel Documentos) · `_smoke-pdf-contrato.mjs` (`node:test`, `@prueba ligera`, 21/08/2026, en `npm test`; 43 comprobaciones): abre el PDF que devuelve `lib/documents/contratoFirmadoPdf.js` y lo lee **por dentro** —descomprime los flujos y traduce los glifos con el CMap `/ToUnicode` que pdfkit ya mete en el propio documento—, así que comprueba el TEXTO y no el tamaño, que era lo único que se miraba antes (un PDF de 20 KB con el clausulado equivocado pesa exactamente lo mismo que uno con el bueno). Fija: el clausulado ÍNTEGRO de los bloques aceptados y **ninguno** de los que no se aceptaron, los datos declarados que se imprimen, la traza de la firma (fecha clavada a Europe/Madrid, IP, navegador, versión del documento), un pie del centro por página y ni uno de más en un documento de varias, y que ni un PNG corrupto ni una plantilla a medias dejan a nadie sin su copia. También fija `contratoPdfFilename`. |
+| **Scripts** | activar: `node scripts/enable-module.js <slug> documents` (o `documents_avanzado`; las dos claves comparten las cinco migraciones que declara `scripts/_module-migrations.js`) · migraciones vivas, en orden: `migrate-documents-sprint-1.js` (tablas), `migrate-documents-client-link.js` (`client_id`), `migrate-documents-transversal.js` (archivo central: MIME libre, `source`), `migrate-documents-patient-link.js` (`patient_id`), `migrate-documents-client-portal.js` (`client_visible`, `uploaded_by_client`), `migrate-documents-incidencia-link.js` (`incidencia_id`; **CORE**, no de este módulo: la columna la declara el modelo para todos), `migrate-documentos-lecturas.js` (`team_block_id` + tabla `document_reads`; **CORE** por lo mismo), `migrate-carpetas-compartidas.js` (tabla `document_folder_members`; **CORE**, por existencia de `document_folders`) · MASTER one-off: `migrate-documents-avanzado.js` (reparte básico/avanzado; idempotente) · datos, a mano: `_hechos/migrate-attachments-to-documents.js` (adjuntos viejos → archivo central), `migrate-contract-patient-to-client.js` (`--confirm`), `seed-contrato-tunutrilaura.js` (clausulado de Laura en `contract_templates`) · histórico: `_hechos/enable-documents-all-tenants.js` (da `documents` a TODOS los tenants; anterior a `enable-module.js` y al reparto básico/avanzado; sigue detrás de `npm run db:enable:documents`) |
+| **Pruebas** | `_smoke-carpetas-compartidas.mjs` (`node:test`, `@prueba ligera`: el ACL de las carpetas compartidas — que una privada de otro SIGA sin verse, que «Mis documentos» no se llene de lo ajeno, y que quitar a alguien de la lista le retire el acceso de verdad) · `_smoke-departamentos-equipo.mjs` (`node:test`, `@prueba ligera`: quién es «Administración» — dos departamentos, no uno) · `_smoke-documentos-lecturas.mjs` (`node:test`, `@prueba ligera`, en `npm test`: limpieza de lo que llega del navegador, resumen de un documento y —la que de verdad importa— que reasignar lectores NO borra un acuse ya firmado) · `smoke-test-documents.mjs` (servidor + base de datos; 21 checks del archivo; entra en `npm run test:todo` y en `npm run smoke:documents`) · `_smoke-contrato-estructurado.mjs` (base de datos; usa `lib/documents/contratoFirmadoPdf.js`) · `_smoke-piezas-ficha.mjs` (`@prueba ligera`, en `npm test`: con `documents_avanzado` la ficha no monta su panel Documentos) · `_smoke-pdf-contrato.mjs` (`node:test`, `@prueba ligera`, 21/08/2026, en `npm test`; 43 comprobaciones): abre el PDF que devuelve `lib/documents/contratoFirmadoPdf.js` y lo lee **por dentro** —descomprime los flujos y traduce los glifos con el CMap `/ToUnicode` que pdfkit ya mete en el propio documento—, así que comprueba el TEXTO y no el tamaño, que era lo único que se miraba antes (un PDF de 20 KB con el clausulado equivocado pesa exactamente lo mismo que uno con el bueno). Fija: el clausulado ÍNTEGRO de los bloques aceptados y **ninguno** de los que no se aceptaron, los datos declarados que se imprimen, la traza de la firma (fecha clavada a Europe/Madrid, IP, navegador, versión del documento), un pie del centro por página y ni uno de más en un documento de varias, y que ni un PNG corrupto ni una plantilla a medias dejan a nadie sin su copia. También fija `contratoPdfFilename`. |
 | **Decisiones** | `../decisions/2026-07-23-conexion-cliente-equipo.md` (`documents.client_id`) · `../decisions/2026-08-01-activar-un-modulo-tiene-dos-puertas.md` (`documents` en nutri_laura: el tenant lo tenía y su usuaria no lo veía) · `../decisions/2026-08-18-la-piramide-invertida-de-leads.md` (el panel Documentos de la ficha pasa a `components/clients/` y lo decide `documents_avanzado`) |
 | **En este doc** | «Básico vs avanzado (01/08/2026)» · «2. Activación del módulo» · «3. Arquitectura BD (schema `crm_{slug}`)» · «4. Storage layout — `lib/documents/documentStorage.js`» · «5. Endpoints REST» · «6. Seguridad» · «9. Sprint 2 (implementado) — UI» · «11. Revisión adversarial (post-Sprint 1)» |
 
@@ -53,6 +53,139 @@ En el código nunca hubo tal dependencia: el único gate de
   igual que antes. Sin Citas, se sube, se ve y se descarga — que es exactamente
   lo que quiere quien no atiende familias.
 - `documents_avanzado` sigue exigiendo `documents`, sin cambios.
+
+---
+
+## Documentos que HAY QUE LEER, y documentos de un bloqueo (01/09/2026)
+
+Lo pidió Rodrigo, y son dos cosas que se venden juntas porque se usan juntas:
+
+> «Cuando quiero subir un documento, quiero poder tagear a los miembros de mi
+> equipo para que les salte un aviso de que ese documento lo tienen que leer en
+> la pantalla de inicio. Además, quiero poder aparejarlo a un bloqueo concreto,
+> por ejemplo el miércoles 2 en la Reunión de equipo de 12:00-13:00, para que si
+> entran en la cita del bloqueo vean el documento aparejado. También se tiene
+> que poder hacer a la inversa, subir el documento a través del modal de ese
+> bloqueo concreto.»
+
+### Las dos piezas
+
+| | Dónde vive | Qué significa |
+| --- | --- | --- |
+| **La pareja** | `documents.team_block_id` | de qué tramo de la agenda cuelga el documento. FK **ON DELETE SET NULL**: borrar el bloqueo del miércoles quita la pareja, nunca el documento |
+| **El acuse** | tabla `document_reads` (documento × persona, `read_at`) | a quién se le ha pedido leerlo y cuándo lo leyó. FK **CASCADE** por las dos patas: sin documento no hay nada que leer, y quien deja el centro no le debe una lectura a nadie |
+
+El documento **es del archivo central de siempre** (`documents`,
+`visibility='shared'`, `source='bloqueo'`): se busca desde Documentos, cuenta
+para la cuota y se descarga con las reglas de siempre. El bloqueo solo es otra
+puerta al mismo archivo, como ya lo eran la ficha del cliente y la incidencia.
+
+### Las cuatro puertas, una sola regla
+
+Todo el comportamiento vive en `lib/documents/lecturas.js` para que ninguna
+pantalla tenga su propia versión:
+
+1. **Modal del bloqueo** (`modules/default/citas/BloqueoModal.jsx`) — se sube el
+   acta y se eligen los lectores *a la vez*, que es lo que evita el paso que
+   nadie da: subirlo y luego acordarse de avisar.
+2. **Archivo** (`/documentos`, botón «Pedir lectura al equipo») — se le pide la
+   lectura a algo ya subido. También `POST /api/documents` acepta `teamBlockId`
+   y `lectores`: la dirección inversa.
+3. **Descarga y vista previa** — **abrir el documento ES leerlo**. No hay un
+   «marcar como leído» de mentira que se pulse sin mirar; el botón «Ya lo he
+   leído» existe para lo que ya se conocía (vino por correo, se leyó en la
+   reunión) y pone el mismo sello.
+4. **Portada, «Mi trabajo» y campana** — la tarjeta «Documentos por leer» de
+   `Pendiente` (solo LAS MÍAS, también para el admin), la caja «Por leer» y el
+   aviso `documento_por_leer`, que enlaza a `/documentos/lecturas`.
+
+### Lo que no se puede perder
+
+- **Un acuse firmado no se borra al reasignar.** Al guardar una lista nueva de
+  lectores se quitan los que sobran… salvo los que ya leyeron: ese acuse es la
+  respuesta a «¿se enteró todo el mundo?» y no puede desaparecer porque alguien
+  reabra el desplegable. Lo fija `_smoke-documentos-lecturas.mjs`.
+- **El panorama del centro es de dirección.** `?ambito=centro` (quién va al día)
+  solo para admin; el resto ve las suyas, que es lo que necesita para trabajar.
+- **Nadie firma por otro.** El `teamMemberId` del PATCH sale de la sesión, jamás
+  del cuerpo de la petición.
+- **Gate por `team` DEL TENANT, no del usuario.** Sin equipo no hay a quién
+  pedirle nada; pero un usuario sin `team` en su `moduleAccess` sigue teniendo
+  sus lecturas pendientes (el caso de Rocío, `lib/citas/visibilidad.js`). Por
+  eso la entrada «Para leer» del menú no lleva `moduleKey` y lo que la esconde
+  donde no puede haber nada es `hijosOcultosSegunModulos`.
+
+### Qué queda fuera, a propósito
+
+No hay recordatorio por correo ni fecha límite de lectura: el aviso vive en la
+pantalla de inicio y se apaga solo al abrir el documento. Si algún día hace
+falta apretar («esto hay que leerlo antes del viernes»), la columna que falta es
+una fecha en `document_reads`, no otra tabla.
+
+---
+
+## Una carpeta la ve quien se quiera (01/09/2026)
+
+> «Las carpetas creadas en Documentos tienen que poder ser vistas por quien se
+> quiera. Un selector de equipo.» (Rodrigo)
+
+Hasta hoy una carpeta era `private` (solo su dueño) o `shared` (todo el centro),
+sin nada en medio: no había forma de decir «los protocolos los ven las cinco
+terapeutas y nadie más».
+
+### Cómo está montado
+
+| | |
+| --- | --- |
+| **Dónde vive la lista** | tabla `document_folder_members` (carpeta × ficha de equipo) |
+| **Qué NO se tocó** | `document_folders.visibility`, que sigue siendo el mismo ENUM de Postgres de siempre |
+| **Qué significa cada estado** | `private` sin lista → solo el dueño · `private` con lista → el dueño y los de la lista · `shared` → todo el centro |
+| **Qué arrastra** | la carpeta, sus SUBCARPETAS y sus DOCUMENTOS (compartir «Protocolos» y que dentro no se vea nada sería compartir un cartel) |
+| **Qué reparte** | **lectura**: ver y descargar. Subir, renombrar, borrar y repartir el acceso siguen siendo del dueño |
+
+**Por qué no un valor más en el ENUM.** Porque ampliar un enum de Postgres en
+una migración de tenant es lo que ya costó un arreglo (el tipo es propiedad del
+schema); la regla de la casa es VARCHAR + CHECK, y aquí ni eso hace falta. Un
+cliente que no comparta ninguna carpeta se comporta EXACTAMENTE igual que antes
+de la tabla.
+
+**Dónde aparece lo que te comparten.** En la pestaña **Compartido**, que
+significa «lo que no es solo mío»; «Mis documentos» sigue teniendo solo lo tuyo.
+Y una carpeta compartida **sale en la raíz** de quien la recibe aunque por
+dentro cuelgue de otra: para llegar por el camino normal habría que poder abrir
+a su madre, que no ve. Solo sube a la raíz cuando esa madre no le es visible; si
+puede abrirla, la carpeta ya sale dentro. El breadcrumb se corta en la primera
+madre invisible, para no cantar el nombre de la carpeta privada de otro.
+
+**El cruce que costaba rato.** El ACL del archivo va por `ownerUserId` (usuario
+de `master.users`) y el selector por `teamMemberId` (ficha del tenant). El
+puente es `TeamMember.userId` y se cruza en UN sitio,
+`lib/documents/carpetasCompartidas.js`; los endpoints piden «las carpetas que
+veo» y les llega una lista de ids.
+
+⚠️ **Compartir no salta el módulo.** Quien no tenga `documents_avanzado` en sus
+accesos no entra en el archivo, así que compartirle una carpeta no le enseña
+nada. En Aumenta los 19 usuarios lo tienen desde el 01/09/2026.
+
+## Los dos botones de los selectores de equipo (01/09/2026)
+
+> «Debería haber dentro de los selectores de equipo dos botones más: todo el
+> equipo y todos menos Administración (Olga y Rosa).» (Rodrigo)
+
+Viven en `components/documents/LectoresPicker.jsx`, que es EL selector de equipo
+con casillas del CRM: lo montan el modal de un bloqueo de agenda, «Pedir
+lectura» del archivo y «Quién ve esta carpeta». Un sitio, tres pantallas.
+
+Quién es administración **no son dos nombres a mano**: sale de
+`TeamMember.department` (`lib/team/departamentos.js`), que ya está relleno. Y
+son **dos** departamentos, no uno: en producción Olga es «Administración» y Rosa,
+«Contabilidad» — un botón que solo mirase «Administración» dejaría a Rosa dentro
+y parecería correcto. «Dirección» NO entra: el encargo dice Administración.
+
+El departamento **no viaja al navegador** (`department` está en
+`CAMPOS_FUERA_DE_LA_LISTA`): el servidor manda solo los ids de quién es
+administración, que es lo justo para pintar el botón. Sin nadie en
+administración, el segundo botón no se enseña — haría lo mismo que el primero.
 
 ---
 

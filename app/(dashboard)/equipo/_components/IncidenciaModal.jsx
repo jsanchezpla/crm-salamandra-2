@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Select from "@/components/ui/Select.jsx";
+import SelectorPaciente from "@/components/citas/SelectorPaciente.jsx";
 import { INCIDENCIA_CATEGORIES, INCIDENCIA_PRIORITY, INCIDENCIA_VERIFICATIONS, exigeSubcategoria } from "@/lib/clinica/incidencias.js";
 
 /**
@@ -114,6 +115,9 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
   const [priority, setPriority] = useState(inc?.priority ?? "medium");
   const [date, setDate] = useState(inc?.date ?? new Date().toISOString().slice(0, 10));
   const [patientId, setPatientId] = useState(inc?.patientId ?? "");
+  // El nombre del paciente elegido en el buscador (31/08/2026): la lista de
+  // `patients` corta en 1.000 y con 1.174 el elegido puede no estar en ella.
+  const [pacienteNombre, setPacienteNombre] = useState(null);
   // Multi-responsable: se parte de `assignees` (nuevo) y se cae al legacy
   // `assignedToId` para las incidencias creadas antes del cambio.
   const [assigneeIds, setAssigneeIds] = useState(() => {
@@ -336,8 +340,12 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
 
   const inputCls = "w-full px-3 py-2 text-sm border border-neutral-200 rounded-lg focus:outline-none focus:border-neutral-400";
 
+  // items-start SIEMPRE (31/08/2026): con lg:items-center, un modal más alto
+  // que la ventana se centraba y su cabecera quedaba POR ENCIMA del área de
+  // scroll — imposible de alcanzar sin hacer zoom. Es el patrón de
+  // TiendaModule: arriba y con scroll del wrapper.
   return (
-    <div className="fixed inset-0 z-50 flex items-start lg:items-center justify-center bg-black/40 p-4 overflow-y-auto" onClick={() => !busy && onClose?.()}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 overflow-y-auto" onClick={() => !busy && onClose?.()}>
       <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl my-4" onClick={(e) => e.stopPropagation()}>
         <div className="px-5 py-4 border-b border-neutral-100 flex items-start justify-between gap-4">
           <div>
@@ -413,9 +421,18 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-[10px] uppercase tracking-wider text-neutral-400">Paciente (si procede)</label>
-              <Select value={patientId} onChange={setPatientId}
-                options={[{ value: "", label: "Ninguno" }, ...patients.map((p) => ({ value: p.id, label: p.name }))]}
-                className={`mt-1 ${inputCls} bg-white`} />
+              {/* Buscador que pregunta al SERVIDOR (31/08/2026): el desplegable
+                  cargaba como mucho 1.000 y con los 1.174 de Aumenta unos 174
+                  no salían — el mismo agujero ya arreglado en el alta de citas.
+                  El selector de Citas vale tal cual (el parámetro es `q`). */}
+              <SelectorPaciente
+                value={patientId}
+                onChange={setPatientId}
+                onPaciente={(p) => setPacienteNombre(p?.name ?? null)}
+                opcionesFijas={[{ value: "", label: "Ninguno" }]}
+                placeholder="Ninguno"
+                className={`mt-1 ${inputCls} bg-white`}
+              />
             </div>
             <div>
               {/* Quién la registra sale relleno con quien está usando el CRM,
@@ -484,7 +501,7 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
             </div>
             <p className="text-[10px] text-neutral-400 mb-2">
               {patientId
-                ? `Se guarda también en la ficha de ${patients.find((p) => p.id === patientId)?.name ?? "su paciente"}.`
+                ? `Se guarda también en la ficha de ${pacienteNombre ?? patients.find((p) => p.id === patientId)?.name ?? "su paciente"}.`
                 : "Sin paciente, queda como documento interno en el archivo de Documentos."}
             </p>
             {docs.length === 0 && queuedDocs.length === 0 && <p className="text-[11px] text-neutral-400">Sin documentos.</p>}
@@ -581,7 +598,7 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
         {/* Modal de NOMBRE obligatorio al adjuntar (mismo patrón que la ficha
             de paciente: el buscador del archivo filtra por este nombre). */}
         {pendingDoc && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.45)" }}>
+          <div className="fixed inset-0 z-[60] flex items-start sm:items-center justify-center p-4 overflow-y-auto" style={{ background: "rgba(0,0,0,0.45)" }}>
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-5">
               <div className="text-sm font-semibold text-neutral-800 mb-1">Nombre del documento</div>
               <div className="text-xs text-neutral-500 mb-3 truncate">Archivo: {pendingDoc.file.name}</div>

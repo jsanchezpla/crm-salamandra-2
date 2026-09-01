@@ -2,7 +2,8 @@ import { Op } from "sequelize";
 import { withTenant } from "@/lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, unauthorized, noContent, serverError } from "@/lib/utils/apiResponse.js";
 import { MODULE_KEYS } from "@/lib/tenant/moduleKeys.js";
-import { logDocumentsAudit, resolveOwnerNames, canView, serializeFolder } from "@/lib/documents/helpers.js";
+import { logDocumentsAudit, resolveOwnerNames, canViewFolder, serializeFolder } from "@/lib/documents/helpers.js";
+import { carpetasCompartidasCon, contarMiembros } from "@/lib/documents/carpetasCompartidas.js";
 import { deleteDocumentFile } from "@/lib/documents/documentStorage.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -35,20 +36,34 @@ export const GET = withTenant(async (request, { params }, ctx) => {
     const { DocumentFolder } = ctx.tenantModels;
     const folder = await DocumentFolder.findByPk(id);
     if (!folder) return notFound("Carpeta no encontrada");
-    if (!canView(folder, userId)) return forbidden("Sin acceso a esta carpeta");
+    // También la ve quien esté en su lista, o en la de alguna de sus madres
+    // (01/09/2026). Renombrar y borrar siguen siendo del dueño, más abajo.
+    const { todas } = await carpetasCompartidasCon({ tenantModels: ctx.tenantModels, userId });
+    if (!canViewFolder(folder, userId, todas)) return forbidden("Sin acceso a esta carpeta");
 
-    // Breadcrumb subiendo por parentFolderId (bounded por la profundidad máxima).
+    /*
+     * Breadcrumb subiendo por parentFolderId (acotado por la profundidad
+     * máxima). Se CORTA en cuanto una madre deja de ser visible (01/09/2026):
+     * desde que una carpeta puede compartirse suelta, a quien le pasan
+     * «Protocolos/2026» no tiene por qué enterarse de cómo se llama la carpeta
+     * privada de otro en la que vive. Antes no pasaba porque una carpeta
+     * privada solo la veía su dueño, que ve toda su rama.
+     */
     const chain = [folder];
     let cur = folder;
     for (let i = 0; i < 4 && cur.parentFolderId; i++) {
       cur = await DocumentFolder.findByPk(cur.parentFolderId);
-      if (!cur) break;
+      if (!cur || !canViewFolder(cur, userId, todas)) break;
       chain.unshift(cur);
     }
 
     const names = await resolveOwnerNames([folder.ownerUserId]);
+    const compartidasCon = await contarMiembros({ tenantModels: ctx.tenantModels, folderIds: [folder.id] });
     return ok({
-      folder: serializeFolder(folder, names.get(folder.ownerUserId)),
+      folder: serializeFolder(folder, names.get(folder.ownerUserId), {
+        sharedWith: compartidasCon.get(folder.id) ?? 0,
+        compartidaConmigo: folder.ownerUserId !== userId && folder.visibility !== "shared" && todas.includes(folder.id),
+      }),
       breadcrumb: chain.map((f) => ({ id: f.id, name: f.name })),
     });
   } catch (err) {

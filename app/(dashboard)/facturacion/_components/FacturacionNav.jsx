@@ -10,7 +10,7 @@ import { usePathname } from "next/navigation";
  * que el layout (servidor) los resuelve y esta barra solo pinta lo que le den
  * — el mismo reparto que la página de Configuración con ConfigModule.
  */
-function pillars(conBanco) {
+function pillars(conBanco, conSocios) {
   return [
     {
       label: "Operativa",
@@ -19,6 +19,9 @@ function pillars(conBanco) {
         { href: "/facturacion/presupuestos", label: "Presupuestos" },
         { href: "/facturacion/facturas", label: "Facturas" },
         { href: "/facturacion/cobros", label: "Cobros" },
+        // Cuotas va pegada a Cobros porque es donde nacen: la cuota asignada
+        // genera el cobro del mes (01/09/2026).
+        { href: "/facturacion/cuotas", label: "Cuotas" },
         { href: "/facturacion/recurrentes", label: "Recurrentes" },
         { href: "/facturacion/costes", label: "Gastos" },
         // Proveedores va pegado a Gastos porque es donde se usa: al registrar un
@@ -35,7 +38,10 @@ function pillars(conBanco) {
       label: "Finanzas & Rentabilidad",
       items: [
         { href: "/facturacion/resumen", label: "Resumen" },
-        { href: "/facturacion/analitica/socios", label: "Por socio" },
+        // Por socio: solo si el centro tiene socios CONFIGURADOS (la vara,
+        // lib/billing/socios.js). Un centro sin socios veía una tabla con una
+        // sola fila «Sin asignar».
+        ...(conSocios ? [{ href: "/facturacion/analitica/socios", label: "Por socio" }] : []),
         { href: "/facturacion/analitica/clientes", label: "Por cliente" },
         { href: "/facturacion/analitica/empleados", label: "Por empleado" },
         { href: "/facturacion/analitica/iva", label: "Impuestos" },
@@ -54,13 +60,13 @@ function isActive(pathname, item) {
   return pathname === item.href || pathname.startsWith(item.href + "/");
 }
 
-export default function FacturacionNav({ conBanco = false }) {
+export default function FacturacionNav({ conBanco = false, conSocios = true }) {
   const pathname = usePathname();
 
   return (
     <nav className="shrink-0 border-b border-neutral-200 bg-white/70 backdrop-blur px-4 lg:px-8 py-2.5 overflow-x-auto">
       <div className="flex items-center gap-5 min-w-max">
-        {pillars(conBanco).map((pillar) => (
+        {pillars(conBanco, conSocios).map((pillar) => (
           <div key={pillar.label} className="flex items-center gap-2">
             <span className="text-[9.5px] uppercase tracking-[0.12em] text-neutral-400 font-semibold shrink-0">
               {pillar.label}

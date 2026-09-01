@@ -24,6 +24,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatearMinutos } from "@/lib/fichaje/parseHora.js";
 import ImportarFichajeModal from "./ImportarFichajeModal.jsx";
 import CorregirFichajeModal from "./CorregirFichajeModal.jsx";
+import ApuntarExtraModal from "./ApuntarExtraModal.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
@@ -64,6 +65,7 @@ export default function FichajeModule() {
   const [abierta, setAbierta] = useState(null); // teamMemberId desplegado
   const [importando, setImportando] = useState(false);
   const [corrigiendo, setCorrigiendo] = useState(null);
+  const [apuntandoExtra, setApuntandoExtra] = useState(false);
   const [verAvisos, setVerAvisos] = useState(true);
 
   const cargar = useCallback(async () => {
@@ -133,6 +135,13 @@ export default function FichajeModule() {
           >
             Exportar
           </a>
+          <button
+            type="button"
+            onClick={() => setApuntandoExtra(true)}
+            className="px-3 py-2 text-sm rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50"
+          >
+            Apuntar horas extra
+          </button>
           <button
             type="button"
             onClick={() => setImportando(true)}
@@ -280,6 +289,14 @@ export default function FichajeModule() {
           onHecho={() => { setCorrigiendo(null); cargar(); }}
         />
       )}
+      {apuntandoExtra && datos && (
+        <ApuntarExtraModal
+          personas={datos.resumen}
+          periodo={periodo}
+          onClose={() => setApuntandoExtra(false)}
+          onSaved={() => { setApuntandoExtra(false); cargar(); }}
+        />
+      )}
     </div>
   );
 }
@@ -306,6 +323,11 @@ function FilaPersona({ r, nAvisos, desplegada, onToggle, filas, onCorregir }) {
           )}
           {r.correcciones > 0 && (
             <span className="ml-2 text-[11px] text-gray-400">{r.correcciones} a mano</span>
+          )}
+          {r.extrasApuntadas > 0 && (
+            <span className="ml-2 text-[11px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">
+              +{formatearMinutos(r.extrasApuntadas)} extra
+            </span>
           )}
         </td>
         <td className="px-3 py-2.5 text-right text-gray-500">{r.dias || "—"}</td>
@@ -343,6 +365,9 @@ function FilaPersona({ r, nAvisos, desplegada, onToggle, filas, onCorregir }) {
                             <span className="text-amber-600">
                               el Excel decía {formatearMinutos(f.minutosOriginal)}
                             </span>
+                          )}
+                          {f.tipo === "extra" && (
+                            <span className="ml-2 px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 not-italic">horas extra</span>
                           )}
                           {f.origen !== "import" && (
                             <span className="ml-2">{f.origen === "manual" ? "a mano" : "corregido"}</span>

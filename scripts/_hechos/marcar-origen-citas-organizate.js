@@ -67,8 +67,12 @@ async function main() {
   for (const c of citas) {
     const patientId = porNombre.get(norm(c.paciente));
     if (!patientId) { n.sinCruce++; continue; }
-    // La MISMA construcción de fecha que usó el importador: mismo instante.
-    const cuando = new Date(`${c.fecha}T${c.hora}:00`);
+    // El importador corrió en un contenedor en UTC: `new Date("...T13:45:00")`
+    // guardó la hora del reloj de Organízate COMO UTC. Hoy el contenedor va en
+    // Europe/Madrid, así que la misma expresión daría otro instante y no
+    // cruzaría nada (pasó en la primera pasada: 1.783 sin cruce). La `Z`
+    // reproduce lo que quedó guardado, corra donde corra.
+    const cuando = new Date(`${c.fecha}T${c.hora}:00Z`);
     const b = await m.Booking.findOne({ where: { patientId, scheduledAt: cuando } });
     if (!b) { n.sinCruce++; continue; }
     if (b.teamMemberId) { n.yaAsignadas++; continue; }

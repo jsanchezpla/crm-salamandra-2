@@ -78,7 +78,10 @@ export function defineFichaje(sequelize) {
         field: "minutos_original",
       },
       tipo: {
-        type: DataTypes.ENUM("trabajo", "pausa", "ausencia", "festivo"),
+        // "extra" (31/08/2026): horas extra apuntadas a mano — se pagan y
+        // suman como trabajo, pero quedan etiquetadas (y con su nota, que el
+        // POST manual exige). Valor nuevo del enum: migrate-fichaje-tipo-extra.
+        type: DataTypes.ENUM("trabajo", "pausa", "ausencia", "festivo", "extra"),
         allowNull: false,
         defaultValue: "trabajo",
       },

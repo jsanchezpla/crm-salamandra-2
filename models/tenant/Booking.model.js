@@ -121,6 +121,13 @@ export function defineBooking(sequelize) {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      // La cita que RECUPERA esta falta (31/08/2026): solo con sentido en una
+      // falta recuperable (justificada). Sin FK dura a propósito — borrar la
+      // cita que recuperaba no debe reventar el histórico de la falta.
+      recoveredByBookingId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       // Miembro del equipo (profesional) asignado a la cita. Nullable/aditivo:
       // las citas existentes (incl. nutri_laura en prod) quedan sin asignar.
       // underscored global → columna team_member_id.
@@ -254,6 +261,38 @@ export function defineBooking(sequelize) {
         type: DataTypes.JSONB,
         allowNull: true,
       },
+      /**
+       * ── EL GRUPO DE TALLER que se da en esta cita (01/09/2026, Rodrigo) ───
+       *
+       * «Los talleres no dejan de ser citas múltiples a las que van varios
+       * pacientes a la vez. Por tanto hay que preparar los talleres de tal
+       * forma que en las citas se pueda seleccionar los talleres. **No como
+       * bloqueos sino como un tipo más de cita.**»
+       *
+       * Y era literal: hasta hoy un taller se apuntaba como un bloqueo de
+       * agenda (`team_blocks.taller_id`), o sea una hora tachada. Una hora
+       * tachada no tiene asistentes, no se cobra, no se le pasa lista y no
+       * aparece en la historia de ningún niño. Con esto el taller es una cita
+       * de verdad y entra por las mismas puertas que las demás.
+       *
+       * ── LA CITA DE UN TALLER NO TIENE PACIENTE, Y ES A PROPÓSITO ──────────
+       * `patient_id` se queda NULL: los asistentes son varios y viven en
+       * `taller_asistencias`, una fila por niño con su asistencia. Se decidió
+       * así porque en la agenda tiene que verse UNA caja —«Habilidades
+       * sociales · Grupo A (8)»— y no ocho apiladas a la misma hora.
+       *
+       * `client_name` guarda el rótulo del grupo, que es lo que se pinta y lo
+       * que se busca; los campos de contacto quedan vacíos, porque un taller no
+       * tiene UNA familia a la que mandarle el recordatorio.
+       *
+       * Nullable y sin FK dura: la inmensa mayoría de las 12.030 citas de
+       * Aumenta no son talleres, y retirar un grupo no puede borrar las tardes
+       * que ya se dieron.
+       */
+      tallerGrupoId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       // Notas internas (no visibles al cliente)
       notes: {
         type: DataTypes.TEXT,
@@ -268,6 +307,7 @@ export function defineBooking(sequelize) {
         { fields: ["team_member_id"], name: "bookings_team_member_idx" },
         { fields: ["patient_id"], name: "bookings_patient_idx" },
         { fields: ["pack_id"], name: "bookings_pack_idx" },
+        { fields: ["taller_grupo_id"], name: "bookings_taller_grupo_idx" },
       ],
     }
   );

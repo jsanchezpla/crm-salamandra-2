@@ -19,6 +19,7 @@ cambiar tres cosas en pantallas que ya existían:
 | El embudo | `lib/leads/embudos.js` | Las cinco por defecto | `EMBUDO_BOOKING`, siete etapas |
 | El rótulo del embudo | `app/(dashboard)/leads/page.jsx` | «Leads Profesionales» | «Propuestas» |
 | El rótulo de Clientes | `lib/clients/vocabulario.js` | «Clientes» | «Contratantes» |
+| El «Tipo» de la ficha | `lib/booking/categorias.js` | No existe | Once tipos: festival, sala, ayuntamiento… |
 
 Por eso **exige `clients` y `leads`**: sin ellos no hay nada que cambiar, y
 quien lo comprara suelto se encontraría un menú vacío.
@@ -61,6 +62,52 @@ Dos etapas piden explicación:
 Las dos están en `GANADAS` y en `CLOSED_STAGES` (`lib/home/summary.js`). Si solo
 lo estuviera `fecha_confirmada`, **la conversión bajaría el día del concierto**,
 que es justo cuando el trabajo salió bien.
+
+## El «Tipo» del contratante
+
+Los 210 contactos de la representante entraron con un `sector` de texto libre
+heredado de Captación —«Industria · Prensa y radio», «Prensa · Blogs y
+webs»— que servía para leer pero no para filtrar, y que mezclaba dos ejes
+distintos: de dónde salió el contacto y qué es. Rodrigo, 24/08/2026: «no queda
+bien separado si es industria, si es manager o si es sala ni nada».
+
+`lib/booking/categorias.js` declara las once que hay y, de cada una, lo único
+que de verdad cambia algo: **si de ahí sale un bolo** (`contrata`). A un
+ayuntamiento se le manda un presupuesto con IVA; a una revista, una nota de
+prensa.
+
+| | |
+| --- | --- |
+| Contratan | `festival`, `sala`, `ayuntamiento`, `ciclo`, `promotora` |
+| No contratan | `medio`, `radio`, `tv`, `manager`, `discografica`, `otro` |
+
+**Dónde vive:** en `Client.customFields.categoria`, no en una columna. Solo la
+usan los clientes con `booking`, y añadir una columna a `clients` —que la
+tienen todos los tenants— para algo de uno sería cobrarle a todos el sitio.
+
+**Dónde se pone** (01/09/2026, Rodrigo: «no puedo añadir Tipo a los
+contratantes, debería dejarme en Editar ficha»): en el desplegable **Tipo** del
+alta, del panel «Editar ficha» y de la ficha completa. Sale con `booking` y en
+ningún otro sitio —`lib/clients/formularioAlta.js`, opción `conCategoria`, que
+las dos páginas resuelven en el servidor—, y «Sin especificar» es la primera
+opción y la que borra. Hasta ese día el campo lo escribía Únicamente la
+importación de los 210: la pantalla filtraba y pintaba una columna con un dato
+que ninguna pantalla sabía escribir, así que un contratante dado de alta a mano
+nacía sin tipo y se quedaba así. El endpoint valida contra la lista
+(`categoriaONull`) y solo lo toca si viene en el cuerpo, para que guardar desde
+una pantalla que no lo pregunta no lo borre.
+
+**Dónde se lee:** la columna «Tipo» y el desplegable de filtro de `/clientes`,
+la fila «Tipo» de la ficha, la etiqueta de cada destinatario en `/correo` y el
+Excel de Exportar, que desde el 01/09/2026 lo respeta como filtro **y lo saca
+como columna** (detrás de Empresa, solo con `booking`): hasta ese día se bajaban
+«festivales» y el fichero no decía de ninguna fila que lo fuera, con lo que el
+dato se perdía justo al salir del CRM.
+
+**Prueba:** `scripts/_smoke-tipo-contratante.mjs` (`node:test`) — que el campo
+sigue en el formulario, que lo elegible es exactamente lo filtrable y que las
+dos pantallas lo siembran al abrir la edición (si no, corregir un teléfono
+borraría el tipo).
 
 ## Qué NO hace todavía
 

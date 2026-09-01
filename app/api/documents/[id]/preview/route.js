@@ -2,8 +2,11 @@ import { Readable } from "node:stream";
 import { withTenant } from "@/lib/tenant/withTenant.js";
 import { error, forbidden, notFound, unauthorized, serverError } from "@/lib/utils/apiResponse.js";
 import { MODULE_KEYS } from "@/lib/tenant/moduleKeys.js";
-import { canView, contentDisposition } from "@/lib/documents/helpers.js";
+import { canViewDocument, contentDisposition } from "@/lib/documents/helpers.js";
+import { carpetasCompartidasCon } from "@/lib/documents/carpetasCompartidas.js";
 import { readDocumentStream } from "@/lib/documents/documentStorage.js";
+import { resolveCurrentTeamMemberId } from "@/lib/team/currentTeamMember.js";
+import { marcarLeido } from "@/lib/documents/lecturas.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -13,6 +16,10 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * servir contenido de usuario desde el origen de la app:
  *   - Content-Type: application/pdf forzado + X-Content-Type-Options: nosniff
  *   - CSP default-src 'none'; object-src 'self' (solo embebido, nada más).
+ *
+ * Sella la lectura igual que la descarga (01/09/2026): abrir la vista previa de
+ * un PDF ES leerlo, y obligar a descargarlo para que baje el aviso sería pedir
+ * dos veces lo mismo.
  */
 export const GET = withTenant(async (request, { params }, ctx) => {
   try {
@@ -25,7 +32,9 @@ export const GET = withTenant(async (request, { params }, ctx) => {
     const { Document } = ctx.tenantModels;
     const doc = await Document.findByPk(id);
     if (!doc) return notFound("Documento no encontrado");
-    if (!canView(doc, userId)) return forbidden("Sin acceso a este documento");
+    // Además de lo de siempre: lo que vive en una carpeta compartida conmigo.
+    const { todas } = await carpetasCompartidasCon({ tenantModels: ctx.tenantModels, userId });
+    if (!canViewDocument(doc, userId, todas)) return forbidden("Sin acceso a este documento");
     if (doc.mimeType !== "application/pdf") {
       return error("La vista previa inline solo está disponible para PDF", 400);
     }
@@ -38,6 +47,9 @@ export const GET = withTenant(async (request, { params }, ctx) => {
       if (e.code === "ENOENT") return notFound("Archivo físico no encontrado");
       throw e;
     }
+
+    const miTm = await resolveCurrentTeamMemberId(request, ctx.tenantModels);
+    if (miTm) await marcarLeido({ tenantModels: ctx.tenantModels, documentId: doc.id, teamMemberId: miTm });
 
     return new Response(Readable.toWeb(stream), {
       status: 200,

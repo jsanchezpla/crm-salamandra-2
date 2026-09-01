@@ -1,9 +1,8 @@
-import ExcelJS from "exceljs";
-
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { auditar, datosPeticion } from "../../../../lib/utils/auditoria.js";
 import { aplicar, hashDeFichero } from "../../../../lib/fichaje/importar.js";
+import { leerLibro } from "../../../../lib/fichaje/leerLibro.js";
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
 import { isDemoTenant } from "../../../../lib/demo/isDemo.js";
 
@@ -48,11 +47,11 @@ export const POST = withTenant(async (request, _ctx, ctx) => {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const workbook = new ExcelJS.Workbook();
+    let workbook;
     try {
-      await workbook.xlsx.load(buffer);
+      workbook = await leerLibro(buffer);
     } catch {
-      return error("No se ha podido abrir el fichero: ¿es un .xlsx de verdad?", 422);
+      return error("No se ha podido abrir el fichero: ¿es un Excel de verdad (.xlsx o .xls)?", 422);
     }
 
     let res;

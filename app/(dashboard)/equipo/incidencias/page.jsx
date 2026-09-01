@@ -31,6 +31,21 @@ export default function IncidenciasPage() {
   const [loading, setLoading] = useState(true);
   const [statusTab, setStatusTab] = useState("");
   const [category, setCategory] = useState("");
+  // Quién la registró y quién es responsable (31/08/2026, Rodrigo): con los
+  // dos combinados salen «todas las mías», «todas las de X» y «las que le
+  // mandé yo a X». Las opciones son la misma lista de equipo que usa el
+  // formulario, que ya viene en la respuesta.
+  const [registroId, setRegistroId] = useState("");
+  /*
+   * ── SE ABRE EN LAS MÍAS (01/09/2026, Rodrigo) ────────────────────────────
+   *
+   * `null` no es «cualquiera»: es «las que me atañen a mí», que es como se
+   * abre la pantalla. Se manda `mine=1` y el servidor resuelve quién soy —el
+   * navegador no lo sabe: /api/auth/me da el usuario, no su ficha de equipo—,
+   * y de vuelta llega `yoSoy` para que el desplegable enseñe mi nombre en vez
+   * de un hueco. Elegir «Cualquier responsable» pone "" y quita el filtro.
+   */
+  const [responsableId, setResponsableId] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [modal, setModal] = useState(null); // { mode, incidencia }
   const [errorMsg, setErrorMsg] = useState(null);
@@ -47,6 +62,11 @@ export default function IncidenciasPage() {
     const params = new URLSearchParams();
     if (statusTab) params.set("status", statusTab);
     if (category) params.set("category", category);
+    if (registroId) params.set("reportedById", registroId);
+    // `assignedToId` filtra por la tabla de responsables, así que encuentra
+    // también a quien es segundo responsable (ver el GET del endpoint).
+    if (responsableId === null) params.set("mine", "1");
+    else if (responsableId) params.set("assignedToId", responsableId);
     fetch(`/api/clinica/incidencias?${params}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => { if (j.ok) setData(j.data); else setErrorMsg(j.error); })
@@ -54,9 +74,13 @@ export default function IncidenciasPage() {
       .finally(() => setLoading(false));
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { load(); }, [statusTab, category]);
+  useEffect(() => { load(); }, [statusTab, category, registroId, responsableId]);
 
   const rows = data?.incidencias ?? [];
+  // ¿Se está filtrando por responsable? Con `null` («las mías») solo si el
+  // servidor sabe quién soy: quien no tiene ficha de equipo las ve todas, y
+  // decirle «con estos filtros» sería mentirle.
+  const filtrandoPorResponsable = responsableId === null ? Boolean(data?.yoSoy) : Boolean(responsableId);
   const counts = data?.counts ?? { pending: 0, in_progress: 0, resolved: 0 };
   const totalCount = counts.pending + counts.in_progress + counts.resolved;
   const tabCount = (k) => (k === "" ? totalCount : counts[k] ?? 0);
@@ -102,7 +126,17 @@ export default function IncidenciasPage() {
             </button>
           ))}
         </div>
-        <div className="sm:ml-auto">
+        {/* Cada persona sale con su NOMBRE a secas (01/09/2026, Rodrigo):
+            repetir «Registrada por X» / «Responsable: X» en cada línea de los
+            dos desplegables era ruido. Cuál es cuál lo dice la opción neutra
+            de cada uno, que es la que se ve mientras no hay filtro puesto. */}
+        <div className="sm:ml-auto flex flex-wrap gap-2">
+          <Select value={registroId} onChange={setRegistroId} aria-label="Filtrar por quién registró la incidencia"
+            options={[{ value: "", label: "Registrada por cualquiera" }, ...(data?.therapists ?? []).map((t) => ({ value: t.id, label: t.name }))]}
+            className="text-xs border border-neutral-200 rounded-lg px-3 py-2 bg-white hover:border-neutral-300 cursor-pointer" />
+          <Select value={responsableId ?? data?.yoSoy ?? ""} onChange={setResponsableId} aria-label="Filtrar por responsable"
+            options={[{ value: "", label: "Cualquier responsable" }, ...(data?.therapists ?? []).map((t) => ({ value: t.id, label: t.name }))]}
+            className="text-xs border border-neutral-200 rounded-lg px-3 py-2 bg-white hover:border-neutral-300 cursor-pointer" />
           <Select value={category} onChange={setCategory}
             options={[{ value: "", label: "Todas las categorías" }, ...INCIDENCIA_CATEGORIES.map((c) => ({ value: c.key, label: c.label }))]}
             className="text-xs border border-neutral-200 rounded-lg px-3 py-2 bg-white hover:border-neutral-300 cursor-pointer" />
@@ -114,7 +148,7 @@ export default function IncidenciasPage() {
         {loading ? (
           <p className="px-4 py-10 text-center text-neutral-400 text-sm">Cargando…</p>
         ) : rows.length === 0 ? (
-          <p className="px-4 py-10 text-center text-neutral-400 text-sm">No hay incidencias{statusTab || category ? " con estos filtros" : ""}.</p>
+          <p className="px-4 py-10 text-center text-neutral-400 text-sm">No hay incidencias{statusTab || category || registroId || filtrandoPorResponsable ? " con estos filtros" : ""}.</p>
         ) : (
           <ul className="divide-y divide-neutral-100">
             {rows.map((r) => (
