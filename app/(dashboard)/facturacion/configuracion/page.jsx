@@ -78,6 +78,42 @@ export default function ConfiguracionPage() {
     } catch (e) { setErrorMsg(e.message); } finally { setGuardandoConcepto(false); }
   }
 
+  /*
+   * EDITAR un concepto (01/09/2026, petición de Aumenta: «poder dar de baja,
+   * MODIFICAR, eliminar una cuota»). El PATCH ya existía desde el 31/08; lo que
+   * faltaba era la puerta: se podía apagar y borrar, pero no corregir un precio
+   * sin dar de alta otro concepto y dejar el viejo apagado.
+   *
+   * Importa especialmente ahora: las cuotas asignadas con importe a NULL toman
+   * el precio de AQUÍ, así que subir la tarifa es editar un concepto y no
+   * repasar 260 familias.
+   */
+  const [editandoConcepto, setEditandoConcepto] = useState(null);
+
+  async function guardarConcepto() {
+    const c = editandoConcepto;
+    if (!c || !String(c.name ?? "").trim()) return;
+    setErrorMsg(null);
+    try {
+      const r = await fetch(`/api/billing/conceptos/${c.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: c.name,
+          description: c.description || null,
+          unitPrice: Number(c.unitPrice || 0),
+          vatRate: Number(c.vatRate || 0),
+          category: c.category || null,
+          periodicity: c.periodicity || null,
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "No se pudo guardar el concepto");
+      setConceptos((cs) => cs.map((x) => (x.id === c.id ? j.data : x)));
+      setEditandoConcepto(null);
+    } catch (e) { setErrorMsg(e.message); }
+  }
+
   async function alternarConcepto(c) {
     const r = await fetch(`/api/billing/conceptos/${c.id}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
@@ -270,17 +306,55 @@ export default function ConfiguracionPage() {
               </tr>
             </thead>
             <tbody>
-              {conceptos.map((c) => (
+              {conceptos.map((c) => editandoConcepto?.id === c.id ? (
+                <tr key={c.id} className="border-b border-neutral-50 bg-neutral-50/70">
+                  <td className="px-2 py-2">
+                    <input className={inputCls} value={editandoConcepto.name ?? ""}
+                      onChange={(e) => setEditandoConcepto((v) => ({ ...v, name: e.target.value }))} />
+                  </td>
+                  <td className="px-2 py-2">
+                    <input className={inputCls} placeholder="Vacío = el nombre" value={editandoConcepto.description ?? ""}
+                      onChange={(e) => setEditandoConcepto((v) => ({ ...v, description: e.target.value }))} />
+                  </td>
+                  <td className="px-2 py-2">
+                    <input type="number" step="0.01" className={inputCls} value={editandoConcepto.unitPrice ?? ""}
+                      onChange={(e) => setEditandoConcepto((v) => ({ ...v, unitPrice: e.target.value }))} />
+                  </td>
+                  <td className="px-2 py-2">
+                    <input type="number" min="0" max="100" step="0.01" className={inputCls} value={editandoConcepto.vatRate ?? ""}
+                      onChange={(e) => setEditandoConcepto((v) => ({ ...v, vatRate: e.target.value }))} />
+                  </td>
+                  <td className="px-2 py-2">
+                    <input className={inputCls} value={editandoConcepto.category ?? ""}
+                      onChange={(e) => setEditandoConcepto((v) => ({ ...v, category: e.target.value }))} />
+                  </td>
+                  <td className="px-2 py-2">
+                    <input className={inputCls} value={editandoConcepto.periodicity ?? ""}
+                      onChange={(e) => setEditandoConcepto((v) => ({ ...v, periodicity: e.target.value }))} />
+                  </td>
+                  <td className="px-2 py-2 text-right whitespace-nowrap">
+                    <button onClick={guardarConcepto} disabled={!String(editandoConcepto.name ?? "").trim()}
+                      className="text-[11px] font-semibold text-[var(--color-primary,#1B3A2D)] hover:underline disabled:opacity-40 mr-2">Guardar</button>
+                    <button onClick={() => setEditandoConcepto(null)} className="text-[11px] text-neutral-400 hover:text-neutral-700">Cancelar</button>
+                  </td>
+                </tr>
+              ) : (
                 <tr key={c.id} className={`border-b border-neutral-50 ${c.active ? "" : "opacity-40"}`}>
                   <td className="px-2 py-2 font-medium text-neutral-800">{c.name}</td>
                   <td className="px-2 py-2 text-neutral-500 max-w-[260px] truncate" title={c.description || ""}>{c.description || "—"}</td>
-                  <td className="px-2 py-2 text-right tabular-nums">{Number(c.unitPrice).toLocaleString("es-ES", { minimumFractionDigits: 2 })} €</td>
+                  {/* Un concepto a 0 € se marca: las cuotas que solo lo lleven a él
+                      no se pueden generar, y así se ve dónde hay que poner precio. */}
+                  <td className={`px-2 py-2 text-right tabular-nums ${Number(c.unitPrice) === 0 ? "text-amber-600 font-semibold" : ""}`}
+                    title={Number(c.unitPrice) === 0 ? "Sin precio: una cuota que solo lleve este concepto no se puede generar" : undefined}>
+                    {Number(c.unitPrice).toLocaleString("es-ES", { minimumFractionDigits: 2 })} €
+                  </td>
                   <td className="px-2 py-2 text-right tabular-nums">{Number(c.vatRate)}</td>
                   <td className="px-2 py-2 text-neutral-500">{c.category || "—"}</td>
                   <td className="px-2 py-2 text-neutral-500">{c.periodicity || "—"}</td>
                   <td className="px-2 py-2 text-right whitespace-nowrap">
                     {puedeFacturar && (
                       <>
+                        <button onClick={() => setEditandoConcepto({ ...c })} className="text-[11px] text-neutral-500 hover:text-neutral-800 mr-2">Editar</button>
                         <button onClick={() => alternarConcepto(c)} className="text-[11px] text-neutral-500 hover:text-neutral-800 mr-2">
                           {c.active ? "Apagar" : "Encender"}
                         </button>
