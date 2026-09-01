@@ -65,6 +65,10 @@ export default async function ClienteDetailPage() {
   let conPacientes = false;
   let conFacturacion = false;
   let conNutricion = false;
+  // El «Tipo» del contratante (festival / sala / ayuntamiento / medio…): la
+  // MISMA pregunta que hace la lista, para que la ficha y el listado no puedan
+  // discrepar en si ese campo existe.
+  let conCategoria = false;
   // Qué paneles de consulta monta la ficha (Notas, Documentos, la lista de
   // citas) y con qué palabras: `lib/clients/piezasFicha.js`, por módulos. Ante
   // la duda, ninguno: una pestaña de menos se echa de menos; una de más en el
@@ -84,6 +88,7 @@ export default async function ClienteDetailPage() {
       // vería la pestaña con «Módulo nutricion no activo» dentro. Es el mismo
       // patrón que `conFacturacion`.
       conNutricion = activos.has("nutricion");
+      conCategoria = activos.has("booking");
       ({ piezas, textos } = fichaSegunModulos(tieneModulo));
     }
   } catch {
@@ -102,6 +107,7 @@ export default async function ClienteDetailPage() {
       conPacientes={conPacientes}
       conFacturacion={conFacturacion}
       conNutricion={conNutricion}
+      conCategoria={conCategoria}
       piezas={piezas}
       textos={textos}
     />

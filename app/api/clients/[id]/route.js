@@ -10,6 +10,7 @@ import { borrarRastroDelCliente } from "../../../../lib/clients/borrarRastro.js"
 import { entradaDeCliente } from "../../../../lib/clients/listaEspera.js";
 import { terapeutaAPacientesDeFamilia } from "../../../../lib/clients/profesionalFamilia.js";
 import { fechaONull } from "../../../../lib/clients/formularioAlta.js";
+import { categoriaONull } from "../../../../lib/booking/categorias.js";
 import { esEstadoDeFicha } from "../../../../lib/clients/estados.js";
 import { bonosDeCliente } from "../../../../lib/citas/packs.js";
 import {
@@ -154,6 +155,13 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
     ...(body.status !== undefined || base.seStatus !== undefined
       ? { seStatus: body.status ?? base.seStatus }
       : {}),
+    // El tipo de contratante (01/09/2026). Se mira `"categoria" in body` y no
+    // el valor por lo mismo que el embudo de aquí arriba: quien no lo pregunta
+    // —la ficha de una clínica, el botón que avanza el estado— no lo manda y no
+    // tiene por qué pisarlo. Cuando SÍ viene, `""` borra (es «Sin especificar»,
+    // la única forma de deshacer un tipo mal puesto) y una clave inventada no
+    // entra: `categoriaONull` la deja en null.
+    ...("categoria" in body ? { categoria: categoriaONull(body.categoria) } : {}),
   };
 
   // Datos fiscales (solo si vienen explícitos en el body).
