@@ -25,8 +25,11 @@ const FICHA = "tm-bea";
 // Hoy —donde vive Pendiente— se construye igual.
 const MODULOS = ["citas", "team", "clinica", "pacientes", "team_avanzado"];
 
+/** Lo que hay abierto en TODO el centro, para distinguirlo de «las mías». */
+const EN_EL_CENTRO = 7;
+
 /** ctx de mentira. `mias` = ids de incidencias donde figura como responsable. */
-function ctxDe({ mias, conFicha = true }) {
+function ctxDe({ mias, conFicha = true, role = "user" }) {
   const contado = [];
   const tenantModels = {
     TeamMember: {
@@ -44,11 +47,12 @@ function ctxDe({ mias, conFicha = true }) {
       },
     },
     Incidencia: {
-      // Cuenta de verdad sobre el `where` que reciba: si alguien vuelve a
-      // contar todo el centro, aquí se ve.
+      // Cuenta de verdad sobre el `where` que reciba: sin filtro de persona
+      // devuelve el centro entero, así que si alguien vuelve a contarlo todo
+      // para quien no dirige, aquí se ve.
       count: async ({ where }) => {
         contado.push(where);
-        return where.id?.[Op.in]?.length ?? 99;
+        return where.id?.[Op.in]?.length ?? EN_EL_CENTRO;
       },
       findAll: async () => [],
     },
@@ -61,7 +65,7 @@ function ctxDe({ mias, conFicha = true }) {
       tenantHasModule: (k) => t.has(k),
       tenantModels,
       tenantSequelize: null,
-      user: { id: "u1", role: "user" },
+      user: { id: "u1", role },
       tenant: { settings: {} },
     },
     contado,
@@ -92,6 +96,23 @@ test("quien no tiene ficha de equipo no tiene incidencias propias: ni se pregunt
   const p = await buildPortada(ctx);
   assert.equal(contado.length, 0, "sin ficha no se consulta nada");
   assert.equal(tarjeta(p), null);
+});
+
+// Dirección es la excepción (01/09/2026, Rodrigo): quien dirige necesita el
+// panorama, no su bandeja. Va por ROL, no por ficha: el admin de dirección de
+// Aumenta no tiene ficha de equipo y es justo quien más mira esta tarjeta.
+test("dirección sigue viendo el total del centro, no solo lo suyo", async () => {
+  const { ctx, contado } = ctxDe({ mias: ["i1"], role: "admin" });
+  const p = await buildPortada(ctx);
+  assert.equal(contado[0].id, undefined, "sin filtro de persona");
+  assert.equal(contado[0].status[Op.ne], "resolved");
+  assert.equal(tarjeta(p)?.count, EN_EL_CENTRO);
+});
+
+test("y lo ve aunque no tenga ficha de equipo (el admin de dirección)", async () => {
+  const { ctx } = ctxDe({ mias: [], conFicha: false, role: "admin" });
+  const p = await buildPortada(ctx);
+  assert.equal(tarjeta(p)?.count, EN_EL_CENTRO);
 });
 
 test("una incidencia sola va en singular", async () => {
