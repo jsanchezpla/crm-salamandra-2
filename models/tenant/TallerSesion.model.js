@@ -63,6 +63,34 @@ export function defineTallerSesion(sequelize) {
         allowNull: false,
       },
       /**
+       * El GRUPO del que es esta sesión (01/09/2026). La actividad no da
+       * sesiones: las da el grupo de los martes, con su gente. Nullable por las
+       * sesiones anteriores a que existieran los grupos (en producción, cero) y
+       * porque el modelo la declara para todos los tenants.
+       */
+      grupoId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      /**
+       * LA CITA de la que sale (01/09/2026, Rodrigo: los talleres pasan a ser
+       * «un tipo más de cita», no un bloqueo).
+       *
+       * Es el equivalente de `clinic_sessions.booking_id` y responde a lo mismo
+       * —**una cita, un registro**—: entrar y salir del taller de esa tarde
+       * tiene que seguir editando el mismo registro, no crear uno nuevo cada
+       * vez. Aquí manda todavía más que en una sesión individual, porque de
+       * este registro cuelgan las copias de los ocho asistentes: un segundo
+       * registro de la misma tarde partiría el grupo en dos.
+       *
+       * Sin FK dura, como `teamBlockId`: borrar la cita del calendario no puede
+       * llevarse por delante lo que se escribió del taller.
+       */
+      bookingId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      /**
        * Quién la dio. Nullable por lo mismo que en `ClinicSession`: un taller
        * puede haberlo llevado alguien que ya no está en el centro, y una nota
        * sin firma sigue siendo el registro de lo que se hizo.
@@ -134,6 +162,10 @@ export function defineTallerSesion(sequelize) {
       indexes: [
         { fields: ["taller_id", "session_date"], name: "taller_sesiones_taller_fecha_idx" },
         { fields: ["team_member_id"], name: "taller_sesiones_member_idx" },
+        { fields: ["grupo_id", "session_date"], name: "taller_sesiones_grupo_fecha_idx" },
+        // «¿Esta cita ya tiene registro?», que se pregunta al abrir el modal de
+        // cada taller de la agenda. Mismo camino que en `clinic_sessions`.
+        { fields: ["booking_id"], name: "taller_sesiones_booking_idx" },
       ],
     }
   );

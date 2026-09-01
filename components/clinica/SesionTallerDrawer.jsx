@@ -48,7 +48,27 @@ function partirEnMadrid(valor) {
   return { fecha: `${p.year}-${p.month}-${p.day}`, hora: `${p.hour}:${p.minute}` };
 }
 
-export default function SesionTallerDrawer({ tallerId, tallerName, sesionId, onClose, onSaved }) {
+export default function SesionTallerDrawer({
+  tallerId,
+  tallerName,
+  sesionId,
+  // El GRUPO del que es la sesión (01/09/2026). Sin él la sesión sería «de la
+  // actividad», que desde que hay varios grupos no dice de quién es.
+  grupoId = null,
+  // Y la CITA de la que sale, cuando se escribe desde la agenda. Es lo que hace
+  // que entrar y salir siga editando el MISMO registro (una cita, un registro).
+  bookingId = null,
+  /*
+   * Cuándo y cuánto duró, cuando se escribe desde una cita. Sin esto el
+   * registro nacía con la fecha y la hora de AHORA, y el taller del martes
+   * apuntado el jueves quedaba fechado el jueves — en la ficha de los ocho.
+   * `cuando` es un ISO; `duracionCita`, minutos.
+   */
+  cuando = null,
+  duracionCita = null,
+  onClose,
+  onSaved,
+}) {
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [err, setErr] = useState(null);
@@ -58,14 +78,24 @@ export default function SesionTallerDrawer({ tallerId, tallerName, sesionId, onC
   const [valores, setValores] = useState({});
   const [etiquetaNota, setEtiquetaNota] = useState(ETIQUETA_NOTA_POR_DEFECTO);
 
-  const hoy = partirEnMadrid(null);
-  const [fecha, setFecha] = useState(hoy.fecha);
-  const [hora, setHora] = useState(hoy.hora);
-  const [duracion, setDuracion] = useState("");
+  // La de la CITA si viene de una; si no, ahora. Un taller se apunta a menudo
+  // días después, y la fecha del registro es la de la tarde que se dio.
+  const arranque = partirEnMadrid(cuando);
+  const [fecha, setFecha] = useState(arranque.fecha);
+  const [hora, setHora] = useState(arranque.hora);
+  const [duracion, setDuracion] = useState(duracionCita ? String(duracionCita) : "");
   const [internas, setInternas] = useState("");
   const [cerrada, setCerrada] = useState(false);
   /** [{ patientId, nombre, asistio, nota, enviada, yaNoApuntado }] */
   const [asistentes, setAsistentes] = useState([]);
+  /*
+   * Quién hizo el registro (01/09/2026, Rodrigo: «para los registros de
+   * sesiones se podrá elegir qué terapeuta los hace dentro del propio
+   * registro»). Un taller lo dan varios y lo escribe uno; y a veces lo escribe
+   * quien no estaba, porque la que estaba se puso mala. Se elige aquí.
+   */
+  const [equipo, setEquipo] = useState([]);
+  const [teamMemberId, setTeamMemberId] = useState("");
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -96,32 +126,68 @@ export default function SesionTallerDrawer({ tallerId, tallerName, sesionId, onC
         setCerrada(d.status === "published");
         setEtiquetaNota(d.etiquetaNota || ETIQUETA_NOTA_POR_DEFECTO);
         setAsistentes(d.asistentes ?? []);
+        setTeamMemberId(d.teamMemberId ?? "");
       } else {
         const aps = apartadosConPlantillas({}, lista);
         setApartados(aps);
         setValores(aFormulario({}, aps));
-        // Sesión nueva: vienen marcados los que están apuntados al taller, que
-        // es lo que pasa casi siempre. Quien falte se desmarca.
-        const r = await fetch(`/api/clinica/talleres/${tallerId}`, { cache: "no-store" });
-        const j = await r.json();
-        const apuntados = j?.ok ? (j.data?.apuntados ?? []) : [];
-        setAsistentes(
-          apuntados.map((i) => ({
+        /*
+         * Sesión nueva. De dónde sale la lista, por orden:
+         *   · de la CITA, si se escribe desde la agenda: los que ya se marcaron
+         *     como que vinieron. Quien pasó lista no lo hace dos veces.
+         *   · del GRUPO, si se escribe desde la pestaña: los apuntados hoy,
+         *     todos marcados. Quien faltó se desmarca.
+         */
+        let puestos = [];
+        if (bookingId) {
+          const rc = await fetch(`/api/citas/bookings/${bookingId}/taller`, { cache: "no-store" });
+          const jc = await rc.json();
+          if (jc?.ok) {
+            puestos = (jc.data?.asistentes ?? []).map((a) => ({
+              patientId: a.patientId,
+              nombre: a.nombre,
+              // Con la lista ya pasada, manda lo que se marcó; si nadie la ha
+              // tocado (todos «prevista»), vienen todos marcados.
+              asistio: a.status !== "no_show",
+              nota: "",
+            }));
+            // El registro lo firma, de entrada, quien coordina el taller.
+            const primero = (jc.data?.impartidores ?? [])[0];
+            if (primero) setTeamMemberId(primero.teamMemberId);
+          }
+        }
+        if (!puestos.length) {
+          const url = grupoId
+            ? `/api/clinica/talleres/${tallerId}/grupos/${grupoId}`
+            : `/api/clinica/talleres/${tallerId}`;
+          const r = await fetch(url, { cache: "no-store" });
+          const j = await r.json();
+          const apuntados = j?.ok ? (j.data?.apuntados ?? []) : [];
+          puestos = apuntados.map((i) => ({
             patientId: i.patientId,
             nombre: [i.patient?.firstName, i.patient?.lastName].filter(Boolean).join(" ") || "—",
             asistio: true,
             nota: "",
-          }))
-        );
+          }));
+        }
+        setAsistentes(puestos);
       }
     } catch (e) {
       setErr(e.message);
     } finally {
       setCargando(false);
     }
-  }, [sesionId, tallerId]);
+  }, [sesionId, tallerId, grupoId, bookingId]);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  // El equipo, para poder elegir y CORREGIR quién hizo el registro.
+  useEffect(() => {
+    fetch("/api/team?status=active&limit=200", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (j?.ok) setEquipo(j.data?.members ?? []); })
+      .catch(() => {});
+  }, []);
 
   function cambiarAsistente(patientId, campo, valor) {
     setAsistentes((prev) => prev.map((a) => (a.patientId === patientId ? { ...a, [campo]: valor } : a)));
@@ -145,6 +211,9 @@ export default function SesionTallerDrawer({ tallerId, tallerName, sesionId, onC
       const cuerpo = {
         sessionDate: cuando.toISOString(),
         duration: duracion === "" ? null : Number(duracion),
+        grupoId: grupoId || undefined,
+        bookingId: bookingId || undefined,
+        teamMemberId: teamMemberId || null,
         contentSections: { ...desdeFormulario(valores, apartados), apartados },
         internalNotes: internas,
         etiquetaNota,
@@ -215,6 +284,21 @@ export default function SesionTallerDrawer({ tallerId, tallerName, sesionId, onC
                   />
                 </label>
               </div>
+
+              {/* ── Quién lo hizo (01/09/2026, Rodrigo) ─────────────────────
+                  «Para los registros de sesiones se podrá elegir qué terapeuta
+                  los hace dentro del propio registro.» Un taller lo dan varios
+                  y lo escribe uno; y a veces lo escribe quien no estaba, porque
+                  la que estaba se puso mala. Se elige, y se puede corregir. */}
+              <label className="text-xs block">
+                <span className="block text-neutral-500 mb-1">Quién lo hizo</span>
+                <select value={teamMemberId} onChange={(e) => setTeamMemberId(e.target.value)} className={inputCls}>
+                  <option value="">— Sin firmar —</option>
+                  {equipo.map((m) => (
+                    <option key={m.id} value={m.id}>{m.displayName}</option>
+                  ))}
+                </select>
+              </label>
 
               {/* ── 1. El registro del grupo ───────────────────────────── */}
               <section>

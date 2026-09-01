@@ -24,6 +24,8 @@ import { bookingConfirmedTemplate } from "../../../../lib/email/templates/citas/
 import { cargarAusencias, minutosOcupados } from "../../../../lib/citas/ausencias.js";
 import { getMadridParts } from "../../../../lib/citas/slots.js";
 import { asignarSesion } from "../../../../lib/citas/packs.js";
+import { grupoDeTipoDeCita, montarCitaDeTaller } from "../../../../lib/clinica/citaDeTaller.js";
+import { terapeutasDeGrupo } from "../../../../lib/clinica/grupoDeTaller.js";
 
 
 const VALID_STATUS = new Set(["pending", "confirmed", "completed", "cancelled", "no_show"]);
@@ -215,7 +217,28 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     const eventType = await EventType.findByPk(eventTypeId);
     if (!eventType) return error("eventTypeId no existe", 404);
 
-    const clientName = normalizeString(body.clientName);
+    /*
+     * ── ¿ES UN TALLER? (01/09/2026, Rodrigo) ─────────────────────────────────
+     *
+     * «Hay que preparar los talleres de tal forma que en las citas se pueda
+     * seleccionar los talleres. No como bloqueos sino como un tipo más de
+     * cita.» Y es exactamente eso: se elige su tipo de cita y ya. Lo que cambia
+     * a partir de aquí es poco y se lee de un vistazo:
+     *
+     *   · no tiene UN paciente (tiene ocho, en `taller_asistencias`);
+     *   · su nombre lo pone el grupo, no lo teclea nadie;
+     *   · si no se dice quién lo da, lo da quien coordina el grupo;
+     *   · no sale correo: no hay UNA familia a la que mandárselo.
+     *
+     * Todo lo demás —festivos, vacaciones, solapes, auditoría— pasa por las
+     * mismas puertas que cualquier cita, que es de lo que iba el encargo.
+     */
+    const tallerGrupoId = grupoDeTipoDeCita(eventType);
+
+    // El rótulo del grupo hace de `clientName`, que es NOT NULL y es lo que se
+    // pinta y se busca. Sale del propio tipo de cita («Habilidades sociales ·
+    // Grupo 1»), así que renombrar el grupo renombra las citas nuevas solo.
+    const clientName = tallerGrupoId ? eventType.name : normalizeString(body.clientName);
     if (!clientName) return error("clientName es obligatorio");
 
     /*
@@ -345,6 +368,16 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
         if (!tm) return error("teamMemberId no existe");
       }
       teamMemberId = tmId;
+      /*
+       * Un taller sin profesional elegido lo lleva quien coordina el grupo. Es
+       * lo que hace que la caja salga con su color y que el solape se compruebe
+       * contra SU agenda — sin dueño, un taller de hora y media no chocaría con
+       * nada y se podrían apuntar dos cosas encima.
+       */
+      if (!teamMemberId && tallerGrupoId) {
+        const equipo = await terapeutasDeGrupo({ tenantModels, grupoId: tallerGrupoId });
+        teamMemberId = equipo[0] ?? null;
+      }
     }
 
     /*
@@ -411,7 +444,19 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       clientId,
       packId: enBono?.packId ?? null,
       sessionNumber: enBono?.sessionNumber ?? null,
+      tallerGrupoId,
     });
+
+    /*
+     * Y la cita de taller se monta: se le copia la lista de quién está apuntado
+     * al grupo AHORA y quién lo imparte. Se copia, no se lee en vivo, y ese es
+     * el punto entero — ver `lib/clinica/citaDeTaller.js`: dar de baja a un
+     * niño en enero no puede borrarlo de las tardes de octubre a las que fue.
+     */
+    let taller = null;
+    if (tallerGrupoId) {
+      taller = await montarCitaDeTaller({ tenantModels, booking: row, grupoId: tallerGrupoId });
+    }
 
     await logCitasAudit({
       tenantId: tenant.id,
@@ -445,6 +490,12 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     // El drawer manda el de la PRIMERA cita y las demás nacen calladas.
     if (body.omitirCorreo === true) {
       emailMotivo = "omitido";
+    } else if (tallerGrupoId) {
+      // Un taller no tiene UNA familia a la que avisar: tiene ocho, cada una
+      // con su consentimiento. Avisar a las ocho desde aquí sería mandar ocho
+      // correos que dicen «tu cita» de algo que es de grupo; se decidirá cuando
+      // se pida, y con su propia plantilla.
+      emailMotivo = "taller";
     } else try {
       if (!row.clientEmail) throw new Error("SIN_EMAIL");
       if (!(await citaPuedeAvisar(tenantModels, row, "citasEmail"))) throw new Error("SIN_CONSENTIMIENTO");
@@ -487,7 +538,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       }
     }
 
-    return created({ ...row.toJSON(), emailEnviado, emailMotivo });
+    return created({ ...row.toJSON(), emailEnviado, emailMotivo, taller });
   } catch (err) {
     return serverError(err);
   }

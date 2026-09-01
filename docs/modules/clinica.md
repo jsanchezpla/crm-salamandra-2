@@ -883,7 +883,7 @@ se hacía dentro no quedaba ni una línea en la historia de ninguno.
 
 | Dónde | Qué guarda |
 | --- | --- |
-| `team_blocks.taller_id` | Qué taller se da en ese tramo de la agenda. El bloqueo deja de ser «una hora tachada»: sabe qué es. Nullable y sin FK dura — dar de baja un taller no puede borrar horas de la agenda. Migración en el bloque `citas` (ver `citas.md`). |
+| `bookings.taller_grupo_id` | La CITA del taller. ⚠️ `team_blocks.taller_id` **quedó obsoleta al día siguiente** — ver «Los talleres son citas», abajo. |
 | `taller_sesiones` (`TallerSesion`) | **El registro COMÚN del grupo**, por apartados, con el mismo mecanismo que un registro de sesión normal (`lib/clinica/plantillas.js`). Más quién la dio, cuándo, cuánto duró y las notas internas del grupo. |
 | `clinic_sessions.taller_sesion_id` | El registro de CADA asistente, con el cuerpo común ya dentro y **su nota individual** en `content_sections.notaIndividualTaller`. Sin FK dura: borrar la sesión del taller no puede llevarse la historia clínica de ocho pacientes. |
 
@@ -928,6 +928,120 @@ no puede desaparecer del CRM. Esa sesión se desengancha del taller (para que la
 próxima propagación no la reescriba), se queda en la ficha del paciente y la
 respuesta la cuenta en `conservadas`. Borrar la sesión de taller entera es
 **solo admin**, por lo mismo: se lleva el registro de todo el grupo.
+
+## Los talleres son CITAS, y por grupos (01/09/2026)
+
+> «Los talleres no dejan de ser citas múltiples a las que van varios pacientes a
+> la vez y que pueden estar impartidas por varios terapeutas la misma cita. Por
+> tanto hay que preparar los talleres de tal forma que en las citas se pueda
+> seleccionar los talleres. **No como bloqueos sino como un tipo más de cita.**
+> Solo que estos tipos de cita se crean desde la pestaña de talleres, y en la
+> propia pestaña se marca quién o quiénes imparten y qué pacientes van. Asimismo
+> estos pacientes tendrán que estar relacionados entre sí dentro de una misma
+> cuota de talleres.» Y, a media conversación: **«en los talleres hay que poder
+> poner varios grupos distintos para la misma actividad».** (Rodrigo)
+
+Corrige el encargo de esa misma mañana, que había dejado el taller como un
+bloqueo con nombre. Un bloqueo es una hora tachada: no tiene asistentes, no se
+cobra, no se le pasa lista y no llega a la historia de ningún niño.
+
+### La actividad y el grupo
+
+`Habilidades sociales` son **45 niños** en Aumenta, y 45 niños no caben en una
+sala. Por eso el modelo se parte en dos alturas:
+
+| Tabla | Qué es | Cada cuánto cambia |
+| --- | --- | --- |
+| `talleres` (`Taller`) | **La ACTIVIDAD**: qué es y cómo se cobra | una vez al año |
+| `taller_grupos` (`TallerGrupo`) | **EL GRUPO**: cuándo, cuánto dura, plazas, su concepto propio | cada curso, y hay varios |
+| `taller_grupo_terapeutas` | Quién lleva el grupo. **Varios**, uno de ellos `coordina` (índice único parcial) | |
+| `taller_inscripciones.grupo_id` | Un paciente se apunta a un GRUPO, no a la actividad. `taller_id` se queda para preguntar por la actividad entera | |
+| `taller_cita_terapeutas` | Quién impartió **una tarde concreta**. Se copia del grupo al crear la cita y luego va por su cuenta: cambiar el grupo en enero no puede reescribir quién dio el taller en octubre | |
+| `taller_asistencias` | Quién fue a esa tarde y si faltó. Mismos tres campos que `bookings` (`no_show` + `justified` + motivo) | |
+
+### El grupo es un tipo de cita
+
+Cada grupo tiene su `EventType`, creado y mantenido **desde Talleres**
+(`lib/clinica/tipoCitaTaller.js`), con el nombre «Actividad · Grupo», slug
+`taller-…`, presencial y **oculto** (`is_hidden`: a un taller se entra
+apuntándose, no reservando desde la web). El puntero vive en
+`event_types.taller_grupo_id` —y no al revés— porque la pregunta que se hace mil
+veces al día es la de ida: «de este tipo de cita, ¿es un taller?».
+
+Con eso, el taller entra por las puertas que ya existen: festivos, vacaciones,
+solapes, filtros por tipo, color de la caja e informe de ocupación. **Nada de
+eso hubo que enseñárselo.**
+
+### Una caja en la agenda, no ocho
+
+La cita de taller lleva `patient_id` a NULL —los asistentes son varios y viven
+en `taller_asistencias`— y `client_name` con el rótulo del grupo. En el
+calendario sale como `Habilidades sociales · Grupo A (8)`, y `(6/8)` cuando ya
+se ha pasado lista.
+
+Dos consecuencias que hubo que resolver:
+
+- **`bookings.team_member_id` solo admite uno**, y hace falta (color de la caja,
+  y el solape se comprueba por profesional). Se pone quien coordina; para que la
+  segunda terapeuta lo vea en SU agenda, el calendario amplía el filtro con
+  `citasDeTallerQueImparte()` (`lib/clinica/citaDeTaller.js`).
+- **No sale correo**: un taller no tiene UNA familia a la que avisar, tiene
+  ocho, cada una con su consentimiento. El POST devuelve
+  `emailMotivo: "taller"` y la pantalla no enseña el aviso de «no le ha llegado».
+
+### La lista se COPIA al crear la cita
+
+Y es lo importante de todo: al apuntar la cita se copian los inscritos **de ese
+momento**. Si se leyera del grupo en vivo, dar de baja a un niño en enero lo
+borraría de todas las tardes de octubre a las que sí fue —y con él, su registro
+y su falta—. Para meter en una cita ya creada a alguien apuntado después está
+«Traer a los nuevos» (`PATCH …/taller` con `sincronizar: true`), que **solo
+añade** y lo pide una persona.
+
+### La asistencia manda sobre el registro
+
+El registro común se copia **solo a quien consta como `asistio`**. Marcar una
+falta después de haberlo escrito le quita a ese niño su copia, y marcarlo como
+presente se la da: no se le puede dejar en la historia clínica una sesión a la
+que no fue, ni quitarle una a la que sí. La falta abre incidencia por la misma
+puerta que las individuales (`lib/citas/incidenciaPorFalta.js`).
+
+### La cuota del taller
+
+Apuntar a un niño le da de alta a **su familia** una cuota mensual con el
+concepto del taller, y darlo de baja la cierra (`endDate` + `active: false`,
+nunca se borra). El id vive en `taller_inscripciones.cuota_id`, que es lo que
+permite cerrar la de ese taller sin adivinar cuál de las cuotas de la familia
+era (`lib/clinica/cuotaDeTaller.js`).
+
+Dos reglas que no son obvias:
+
+- **si la familia ya paga ese concepto, se ENGANCHA a esa cuota** en vez de
+  crear otra. El caso real es un niño al que ya se le cobraba el taller por
+  fuera —259 de las 274 cuotas de Aumenta vienen del volcado de Organízate—, y
+  apuntarlo ahora no puede duplicarle el recibo;
+- **si su cuota cubre además otras cosas, la baja NO la cierra**: dejaría a la
+  familia sin cobrar la logopedia por haber sacado al niño del taller. Se
+  devuelve el motivo y lo decide una persona.
+
+Todo es *best-effort*: sin Facturación o sin concepto de cobro, el niño se
+apunta igual y la pantalla lo dice («Sin cuota» en su fila).
+
+### Quién firma el registro
+
+Se elige en el propio formulario, y se puede corregir después —lo mismo que se
+hizo el mismo día para los registros individuales
+(`app/api/clinica/sessions/[id]` acepta `therapistId` en el PATCH y lo valida
+contra el equipo del centro)—. En un taller arranca por quien coordina.
+
+### Lo que se quedó atrás
+
+`team_blocks.taller_id` **existe y ya no la escribe nadie**. La columna se
+queda, y el modal de un bloqueo que la tuviera enseña un aviso de dónde han ido
+a parar los talleres. En producción no hay ni uno (0 de 10.468 bloqueos), así
+que no hubo nada que migrar.
+
+Lo puro lo fija `scripts/_smoke-talleres-grupos.mjs` (`node:test`, ligera).
 
 ## Modelos
 

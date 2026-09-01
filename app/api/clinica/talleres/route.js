@@ -36,6 +36,16 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     const cuenta = {};
     for (const i of abiertas) cuenta[i.tallerId] = (cuenta[i.tallerId] ?? 0) + 1;
 
+    // Cuántos GRUPOS tiene cada actividad (01/09/2026). Es lo primero que se
+    // mira desde que un taller puede tener varios: sin este número, la tabla no
+    // dice si «Habilidades sociales» son 45 niños en un grupo o en cinco.
+    const { TallerGrupo } = tenantModels;
+    const grupos = {};
+    if (TallerGrupo) {
+      const filas = await TallerGrupo.findAll({ where: { active: true }, attributes: ["tallerId"], raw: true });
+      for (const g of filas) grupos[g.tallerId] = (grupos[g.tallerId] ?? 0) + 1;
+    }
+
     // El concepto de cobro de cada taller (31/08/2026), colgado a mano: no
     // hay asociación (FK suave a propósito) y un concepto borrado sale null.
     const conceptIds = [...new Set(talleres.map((t) => t.conceptId).filter(Boolean))];
@@ -53,6 +63,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       talleres: talleres.map((t) => ({
         ...t.toJSON(),
         apuntados: cuenta[t.id] ?? 0,
+        grupos: grupos[t.id] ?? 0,
         concepto: (t.conceptId && conceptos.get(t.conceptId)) || null,
       })),
       total: talleres.length,

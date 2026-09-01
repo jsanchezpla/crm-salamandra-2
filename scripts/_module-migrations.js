@@ -392,6 +392,14 @@ export const MODULES = {
     // que sin ellas CUALQUIER lectura de bloqueos da 42703. VA ANTES del
     // despliegue. El porqué del sitio, en `lib/reuniones/acta.js`.
     "migrate-reuniones-acta",
+    /*
+     * Los talleres pasan a ser CITAS (01/09/2026): `bookings.taller_grupo_id` y
+     * `event_types.taller_grupo_id`. Aquí por lo mismo que sus vecinas —los
+     * modelos las declaran para todos y sin ellas la agenda da 42703—; el resto
+     * de lo que crea vive en el bloque `clinica`, donde está la tabla
+     * `talleres`. VA ANTES del despliegue.
+     */
+    "migrate-talleres-grupos",
   ],
 
   calendar: ["migrate-calendar-citas-fks"],
@@ -440,6 +448,20 @@ export const MODULES = {
     // modelo de sesiones declara esa columna, así que sin ella toda lectura de
     // la historia clínica da 42703. VA ANTES del despliegue.
     "migrate-taller-sesiones",
+    /*
+     * Los GRUPOS de un taller y todo lo que cuelga de una cita de taller
+     * (01/09/2026): «hay que poder poner varios grupos distintos para la misma
+     * actividad», con varios terapeutas y lista de asistencia.
+     *
+     * Está también en el bloque `citas` y NO es un descuido: crea cuatro tablas
+     * donde hay `talleres` (esto es Clínica) pero además añade
+     * `bookings.taller_grupo_id` y `event_types.taller_grupo_id`, que los
+     * modelos `Booking` y `EventType` declaran para TODOS los tenants. Un
+     * centro con Citas y sin Clínica se quedaría sin ellas y toda lectura de su
+     * agenda daría 42703. El analizador de orden deduplica.
+     * VA ANTES del despliegue.
+     */
+    "migrate-talleres-grupos",
     "migrate-clinica-module",
     // El autor del acta puede no estar en la plantilla (02/08/2026): campo de
     // texto libre y created_by_id opcional.

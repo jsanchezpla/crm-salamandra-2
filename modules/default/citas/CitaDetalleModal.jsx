@@ -12,6 +12,8 @@
 
 import { useEffect, useState } from "react";
 import SelectorPaciente from "../../../components/citas/SelectorPaciente.jsx";
+import PanelTallerCita from "../../../components/citas/PanelTallerCita.jsx";
+import SesionTallerDrawer from "../../../components/clinica/SesionTallerDrawer.jsx";
 import { colaDePreparacion } from "../../../lib/clinica/prepararSesion.js";
 import { fichaDeLaCita } from "../../../lib/citas/fichaDeLaCita.js";
 import { esRecuperable, rotuloFalta, citasQuePuedenRecuperar } from "../../../lib/citas/recuperacionFalta.js";
@@ -115,6 +117,13 @@ export function CitaDetalleModal({
   // la regla «una cita, un registro» la aplica la pantalla de destino. Por eso
   // un fallo aquí no se enseña ni se reintenta: se queda el rótulo de siempre.
   const [sesionDeEstaCita, setSesionDeEstaCita] = useState(null);
+  /*
+   * El registro de una cita de TALLER (01/09/2026). No es el mismo formulario
+   * que el de una sesión individual —el cuerpo es del grupo y cada asistente
+   * lleva su nota privada—, así que abre su propio drawer.
+   * `{ grupo, sesionId }` o null.
+   */
+  const [tallerSesion, setTallerSesion] = useState(null);
 
   useEffect(() => {
     if (!openBooking.patientId) return;
@@ -448,6 +457,20 @@ export function CitaDetalleModal({
                 </div>
               )}
 
+              {/*
+                ── SI ES UN TALLER, LO PRIMERO ES LA LISTA (01/09/2026) ───────
+                Una cita de taller no tiene UN paciente: tiene ocho. Lo que se
+                hace al abrirla es pasar lista, así que va arriba del todo, por
+                delante de la fecha y de los botones de estado — que en un taller
+                dicen poco: el estado de verdad lo lleva cada asistente.
+              */}
+              {openBooking.tallerGrupoId && (
+                <PanelTallerCita
+                  bookingId={openBooking.id}
+                  onRegistrar={(d) => setTallerSesion({ grupo: d.grupo, sesionId: d.sesion?.id ?? null })}
+                />
+              )}
+
               <div className="grid grid-cols-1 gap-2 text-[13px]">
                 {/*
                   DE LA CITA A LA FICHA (27/08/2026, Jorge).
@@ -479,18 +502,25 @@ export function CitaDetalleModal({
                     </a>
                   </div>
                 )}
-                <div className="flex">
-                  <span className="w-24 text-neutral-400">Email</span>
-                  <a className="text-neutral-800 hover:underline" href={`mailto:${openBooking.clientEmail}`}>
-                    {openBooking.clientEmail}
-                  </a>
-                </div>
-                <div className="flex">
-                  <span className="w-24 text-neutral-400">Teléfono</span>
-                  <a className="text-neutral-800 hover:underline" href={`tel:${openBooking.clientPhone}`}>
-                    {openBooking.clientPhone}
-                  </a>
-                </div>
+                {/* Un taller no tiene UN contacto: tiene ocho, y cada uno
+                    está en la ficha de su paciente. Dos rayas vacías aquí solo
+                    harían pensar que falta un dato. */}
+                {!openBooking.tallerGrupoId && (
+                  <>
+                    <div className="flex">
+                      <span className="w-24 text-neutral-400">Email</span>
+                      <a className="text-neutral-800 hover:underline" href={`mailto:${openBooking.clientEmail}`}>
+                        {openBooking.clientEmail}
+                      </a>
+                    </div>
+                    <div className="flex">
+                      <span className="w-24 text-neutral-400">Teléfono</span>
+                      <a className="text-neutral-800 hover:underline" href={`tel:${openBooking.clientPhone}`}>
+                        {openBooking.clientPhone}
+                      </a>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="grid grid-cols-1 gap-2 text-[13px] pt-3 border-t border-neutral-100">
@@ -612,7 +642,10 @@ export function CitaDetalleModal({
                     </select>
                   </div>
                 )}
-                {patients.length > 0 && (
+                {/* En un taller no hay UN paciente: la lista está arriba, con
+                    su asistencia. Un «Paciente: sin asignar» aquí invitaría a
+                    ponerle uno, y esa cita no es de nadie en concreto. */}
+                {patients.length > 0 && !openBooking.tallerGrupoId && (
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="w-24 text-neutral-400 shrink-0">Paciente</span>
                     {/*
@@ -1065,7 +1098,13 @@ export function CitaDetalleModal({
                  * «No asistió» que abría un diálogo para elegir cuál de las dos
                  * era; la diferencia se decide igual, pero ahora se ve.
                  */}
-                {openBooking.status !== "no_show" && (
+                {/*
+                 * En un TALLER estos dos botones no se enseñan (01/09/2026):
+                 * la falta es de un niño, no de la cita entera, y se marca
+                 * arriba, uno a uno. Dar por «no asistida» la tarde entera
+                 * porque faltó uno sería justo lo contrario de lo que se pidió.
+                 */}
+                {openBooking.status !== "no_show" && !openBooking.tallerGrupoId && (
                   <>
                     <button
                       onClick={() => marcarFalta("falta_justificada")}
@@ -1161,6 +1200,31 @@ export function CitaDetalleModal({
               </div>
             )}
           </div>
+
+          {/* ── El registro de la sesión del taller (01/09/2026) ───────────
+              Va fuera del cuerpo con scroll y con su propia capa: es un drawer
+              a pantalla completa, no un trozo más del modal. */}
+          {tallerSesion && (
+            <SesionTallerDrawer
+              key={tallerSesion.sesionId ?? "nueva"}
+              tallerId={tallerSesion.grupo?.tallerId}
+              tallerName={
+                [tallerSesion.grupo?.tallerName, tallerSesion.grupo?.name].filter(Boolean).join(" · ")
+              }
+              grupoId={tallerSesion.grupo?.id ?? null}
+              bookingId={openBooking.id}
+              // La fecha y la duración son las de LA CITA, no las de hoy: un
+              // taller se apunta a menudo días después de darlo.
+              cuando={openBooking.scheduledAt}
+              duracionCita={openBooking.duration}
+              sesionId={tallerSesion.sesionId}
+              onClose={() => setTallerSesion(null)}
+              onSaved={() => {
+                setTallerSesion(null);
+                onChanged?.();
+              }}
+            />
+          )}
         </div>
   );
 }

@@ -54,9 +54,6 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
    * modal, que se monta DESPUÉS de un clic: para entonces el ref ya está.
    */
   const categoriasBloqueoRef = useRef([]);
-  // Y los talleres del centro, por lo mismo: el modal de un bloqueo pregunta si
-  // ese tramo es un taller (01/09/2026).
-  const talleresRef = useRef([]);
   // Y el equipo, por lo mismo otra vez: al colgar un documento de un bloqueo se
   // elige a quién se le pide que lo lea (01/09/2026). `administracionRef` son
   // los ids de quien lleva la administración del centro, para el botón «Todos
@@ -372,7 +369,6 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
         const jb = await rb.json();
         if (jb.ok) {
           categoriasBloqueoRef.current = jb.data.categorias ?? [];
-          talleresRef.current = jb.data.talleres ?? [];
           equipoRef.current = jb.data.equipo ?? [];
           administracionRef.current = jb.data.administracion ?? [];
           fondos = (jb.data.bloqueos ?? [])
@@ -1167,7 +1163,6 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
           key={bloqueoAbierto.id}
           bloqueo={bloqueoAbierto}
           categorias={categoriasBloqueoRef.current}
-          talleres={talleresRef.current}
           equipo={equipoRef.current}
           administracion={administracionRef.current}
           onClose={() => setBloqueoAbierto(null)}

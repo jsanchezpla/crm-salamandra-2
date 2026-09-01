@@ -6,6 +6,7 @@ import { limpiarContentSections } from "../../../../../../lib/clinica/plantillas
 import { apartadoDeNota, apartadosComunes, valoresComunes } from "../../../../../../lib/clinica/tallerSesion.js";
 import { propagarSesionDeTaller } from "../../../../../../lib/clinica/propagarTaller.js";
 import { resolveCurrentTeamMemberId } from "../../../../../../lib/team/currentTeamMember.js";
+import { asistentesQueVinieron } from "../../../../../../lib/clinica/citaDeTaller.js";
 
 /**
  * /api/clinica/talleres/[id]/sesiones — las sesiones de un taller
@@ -33,6 +34,8 @@ function serializaFila(s, cuantos) {
   return {
     id: j.id,
     tallerId: j.tallerId,
+    grupoId: j.grupoId ?? null,
+    bookingId: j.bookingId ?? null,
     sessionDate: j.sessionDate,
     duration: j.duration ?? null,
     teamMemberId: j.teamMemberId ?? null,
@@ -55,8 +58,11 @@ export const GET = withTenant(async (request, { params }, ctx) => {
     const taller = await Taller.findByPk(id, { attributes: ["id", "name"] });
     if (!taller) return notFound("Taller no encontrado");
 
+    // `?grupoId=…` — las sesiones de UN grupo. Sin él, las de toda la
+    // actividad, que es como se leía antes de que hubiera grupos.
+    const grupoId = new URL(request.url).searchParams.get("grupoId");
     const filas = await TallerSesion.findAll({
-      where: { tallerId: id },
+      where: grupoId && UUID_RE.test(grupoId) ? { tallerId: id, grupoId } : { tallerId: id },
       include: TeamMember
         ? [{ model: TeamMember, as: "profesional", attributes: ["id", "displayName"], required: false }]
         : [],
@@ -111,6 +117,29 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     if (Number.isNaN(fecha.getTime())) return error("La fecha de la sesión no es válida", 422);
 
     /*
+     * ── UNA CITA, UN REGISTRO (01/09/2026) ──────────────────────────────────
+     * Desde que los talleres son citas, el registro se escribe desde la cita de
+     * esa tarde. Y aquí manda la misma regla que en una sesión individual: si
+     * esa cita YA tiene registro, se devuelve el que hay en vez de crear otro.
+     * Un segundo registro de la misma tarde partiría el grupo en dos —cada
+     * asistente colgaría de uno— y nadie se enteraría hasta leer el informe.
+     */
+    const bookingId =
+      typeof body.bookingId === "string" && UUID_RE.test(body.bookingId) ? body.bookingId : null;
+    if (bookingId) {
+      const yaHay = await TallerSesion.findOne({ where: { bookingId } });
+      if (yaHay) return ok({ id: yaHay.id, yaExistia: true });
+    }
+
+    // El grupo: el que mande la pantalla, o el de la cita si viene por ahí.
+    let grupoId = typeof body.grupoId === "string" && UUID_RE.test(body.grupoId) ? body.grupoId : null;
+    if (!grupoId && bookingId) {
+      const { Booking } = ctx.tenantModels;
+      const cita = Booking ? await Booking.findByPk(bookingId, { attributes: ["tallerGrupoId"] }) : null;
+      grupoId = cita?.tallerGrupoId ?? null;
+    }
+
+    /*
      * Quién la dio: lo que mande la pantalla, y si no manda nada, quien está
      * escribiendo. Es lo mismo que hace el resto del módulo con
      * `resolveCurrentTeamMemberId`, y evita el caso tonto de una sesión de
@@ -132,6 +161,8 @@ export const POST = withTenant(async (request, { params }, ctx) => {
 
     const fila = await TallerSesion.create({
       tallerId: id,
+      grupoId,
+      bookingId,
       teamMemberId,
       sessionDate: fecha,
       duration: body.duration != null && body.duration !== "" ? Number(body.duration) : null,
@@ -149,9 +180,22 @@ export const POST = withTenant(async (request, { params }, ctx) => {
      * desde el formulario.
      */
     let asistentes = Array.isArray(body.asistentes) ? body.asistentes : null;
+    /*
+     * Con cita, la lista sale de la ASISTENCIA que se pasó en ella: solo los
+     * que constan como que vinieron. Es lo correcto y además evita el trabajo
+     * doble — quien pasa lista en la cita no tiene que volver a marcarla aquí.
+     * Los que faltaron no reciben registro: no se le puede dejar a un niño en
+     * su historia clínica una sesión a la que no fue.
+     */
+    if (!asistentes && bookingId) {
+      const vinieron = await asistentesQueVinieron({ tenantModels: ctx.tenantModels, bookingId });
+      if (vinieron.length) asistentes = vinieron.map((patientId) => ({ patientId, nota: "" }));
+    }
+    // Sin cita (registro escrito desde la pestaña de Talleres): los apuntados
+    // hoy al GRUPO, y si la sesión no es de ningún grupo, los del taller.
     if (!asistentes && TallerInscripcion) {
       const apuntados = await TallerInscripcion.findAll({
-        where: { tallerId: id, leftAt: null },
+        where: grupoId ? { grupoId, leftAt: null } : { tallerId: id, leftAt: null },
         attributes: ["patientId"],
         raw: true,
       });

@@ -34,10 +34,9 @@ const fmtSize = (n) => {
   return kb < 1024 ? `${Math.max(1, Math.round(kb))} KB` : `${(kb / 1024).toFixed(1)} MB`;
 };
 
-export function BloqueoModal({ bloqueo, categorias = [], talleres = [], equipo = [], administracion = [], onClose, onSaved }) {
+export function BloqueoModal({ bloqueo, categorias = [], equipo = [], administracion = [], onClose, onSaved }) {
   const [label, setLabel] = useState(bloqueo.label ?? "");
   const [categoryKey, setCategoryKey] = useState(bloqueo.categoryKey ?? "");
-  const [tallerId, setTallerId] = useState(bloqueo.tallerId ?? "");
   const [startDate, setStartDate] = useState(toDateInput(bloqueo.start));
   const [startTime, setStartTime] = useState(toTimeInput(bloqueo.start));
   const [endDate, setEndDate] = useState(toDateInput(bloqueo.end));
@@ -85,8 +84,10 @@ export function BloqueoModal({ bloqueo, categorias = [], talleres = [], equipo =
           // Vacía = quitarle la categoría. El servidor descarta la que no esté
           // dada de alta, así que aquí no hace falta validar nada.
           categoryKey: categoryKey || null,
-          // Y qué taller se da en el tramo. Vacío = no es un taller.
-          tallerId: tallerId || null,
+          // `tallerId` NO viaja: los talleres dejaron de ser bloqueos el
+          // 01/09/2026 y este modal ya no lo toca. La columna sigue ahí y lo
+          // que hubiera guardado se queda como está, que es lo que hay que
+          // hacer con un dato que ya nadie escribe pero alguien pudo escribir.
           startAt: inicio.toISOString(),
           endAt: fin.toISOString(),
         }),
@@ -201,26 +202,27 @@ export function BloqueoModal({ bloqueo, categorias = [], talleres = [], equipo =
                 </select>
               </div>
             )}
-            {/* ¿Este tramo es un TALLER? (01/09/2026, Rodrigo). Hasta hoy los
-                talleres «salían como bloqueos y ya»: la hora quedaba tachada y
-                de lo que pasaba dentro no quedaba nada. Marcándolo aquí, desde
-                el propio taller se registra la sesión del grupo. */}
-            {talleres.length > 0 && (
-              <div>
-                <label className="block text-[11px] font-medium text-neutral-500 mb-1">Taller</label>
-                <select value={tallerId} onChange={(e) => setTallerId(e.target.value)} className={inputCls}>
-                  <option value="">No es un taller</option>
-                  {talleres.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
-                  ))}
-                </select>
-                {tallerId && (
-                  <p className="text-[10px] text-neutral-400 mt-1">
-                    El registro de la sesión se escribe desde{" "}
-                    <a href="/clinica/talleres" className="underline hover:no-underline">Talleres</a>: uno para
-                    todo el grupo, más la nota de cada paciente.
-                  </p>
-                )}
+            {/*
+              ── UN TALLER YA NO ES UN BLOQUEO (01/09/2026, Rodrigo) ──────────
+              Aquí había un desplegable para decir «este tramo es el taller de
+              habilidades sociales». Duró un día: «hay que preparar los talleres
+              de tal forma que en las citas se pueda seleccionar los talleres.
+              **No como bloqueos sino como un tipo más de cita**».
+
+              Y tenía razón. Un bloqueo es una hora tachada: no tiene
+              asistentes, no se cobra, no se le pasa lista y no llega a la
+              historia de ningún niño. Ahora cada grupo de taller tiene su tipo
+              de cita y se apunta en la agenda como cualquier otra.
+
+              Solo se enseña este aviso a quien tenga un bloqueo de los de
+              entonces —en producción no hay ninguno—, para que sepa dónde ha
+              ido a parar aquello. Cuando no queden, este bloque se cae solo.
+            */}
+            {bloqueo.tallerId && (
+              <div className="rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                Este tramo estaba marcado como taller. Los talleres ya no se apuntan como bloqueos: se
+                crean como un tipo de cita más desde{" "}
+                <a href="/clinica/talleres" className="underline hover:no-underline">Clínica → Talleres</a>.
               </div>
             )}
             <div>

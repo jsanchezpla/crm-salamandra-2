@@ -62,6 +62,23 @@ export function NuevaCitaDrawer({
   }, [eventTypes, createForm.eventTypeId]);
 
   /*
+   * ── ¿ES UN TALLER? (01/09/2026, Rodrigo) ─────────────────────────────────
+   *
+   * «Hay que preparar los talleres de tal forma que en las citas se pueda
+   * seleccionar los talleres. No como bloqueos sino como un tipo más de cita.»
+   *
+   * Un taller es un tipo de cita más, pero SIN paciente: van varios, y quiénes
+   * son ya está dicho en el grupo. Así que al elegirlo desaparece la mitad de
+   * arriba del formulario —familia, paciente, correo y teléfono—, que en un
+   * taller no significa nada: no hay UNA familia a la que mandarle nada.
+   *
+   * El profesional también deja de ser obligatorio: si no se elige, lo lleva
+   * quien coordina el grupo (lo resuelve el servidor).
+   */
+  const esTaller = Boolean(selectedEventType?.tallerGrupoId);
+  const hayTalleres = useMemo(() => eventTypes.some((e) => e.tallerGrupoId), [eventTypes]);
+
+  /*
    * ── EL TECHO DE LOS 300 PACIENTES (28/08/2026) ────────────────────────────
    *
    * `patients` venía del padre, que pedía `/api/pacientes` sin más: ese endpoint
@@ -262,9 +279,11 @@ export function NuevaCitaDrawer({
     setFormError(null);
     if (!createForm.eventTypeId) { setFormError("Selecciona tipo de cita"); return; }
     if (!createForm.date || !createForm.time) { setFormError("Fecha y hora son obligatorias"); return; }
-    if (!createForm.clientName.trim()) { setFormError("Nombre del cliente obligatorio"); return; }
+    // Un taller no tiene cliente: su nombre lo pone el grupo, en el servidor.
+    if (!esTaller && !createForm.clientName.trim()) { setFormError("Nombre del cliente obligatorio"); return; }
     // Solo si hay equipo del que elegir: sin módulo `team` el campo ni se pinta.
-    if (teamMembers.length > 0 && !createForm.teamMemberId) {
+    // En un taller es opcional: sin elegir a nadie lo lleva quien coordina.
+    if (!esTaller && teamMembers.length > 0 && !createForm.teamMemberId) {
       setFormError("Elige el profesional que la atiende");
       return;
     }
@@ -284,12 +303,16 @@ export function NuevaCitaDrawer({
      * La regla y el texto viven en `lib/citas/contactoCita.js`, los mismos que
      * usa el servidor. Estaban escritos cuatro veces y ya divergían.
      */
-    const aviso = avisoDeContacto(
-      repasarContactoDeCita({
-        clientEmail: createForm.clientEmail,
-        clientPhone: createForm.clientPhone,
-      })
-    );
+    // En un taller no hay a quién avisar (son ocho familias), así que este
+    // repaso no aplica: preguntarlo sería pedir una decisión sobre nada.
+    const aviso = esTaller
+      ? null
+      : avisoDeContacto(
+          repasarContactoDeCita({
+            clientEmail: createForm.clientEmail,
+            clientPhone: createForm.clientPhone,
+          })
+        );
     if (aviso && !(await confirmar(aviso))) return;
 
     // La repetición se calcula ANTES de crear nada: si el «hasta» no da
@@ -308,18 +331,28 @@ export function NuevaCitaDrawer({
     try {
       const scheduledAt = new Date(`${createForm.date}T${createForm.time}`).toISOString();
       // El mismo cuerpo para la primera cita y para sus repeticiones.
-      const cuerpoCita = {
-        eventTypeId: createForm.eventTypeId,
-        clientId: createForm.clientId || null,
-        clientName: createForm.clientName.trim(),
-        clientEmail: createForm.clientEmail.trim(),
-        clientPhone: createForm.clientPhone.trim(),
-        modality: createForm.modality,
-        additionalData: createForm.additionalData.trim() || null,
-        notes: createForm.notes.trim() || null,
-        patientId: createForm.patientId || null,
-        teamMemberId: createForm.teamMemberId || null,
-      };
+      const cuerpoCita = esTaller
+        ? {
+            // Un taller solo necesita saber CUÁL es y cuándo: el nombre, los
+            // asistentes y quién lo imparte salen del grupo (en el servidor).
+            eventTypeId: createForm.eventTypeId,
+            clientName: selectedEventType?.name ?? "Taller",
+            modality: createForm.modality,
+            notes: createForm.notes.trim() || null,
+            teamMemberId: createForm.teamMemberId || null,
+          }
+        : {
+            eventTypeId: createForm.eventTypeId,
+            clientId: createForm.clientId || null,
+            clientName: createForm.clientName.trim(),
+            clientEmail: createForm.clientEmail.trim(),
+            clientPhone: createForm.clientPhone.trim(),
+            modality: createForm.modality,
+            additionalData: createForm.additionalData.trim() || null,
+            notes: createForm.notes.trim() || null,
+            patientId: createForm.patientId || null,
+            teamMemberId: createForm.teamMemberId || null,
+          };
       const enviar = (insistir) =>
         fetch("/api/citas/bookings", {
           method: "POST",
@@ -363,7 +396,14 @@ export function NuevaCitaDrawer({
        *
        * Solo se avisa cuando NO sale. Si sale, no hay nada que contar.
        */
-      if (j.data && j.data.emailEnviado === false) {
+      /*
+       * …salvo en un TALLER (01/09/2026), donde el correo no es que haya
+       * fallado: es que no lo hay. Son ocho familias, cada una con su
+       * consentimiento, y avisarlas es otra decisión con su propia plantilla.
+       * El servidor lo dice con `emailMotivo: "taller"`; enseñar aquí «no le
+       * ha llegado el correo» sería inventarse un problema.
+       */
+      if (j.data && j.data.emailEnviado === false && j.data.emailMotivo !== "taller") {
         const porQue = {
           sin_email: "no tiene correo en su ficha",
           sin_consentimiento: "ha pedido no recibir correos",
@@ -452,6 +492,20 @@ export function NuevaCitaDrawer({
                 </div>
               )}
 
+              {/*
+                ── UN TALLER NO TIENE FAMILIA (01/09/2026, Rodrigo) ───────────
+                Van varios pacientes y quiénes son ya está dicho en su grupo, así
+                que aquí sobra todo lo de «quién viene». Se enseña de quién es la
+                cita y se pasa directamente a cuándo.
+              */}
+              {esTaller ? (
+                <div className="text-xs rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-emerald-800">
+                  <strong>{selectedEventType?.name}</strong> — es un taller: la cita se crea con todos los
+                  pacientes apuntados a ese grupo y con quien lo imparte. La lista se pasa después, al abrir
+                  la cita en la agenda.
+                </div>
+              ) : (
+              <>
               {/*
                 PRIMERO QUIÉN, DESPUÉS QUÉ (13/08/2026, Rodrigo: «poner en la
                 cita manual primero el paciente y segundo el tipo de cita»). El
@@ -557,6 +611,8 @@ export function NuevaCitaDrawer({
                   </p>
                 </div>
               )}
+              </>
+              )}
 
               <div>
                 <label className="block text-[11px] font-medium text-neutral-500 mb-1">Tipo de cita *</label>
@@ -569,7 +625,15 @@ export function NuevaCitaDrawer({
                   }}
                   options={[
                     { value: "", label: "— Selecciona —", pinned: true },
-                    ...eventTypes.map((e) => ({ value: e.id, label: `${e.name} (${e.duration} min)` })),
+                    // Los talleres van marcados: es un tipo de cita más, pero se
+                    // comporta distinto (no lleva paciente) y quien lo elige
+                    // tiene que saberlo antes de pulsarlo, no después.
+                    ...eventTypes.map((e) => ({
+                      value: e.id,
+                      label: e.tallerGrupoId
+                        ? `Taller · ${e.name} (${e.duration} min)`
+                        : `${e.name} (${e.duration} min)`,
+                    })),
                   ]}
                   className={inputCls}
                   /*
@@ -583,6 +647,12 @@ export function NuevaCitaDrawer({
                    */
                   searchable
                 />
+                {hayTalleres && !esTaller && (
+                  <p className="text-[10px] text-neutral-400 mt-1">
+                    Los talleres salen aquí marcados como «Taller». Al elegir uno no hace falta paciente:
+                    van los apuntados a su grupo.
+                  </p>
+                )}
                 {bonoAviso && (
                   <div
                     className={`mt-1.5 text-[11px] leading-snug rounded-md px-2.5 py-1.5 border ${
@@ -658,26 +728,29 @@ export function NuevaCitaDrawer({
                 </p>
               )}
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Email</label>
-                  <input
-                    type="email"
-                    value={createForm.clientEmail}
-                    onChange={(e) => updateCreateForm("clientEmail", e.target.value)}
-                    className={inputCls}
-                  />
+              {/* En un taller no hay UN contacto: son ocho familias. */}
+              {!esTaller && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-medium text-neutral-500 mb-1">Email</label>
+                    <input
+                      type="email"
+                      value={createForm.clientEmail}
+                      onChange={(e) => updateCreateForm("clientEmail", e.target.value)}
+                      className={inputCls}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium text-neutral-500 mb-1">Teléfono</label>
+                    <input
+                      type="tel"
+                      value={createForm.clientPhone}
+                      onChange={(e) => updateCreateForm("clientPhone", e.target.value)}
+                      className={inputCls}
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Teléfono</label>
-                  <input
-                    type="tel"
-                    value={createForm.clientPhone}
-                    onChange={(e) => updateCreateForm("clientPhone", e.target.value)}
-                    className={inputCls}
-                  />
-                </div>
-              </div>
+              )}
 
               {/*
                 El profesional es OBLIGATORIO desde el 12/08/2026 (Rodrigo). Se
@@ -689,17 +762,29 @@ export function NuevaCitaDrawer({
               */}
               {teamMembers.length > 0 && (
                 <div>
-                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Profesional *</label>
+                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">
+                    Profesional {esTaller ? "" : "*"}
+                  </label>
                   <Select
                     value={createForm.teamMemberId}
                     onChange={(v) => updateCreateForm("teamMemberId", v)}
                     options={[
-                      { value: "", label: "— Selecciona —", pinned: true },
+                      {
+                        value: "",
+                        label: esTaller ? "— Quien coordina el grupo —" : "— Selecciona —",
+                        pinned: true,
+                      },
                       ...teamMembers.map((m) => ({ value: m.id, label: m.displayName })),
                     ]}
                     placeholder="— Selecciona —"
                     searchable
                   />
+                  {esTaller && (
+                    <p className="text-[10px] text-neutral-400 mt-1">
+                      Es quien figura como responsable de la cita. Los demás que lo imparten salen igual, y
+                      el taller aparece en la agenda de todos ellos.
+                    </p>
+                  )}
                 </div>
               )}
 
