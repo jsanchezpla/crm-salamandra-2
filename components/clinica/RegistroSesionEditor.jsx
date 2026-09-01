@@ -103,6 +103,7 @@ import {
   paraInputLocal,
   payloadDePreparacion,
   pidePreparar,
+  proximasSesionesPendientes,
   sesionDeLaCita,
 } from "@/lib/clinica/prepararSesion.js";
 import ApartadosEditor from "@/components/clinica/ApartadosEditor.jsx";
@@ -169,6 +170,61 @@ const NOMBRES_AUDIO = {
 };
 const TIPO_AUDIO = { objectives: "lista" };
 
+const fmtDiaCorto = (v) => {
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("es-ES", { day: "numeric", month: "long" });
+};
+
+/**
+ * El cartelito de que la preparación no la ha escrito ella: viene de lo que
+ * dejó apuntado en «Próximas sesiones» de la sesión anterior.
+ *
+ * Se dice, y no se cuela en silencio, por lo de siempre en lo clínico: un texto
+ * que aparece solo en un recuadro y acaba guardado en una nota firmada tiene
+ * que llevar escrito de dónde salió. Desaparece en cuanto se vacía el recuadro.
+ */
+function AvisoPrepHeredada({ de }) {
+  if (!de) return null;
+  return (
+    <p className="text-[10px] text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5 leading-relaxed">
+      Viene de <strong>«Próximas sesiones»</strong> de la sesión del {fmtDiaCorto(de)}. Edítalo o bórralo:
+      no se guarda hasta que guardes el registro.
+    </p>
+  );
+}
+
+/**
+ * Quién dio la sesión (01/09/2026, Rodrigo). Un desplegable con el equipo, y el
+ * nombre a secas si no hay lista que desplegar —el centro puede no tener el
+ * módulo de equipo, y entonces esto se comporta como se comportaba ayer—.
+ *
+ * Sale en las dos cabeceras de esta pantalla (el registro y la preparación)
+ * porque la firma se decide igual en las dos: quien prepara una sesión no es
+ * siempre quien la da.
+ */
+function FirmaDeLaSesion({ equipo, valor, onCambio, nombre }) {
+  if (!equipo.length) return <p className="text-xs text-neutral-500 mt-1">{nombre}</p>;
+  return (
+    <label className="block mt-1">
+      <span className="sr-only">Profesional que da la sesión</span>
+      <select
+        value={valor}
+        onChange={(e) => onCambio(e.target.value)}
+        className="text-xs text-neutral-600 bg-transparent border border-neutral-200 rounded-lg px-2 py-1 focus:outline-none focus:border-neutral-400 max-w-full"
+      >
+        {/* Sin firma solo mientras no se elige: el alta la exige. */}
+        {!valor && <option value="">Sin profesional</option>}
+        {equipo.map((m) => (
+          <option key={m.id} value={m.id}>
+            {m.displayName}
+            {m.status === "inactive" ? " (ya no está)" : ""}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 const fmtSize = (b) => (b == null ? "" : b < 1024 * 1024 ? `${Math.round(b / 1024)} KB` : `${(b / (1024 * 1024)).toFixed(1)} MB`);
 const fmtDur = (s) => (s == null ? "" : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`);
 
@@ -192,6 +248,21 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
 
   const [patient, setPatient] = useState(null);
   const [loadingPatient, setLoadingPatient] = useState(true);
+  // ── QUIÉN DIO LA SESIÓN (01/09/2026, Rodrigo) ─────────────────────────────
+  // «Se ha apuntado un registro a nombre de un terapeuta cuando el registro lo
+  // había hecho otro terapeuta y no podemos cambiarlo.» Y no se podía desde
+  // ninguna pantalla: esta enseñaba el terapeuta PRINCIPAL DEL PACIENTE —no el
+  // de la sesión— y el alta firmaba con él, así que una sesión que cubre una
+  // compañera nacía mal firmada y ahí se quedaba. Ahora se elige, y lo elegido
+  // es lo que se guarda: al estrenar y al corregir una ya escrita.
+  const [terapeutaId, setTerapeutaId] = useState("");
+  const [equipo, setEquipo] = useState([]);
+  // De qué sesión viene la preparación que se ha escrito sola (01/09/2026).
+  // `null` cuando la ha escrito ella, que es el caso normal.
+  const [prepHeredadaDe, setPrepHeredadaDe] = useState(null);
+  // Se hereda UNA vez por visita: sin esto, borrar el texto heredado lo volvería
+  // a traer al siguiente render y no habría manera de quitárselo de encima.
+  const yaHeredado = useRef(false);
   // La sesión que se está editando, ya cargada. `null` mientras se estrena una.
   const [sesion, setSesion] = useState(null);
   // «Cargando» de VERDAD: mientras esto esté puesto no se pinta el formulario.
@@ -266,6 +337,34 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
   }, [id]);
 
   /**
+   * El equipo, para poder decir quién dio la sesión.
+   *
+   * `status=all` a propósito: hay que poder firmar a nombre de alguien que ya
+   * no está en el centro. De las 22.045 sesiones importadas de Aumenta, 4.045
+   * las escribió gente que se fue, y corregir una firma HACIA una de esas
+   * personas es justo uno de los casos que hay que poder arreglar.
+   *
+   * Resiliente, como en la ficha del paciente: si el centro no tiene el módulo
+   * de equipo esto da 403, la lista se queda vacía y la pantalla enseña el
+   * nombre de siempre sin desplegable.
+   */
+  useEffect(() => {
+    fetch(`/api/team?status=all&limit=200`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setEquipo(j?.data?.members ?? []))
+      .catch(() => {});
+  }, []);
+
+  // Estrenando registro, la firma arranca en el terapeuta principal del
+  // paciente —que es lo que hacía antes—, pero ahora se puede cambiar antes de
+  // guardar. Solo se pone si no hay nada elegido: no puede pisar lo que acabe
+  // de elegir quien escribe, ni la firma de la sesión que se está editando.
+  useEffect(() => {
+    if (sessionId || terapeutaId || !patient?.mainTherapistId) return;
+    setTerapeutaId(patient.mainTherapistId);
+  }, [sessionId, terapeutaId, patient?.mainTherapistId]);
+
+  /**
    * Las plantillas del centro y, si se está editando, LA SESIÓN — en el mismo
    * efecto y con un solo `await` de los dos.
    *
@@ -324,6 +423,7 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
     const suyos = apartadosConPlantillas(s.contentSections, plantillasDelCentro);
     const lista = suyos.length ? suyos : PLANTILLA_BASE.registro.apartados.map((a) => ({ ...a }));
     setSesion(s);
+    setTerapeutaId(s.therapistId ?? "");
     setApartados(lista);
     setPlantillaKey(s.contentSections?.[CLAVE_PLANTILLA] ?? plantillasDelCentro?.[0]?.key ?? "");
     setFecha(paraInputLocal(s.sessionDate));
@@ -334,6 +434,53 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
       ...aFormulario(valoresDeSesion(s), lista),
     });
   }
+
+  /**
+   * ── «PRÓXIMAS SESIONES» ES LA PREPARACIÓN DE LA SIGUIENTE (01/09/2026) ───
+   *
+   * Rodrigo: «todo lo que sea Próximas sesiones se tiene que registrar
+   * automáticamente como borrador para la siguiente preparación». Al abrir un
+   * registro cuya preparación está VACÍA se busca lo que la profesional dejó
+   * apuntado en la sesión anterior de ese paciente y se escribe aquí, con un
+   * cartel que dice de dónde sale.
+   *
+   * Solo si está vacía, y esa es la regla que no se toca: lo escrito a mano
+   * nunca se pisa. Y no se guarda nada por su cuenta — esto es una propuesta en
+   * pantalla hasta que alguien le dé a guardar (ver `proximasSesionesPendientes`).
+   *
+   * Espera a que termine de resolverse la sesión: si se adelantara, escribiría
+   * en un formulario que `volcarSesion` va a sobrescribir medio segundo después.
+   */
+  useEffect(() => {
+    if (yaHeredado.current || resolviendo || loadingPatient || !patient) return;
+    yaHeredado.current = true;
+    // Con preparación escrita no hay nada que heredar: ni se pregunta.
+    if (String(form.prepText ?? "").trim()) return;
+    let vivo = true;
+    (async () => {
+      const suyas = await fetch(`/api/clinica/sessions?patientId=${encodeURIComponent(id)}&limit=100`, { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => j?.data?.sessions ?? [])
+        .catch(() => []);
+      if (!vivo) return;
+      const previa = proximasSesionesPendientes(suyas, {
+        antesDe: cuandoEsLaSesion(),
+        excluirId: sessionId,
+      });
+      if (!previa) return;
+      // Se vuelve a mirar sobre el estado de AHORA: entre la petición y esto ha
+      // podido ponerse a escribir, y lo suyo manda siempre.
+      setForm((f) => {
+        if (String(f.prepText ?? "").trim()) return f;
+        setPrepHeredadaDe(previa.sesion.sessionDate);
+        return { ...f, prepText: previa.texto };
+      });
+    })();
+    return () => {
+      vivo = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolviendo, loadingPatient, patient, id, sessionId]);
 
   /**
    * ── LA REGLA: UNA CITA, UN REGISTRO (01/09/2026, Rodrigo) ────────────────
@@ -549,6 +696,16 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
     );
   }
 
+  /**
+   * La firma que se va a guardar: la elegida en el desplegable y, si aún no hay
+   * ninguna (el equipo no ha cargado, o el centro no tiene el módulo), la de
+   * siempre — el terapeuta principal del paciente. Nunca se queda vacía por el
+   * camino: el alta la exige.
+   */
+  function firmaDeLaSesion() {
+    return terapeutaId || sesion?.therapistId || patient?.mainTherapistId || "";
+  }
+
   /** La hora que se ve en el input, tal cual. Sin zona: `new Date` la lee local. */
   function cuandoEsLaSesion() {
     const escrita = fecha ? new Date(fecha) : new Date();
@@ -566,7 +723,8 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
    * devolverla a «Borrador», que es lo que haría reusar el alta tal cual.
    */
   async function guardarPreparacion() {
-    if (!sesion && !patient?.mainTherapistId) {
+    const firma = firmaDeLaSesion();
+    if (!sesion && !firma) {
       setErrorMsg("El paciente no tiene terapeuta asignado. Asígnale uno en su ficha antes de guardar.");
       return;
     }
@@ -574,12 +732,21 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
     setErrorMsg(null);
     try {
       if (sesion) {
-        await parchear({ prepText: form.prepText, sessionDate: cuandoEsLaSesion().toISOString() }, "Preparación guardada");
+        await parchear(
+          {
+            prepText: form.prepText,
+            sessionDate: cuandoEsLaSesion().toISOString(),
+            // Quién la da también se corrige desde aquí: el servidor descarta el
+            // campo si no ha cambiado y rechaza a quien no sea del centro.
+            ...(firma ? { therapistId: firma } : {}),
+          },
+          "Preparación guardada"
+        );
         return;
       }
       const payload = payloadDePreparacion({
         patientId: id,
-        therapistId: patient.mainTherapistId,
+        therapistId: firma,
         fecha: cuandoEsLaSesion(),
         prepText: form.prepText,
         bookingId: cita,
@@ -647,7 +814,8 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
    * @param {boolean} cerrar  además de guardar, cerrar el registro («finalizar»)
    */
   async function guardarRegistro(cerrar = false) {
-    if (!sesion && !patient?.mainTherapistId) {
+    const firma = firmaDeLaSesion();
+    if (!sesion && !firma) {
       setErrorMsg("El paciente no tiene terapeuta asignado. Asígnale uno en su ficha antes de guardar.");
       return;
     }
@@ -666,6 +834,10 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
         prepText: form.prepText,
         parentFeedback: form.parentFeedback,
         internalNotes: form.internalNotes,
+        // Quién dio la sesión (01/09/2026). Viaja siempre que haya alguien
+        // elegido; el servidor lo descarta si es el mismo que ya estaba y
+        // rechaza el que no sea del equipo del centro.
+        ...(firma ? { therapistId: firma } : {}),
       };
 
       // ── Editando: PATCH sobre la misma sesión ───────────────────────────
@@ -695,7 +867,7 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
       // ── Estrenando: alta ────────────────────────────────────────────────
       const payload = {
         patientId: id,
-        therapistId: patient.mainTherapistId,
+        therapistId: firma,
         ...cuerpo,
         // De qué cita sale, si sale de una: es lo que hace que volver a esa
         // cita traiga ESTE registro y no uno nuevo (01/09/2026).
@@ -762,7 +934,19 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
     onAviso: setErrorMsg,
   });
 
-  const therapistName = patient?.therapist?.name ?? "—";
+  /**
+   * El nombre que se enseña cuando NO hay desplegable (el centro no tiene
+   * módulo de equipo, o la lista aún no ha llegado).
+   *
+   * Manda la firma de la SESIÓN, no el terapeuta principal del paciente: eran
+   * lo mismo hasta que se pudo cambiar, y desde entonces enseñar el del
+   * paciente sería mentir justo en la pantalla desde la que se corrige.
+   */
+  const terapeutaDelEquipo = equipo.find((m) => m.id === terapeutaId);
+  const therapistName =
+    terapeutaDelEquipo?.displayName ??
+    (sesion?.therapist?.name || (terapeutaId === patient?.mainTherapistId ? patient?.therapist?.name : null)) ??
+    "—";
   const ta = "w-full px-3 py-2 text-xs border border-neutral-200 rounded-lg focus:outline-none focus:border-neutral-400 leading-relaxed";
 
   // Mientras se resuelve de qué sesión estamos hablando NO se pinta el
@@ -921,7 +1105,7 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
               <div>
                 <div className="eyebrow mb-1">{sesion ? "Registro de sesión" : "Nuevo registro de sesión"}</div>
                 <h1 className="font-display text-2xl lg:text-3xl text-[var(--ink-900)] tracking-tight">{patient.firstName} {patient.lastName}</h1>
-                <p className="text-xs text-neutral-500 mt-1">{therapistName}</p>
+                <FirmaDeLaSesion equipo={equipo} valor={terapeutaId} onCambio={setTerapeutaId} nombre={therapistName} />
               </div>
               <div>
                 <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1.5">Día y hora de la sesión</div>
@@ -1088,6 +1272,7 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
             <p className="text-[10px] text-neutral-400 -mt-2">
               Lo que preparaste antes de la sesión. Se guarda con ella y sirve para redactar el informe.
             </p>
+            {form.prepText.trim() && <AvisoPrepHeredada de={prepHeredadaDe} />}
             <textarea
               className={ta}
               rows={3}
@@ -1199,7 +1384,9 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
           <div className="text-center mb-6">
             <div className="eyebrow mb-2">Preparar la sesión</div>
             <h1 className="font-display text-2xl lg:text-3xl text-[var(--ink-900)] tracking-tight">{patient.firstName} {patient.lastName}</h1>
-            <p className="text-xs text-neutral-500 mt-1">{therapistName}</p>
+            <div className="inline-flex justify-center mt-1">
+              <FirmaDeLaSesion equipo={equipo} valor={terapeutaId} onCambio={setTerapeutaId} nombre={therapistName} />
+            </div>
           </div>
 
           <div className="max-w-2xl mx-auto space-y-4">
@@ -1240,6 +1427,11 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
 
             <div>
               <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1.5">Preparación</div>
+              {form.prepText.trim() && (
+                <div className="mb-1.5">
+                  <AvisoPrepHeredada de={prepHeredadaDe} />
+                </div>
+              )}
               <textarea
                 className={ta}
                 rows={6}

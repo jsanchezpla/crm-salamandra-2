@@ -340,6 +340,61 @@ para un mes cerrado es exacta.
 > Las secciones "Lo que NO hace" y "Backlog" de abajo describen el Sprint 1 visual
 > original; parte ya está cubierta por Fase 1.
 
+## Quién dio la sesión se corrige (01/09/2026)
+
+> «Se ha apuntado un registro a nombre de un terapeuta cuando el registro lo
+> había hecho otro terapeuta y no podemos cambiarlo.» (Rodrigo)
+
+Y no se podía desde ninguna pantalla: `RegistroSesionEditor` enseñaba el
+terapeuta **principal del paciente** —no el de la sesión— y el alta firmaba con
+él, así que una sesión que cubre una compañera nacía mal firmada y ahí se
+quedaba. Pasa de dos maneras: cubriendo una baja, y escribiendo el registro
+desde la ficha del paciente.
+
+Ahora la cabecera del formulario (las dos: registro y preparación) lleva un
+desplegable con el equipo, `FirmaDeLaSesion`. Lo elegido es lo que se guarda, al
+estrenar y al corregir. La lista se pide con `status=all` **a propósito**: hay
+que poder firmar a nombre de alguien que ya no está en el centro, que es
+justamente el caso de las 4.045 sesiones importadas.
+
+Por el lado del servidor, `therapistId` entra en `PATCH_FIELDS` de
+`app/api/clinica/sessions/[id]` con dos frenos: tiene que ser un UUID y tiene
+que existir en `team_members` **de ese schema** (un id con forma de id firmaría
+la nota a nombre de una fila que no existe, o de otro tenant). Queda en el
+`AuditLog` con el antes y el después —`therapistId` ya estaba en la lista blanca
+de `auditSummary`—, que es lo que hace que cambiar la firma de una nota clínica
+no sea un movimiento invisible.
+
+⚠️ **Las sesiones de TALLER no se editan desde ahí** (su cuerpo se propaga al
+grupo, ver «Talleres»), así que su firma tampoco: se corrige desde el taller.
+
+## «Próximas sesiones» es la preparación de la siguiente (01/09/2026)
+
+> «Todo lo que sea Próximas sesiones se tiene que registrar automáticamente
+> como borrador para la siguiente preparación.» (Rodrigo)
+
+Lo que se escribe en el apartado «Próximas sesiones» (`nextSessionNotes`) no iba
+a ninguna parte: se guardaba el martes y el jueves la preparación abría en
+blanco. Para recuperarlo había que salir del formulario, abrir la sesión
+anterior en la ficha y copiarlo a mano — en Aumenta, con 22.064 sesiones, había
+**once** con preparación escrita.
+
+Al abrir un registro cuya preparación está **vacía**, `RegistroSesionEditor`
+pide las sesiones del paciente y escribe en el recuadro lo que dejó apuntado la
+sesión anterior, con un cartel que dice de dónde sale. La regla vive en
+`proximasSesionesPendientes` (`lib/clinica/prepararSesion.js`) y la prueba
+`_smoke-proximas-sesiones.mjs`:
+
+- **La anterior, no la última**: la más reciente ESTRICTAMENTE antes de esta.
+  Desde que una sesión puede nacer con fecha futura (se prepara la del jueves el
+  martes), la última de la lista puede ser posterior.
+- **Nunca ella misma** (`excluirId`), o una sesión ya escrita se heredaría sola.
+- **Solo si está vacía**: lo escrito a mano no se pisa nunca.
+- **No guarda nada ni crea nada.** Es una propuesta en pantalla hasta que
+  alguien le da a guardar. Se descartó la otra forma posible —que al cerrar un
+  registro el CRM diera de alta el borrador de la siguiente cita— porque
+  llenaría la historia clínica de registros que nadie ha abierto.
+
 ## Registro de sesión en 3 partes (sprint Aumenta 2026-07, punto 4)
 
 Una sesión ya no es solo el informe de lo que pasó dentro:
@@ -902,7 +957,7 @@ Tabla: `clinic_sessions`. Registro estructurado de una sesión clínica.
 | Campo | Tipo | Notas |
 | --- | --- | --- |
 | `patientId` | UUID NOT NULL | FK a `patients` (ON DELETE RESTRICT). |
-| `therapistId` | UUID **nullable** | FK a `team_members`. Opcional desde el 02/08/2026 (`migrate-sesion-terapeuta-opcional.js`): al importar cuatro años de Aumenta salieron 4.045 sesiones firmadas por gente que ya no está; una nota sin firma es mejor que una atribuida a otra persona. |
+| `therapistId` | UUID **nullable** | FK a `team_members`. Opcional desde el 02/08/2026 (`migrate-sesion-terapeuta-opcional.js`): al importar cuatro años de Aumenta salieron 4.045 sesiones firmadas por gente que ya no está; una nota sin firma es mejor que una atribuida a otra persona. **Se cambia a posteriori desde el 01/09/2026** (ver abajo). |
 | `sessionDate` | TIMESTAMPTZ NOT NULL | Fecha y hora de la sesión. |
 | `duration` | INTEGER nullable | Minutos. |
 | `objectives` | JSONB NOT NULL DEFAULT `[]` | Array de objetivos trabajados (chips). |

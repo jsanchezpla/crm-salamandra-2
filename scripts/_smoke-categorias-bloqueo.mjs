@@ -29,6 +29,7 @@ import {
   categoriasDe,
   claveDesdeTitulo,
   claveValida,
+  categoriaPorEtiqueta,
   limpiaColorCategoria,
   normalizarCategorias,
 } from "../lib/citas/categoriasBloqueo.js";
@@ -141,14 +142,32 @@ test("una categoría borrada no rompe el bloqueo que la usaba", () => {
   assert.equal(colorDeBloqueo({ categoria: null, persona: "#AABBCC" }), "#AABBCC");
 });
 
-test("las seis de fábrica están, con clave y color distinguibles", () => {
+test("las de fábrica están, con clave y color distinguibles", () => {
   const cats = normalizarCategorias(CATEGORIAS_CLINICA_BASE);
-  assert.equal(cats.length, 6);
+  assert.equal(cats.length, 9);
   assert.deepEqual(
     cats.map((c) => c.key),
-    ["reunion_equipo", "trabajo_interno", "gestion_documental", "valoraciones", "libre_pacientes", "descanso"]
+    [
+      "reunion_equipo",
+      "trabajo_interno",
+      "gestion_documental",
+      "valoraciones",
+      "libre_pacientes",
+      "descanso",
+      "taller_grupo",
+      "sesion_paciente",
+      "reservado_paciente",
+    ]
   );
-  assert.equal(new Set(cats.map((c) => c.color)).size, 6, "seis colores distintos");
+  assert.equal(new Set(cats.map((c) => c.color)).size, 9, "nueve colores distintos");
+});
+
+test("las tres nuevas NO cuentan como trabajo interno en Productividad", () => {
+  // Son horas con pacientes. Si contaran, el sumatorio del centro se movería
+  // 1.500 bloqueos de golpe sin que nadie lo haya pedido.
+  assert.equal(clasificarBloqueo("TALLER H.H.S.S", "taller_grupo"), null);
+  assert.equal(clasificarBloqueo("BONOS Sahara", "sesion_paciente"), null);
+  assert.equal(clasificarBloqueo("Reservado Iván, comienza el 22/09", "reservado_paciente"), null);
 });
 
 // ── 5. Productividad deja de adivinar, pero sin mover lo que ya contaba ─────
@@ -173,4 +192,79 @@ test("sin categoría, el texto sigue clasificando igual que antes", () => {
   assert.equal(clasificarBloqueo("Reservado t.i.", null), "ti");
   assert.equal(clasificarBloqueo("REUNIÓN EQUIPO", ""), "equipo");
   assert.equal(clasificarBloqueo("Vacaciones", null), null);
+});
+
+// ── 6. Etiqueta escrita a mano → categoría (backfill del 01/09/2026) ────────
+//
+// Los casos son literales de la agenda de Aumenta, con su recuento del día en
+// que se escribió esto. Si mañana una regla cambia y estos dejan de caer donde
+// caen, son 10.468 bloqueos los que se mueven de sitio en la agenda de quince
+// personas: por eso están aquí con nombre y apellidos.
+
+test("las clases que exportó Organízate caen en su categoría", () => {
+  const c = (l) => categoriaPorEtiqueta(l);
+  assert.equal(c("LIBRE PACIENTES"), "libre_pacientes"); //          2.983
+  assert.equal(c("DESCANSO"), "descanso"); //                        2.564
+  assert.equal(c("REUNIÓN EQUIPO"), "reunion_equipo"); //               528
+  assert.equal(c("GESTION DOCUMENTAL"), "gestion_documental"); //       434
+  assert.equal(c("VALORACIONES COMPLETAS"), "valoraciones"); //         173
+});
+
+test("«Reservado T.I.» en sus tres grafías es trabajo interno", () => {
+  // 1.677 + 299 + 218 bloqueos escritos de tres maneras por quince personas.
+  assert.equal(categoriaPorEtiqueta("Reservado T.I."), "trabajo_interno");
+  assert.equal(categoriaPorEtiqueta("Reservado T.I"), "trabajo_interno");
+  assert.equal(categoriaPorEtiqueta("Reservado t.i."), "trabajo_interno");
+});
+
+test("manda el principio de la etiqueta, no lo que se cuente después", () => {
+  // «GESTION DOCUMENTAL T.I.» lleva las dos escritas: gana la de delante, que
+  // es el tipo que eligieron de la lista.
+  assert.equal(categoriaPorEtiqueta("GESTION DOCUMENTAL T.I."), "gestion_documental");
+  // Una hora apartada como libre de pacientes en la que además hubo una
+  // coordinación sigue siendo la hora que el centro apartó.
+  assert.equal(
+    categoriaPorEtiqueta("LIBRE PACIENTES Reunión Coordinación con Laura B de 13:15 a 13:45"),
+    "libre_pacientes"
+  );
+  assert.equal(
+    categoriaPorEtiqueta("Reservado T.I. Reservado 30 minutos reunión coordinación con ISa de 13:15 a 13:45"),
+    "trabajo_interno"
+  );
+});
+
+test("«Reservado» a secas no es una clase: se lee lo que viene detrás", () => {
+  // Una reunión de coordinación con una compañera es reunión de equipo…
+  assert.equal(categoriaPorEtiqueta("Reservado Reunión con Arancha Coordinación"), "reunion_equipo");
+  assert.equal(categoriaPorEtiqueta("Reservado Reunión coordinación con Laura F"), "reunion_equipo");
+  // …y una hora guardada para un niño que empieza más tarde, no.
+  assert.equal(categoriaPorEtiqueta("Reservado Ivan Jiménez Comienza el día 22/09"), "reservado_paciente");
+  assert.equal(categoriaPorEtiqueta("Reservado"), "reservado_paciente");
+});
+
+test("las horas con pacientes van a las tres categorías nuevas", () => {
+  assert.equal(categoriaPorEtiqueta("TALLER H.H.S.S PEQUES CON LAURA G"), "taller_grupo");
+  assert.equal(categoriaPorEtiqueta("OTROS MENTE ACTIVA"), "taller_grupo");
+  assert.equal(categoriaPorEtiqueta("BONOS CARLA BORRALLO"), "sesion_paciente");
+  assert.equal(categoriaPorEtiqueta("APOYO ESO Alejandro Lillo"), "sesion_paciente");
+  assert.equal(categoriaPorEtiqueta("RECUPERACIÓN David Espinosa 15 minutos"), "sesion_paciente");
+});
+
+test("ante la duda, sin categoría", () => {
+  assert.equal(categoriaPorEtiqueta("Vacaciones"), null);
+  assert.equal(categoriaPorEtiqueta("Congreso en Sevilla"), null);
+  assert.equal(categoriaPorEtiqueta(""), null);
+  assert.equal(categoriaPorEtiqueta(null), null);
+});
+
+test("solo se devuelve una clave que el centro tenga dada de alta", () => {
+  // Un centro con solo dos categorías no puede acabar con bloqueos apuntando a
+  // una tercera que no existe: se quedarían huérfanos al pintar.
+  const dos = normalizarCategorias([
+    { key: "descanso", label: "Descanso", color: "#DB2777" },
+    { key: "trabajo_interno", label: "Trabajo interno", color: "#7C3AED" },
+  ]);
+  assert.equal(categoriaPorEtiqueta("DESCANSO", dos), "descanso");
+  assert.equal(categoriaPorEtiqueta("LIBRE PACIENTES", dos), null);
+  assert.equal(categoriaPorEtiqueta("DESCANSO", []), null);
 });

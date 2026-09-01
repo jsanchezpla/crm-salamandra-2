@@ -1589,11 +1589,63 @@ en cada carga del calendario. El bloqueo guarda solo la clave
 (`team_blocks.category_key`), sin FK: son un JSONB, no una tabla.
 
 **Nace vacía, a propósito.** Sin categorías guardadas todo se comporta como
-antes del 01/09/2026. Las seis de un centro clínico están en
+antes del 01/09/2026. Las **nueve** de un centro clínico están en
 `CATEGORIAS_CLINICA_BASE` y se cargan con un botón de la tarjeta o con
 `scripts/seed-categorias-bloqueo.js <slug> --confirm`; no se le meten a todo el
 mundo, porque «Valoraciones» o «Libre de pacientes» no significan nada en una
 agencia de management.
+
+### Las nueve, y por qué no son seis
+
+Las seis del encargo más **tres que trajo la agenda de verdad** el mismo día, al
+ir a etiquetar los 10.468 bloqueos de Aumenta: ~1.500 no eran ninguna de las
+seis. `BONOS Carla Borrallo`, `TALLER H.H.S.S`, `OTROS MENTE ACTIVA`,
+`APOYO ESO`, `RECUPERACIÓN`, `Reservado <niño>, comienza el día 15/09`. Todas
+son **horas con pacientes** apuntadas como bloqueo porque no pasan por la agenda
+de citas.
+
+| Clave | Rótulo | Cuenta en Productividad |
+| --- | --- | --- |
+| `reunion_equipo` | Reunión de equipo | «equipo» |
+| `trabajo_interno` | Trabajo interno | «ti» |
+| `gestion_documental` | Gestión documental | no |
+| `valoraciones` | Valoraciones | no |
+| `libre_pacientes` | Libre de pacientes | no |
+| `descanso` | Descanso | no |
+| `taller_grupo` | Taller o grupo | no |
+| `sesion_paciente` | Sesión de bono, apoyo o recuperación | no |
+| `reservado_paciente` | Hora reservada a un paciente | no |
+
+Las tres nuevas **no cuentan como trabajo interno**, y esa es la razón de que
+sean categorías propias y no `trabajo_interno`: colar ahí 1.500 horas de
+atención directa movería el sumatorio que el centro lleva meses mirando.
+
+### El backfill: de la etiqueta a la categoría
+
+`scripts/backfill-categorias-bloqueo.js <slug> [--confirm]` pone categoría a los
+bloqueos que **no tienen ninguna**, leyendo su etiqueta. Las reglas viven en
+`categoriaPorEtiqueta` (`lib/citas/categoriasBloqueo.js`) y se prueban en
+`_smoke-categorias-bloqueo.mjs` con casos literales de producción.
+
+La regla es **manda el principio de la etiqueta**: lo que va delante no es texto
+que alguien escribió, es el nombre del tipo que eligió en Organízate, y la
+exportación lo dejó pegado a la nota de esa hora («LIBRE PACIENTES Reunión
+coordinación con Laura B de 13:15 a 13:45» → libre de pacientes). La única
+excepción es «Reservado» a secas, que no es el nombre de ninguna clase: ahí se
+lee lo de detrás, y separa las 44 reuniones de coordinación de las horas
+guardadas a un niño que empieza más tarde. Lo que no cae en ninguna regla se
+queda **sin categoría**: adivinar mal es peor que no adivinar.
+
+En seco por defecto (enseña el reparto por categoría y **por persona**) y con
+lista de deshacer guardada en el temporal **antes** de tocar nada —`--deshacer
+<fichero>`—. Nunca pisa una categoría puesta a mano, y da de alta las categorías
+de fábrica que le falten al centro sin tocar las que ya tenía.
+
+**Corrido en Aumenta el 01/09/2026**: 10.465 bloqueos etiquetados, cero sin
+categoría. Reparto: libre de pacientes 3.006 · descanso 2.564 · trabajo interno
+2.215 · hora reservada 666 · reunión de equipo 572 · gestión documental 477 ·
+sesión de bono/apoyo 399 · taller 392 · valoraciones 174. Lista para deshacer en
+el VPS: `/root/backfill-bloqueos-aumenta-20260901.json`.
 
 **El color de la categoría MANDA sobre el de la persona**
 (`lib/citas/coloresBloqueo.js`: categoría → persona → centro → negro). Es lo que
