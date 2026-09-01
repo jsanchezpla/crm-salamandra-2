@@ -18,7 +18,18 @@
  *
  * «Preparar la sesión» (borrador antes de darla, 26/08 por la mañana) sigue
  * igual: se llega con ?preparar=1 desde el modal de la cita o con su enlace de
- * abajo, y no ha cambiado nada de ese flujo.
+ * abajo.
+ *
+ * ── EL BORRADOR NO SE PODÍA GUARDAR DESDE EL REGISTRO (01/09/2026, Rodrigo) ─
+ * «Guardar la preparación no funciona: no se guarda nada como borrador.» Las
+ * dos pantallas de esta página escribían la preparación en estados DISTINTOS
+ * —el registro en `form.prepText`, la de preparar en un `prepSolo` suyo—, así
+ * que el enlace «Guárdala solo como preparación» te llevaba a un recuadro
+ * vacío con el botón apagado: lo escrito se quedaba atrás y no había forma de
+ * guardarlo. Ahora la preparación es UNA (`form.prepText`), como ya lo eran el
+ * día y los adjuntos, y el texto cruza en los dos sentidos. Y como del
+ * registro completo solo viaja la preparación, la pantalla avisa si hay algo
+ * más escrito en vez de tirarlo callando.
  *
  * ── LOS APARTADOS DEL PUNTO 2 SALEN DE UNA PLANTILLA (29/08/2026) ──────────
  * El «Informe de la sesión» tenía siete campos escritos a mano aquí dentro.
@@ -108,7 +119,14 @@ export default function NuevaSesionPage() {
   // porque llega por la barra de direcciones. La comparten el registro y la
   // preparación: es «cuándo es (o fue) la sesión».
   const [fecha, setFecha] = useState(() => paraInputLocal(fechaDePreparacion(query.get("fecha")) ?? new Date()));
-  const [prepSolo, setPrepSolo] = useState("");
+  // ⚠️ La preparación vive en UN solo sitio: `form.prepText`. Las dos pantallas
+  // —el registro completo y «Preparar la sesión»— escriben en él. Hasta el
+  // 01/09/2026 la de preparación tenía su propio estado (`prepSolo`) y el texto
+  // NO cruzaba: se escribía la preparación en el registro, se pulsaba «Guárdala
+  // solo como preparación» y aparecía el recuadro VACÍO con el botón apagado.
+  // Desde fuera eso es «guardar la preparación no funciona, no se guarda nada
+  // como borrador» — y era cierto: no había manera de guardarla desde ahí. El
+  // día y los adjuntos ya se compartían; el texto era el único que se caía.
   const [form, setForm] = useState(FORM_VACIO);
   // Los apartados del punto 2. Arrancan con los de fábrica para que la pantalla
   // se pinte entera antes de que conteste /api/clinica/plantillas; en cuanto
@@ -256,7 +274,7 @@ export default function NuevaSesionPage() {
         patientId: id,
         therapistId: patient.mainTherapistId,
         fecha: Number.isNaN(escrita.getTime()) ? new Date() : escrita,
-        prepText: prepSolo,
+        prepText: form.prepText,
       });
       const r = await fetch("/api/clinica/sessions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const j = await r.json();
@@ -288,6 +306,13 @@ export default function NuevaSesionPage() {
 
   // Un registro sin NADA escrito no es un registro: algo tiene que llevar.
   const hayContenido = Object.values(form).some((v) => String(v ?? "").trim());
+
+  // Lo escrito FUERA de la preparación. Guardar solo la preparación NO se lo
+  // lleva —`payloadDePreparacion` manda `prepText` y nada más—, así que la
+  // pantalla lo dice antes en vez de tirarlo en silencio.
+  const hayMasQueLaPreparacion = Object.entries(form).some(
+    ([k, v]) => k !== "prepText" && String(v ?? "").trim()
+  );
 
   async function guardarRegistro() {
     if (!patient?.mainTherapistId) {
@@ -646,6 +671,25 @@ export default function NuevaSesionPage() {
               Mientras su fecha no haya llegado no cuenta como sesión dada.
             </p>
 
+            {/* Se llega aquí desde el registro completo, y de ahí solo viaja la
+                preparación. Si hay algo más escrito se avisa: perderlo sin
+                decirlo es justo lo que hacía esta pantalla antes del 01/09. */}
+            {hayMasQueLaPreparacion && (
+              <p className="text-[11px] text-amber-800 leading-relaxed bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
+                Aquí se guarda <strong>solo la preparación</strong>. Lo que hayas escrito en el
+                informe de la sesión, en la devolución de la familia o en las notas internas no
+                entra en el borrador: vuelve al{" "}
+                <button
+                  type="button"
+                  onClick={() => setState(STATE.FORM)}
+                  className="font-medium underline"
+                >
+                  registro completo
+                </button>{" "}
+                si quieres guardarlo todo.
+              </p>
+            )}
+
             <div>
               <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1.5">Día y hora de la sesión</div>
               <input
@@ -662,8 +706,8 @@ export default function NuevaSesionPage() {
                 className={ta}
                 rows={6}
                 placeholder="Material previsto, hipótesis de trabajo, qué observar…"
-                value={prepSolo}
-                onChange={(e) => setPrepSolo(e.target.value)}
+                value={form.prepText}
+                onChange={(e) => setForm((f) => ({ ...f, prepText: e.target.value }))}
               />
             </div>
 
@@ -674,8 +718,8 @@ export default function NuevaSesionPage() {
               <button onClick={() => setState(STATE.FORM)} disabled={saving} className="text-xs px-4 py-2 rounded-lg border border-neutral-200 hover:border-neutral-400 text-neutral-700 disabled:opacity-50">Hacer el registro completo</button>
               <button
                 onClick={guardarPreparacion}
-                disabled={saving || !prepSolo.trim()}
-                title={!prepSolo.trim() ? "Escribe la preparación para poder guardarla" : undefined}
+                disabled={saving || !form.prepText.trim()}
+                title={!form.prepText.trim() ? "Escribe la preparación para poder guardarla" : undefined}
                 className="text-xs font-medium px-4 py-2 rounded-lg text-white hover:opacity-90 inline-flex items-center gap-2 disabled:opacity-50"
                 style={{ background: "var(--color-primary, #1B3A2D)" }}
               >
