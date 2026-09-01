@@ -252,6 +252,17 @@ export const CORE = [
   // «relation does not exist». Decide por existencia de `clients` —o sea,
   // todos—; solo crea tabla e índices: idempotente y aditiva.
   "migrate-whatsapp-messages",
+
+  // El Calendario clasifica y reparte (01/09/2026): `calendar_categories`,
+  // `calendar_tasks.category_id` y `calendar_task_owners`. CORE por el mismo
+  // criterio que `migrate-calendar-google`: los modelos CalendarCategory y
+  // CalendarTaskOwner están registrados en `lib/db/tenantDb.js` para TODOS los
+  // tenants, y `CalendarTask` declara `category_id`, así que Sequelize la pide
+  // en CADA SELECT de `calendar_tasks` —tenga el tenant el módulo o no—:
+  // dejarla dentro de `calendar` es un 42703 esperando al próximo schema.
+  // Decide por existencia de `calendar_tasks`; los responsables, además, por
+  // `team_members`. Trae el backfill del responsable único que ya había.
+  "migrate-calendar-categorias",
 ];
 
 export const MODULES = {

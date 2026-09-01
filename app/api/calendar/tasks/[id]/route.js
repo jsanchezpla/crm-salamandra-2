@@ -7,6 +7,8 @@ import {
   resolveCalendarFks,
   resolveAttendees,
   reconciliarAsistentes,
+  resolveOwners,
+  reconciliarResponsables,
 } from "../../../../../lib/calendar/calendarEvent.js";
 import { sincronizarTareaConGoogle, quitarCopiasDeGoogle } from "../../../../../lib/calendar/googleSync.js";
 import { error as errorResponse } from "../../../../../lib/utils/apiResponse.js";
@@ -55,6 +57,10 @@ export const PUT = withTenant(async (request, { params }, ctx) => {
   const asistentes = await resolveAttendees(body, tenantModels, hasModule);
   if (asistentes.error) return errorResponse(asistentes.error);
 
+  // Los responsables (01/09/2026), con la misma regla: solo se tocan si vienen.
+  const responsables = await resolveOwners(body, tenantModels, hasModule);
+  if (responsables.error) return errorResponse(responsables.error);
+
   if (updates.title !== undefined) updates.title = updates.title?.trim() || task.title;
   if (updates.priority && !VALID_PRIORITY.includes(updates.priority)) delete updates.priority;
   if (updates.status && !VALID_STATUS.includes(updates.status)) delete updates.status;
@@ -89,6 +95,21 @@ export const PUT = withTenant(async (request, { params }, ctx) => {
   }
 
   await task.update(updates);
+
+  /*
+   * Los responsables, y con ellos el espejo `team_member_id`. Va DESPUÉS del
+   * update para que el espejo escrito aquí gane: el bucle de `allowed` no
+   * incluye `teamMemberId` —lo trae `resolveCalendarFks`—, y si llegaran los
+   * dos en el mismo cuerpo mandaría la lista, que es la que ve el usuario.
+   */
+  if (responsables.present) {
+    const principal = await reconciliarResponsables({
+      taskId: task.id,
+      ids: responsables.ids,
+      tenantModels,
+    });
+    if (principal !== task.teamMemberId) await task.update({ teamMemberId: principal });
+  }
 
   // La lista de convocados, y el espejo en Google. A quien SALE de la lista se
   // le quita su copia ANTES de borrar la fila (el CASCADE se llevaría el id);

@@ -61,7 +61,25 @@ export function defineCalendarTask(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      /*
+       * El responsable PRINCIPAL. Desde el 01/09/2026 la lista de verdad vive
+       * en `calendar_task_owners` (un evento puede tener varios responsables);
+       * esta columna se queda como ESPEJO del primero, igual que
+       * `Incidencia.assignedToId`, porque hay tres sitios que leen por ella:
+       * «Mi trabajo» de la portada, el reparto de «Reorganizar la semana» y el
+       * filtro `?teamMemberId=` del listado.
+       */
       teamMemberId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      /*
+       * De qué va el evento (01/09/2026): la categoría del catálogo que pone
+       * cada centro (`CalendarCategory`). Nullable: un evento sin categoría es
+       * perfectamente válido y se pinta por prioridad, que es como se ha
+       * pintado siempre.
+       */
+      categoryId: {
         type: DataTypes.UUID,
         allowNull: true,
       },
@@ -95,6 +113,7 @@ export function defineCalendarTask(sequelize) {
       indexes: [
         { fields: ["client_id"], name: "calendar_tasks_client_id_idx" },
         { fields: ["team_member_id"], name: "calendar_tasks_team_member_id_idx" },
+        { fields: ["category_id"], name: "calendar_tasks_category_id_idx" },
       ],
     }
   );

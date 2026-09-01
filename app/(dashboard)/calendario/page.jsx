@@ -11,6 +11,8 @@ import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
 
 const PRIORITY_COLORS = { high: "#ef4444", medium: "#f97316", low: "#22c55e" };
 const PRIORITY_LABELS = { high: "Alta", medium: "Media", low: "Baja" };
+// Con qué se pinta, en modo «por categoría», un evento que no tiene ninguna.
+const SIN_CATEGORIA = "#9CA3AF";
 const STATUS_OPTIONS = [
   { value: "pending", label: "Pendiente" },
   { value: "done", label: "Completada" },
@@ -35,7 +37,15 @@ const EMPTY_FORM = {
   endTime: "",
   allDay: false,
   clientId: "",
+  // El responsable PRINCIPAL: el primero de `ownerIds`. Se conserva en el
+  // formulario porque el servidor lo sigue guardando como espejo (ver
+  // models/tenant/CalendarTaskOwner.model.js), pero quien manda es la lista.
   teamMemberId: "",
+  // Quién se encarga (01/09/2026). Varios, porque una coordinación la preparan
+  // dos personas y hasta hoy había que elegir a una y acordarse de la otra.
+  ownerIds: [],
+  // De qué va (01/09/2026): la categoría del catálogo del centro. "" = ninguna.
+  categoryId: "",
   // A quién afecta (29/08/2026): los miembros del equipo convocados. Es lo que
   // decide en qué Google Calendar aparece el evento.
   attendeeIds: [],
@@ -95,13 +105,26 @@ const GOOGLE_ERRORES = {
 };
 
 /**
- * El desplegable «Afecta a» (29/08/2026): varios miembros a la vez, con la
- * opción «Todos» que los marca de golpe — tal cual lo pidió Rodrigo. No es el
- * MultiSelect de la agenda a propósito: aquel es un FILTRO donde null significa
- * «no filtres», y aquí la lista vacía significa «no afecta a nadie», que es un
- * estado real de un evento (una tarea propia de quien la apunta).
+ * El desplegable de varios miembros del equipo, con la opción «Todos» que los
+ * marca de golpe — tal cual lo pidió Rodrigo. No es el MultiSelect de la agenda
+ * a propósito: aquel es un FILTRO donde null significa «no filtres», y aquí la
+ * lista vacía significa «nadie», que es un estado real de un evento (una tarea
+ * propia de quien la apunta).
+ *
+ * Nació para «Afecta a» (29/08/2026) y desde el 01/09 sirve también para los
+ * RESPONSABLES, que ya no son uno solo. Son dos listas distintas y las dos
+ * hacen falta: una dice quién lo hace y la otra a quién le toca verlo.
  */
-function SelectorAfectados({ value, onChange, options, className }) {
+function SelectorMiembros({
+  value,
+  onChange,
+  options,
+  className,
+  textoVacio = "Nadie",
+  textoTodos = "Todo el equipo",
+  etiquetaUno = "1 miembro",
+  etiquetaVarios = (n) => `${n} miembros`,
+}) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
 
@@ -116,10 +139,10 @@ function SelectorAfectados({ value, onChange, options, className }) {
 
   const marcados = new Set(value);
   const todos = options.length > 0 && value.length === options.length;
-  let texto = "Nadie";
-  if (todos) texto = "Todo el equipo";
-  else if (value.length === 1) texto = options.find((o) => o.value === value[0])?.label ?? "1 miembro";
-  else if (value.length > 1) texto = `${value.length} miembros`;
+  let texto = textoVacio;
+  if (todos) texto = textoTodos;
+  else if (value.length === 1) texto = options.find((o) => o.value === value[0])?.label ?? etiquetaUno;
+  else if (value.length > 1) texto = etiquetaVarios(value.length);
 
   function alternar(id) {
     onChange(marcados.has(id) ? value.filter((x) => x !== id) : [...value, id]);
@@ -236,6 +259,18 @@ export default function CalendarioPage() {
   const [reorg, setReorg] = useState(null); // { loading, err, proposals, model, taskCount } | null
   const [reorgIndex, setReorgIndex] = useState(0); // propuesta activa (0..2)
   const [reorgApplying, setReorgApplying] = useState(false);
+  // Categorías del calendario y CÓMO SE COLOREA (01/09/2026, Rodrigo).
+  //
+  // Dos lecturas de la misma semana: por PRIORIDAD (qué corre más) o por
+  // CATEGORÍA (de qué va). Los dos colores vienen ya en cada evento desde el
+  // servidor, así que cambiar de modo no cuesta una petición — solo repintar.
+  //
+  // La elección se recuerda en el navegador de cada uno: es una preferencia de
+  // cómo mirar, no un ajuste del centro, y guardarla en el tenant obligaría a
+  // que todo el equipo mirara igual.
+  const [categorias, setCategorias] = useState([]);
+  const [colorPor, setColorPor] = useState("prioridad"); // "prioridad" | "categoria"
+  const colorPorRef = useRef("prioridad"); // fetchEvents vive en un useCallback([])
   // Google Calendar (29/08/2026): el estado de MI conexión y sus carteles.
   const [google, setGoogle] = useState(null); // GET /api/calendar/google
   const [googleModal, setGoogleModal] = useState(false);
@@ -253,6 +288,22 @@ export default function CalendarioPage() {
     fetch("/api/projects?limit=1", { cache: "no-store" })
       .then((r) => setHasProjects(r.ok))
       .catch(() => {});
+    // El catálogo de categorías del centro (vacío mientras nadie cree ninguna).
+    fetch("/api/calendar/categories", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setCategorias(j?.data ?? []))
+      .catch(() => {});
+    // Cómo prefiere colorear quien mira. Si eligió «categoría» y luego se
+    // quedó sin ninguna, el efecto de abajo lo devuelve a prioridad solo.
+    try {
+      const guardado = window.localStorage.getItem("calendario:colorPor");
+      if (guardado === "categoria" || guardado === "prioridad") {
+        setColorPor(guardado);
+        colorPorRef.current = guardado;
+      }
+    } catch {
+      /* navegador sin almacenamiento: se queda en prioridad */
+    }
     // Mi conexión con Google Calendar (si el tenant tiene Calendario + Equipo).
     fetch("/api/calendar/google", { cache: "no-store" })
       .then((r) => r.json())
@@ -294,10 +345,18 @@ export default function CalendarioPage() {
   // porque /api/clients corta por su cuenta: con las 1.083 de Aumenta faltaban
   // 883 familias. Ahora pregunta SelectorCliente al servidor según se escribe.
   const clientOptions = [{ value: "", label: "Sin cliente" }];
-  const teamOptions = [
-    { value: "", label: "Sin asignar" },
-    ...teamMembers.map((m) => ({ value: m.id, label: m.displayName })),
-  ];
+
+  /*
+   * Si quien mira dejó elegido «por categoría» y el centro se ha quedado sin
+   * ninguna activa, se vuelve a prioridad solo. Sin esto el calendario entero
+   * se pintaba de gris y los botones para arreglarlo ya no estaban.
+   */
+  useEffect(() => {
+    if (colorPor === "categoria" && categorias.length === 0) {
+      colorPorRef.current = "prioridad";
+      setColorPor("prioridad");
+    }
+  }, [categorias, colorPor]);
 
   const fetchEvents = useCallback(async (fetchInfo, successCallback, failureCallback) => {
     try {
@@ -309,11 +368,42 @@ export default function CalendarioPage() {
       const res = await fetch(`/api/calendar/tasks?${params}`);
       if (!res.ok) throw new Error("Error cargando eventos");
       const json = await res.json();
-      successCallback(json.data ?? []);
+      successCallback((json.data ?? []).map(pintar));
     } catch (err) {
       failureCallback(err);
     }
   }, []);
+
+  /**
+   * El color con el que se pinta un evento según el modo elegido.
+   *
+   * En modo «categoría», un evento SIN categoría se va a gris: es lo honesto
+   * —no es de ninguna— y así se ve de un vistazo lo que queda por clasificar,
+   * en vez de colarlo en el color de la de al lado. Los eventos de Proyectos
+   * no tienen categoría ni prioridad nuestra: conservan el suyo.
+   */
+  function pintar(ev) {
+    const modo = colorPorRef.current;
+    const ep = ev.extendedProps ?? {};
+    if (ep.kind === "projectTask" || ep.kind === "projectMilestone") return ev;
+    const color =
+      modo === "categoria"
+        ? (ep.colorCategoria ?? SIN_CATEGORIA)
+        : (ep.colorPrioridad ?? ev.backgroundColor);
+    if (!color) return ev;
+    return { ...ev, backgroundColor: color, borderColor: color };
+  }
+
+  function cambiarColorPor(modo) {
+    colorPorRef.current = modo;
+    setColorPor(modo);
+    try {
+      window.localStorage.setItem("calendario:colorPor", modo);
+    } catch {
+      /* sin almacenamiento: vale para esta sesión */
+    }
+    calendarRef.current?.getApi().refetchEvents();
+  }
 
   function toggleProjects() {
     const next = !showProjectsRef.current;
@@ -495,6 +585,8 @@ export default function CalendarioPage() {
       // Nombres para enseñar (los ids del form solo sirven a los desplegables).
       clientName: ep.clientName ?? null,
       teamMemberName: ep.teamMemberName ?? null,
+      categoryName: ep.categoryName ?? null,
+      categoryColor: ep.colorCategoria ?? null,
       form: {
         title: event.title,
         notes: ep.notes ?? "",
@@ -507,6 +599,8 @@ export default function CalendarioPage() {
         allDay: event.allDay,
         clientId: ep.clientId ?? "",
         teamMemberId: ep.teamMemberId ?? "",
+        ownerIds: ep.ownerIds ?? [],
+        categoryId: ep.categoryId ?? "",
         attendeeIds: ep.attendeeIds ?? [],
         meetUrl: ep.meetUrl ?? "",
         inviteEmail: ep.inviteEmail ?? "",
@@ -639,7 +733,9 @@ export default function CalendarioPage() {
             endTime: modal.form.allDay ? null : modal.form.endTime || null,
             allDay: modal.form.allDay,
             clientId: modal.form.clientId || null,
-            teamMemberId: modal.form.teamMemberId || null,
+            // La lista manda; el espejo lo escribe el servidor con el primero.
+            ownerIds: modal.form.ownerIds ?? [],
+            categoryId: modal.form.categoryId || null,
             attendeeIds: modal.form.attendeeIds ?? [],
             meetUrl: modal.form.meetUrl.trim() || null,
             inviteEmail: modal.form.inviteEmail.trim() || null,
@@ -709,7 +805,46 @@ export default function CalendarioPage() {
             Calendario <span className="font-display-italic text-[var(--ink-400)]">— equipo</span>
           </h1>
         </div>
-        <div className="flex items-center gap-2">
+        {/* `flex-wrap`: con los botones de color, Google, Proyectos, la IA y
+            «Nueva tarea», en tableta no cabía todo en una línea y el primero se
+            quedaba con el rótulo cortado. Que bajen de fila. */}
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {/*
+            Cómo colorear la semana (01/09/2026, Rodrigo: «un par de botones
+            arriba al lado de Conectar google calendar»). Va PRIMERO, a la
+            izquierda del de Google, porque es de lo que se mira todos los días
+            y aquello se toca una vez.
+
+            Sin categorías creadas no se enseña: un botón que solo puede pintar
+            todo de gris no es una opción, es una trampa. En cuanto el centro
+            crea la primera, aparece.
+          */}
+          {categorias.length > 0 && (
+            <div
+              className="flex items-center rounded-md border border-[var(--ink-200)] overflow-hidden shrink-0"
+              role="group"
+              aria-label="Colorear el calendario por"
+            >
+              {[
+                { key: "prioridad", label: "Prioridad", titulo: "Colorear por prioridad: qué corre más" },
+                { key: "categoria", label: "Categoría", titulo: "Colorear por categoría: de qué va cada cosa" },
+              ].map((op) => (
+                <button
+                  key={op.key}
+                  onClick={() => cambiarColorPor(op.key)}
+                  aria-pressed={colorPor === op.key}
+                  title={op.titulo}
+                  className={`px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
+                    colorPor === op.key
+                      ? "bg-[var(--ink-900)] text-white"
+                      : "text-[var(--ink-500)] hover:bg-[var(--ink-100)]"
+                  }`}
+                >
+                  {op.label}
+                </button>
+              ))}
+            </div>
+          )}
           {google?.disponible && (
             <button
               onClick={() => {
@@ -878,9 +1013,15 @@ export default function CalendarioPage() {
           formulario de siempre. */}
       {detalle && (() => {
         const form = detalle.form;
-        const afectados = (form.attendeeIds ?? [])
-          .map((id) => teamMembers.find((m) => m.id === id)?.displayName)
-          .filter(Boolean);
+        const nombres = (ids) =>
+          (ids ?? []).map((id) => teamMembers.find((m) => m.id === id)?.displayName).filter(Boolean);
+        const afectados = nombres(form.attendeeIds);
+        // El de siempre cuando el evento es anterior a la lista (01/09/2026):
+        // así una reunión vieja sigue diciendo quién la lleva.
+        const responsables = nombres(form.ownerIds);
+        const responsablesTexto = responsables.length
+          ? responsables.join(", ")
+          : (detalle.teamMemberName ?? null);
         return (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -899,6 +1040,15 @@ export default function CalendarioPage() {
                       <span className="w-2 h-2 rounded-full" style={{ background: PRIORITY_COLORS[form.priority] ?? PRIORITY_COLORS.medium }} />
                       Prioridad {(PRIORITY_LABELS[form.priority] ?? PRIORITY_LABELS.medium).toLowerCase()}
                     </span>
+                    {detalle.categoryName && (
+                      <span className="inline-flex items-center gap-1 text-[11px] text-neutral-500">
+                        <span
+                          className="w-2 h-2 rounded-full"
+                          style={{ background: detalle.categoryColor ?? SIN_CATEGORIA }}
+                        />
+                        {detalle.categoryName}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <button onClick={() => setDetalle(null)} className="text-neutral-400 hover:text-neutral-700 p-0.5" aria-label="Cerrar">
@@ -918,10 +1068,12 @@ export default function CalendarioPage() {
                     <span className="text-neutral-800">{detalle.clientName}</span>
                   </div>
                 )}
-                {detalle.teamMemberName && (
+                {responsablesTexto && (
                   <div className="flex">
-                    <span className="w-24 text-neutral-400 shrink-0">Responsable</span>
-                    <span className="text-neutral-800">{detalle.teamMemberName}</span>
+                    <span className="w-24 text-neutral-400 shrink-0">
+                      {responsables.length > 1 ? "Responsables" : "Responsable"}
+                    </span>
+                    <span className="text-neutral-800">{responsablesTexto}</span>
                   </div>
                 )}
                 {afectados.length > 0 && (
@@ -1286,42 +1438,74 @@ export default function CalendarioPage() {
                 />
               </div>
 
-              {/* Cliente + Responsable (opcionales) */}
-              <div className="grid grid-cols-2 gap-3">
+              {/* Categoría (01/09/2026): de qué va. El catálogo lo pone el
+                  centro en /calendario/categorias; sin catálogo no se enseña
+                  un desplegable vacío. Solo se ofrecen las ACTIVAS, más la que
+                  ya tuviera el evento aunque esté desactivada — si no, abrir y
+                  guardar un evento viejo se la borraría sin avisar. */}
+              {(categorias.some((c) => c.active) || modal.form.categoryId) && (
                 <div>
-                  <label className="block text-xs font-medium text-[#374151] mb-1">Cliente</label>
-                  <SelectorCliente
-                    value={modal.form.clientId}
-                    onChange={(v) => updateForm("clientId", v)}
-                    opcionesFijas={clientOptions}
-                    className="w-full text-sm px-3 py-2 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F0F0F]/10 focus:border-[#0F0F0F] bg-white transition-colors"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-[#374151] mb-1">Responsable</label>
+                  <label className="block text-xs font-medium text-[#374151] mb-1">Categoría</label>
                   <Select
-                    value={modal.form.teamMemberId}
-                    onChange={(v) => updateForm("teamMemberId", v)}
-                    options={teamOptions}
+                    value={modal.form.categoryId}
+                    onChange={(v) => updateForm("categoryId", v)}
+                    options={[
+                      { value: "", label: "Sin categoría" },
+                      ...categorias
+                        .filter((c) => c.active || c.id === modal.form.categoryId)
+                        .map((c) => ({
+                          value: c.id,
+                          label: c.active ? c.name : `${c.name} (desactivada)`,
+                        })),
+                    ]}
                     className="w-full text-sm px-3 py-2 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F0F0F]/10 focus:border-[#0F0F0F] bg-white transition-colors"
                   />
                 </div>
+              )}
+
+              {/* Cliente (opcional) */}
+              <div>
+                <label className="block text-xs font-medium text-[#374151] mb-1">Cliente</label>
+                <SelectorCliente
+                  value={modal.form.clientId}
+                  onChange={(v) => updateForm("clientId", v)}
+                  opcionesFijas={clientOptions}
+                  className="w-full text-sm px-3 py-2 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F0F0F]/10 focus:border-[#0F0F0F] bg-white transition-colors"
+                />
               </div>
 
-              {/* A quién afecta (29/08/2026): la lista de convocados, con su
-                  «Todos». Es lo que decide en qué Google Calendar aparece. */}
+              {/* Las dos listas de personas (01/09/2026, Rodrigo). Son
+                  distintas y hacen falta las dos: RESPONSABLES es quién lo
+                  hace —ya no uno solo— y AFECTA A es a quién le toca verlo,
+                  que además decide en qué Google Calendar aparece. */}
               {teamMembers.length > 0 && (
-                <div>
-                  <label className="block text-xs font-medium text-[#374151] mb-1">Afecta a</label>
-                  <SelectorAfectados
-                    value={modal.form.attendeeIds}
-                    onChange={(v) => updateForm("attendeeIds", v)}
-                    options={teamMembers.map((m) => ({ value: m.id, label: m.displayName }))}
-                    className="w-full text-sm px-3 py-2 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F0F0F]/10 focus:border-[#0F0F0F] bg-white transition-colors"
-                  />
-                  <p className="text-[11px] text-[#9CA3AF] mt-1">
-                    Quien aparezca aquí verá el evento en su Google Calendar si lo tiene conectado.
-                  </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-[#374151] mb-1">Responsables</label>
+                    <SelectorMiembros
+                      value={modal.form.ownerIds}
+                      onChange={(v) => updateForm("ownerIds", v)}
+                      options={teamMembers.map((m) => ({ value: m.id, label: m.displayName }))}
+                      textoVacio="Sin asignar"
+                      textoTodos="Todo el equipo"
+                      etiquetaUno="1 responsable"
+                      etiquetaVarios={(n) => `${n} responsables`}
+                      className="w-full text-sm px-3 py-2 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F0F0F]/10 focus:border-[#0F0F0F] bg-white transition-colors"
+                    />
+                    <p className="text-[11px] text-[#9CA3AF] mt-1">Quién se encarga de que salga.</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-[#374151] mb-1">Afecta a</label>
+                    <SelectorMiembros
+                      value={modal.form.attendeeIds}
+                      onChange={(v) => updateForm("attendeeIds", v)}
+                      options={teamMembers.map((m) => ({ value: m.id, label: m.displayName }))}
+                      className="w-full text-sm px-3 py-2 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F0F0F]/10 focus:border-[#0F0F0F] bg-white transition-colors"
+                    />
+                    <p className="text-[11px] text-[#9CA3AF] mt-1">
+                      Lo verán en su Google Calendar si lo tienen conectado.
+                    </p>
+                  </div>
                 </div>
               )}
 
