@@ -44,8 +44,19 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
   const [menuCita, setMenuCita] = useState(null);
   const [portapapeles, setPortapapeles] = useState(null);
   // El bloqueo pulsado en el calendario, para su modal pequeño (31/08/2026):
-  // { id, titulo, label, start, end } o null.
+  // { id, titulo, label, categoryKey, start, end } o null.
   const [bloqueoAbierto, setBloqueoAbierto] = useState(null);
+  /*
+   * Las categorías de bloqueo del centro (01/09/2026), que llegan junto al
+   * listado de bloqueos. En un `ref` y no en un `useState` a propósito: el
+   * listado se pide desde el `events` de FullCalendar, y un `setState` ahí
+   * dispara un render que vuelve a pedir eventos. El único que las lee es el
+   * modal, que se monta DESPUÉS de un clic: para entonces el ref ya está.
+   */
+  const categoriasBloqueoRef = useRef([]);
+  // Y los talleres del centro, por lo mismo: el modal de un bloqueo pregunta si
+  // ese tramo es un taller (01/09/2026).
+  const talleresRef = useRef([]);
   // Vista: "calendar" (por defecto) o "waitlist". La lista de espera son las
   // reservas en estado 'pending' (solicitudes de la web sin confirmar). El
   // globito rojo de la pestaña muestra cuántas hay sin atender.
@@ -330,6 +341,8 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
         );
         const jb = await rb.json();
         if (jb.ok) {
+          categoriasBloqueoRef.current = jb.data.categorias ?? [];
+          talleresRef.current = jb.data.talleres ?? [];
           fondos = (jb.data.bloqueos ?? [])
             .filter((b) => {
               // Los cierres del centro (sin persona) los ve todo el mundo:
@@ -362,7 +375,17 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
                * centro no tienen persona, y decirlo con todas las letras evita
                * leerlos como el bloqueo de alguien.
                */
-              title: `${b.label} · ${b.teamMemberName || "Todo el centro"}`,
+              /*
+               * Y con su CATEGORÍA delante desde el 01/09/2026, cuando la
+               * tiene: el color ya la distingue, pero el color solo se entiende
+               * si en algún sitio pone qué es. No se repite si el motivo libre
+               * dice ya lo mismo («Descanso · Descanso» no informa de nada).
+               */
+              title: [
+                b.categoryLabel && b.categoryLabel !== b.label ? b.categoryLabel : null,
+                b.label,
+                b.teamMemberName || "Todo el centro",
+              ].filter(Boolean).join(" · "),
               start: b.startAt,
               end: b.endAt,
               /*
@@ -393,7 +416,10 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
                * gestión completa sigue en la pestaña de Bloqueos.
                */
               editable: true,
-              extendedProps: { esBloqueo: true, bloqueoId: b.id, label: b.label },
+              extendedProps: {
+                esBloqueo: true, bloqueoId: b.id, label: b.label,
+                categoryKey: b.categoryKey ?? null, tallerId: b.tallerId ?? null,
+              },
             }));
         }
       } catch { /* la agenda se ve igual, sin sombrear */ }
@@ -436,6 +462,8 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
         id: info.event.extendedProps.bloqueoId,
         titulo: info.event.title,
         label: info.event.extendedProps.label,
+        categoryKey: info.event.extendedProps.categoryKey ?? null,
+        tallerId: info.event.extendedProps.tallerId ?? null,
         start: info.event.start,
         end: info.event.end ?? info.event.start,
       });
@@ -1099,6 +1127,8 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
         <BloqueoModal
           key={bloqueoAbierto.id}
           bloqueo={bloqueoAbierto}
+          categorias={categoriasBloqueoRef.current}
+          talleres={talleresRef.current}
           onClose={() => setBloqueoAbierto(null)}
           onSaved={() => {
             setBloqueoAbierto(null);

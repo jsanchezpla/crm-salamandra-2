@@ -149,6 +149,26 @@ export function defineClinicSession(sequelize) {
         allowNull: false,
         defaultValue: "registered",
       },
+      /**
+       * ── De qué SESIÓN DE TALLER sale este registro (01/09/2026, Aumenta) ──
+       *
+       * Null en las 22.045 sesiones de siempre y en todas las individuales: es
+       * lo que distingue una sesión de taller de una sesión normal.
+       *
+       * Cuando lo lleva, esta fila es el REFLEJO de una fila de
+       * `taller_sesiones`: el cuerpo común lo escribe una vez quien da el
+       * taller y se copia a los ocho asistentes (el porqué, en
+       * `TallerSesion.model.js`). Lo que es de este paciente y de nadie más es
+       * su nota individual, que vive en `contentSections` con su clave y NUNCA
+       * se toca al re-propagar.
+       *
+       * Sin FK dura: borrar la sesión del taller no puede llevarse por delante
+       * la historia clínica de ocho pacientes.
+       */
+      tallerSesionId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       // Cliente/pagador (2026-07-23). Foto tomada del paciente al crear la
       // sesión, para llegar a la ficha del cliente sin depender del salto
       // paciente→cliente, que es frágil. El terapeuta ya se guarda aparte.

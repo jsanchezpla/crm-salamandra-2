@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from "react";
 import { COLOR_BLOQUEO_POR_DEFECTO, colorTextoSobre } from "../../../lib/citas/coloresBloqueo.js";
+import { CATEGORIAS_CLINICA_BASE, MAX_CATEGORIAS } from "../../../lib/citas/categoriasBloqueo.js";
 import { PrimaryButton } from "./ui.jsx";
 export function RecordatoriosCard({ activo, readOnly, onChange }) {
   return (
@@ -158,6 +159,176 @@ export function ColorBloqueosCard({ color, readOnly, onGuardar }) {
       {!readOnly && !sinCambios && valido && (
         <p className="text-[10px] text-neutral-400 mt-2">Sin guardar todavía.</p>
       )}
+    </div>
+  );
+}
+
+/**
+ * Categorías de bloqueo (01/09/2026, Rodrigo).
+ *
+ * «Dentro de bloqueos, poder hacer categorías […] con color personalizable
+ * desde Admin para que a todo el equipo le salga igual.»
+ *
+ * La lista es del CENTRO y por eso vive aquí y no en la pantalla de Bloqueos:
+ * si cada cual pudiera añadir la suya, en dos semanas habría cuatro formas de
+ * escribir «trabajo interno» y volveríamos al texto libre del que esto sale.
+ *
+ * ── Dos detalles que parecen menores y no lo son ───────────────────────────
+ *  · **Renombrar conserva la categoría.** Cambiar el título de una fila no
+ *    mueve de sitio a los bloqueos que ya la usaban: el servidor conserva su
+ *    clave (`normalizarCategorias`). Por eso la fila se edita en el sitio y no
+ *    se borra y se vuelve a crear — eso sí los dejaría huérfanos.
+ *  · **El color de la categoría gana al de la persona** en la agenda. La
+ *    tarjeta lo dice, porque si no alguien cambia esto, ve que el bloqueo de
+ *    una compañera con color propio ya no lo respeta y piensa que hay un fallo.
+ */
+export function CategoriasBloqueoCard({ categorias, readOnly, onGuardar }) {
+  const [borrador, setBorrador] = useState(categorias ?? []);
+  const [guardando, setGuardando] = useState(false);
+
+  /*
+   * La config llega asíncrona: sin esto la tarjeta se quedaría con la lista
+   * vacía del primer render y «guardar» borraría las categorías del centro.
+   *
+   * Se sigue el CONTENIDO y no la identidad del array a propósito. La pantalla
+   * de Configuración se vuelve a pintar por cualquier cosa —un aviso, un
+   * cambio de pestaña, guardar otra tarjeta— y ahí llega un array nuevo con lo
+   * mismo dentro; con `[categorias]` como dependencia, cada uno de esos
+   * repintados le borraría al admin las categorías que estuviera escribiendo
+   * sin haber guardado todavía. Al guardar SÍ se repone, y con lo normalizado
+   * por el servidor, que es lo que de verdad queda escrito.
+   */
+  const guardadasJson = JSON.stringify(categorias ?? []);
+  useEffect(() => { setBorrador(JSON.parse(guardadasJson)); }, [guardadasJson]);
+
+  const sinCambios = JSON.stringify(borrador) === guardadasJson;
+  const validas = borrador.every((c) => c.label.trim() && /^#[0-9a-fA-F]{6}$/.test(c.color));
+  const lleno = borrador.length >= MAX_CATEGORIAS;
+
+  function cambiar(i, campo, valor) {
+    setBorrador((prev) => prev.map((c, n) => (n === i ? { ...c, [campo]: valor } : c)));
+  }
+  function quitar(i) {
+    setBorrador((prev) => prev.filter((_, n) => n !== i));
+  }
+  function anadir() {
+    // Sin `key`: se la pone el servidor a partir del título. Una clave inventada
+    // aquí sería una clave más que mantener sincronizada por nada.
+    setBorrador((prev) => [...prev, { label: "", color: COLOR_BLOQUEO_POR_DEFECTO }]);
+  }
+
+  async function guardar() {
+    setGuardando(true);
+    await onGuardar(borrador);
+    setGuardando(false);
+  }
+
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl p-5">
+      <div className="text-sm font-semibold text-neutral-800">Categorías de bloqueo</div>
+      <p className="text-xs text-neutral-400 mt-0.5 max-w-lg">
+        De qué es cada hora bloqueada: reunión de equipo, trabajo interno, gestión documental… Se
+        eligen de esta lista al apuntar el bloqueo, y cada una se pinta de su color{" "}
+        <strong>en la agenda de todo el equipo</strong>. Sin categorías, un bloqueo funciona como
+        siempre: su texto y el color de siempre.
+      </p>
+
+      {borrador.length === 0 ? (
+        <div className="mt-3 rounded-lg border border-dashed border-neutral-200 px-4 py-5 text-center">
+          <p className="text-xs text-neutral-400">Todavía no hay categorías.</p>
+          {!readOnly && (
+            <div className="mt-2 flex flex-wrap gap-2 justify-center">
+              <button
+                type="button"
+                onClick={() => setBorrador(CATEGORIAS_CLINICA_BASE.map((c) => ({ ...c })))}
+                className="px-3 py-1.5 rounded-lg text-[11px] font-semibold uppercase tracking-wide border border-neutral-200 text-neutral-600 hover:border-neutral-400 transition"
+              >
+                Empezar con las de un centro clínico
+              </button>
+              <button
+                type="button"
+                onClick={anadir}
+                className="px-3 py-1.5 rounded-lg text-[11px] font-semibold uppercase tracking-wide border border-neutral-200 text-neutral-600 hover:border-neutral-400 transition"
+              >
+                Crear una en blanco
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <ul className="mt-3 space-y-2">
+          {borrador.map((c, i) => {
+            const color = /^#[0-9a-fA-F]{6}$/.test(c.color) ? c.color : COLOR_BLOQUEO_POR_DEFECTO;
+            return (
+              <li key={c.key ?? `nueva-${i}`} className="flex gap-2 items-center flex-wrap">
+                <input
+                  type="color"
+                  value={color}
+                  disabled={readOnly}
+                  onChange={(e) => cambiar(i, "color", e.target.value.toUpperCase())}
+                  className="h-9 w-11 shrink-0 border border-neutral-200 rounded-lg p-1 disabled:opacity-40 cursor-pointer"
+                  aria-label={`Color de ${c.label || "la categoría"}`}
+                />
+                <input
+                  type="text"
+                  value={c.label}
+                  disabled={readOnly}
+                  maxLength={60}
+                  placeholder="Nombre de la categoría"
+                  onChange={(e) => cambiar(i, "label", e.target.value)}
+                  className="flex-1 min-w-[140px] text-sm border border-neutral-200 rounded-lg px-3 py-2 disabled:bg-neutral-50"
+                />
+                {/* Cómo queda de verdad: mismo cálculo de letra que la agenda. */}
+                <span
+                  className="rounded px-2 py-1 text-[11px] font-medium shrink-0 max-w-[180px] truncate"
+                  style={{ backgroundColor: color, color: colorTextoSobre(color) }}
+                >
+                  {c.label.trim() || "Sin nombre"}
+                </span>
+                {!readOnly && (
+                  <button
+                    type="button"
+                    onClick={() => quitar(i)}
+                    className="shrink-0 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-400 hover:text-rose-600 transition"
+                    aria-label={`Quitar ${c.label || "la categoría"}`}
+                  >
+                    Quitar
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {!readOnly && borrador.length > 0 && (
+        <div className="mt-3 flex gap-2 flex-wrap items-center">
+          <button
+            type="button"
+            onClick={anadir}
+            disabled={lleno}
+            className="px-3 py-1.5 rounded-lg text-[11px] font-semibold uppercase tracking-wide border border-neutral-200 text-neutral-600 hover:border-neutral-400 disabled:opacity-40 transition"
+          >
+            Añadir categoría
+          </button>
+          <PrimaryButton onClick={() => validas && !guardando && guardar()}>
+            {guardando ? "Guardando..." : "Guardar"}
+          </PrimaryButton>
+          {!validas && (
+            <span className="text-[11px] text-rose-600">
+              Cada categoría necesita un nombre y un color tipo <span className="font-mono">#0F0F0F</span>.
+            </span>
+          )}
+          {validas && !sinCambios && <span className="text-[10px] text-neutral-400">Sin guardar todavía.</span>}
+        </div>
+      )}
+
+      <p className="text-[10px] text-neutral-400 mt-3">
+        Al cambiar el nombre de una categoría, los bloqueos que ya la tenían se quedan en ella
+        (solo cambia el rótulo). Al <strong>quitarla</strong>, esos bloqueos se quedan sin categoría
+        y vuelven a pintarse con el color de siempre; no se borra ninguno. El color de la categoría
+        manda sobre el color propio de cada profesional — para eso está.
+      </p>
     </div>
   );
 }

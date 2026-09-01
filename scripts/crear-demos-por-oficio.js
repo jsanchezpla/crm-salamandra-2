@@ -139,6 +139,11 @@ async function montar(demo) {
       slug,
       modulos,
       adminEmail: `admin@${slug}.salamandra`,
+      // El buzón de la cuenta es obligatorio desde el 26/08/2026 (altaTenant lo
+      // exige; sin él, crear una demo desde cero moría con 422). El mismo valor
+      // que el login: a una demo se entra por el botón público y nadie recupera
+      // su contraseña — el dominio .salamandra no existe a propósito.
+      adminCorreo: `admin@${slug}.salamandra`,
       brand: MARCA[slug] ?? {},
       // `free`: `master.tenants.plan` es un enum cerrado (free/starter/pro/
       // enterprise) y no hay ningún «demo». El plan no gatea nada —se quitó de

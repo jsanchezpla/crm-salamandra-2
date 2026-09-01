@@ -4,6 +4,7 @@ import { ok, created, error, forbidden, serverError } from "../../../../lib/util
 import { logCitasAudit } from "../../../../lib/citas/audit.js";
 import { buildMadridDate } from "../../../../lib/citas/slots.js";
 import { colorDeBloqueo } from "../../../../lib/citas/coloresBloqueo.js";
+import { categoriaDe, categoriasDe, claveValida } from "../../../../lib/citas/categoriasBloqueo.js";
 // `lib/citas/visibilidad.js` ya no se usa aquí: desde el 14/08/2026 los bloqueos
 // los ve todo el equipo y no siguen la regla de las citas (ver cabecera del GET).
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
@@ -139,11 +140,64 @@ async function nombresDeQuienApunto(filas, tenantModels) {
 }
 
 /**
- * `colorGeneral` es el del centro. El color viaja YA RESUELTO (persona →
- * centro → rosa de siempre) para que la agenda solo tenga que pintarlo: la
- * regla de quién gana vive en un sitio, no repartida por cada pantalla.
+ * El id de taller que se guarda en un bloqueo: el que venga si el centro lo
+ * tiene dado de alta, o `null`. Vaciarlo es como se le quita el taller a un
+ * bloqueo que lo tenía.
  */
-function serializa(f, colorGeneral, autores) {
+async function tallerValido(valor, tenantModels) {
+  const id = typeof valor === "string" ? valor.trim() : "";
+  if (!id || !UUID_RE.test(id)) return null;
+  const { Taller } = tenantModels ?? {};
+  if (!Taller) return null;
+  try {
+    const t = await Taller.findByPk(id, { attributes: ["id"] });
+    return t ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Los talleres ACTIVOS del centro: `Map id → { id, name }` (01/09/2026).
+ *
+ * Sirve para dos cosas a la vez: poner el nombre a los bloqueos que son un
+ * taller y llenar el desplegable de «¿este bloqueo es un taller?». Se hace con
+ * UNA consulta para toda la lista, y no con un include, porque `team_blocks` no
+ * tiene asociación declarada con `talleres` a propósito: la FK es suave para
+ * que dar de baja un taller no borre horas de la agenda.
+ *
+ * Un centro sin el módulo Clínica no tiene la tabla: devuelve `null` y todo lo
+ * demás sigue igual (los bloqueos son de Citas, los talleres son de Clínica).
+ */
+async function talleresDelCentro(tenantModels) {
+  const { Taller } = tenantModels ?? {};
+  if (!Taller) return null;
+  try {
+    const filas = await Taller.findAll({
+      where: { active: true },
+      attributes: ["id", "name"],
+      order: [["name", "ASC"]],
+      raw: true,
+    });
+    return new Map(filas.map((t) => [t.id, { id: t.id, name: t.name }]));
+  } catch {
+    return null; // un desplegable no puede tumbar la agenda
+  }
+}
+
+/**
+ * `colorGeneral` es el del centro. El color viaja YA RESUELTO (categoría →
+ * persona → centro → negro de siempre) para que la agenda solo tenga que
+ * pintarlo: la regla de quién gana vive en un sitio, no repartida por cada
+ * pantalla.
+ *
+ * `categoryLabel` viaja al lado de la clave por la misma razón: la agenda
+ * escribe el rótulo sin tener que cruzar nada. Una categoría BORRADA se
+ * comporta como si el bloqueo no tuviera: sin rótulo y con el color de siempre
+ * (ver `lib/citas/categoriasBloqueo.js`).
+ */
+function serializa(f, colorGeneral, autores, categorias = [], talleres = null) {
+  const cat = categoriaDe(f.categoryKey, categorias);
   return {
     id: f.id,
     teamMemberId: f.teamMemberId ?? null,
@@ -155,7 +209,21 @@ function serializa(f, colorGeneral, autores) {
     endAt: f.endAt,
     label: f.label,
     notes: f.notes ?? null,
-    color: colorDeBloqueo(f.teamMember?.blockColor, colorGeneral),
+    // La clave se devuelve SIEMPRE tal como está guardada, aunque su categoría
+    // ya no exista: así el desplegable de la pantalla no la borra sin querer al
+    // guardar otra cosa del mismo bloqueo.
+    categoryKey: f.categoryKey ?? null,
+    categoryLabel: cat?.label ?? null,
+    // El taller que se da en este tramo (01/09/2026), si lo hay. Con nombre,
+    // para que la agenda lo escriba sin cruzar nada; un taller dado de baja
+    // llega sin nombre y el bloqueo se lee como uno cualquiera.
+    tallerId: f.tallerId ?? null,
+    tallerName: talleres?.get(f.tallerId)?.name ?? null,
+    color: colorDeBloqueo({
+      categoria: cat?.color ?? null,
+      persona: f.teamMember?.blockColor,
+      centro: colorGeneral,
+    }),
   };
 }
 
@@ -187,8 +255,19 @@ export const GET = withTenant(async (request, _rc, ctx) => {
       limit: 500,
     });
     const colorGeneral = ctx.tenant?.settings?.citas?.colorBloqueos ?? null;
+    const categorias = categoriasDe(ctx.tenant);
     const autores = await nombresDeQuienApunto(filas, ctx.tenantModels);
-    return ok({ bloqueos: filas.map((f) => serializa(f, colorGeneral, autores)), yo });
+    const talleres = await talleresDelCentro(ctx.tenantModels);
+    // Las categorías y los talleres del centro viajan con el listado
+    // (01/09/2026): quien pinta la agenda o el formulario necesita las dos
+    // listas para sus desplegables, y sacarlas de aquí ahorra dos llamadas más
+    // en cada carga del calendario.
+    return ok({
+      bloqueos: filas.map((f) => serializa(f, colorGeneral, autores, categorias, talleres)),
+      yo,
+      categorias,
+      talleres: [...(talleres?.values() ?? [])],
+    });
   } catch (err) {
     return serverError(err);
   }
@@ -277,12 +356,32 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     const label = (body.label ? String(body.label).trim() : "").slice(0, 120) || "Vacaciones";
     const notes = body.notes ? String(body.notes).trim() : null;
 
+    /*
+     * La categoría (01/09/2026). Se acepta SOLO si el centro la tiene dada de
+     * alta: la lista la decide dirección desde Configuración, y una clave
+     * inventada desde el navegador se guardaría como una categoría fantasma
+     * que no se puede ni pintar ni contar. Lo que no cuela, se guarda a null —
+     * no se rechaza la petición: un desplegable desincronizado no puede
+     * impedir apuntar unas vacaciones.
+     */
+    const categorias = categoriasDe(ctx.tenant);
+    const categoryKey = claveValida(body.categoryKey, categorias);
+
+    /*
+     * ¿Este tramo es un TALLER? (01/09/2026). Se comprueba contra los talleres
+     * dados de alta, por lo mismo que la categoría: un id inventado se guardaría
+     * como un taller fantasma del que luego no se puede registrar nada.
+     */
+    const tallerId = await tallerValido(body.tallerId, ctx.tenantModels);
+
     const fila = await TeamBlock.create({
       teamMemberId,
       startAt,
       endAt,
       label,
       notes,
+      categoryKey,
+      tallerId,
       createdById: request.headers.get("x-user-id") || null,
     });
 
@@ -305,14 +404,21 @@ export const POST = withTenant(async (request, _rc, ctx) => {
       action: "citas.bloqueo_created",
       entity: "TeamBlock",
       entityId: fila.id,
-      after: { teamMemberId, startAt, endAt, label },
+      after: { teamMemberId, startAt, endAt, label, categoryKey },
       ip: request.headers.get("x-forwarded-for") ?? null,
     });
 
     const colorGeneral = ctx.tenant?.settings?.citas?.colorBloqueos ?? null;
     return created({
-      ...serializa(fila, colorGeneral),
-      color: colorDeBloqueo(colorPersona, colorGeneral),
+      // El `serializa` de aquí no lleva la persona incluida (la fila recién
+      // creada no trae el `include`), así que el color se recalcula abajo con
+      // el `blockColor` que ya se leyó al validar de quién es.
+      ...serializa(fila, colorGeneral, null, categorias, await talleresDelCentro(ctx.tenantModels)),
+      color: colorDeBloqueo({
+        categoria: categoriaDe(categoryKey, categorias)?.color ?? null,
+        persona: colorPersona,
+        centro: colorGeneral,
+      }),
       citasDentro,
     });
   } catch (err) {
@@ -400,6 +506,24 @@ export const PATCH = withTenant(async (request, _rc, ctx) => {
       cambios.notes = body.notes ? String(body.notes).trim() : null;
     }
 
+    /*
+     * La categoría (01/09/2026). La cambia CUALQUIERA que pueda tocar el
+     * bloqueo —no es como el dueño, que solo lo mueve dirección—: decir que
+     * una hora bloqueada era gestión documental y no una reunión es corregir
+     * una etiqueta, no reasignar la agenda de nadie.
+     *
+     * Mandar `null` (o una cadena vacía) la quita; lo que no venga, no se toca.
+     */
+    const categorias = categoriasDe(ctx.tenant);
+    if (body.categoryKey !== undefined) {
+      cambios.categoryKey = claveValida(body.categoryKey, categorias);
+    }
+
+    // Y qué taller se da en el tramo, con la misma regla (01/09/2026).
+    if (body.tallerId !== undefined) {
+      cambios.tallerId = await tallerValido(body.tallerId, ctx.tenantModels);
+    }
+
     // De quién es: SOLO dirección, y solo si lo manda.
     let colorPersona = null;
     if (body.teamMemberId !== undefined) {
@@ -431,6 +555,7 @@ export const PATCH = withTenant(async (request, _rc, ctx) => {
       startAt: fila.startAt,
       endAt: fila.endAt,
       label: fila.label,
+      categoryKey: fila.categoryKey,
     };
     await fila.update(cambios);
 
@@ -466,14 +591,19 @@ export const PATCH = withTenant(async (request, _rc, ctx) => {
         startAt: fila.startAt,
         endAt: fila.endAt,
         label: fila.label,
+        categoryKey: fila.categoryKey,
       },
       ip: request.headers.get("x-forwarded-for") ?? null,
     });
 
     const colorGeneral = ctx.tenant?.settings?.citas?.colorBloqueos ?? null;
     return ok({
-      ...serializa(fila, colorGeneral),
-      color: colorDeBloqueo(colorPersona, colorGeneral),
+      ...serializa(fila, colorGeneral, null, categorias, await talleresDelCentro(ctx.tenantModels)),
+      color: colorDeBloqueo({
+        categoria: categoriaDe(fila.categoryKey, categorias)?.color ?? null,
+        persona: colorPersona,
+        centro: colorGeneral,
+      }),
       citasDentro,
     });
   } catch (err) {

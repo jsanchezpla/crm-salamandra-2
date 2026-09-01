@@ -7,6 +7,7 @@ import { calculateInvoice } from "../../../../../lib/billing/calculateInvoice.js
 import { fotoFiscalDe, ATRIBUTOS_PARA_CONGELAR } from "../../../../../lib/billing/datosFiscales.js";
 import { agruparLoteCuotas, lineasDeCuota, mesValido, finExclusivoDe } from "../../../../../lib/billing/lotesCuotas.js";
 import { madridToday } from "../../../../../lib/utils/madridDate.js";
+import { metodosValidos } from "../../../../../lib/billing/caja.js";
 
 /**
  * La «Facturación del mes» (31/08/2026, petición de Aumenta — la Facturación
@@ -34,11 +35,19 @@ function agrupacionValida(v) {
   return v === "terapia" ? "terapia" : "pagador";
 }
 
-async function recogerLote({ tenantModels, mes, agrupacion = "pagador" }) {
+async function recogerLote({ tenantModels, mes, agrupacion = "pagador", metodos = [] }) {
   const { Payment, Client, Invoice, BillingConcept } = tenantModels;
 
   const cobros = await Payment.findAll({
-    where: { status: "completed", periodMonth: `${mes}-01`, invoiceId: null },
+    where: {
+      status: "completed",
+      periodMonth: `${mes}-01`,
+      invoiceId: null,
+      // Elegir QUÉ facturar por forma de pago (01/09/2026, petición de Aumenta:
+      // «poder elegir lo que quieres facturar: banco, tarjeta, efectivo»).
+      // Sin métodos elegidos entran todos, que es lo de siempre.
+      ...(metodos.length ? { method: { [Op.in]: metodos } } : {}),
+    },
     attributes: ["id", "clientId", "amount", "method", "paidAt", "notes", "conceptId"],
     order: [["paidAt", "ASC"]],
   });
@@ -118,14 +127,16 @@ export const GET = withTenant(async (request, _rc, { tenantModels, hasModule }) 
     const mes = params.get("mes");
     if (!mesValido(mes)) return error("El mes debe ser 'AAAA-MM'", 422);
     const agrupacion = agrupacionValida(params.get("agrupacion"));
+    const metodos = metodosValidos(params.getAll("metodo"));
 
     const settings = await TenantBillingSettings.findOne();
-    const { facturables, sinNif } = await recogerLote({ tenantModels, mes, agrupacion });
+    const { facturables, sinNif } = await recogerLote({ tenantModels, mes, agrupacion, metodos });
     const hoy = madridToday();
 
     return ok({
       mes,
       agrupacion,
+      metodos,
       emisor: { ok: faltaEmisor(settings).length === 0, faltan: faltaEmisor(settings) },
       facturables: facturables.map(vistaGrupo),
       sinNif: sinNif.map(vistaGrupo),
@@ -156,6 +167,7 @@ export const POST = withTenant(async (request, _rc, { tenant, tenantModels, hasM
     if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return error("issueDate debe ser 'AAAA-MM-DD'", 422);
     const excluidos = new Set((Array.isArray(body?.exclude) ? body.exclude : []).map(String));
     const agrupacion = agrupacionValida(body?.agrupacion);
+    const metodos = metodosValidos(body?.metodos);
 
     const settings = await TenantBillingSettings.findOne();
     const faltan = faltaEmisor(settings);
@@ -185,7 +197,7 @@ export const POST = withTenant(async (request, _rc, { tenant, tenantModels, hasM
       ? settings?.vatExemptNote || "Operación exenta de IVA conforme al artículo 20 de la Ley 37/1992 del IVA."
       : null;
 
-    const { facturables, sinNif, fichas } = await recogerLote({ tenantModels, mes, agrupacion });
+    const { facturables, sinNif, fichas } = await recogerLote({ tenantModels, mes, agrupacion, metodos });
     const sequelize = Invoice.sequelize;
     const resultados = [];
     const auditoria = [];

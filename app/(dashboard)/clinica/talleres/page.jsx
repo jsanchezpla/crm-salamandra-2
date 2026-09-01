@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
+import SesionTallerDrawer from "../../../../components/clinica/SesionTallerDrawer.jsx";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -49,6 +50,27 @@ export default function TalleresPage() {
   }, []);
   const [aApuntar, setAApuntar] = useState("");
 
+  /*
+   * Las SESIONES del taller (01/09/2026): «hay que poner que estos talleres
+   * puedan tener registro de sesión». Se cargan al abrir la ficha del taller y
+   * el drawer de registro se abre desde aquí.
+   *
+   * `sesionAbierta`: null (cerrado) · { id: null } (una nueva) · { id } (esa).
+   */
+  const [sesiones, setSesiones] = useState([]);
+  const [sesionAbierta, setSesionAbierta] = useState(null);
+
+  const cargarSesiones = useCallback(async (tallerId) => {
+    if (!tallerId) return;
+    try {
+      const r = await fetch(`/api/clinica/talleres/${tallerId}/sesiones`, { cache: "no-store" });
+      const j = await r.json();
+      setSesiones(j?.ok ? (j.data?.sesiones ?? []) : []);
+    } catch {
+      setSesiones([]); // la ficha se ve igual, sin la lista
+    }
+  }, []);
+
   const cargar = useCallback(async () => {
     setCargando(true);
     setErrorMsg(null);
@@ -80,12 +102,16 @@ export default function TalleresPage() {
 
   const abrirDetalle = useCallback(async (t) => {
     setAApuntar("");
+    setSesiones([]);
     try {
       const r = await fetch(`/api/clinica/talleres/${t.id}`, { cache: "no-store" });
       const j = await r.json();
-      if (j.ok) setDetalle(j.data);
+      if (j.ok) {
+        setDetalle(j.data);
+        cargarSesiones(t.id);
+      }
     } catch { /* si falla, no se abre */ }
-  }, []);
+  }, [cargarSesiones]);
 
   function abrirTaller(t = null) {
     setEditandoId(t?.id ?? null);
@@ -304,6 +330,52 @@ export default function TalleresPage() {
               </div>
             </div>
 
+            {/* ── Sesiones del taller (01/09/2026) ───────────────────────
+                Una fila por tarde de taller. El registro se escribe una vez y
+                sale igual en la ficha de todos los que vinieron; lo que es de
+                cada uno es su nota individual, que se pone en el mismo
+                formulario y no la ve nadie más. */}
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <h3 className="text-[12px] uppercase tracking-wide text-neutral-400">
+                  Sesiones ({sesiones.length})
+                </h3>
+                <button
+                  onClick={() => setSesionAbierta({ id: null })}
+                  className="text-[12px] px-2.5 py-1 rounded-md border border-neutral-200 text-neutral-600 hover:bg-neutral-50"
+                >
+                  Registrar sesión
+                </button>
+              </div>
+              <div className="rounded-lg border border-neutral-200 overflow-hidden">
+                {sesiones.length === 0 && (
+                  <p className="px-3 py-4 text-center text-[12.5px] text-neutral-400">
+                    Todavía no hay ninguna sesión registrada de este taller.
+                  </p>
+                )}
+                {sesiones.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => setSesionAbierta({ id: s.id })}
+                    className="w-full text-left flex items-center justify-between px-3 py-2 border-b border-neutral-100 last:border-0 hover:bg-neutral-50 transition"
+                  >
+                    <span className="text-[12.5px] text-neutral-800">
+                      {fmtFecha(s.sessionDate)}
+                      {s.teamMemberName ? <span className="text-neutral-400"> · {s.teamMemberName}</span> : null}
+                    </span>
+                    <span className="flex items-center gap-3 shrink-0">
+                      <span className="text-[11.5px] text-neutral-400">
+                        {s.asistentes} paciente{s.asistentes === 1 ? "" : "s"}
+                      </span>
+                      {s.status === "published" && (
+                        <span className="text-[11px] text-neutral-500 bg-neutral-100 rounded px-1.5 py-0.5">Cerrada</span>
+                      )}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {(detalle.pasaron ?? []).length > 0 && (
               <div>
                 <h3 className="text-[12px] uppercase tracking-wide text-neutral-400 mb-2">
@@ -390,6 +462,21 @@ export default function TalleresPage() {
             </button>
           </div>
         </>
+      )}
+
+      {/* ── Registro de una sesión del taller (01/09/2026) ────────────────── */}
+      {sesionAbierta && detalle && (
+        <SesionTallerDrawer
+          key={sesionAbierta.id ?? "nueva"}
+          tallerId={detalle.id}
+          tallerName={detalle.name}
+          sesionId={sesionAbierta.id}
+          onClose={() => setSesionAbierta(null)}
+          onSaved={() => {
+            setSesionAbierta(null);
+            cargarSesiones(detalle.id);
+          }}
+        />
       )}
     </div>
   );

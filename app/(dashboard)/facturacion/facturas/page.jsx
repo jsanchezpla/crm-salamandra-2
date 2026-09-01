@@ -47,6 +47,18 @@ function emptyForm(defaultVat = 21, termsDays = 30, defaultIrpf = 0) {
   };
 }
 
+/**
+ * ¿Las líneas siguen como nacieron? Una sola, sin texto y a cero. Es la vara
+ * para decidir si la cuota de la familia puede rellenarlas sola: en cuanto hay
+ * algo escrito, no se toca.
+ */
+function lineasEnBlanco(lines) {
+  if (!Array.isArray(lines) || lines.length === 0) return true;
+  if (lines.length > 1) return false;
+  const [l] = lines;
+  return !String(l.description ?? "").trim() && !Number(l.unitPrice) && !l.productId;
+}
+
 function calcLine(line) {
   const q = Number(line.quantity ?? 0);
   const p = Number(line.unitPrice ?? 0);
@@ -65,11 +77,59 @@ export default function FacturasPage() {
   const [errorMsg, setErrorMsg] = useState(null);
 
   const [filterStatus, setFilterStatus] = useState("");
+  /*
+   * Rango de fechas y AGRUPAR POR PACIENTE (01/09/2026, petición de Aumenta:
+   * «poder descargarlas una a una, de un paciente concreto y de una fecha
+   * concreta»). La fecha de cada factura ya salía en su columna; lo que
+   * faltaba era poder acotar el periodo y juntar las de un mismo niño.
+   */
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
+  const [agrupar, setAgrupar] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const limit = 20;
   const { sortKey, sortDir, toggle: toggleSort } = useSortState("issueDate", "desc");
+
+  /*
+   * ¿Hay pacientes que agrupar? Se le pregunta al MÓDULO, no a la página de
+   * facturas que se está viendo: mirando solo las 20 filas cargadas, la casilla
+   * aparecía y desaparecía según la página (Aumenta tiene 14.243 facturas y las
+   * primeras son de antes del enlace con el paciente). Sin módulo asistencial el
+   * endpoint responde 403 y la casilla no sale, como en el resto de la pantalla.
+   */
+  const [hayPacientes, setHayPacientes] = useState(false);
+  useEffect(() => {
+    fetch("/api/pacientes?limit=1", { cache: "no-store" })
+      .then((r) => setHayPacientes(r.ok))
+      .catch(() => {});
+  }, []);
+
+  /*
+   * Las filas de la tabla, con una CABECERA por paciente cuando se agrupa.
+   * Se apoya en que la lista viene ordenada por paciente desde el servidor
+   * (ver el `if` de la casilla): agrupar solo lo que cabe en la página
+   * partiría los grupos al pasar de página.
+   */
+  const filas = useMemo(() => {
+    if (!agrupar) return invoices.map((inv) => ({ tipo: "factura", inv }));
+    const out = [];
+    let anterior = null;
+    for (const inv of invoices) {
+      const clave = inv.patient ? String(inv.patient.id) : "__sin__";
+      if (clave !== anterior) {
+        anterior = clave;
+        out.push({
+          tipo: "grupo",
+          clave,
+          etiqueta: inv.patient ? `${inv.patient.firstName} ${inv.patient.lastName}` : "Sin paciente",
+        });
+      }
+      out.push({ tipo: "factura", inv });
+    }
+    return out;
+  }, [invoices, agrupar]);
 
   // Datos auxiliares
   // La ficha del pagador, tal y como la resuelve SelectorCliente: se usa para
@@ -93,6 +153,7 @@ export default function FacturasPage() {
       .then((j) => j.ok && setConceptosCatalogo(j.data.conceptos ?? []))
       .catch(() => {});
   }, []);
+
   const [me, setMe] = useState(null);
   /*
    * Facturar lo hace quien tiene el MÓDULO de Facturación, no solo quien manda
@@ -135,6 +196,53 @@ export default function FacturasPage() {
   const [formError, setFormError] = useState(null);
   const [rectifyOpen, setRectifyOpen] = useState(false); // modal de rectificación
 
+  /*
+   * LA CUOTA DE LA FAMILIA RELLENA LAS LÍNEAS (01/09/2026, petición de Aumenta:
+   * «en las facturas tienen que salir los conceptos predeterminados que tiene
+   * cada paciente y que van asociados a su cuota»).
+   *
+   * Manda la cuota ASIGNADA (`billing_cuotas`, la que se programa cada mes) y,
+   * si esa familia no tiene, la APRENDIDA de la ficha
+   * (`clients.cuota_concept_ids`: lo último que se le cobró). Con paciente
+   * elegido gana la cuota DE ESE paciente — dos hermanos pagan cosas distintas.
+   *
+   * Solo se rellena solo cuando las líneas siguen EN BLANCO: pisar lo que
+   * alguien acaba de escribir sería peor que no rellenar nada. Para lo demás
+   * está el botón «Poner su cuota».
+   */
+  const [cuotaSugerida, setCuotaSugerida] = useState(null); // { lineas, origen }
+
+  const lineasDesdeConceptos = useCallback(
+    (ids) => (Array.isArray(ids) ? ids : [])
+      .map((id) => lineaDesdeConcepto(conceptosCatalogo.find((c) => String(c.id) === String(id))))
+      .filter(Boolean)
+      .map((l) => ({ ...EMPTY_LINE, ...l })),
+    [conceptosCatalogo]
+  );
+
+  useEffect(() => {
+    // Solo al CREAR: en una factura que ya existe, sus líneas son las suyas.
+    if (openInvoice || !editing || !form.clientId || conceptosCatalogo.length === 0) return;
+    let cancelado = false;
+    fetch(`/api/billing/cuotas?clientId=${encodeURIComponent(form.clientId)}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (cancelado) return;
+        const cuotas = j?.data?.cuotas ?? [];
+        const delPaciente = form.patientId
+          ? cuotas.find((c) => String(c.patientId ?? "") === String(form.patientId))
+          : null;
+        const elegida = delPaciente ?? cuotas[0] ?? null;
+        const ids = elegida ? elegida.conceptIds : clienteElegido?.cuotaConceptIds;
+        const lineas = lineasDesdeConceptos(ids);
+        if (!lineas.length) { setCuotaSugerida(null); return; }
+        setCuotaSugerida({ lineas, origen: elegida ? "cuota" : "aprendida" });
+        setForm((f) => (lineasEnBlanco(f.lines) ? { ...f, lines: lineas } : f));
+      })
+      .catch(() => {});
+    return () => { cancelado = true; };
+  }, [openInvoice, editing, form.clientId, form.patientId, conceptosCatalogo, clienteElegido, lineasDesdeConceptos]);
+
   // Debounce búsqueda
   useEffect(() => {
     const id = setTimeout(() => setSearch(searchInput.trim()), 300);
@@ -163,6 +271,8 @@ export default function FacturasPage() {
       const params = new URLSearchParams({ page, limit, sortBy: sortKey, sortDir });
       if (filterStatus) params.set("status", filterStatus);
       if (search) params.set("q", search);
+      if (desde) params.set("from", desde);
+      if (hasta) params.set("to", hasta);
       const res = await fetch(`/api/billing/invoices?${params}`, { cache: "no-store" });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error");
@@ -173,7 +283,7 @@ export default function FacturasPage() {
     } finally {
       setLoading(false);
     }
-  }, [filterStatus, search, page, sortKey, sortDir]);
+  }, [filterStatus, search, desde, hasta, page, sortKey, sortDir]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -481,8 +591,35 @@ export default function FacturasPage() {
           ]}
           className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition"
         />
-        {(filterStatus || searchInput) && (
-          <button onClick={() => { setSearchInput(""); setFilterStatus(""); setPage(1); }}
+        <label className="flex items-center gap-1.5 text-xs text-neutral-500">
+          Desde
+          <input type="date" value={desde} onChange={(e) => { setDesde(e.target.value); setPage(1); }}
+            className="rounded-lg px-2 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition" />
+        </label>
+        <label className="flex items-center gap-1.5 text-xs text-neutral-500">
+          Hasta
+          <input type="date" value={hasta} onChange={(e) => { setHasta(e.target.value); setPage(1); }}
+            className="rounded-lg px-2 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition" />
+        </label>
+        {hayPacientes && (
+          <label className="flex items-center gap-2 text-xs text-neutral-600">
+            <input
+              type="checkbox"
+              checked={agrupar}
+              onChange={(e) => {
+                setAgrupar(e.target.checked);
+                setPage(1);
+                // Agrupar es ORDENAR por paciente: si no, los grupos se
+                // partirían al cambiar de página y no serían grupos.
+                if (e.target.checked && sortKey !== "patient.lastName") toggleSort("patient.lastName");
+                else if (!e.target.checked && sortKey === "patient.lastName") toggleSort("issueDate");
+              }}
+            />
+            Agrupar por paciente
+          </label>
+        )}
+        {(filterStatus || searchInput || desde || hasta) && (
+          <button onClick={() => { setSearchInput(""); setFilterStatus(""); setDesde(""); setHasta(""); setPage(1); }}
             className="text-xs text-neutral-400 hover:text-neutral-600 px-2 py-1.5 transition-colors">Limpiar</button>
         )}
       </div>
@@ -500,25 +637,29 @@ export default function FacturasPage() {
         {!loading && invoices.length === 0 && (
           <div className="bg-white border border-neutral-100 rounded-xl py-10 text-center text-xs text-neutral-400">Sin facturas</div>
         )}
-        {invoices.map((inv) => (
+        {filas.map((fila) => fila.tipo === "grupo" ? (
+          <div key={`g-${fila.clave}`} className="pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+            {fila.etiqueta}
+          </div>
+        ) : (
           <button
-            key={inv.id}
-            onClick={() => openDetail(inv)}
+            key={fila.inv.id}
+            onClick={() => openDetail(fila.inv)}
             className="w-full text-left bg-white border border-neutral-100 rounded-xl p-3 active:bg-neutral-50 transition-colors"
           >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <div className="font-medium text-neutral-800 truncate">{inv.client?.name ?? "—"}</div>
+                <div className="font-medium text-neutral-800 truncate">{fila.inv.client?.name ?? "—"}</div>
                 <div className="text-[11px] text-neutral-400 font-mono">
-                  {inv.status === "draft" ? <span className="italic">borrador</span> : inv.number} · {fmtDate(inv.issueDate)}
+                  {fila.inv.status === "draft" ? <span className="italic">borrador</span> : fila.inv.number} · {fmtDate(fila.inv.issueDate)}
                 </div>
               </div>
-              <StatusBadge status={inv.status} />
+              <StatusBadge status={fila.inv.status} />
             </div>
             <div className="flex items-baseline justify-between gap-2 mt-2">
-              <span className="text-lg font-semibold text-neutral-900 tabular">{fmtMoney(inv.total)}</span>
-              {Number(inv.paidAmount) > 0 && (
-                <span className="text-[11px] text-emerald-700 tabular">Cobrado {fmtMoney(inv.paidAmount)}</span>
+              <span className="text-lg font-semibold text-neutral-900 tabular">{fmtMoney(fila.inv.total)}</span>
+              {Number(fila.inv.paidAmount) > 0 && (
+                <span className="text-[11px] text-emerald-700 tabular">Cobrado {fmtMoney(fila.inv.paidAmount)}</span>
               )}
             </div>
           </button>
@@ -539,25 +680,49 @@ export default function FacturasPage() {
                 <SortableTh k="taxBase" label="Base" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
                 <SortableTh k="total" label="Total" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
                 <SortableTh k="paidAmount" label="Cobrado" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
+                <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody>
               {loading && invoices.length === 0 && (
-                <tr><td colSpan={8} className="text-center py-12 text-xs text-neutral-400">Cargando...</td></tr>
+                <tr><td colSpan={9} className="text-center py-12 text-xs text-neutral-400">Cargando...</td></tr>
               )}
               {!loading && invoices.length === 0 && (
-                <tr><td colSpan={8} className="text-center py-12 text-xs text-neutral-400">Sin facturas</td></tr>
+                <tr><td colSpan={9} className="text-center py-12 text-xs text-neutral-400">Sin facturas</td></tr>
               )}
-              {invoices.map((inv) => (
-                <tr key={inv.id} onClick={() => openDetail(inv)} className="border-b border-neutral-50 hover:bg-neutral-50/70 transition-colors cursor-pointer">
-                  <td className="px-4 py-3 font-mono text-xs text-neutral-500">{inv.status === "draft" ? <span className="italic text-neutral-400">borrador</span> : inv.number}</td>
-                  <td className="px-4 py-3 text-neutral-800">{inv.client?.name ?? "—"}</td>
-                  <td className="px-4 py-3 text-neutral-500 text-xs">{inv.employee?.displayName ?? "—"}</td>
-                  <td className="px-4 py-3 text-neutral-500 text-xs">{fmtDate(inv.issueDate)}</td>
-                  <td className="px-4 py-3"><StatusBadge status={inv.status} /></td>
-                  <td className="px-4 py-3 text-right text-neutral-700 tabular">{fmtMoney(inv.taxBase)}</td>
-                  <td className="px-4 py-3 text-right font-semibold text-neutral-900 tabular">{fmtMoney(inv.total)}</td>
-                  <td className="px-4 py-3 text-right text-emerald-700 tabular">{fmtMoney(inv.paidAmount)}</td>
+              {filas.map((fila) => fila.tipo === "grupo" ? (
+                <tr key={`g-${fila.clave}`} className="bg-neutral-50/80 border-b border-neutral-100">
+                  <td colSpan={9} className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+                    {fila.etiqueta}
+                  </td>
+                </tr>
+              ) : (
+                <tr key={fila.inv.id} onClick={() => openDetail(fila.inv)} className="border-b border-neutral-50 hover:bg-neutral-50/70 transition-colors cursor-pointer">
+                  <td className="px-4 py-3 font-mono text-xs text-neutral-500">{fila.inv.status === "draft" ? <span className="italic text-neutral-400">borrador</span> : fila.inv.number}</td>
+                  <td className="px-4 py-3 text-neutral-800">{fila.inv.client?.name ?? "—"}</td>
+                  <td className="px-4 py-3 text-neutral-500 text-xs">{fila.inv.employee?.displayName ?? "—"}</td>
+                  <td className="px-4 py-3 text-neutral-500 text-xs">{fmtDate(fila.inv.issueDate)}</td>
+                  <td className="px-4 py-3"><StatusBadge status={fila.inv.status} /></td>
+                  <td className="px-4 py-3 text-right text-neutral-700 tabular">{fmtMoney(fila.inv.taxBase)}</td>
+                  <td className="px-4 py-3 text-right font-semibold text-neutral-900 tabular">{fmtMoney(fila.inv.total)}</td>
+                  <td className="px-4 py-3 text-right text-emerald-700 tabular">{fmtMoney(fila.inv.paidAmount)}</td>
+                  {/* Descargar UNA (01/09/2026): el ZIP de todas ya estaba; lo
+                      que faltaba era el PDF de esta fila sin abrir la factura.
+                      `stopPropagation` para que el clic no abra el cajón. */}
+                  <td className="px-4 py-3 text-right">
+                    {fila.inv.status !== "draft" && (
+                      <a
+                        href={`/api/billing/invoices/${fila.inv.id}/pdf`}
+                        onClick={(e) => e.stopPropagation()}
+                        title={`Descargar ${fila.inv.number}`}
+                        className="inline-flex items-center text-neutral-400 hover:text-[var(--color-primary,#1B3A2D)] transition-colors"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                        </svg>
+                      </a>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -744,8 +909,29 @@ export default function FacturasPage() {
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <h3 className="eyebrow">Líneas</h3>
-                      <button type="button" onClick={addLine} className="text-xs font-semibold text-[var(--color-primary,#1B3A2D)] hover:underline">+ Añadir línea</button>
+                      <div className="flex items-center gap-3">
+                        {!openInvoice && cuotaSugerida && (
+                          <button
+                            type="button"
+                            onClick={() => setForm((f) => ({ ...f, lines: cuotaSugerida.lineas.map((l) => ({ ...l })) }))}
+                            className="text-xs font-semibold text-neutral-500 hover:text-neutral-800 hover:underline"
+                            title={cuotaSugerida.origen === "cuota"
+                              ? "Los conceptos de la cuota mensual de esta familia"
+                              : "Los conceptos del último cobro de cuota de esta familia"}
+                          >
+                            Poner su cuota ({cuotaSugerida.lineas.length})
+                          </button>
+                        )}
+                        <button type="button" onClick={addLine} className="text-xs font-semibold text-[var(--color-primary,#1B3A2D)] hover:underline">+ Añadir línea</button>
+                      </div>
                     </div>
+                    {!openInvoice && cuotaSugerida && (
+                      <p className="text-[11px] text-neutral-400 mb-2">
+                        {cuotaSugerida.origen === "cuota"
+                          ? "Los conceptos vienen de la cuota mensual de esta familia."
+                          : "Los conceptos vienen del último cobro de cuota de esta familia."}
+                      </p>
+                    )}
                     <div className="space-y-2">
                       {form.lines.map((l, idx) => {
                         const c = calcLine(l);

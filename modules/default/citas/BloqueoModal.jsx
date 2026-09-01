@@ -5,13 +5,19 @@ import { inputCls, toDateInput, toTimeInput } from "./chips.jsx";
 
 /**
  * El modal pequeño de un bloqueo pulsado en el calendario (31/08/2026,
- * Rodrigo): cambiar el concepto, la fecha y la duración sin ir a la pestaña
- * de Bloqueos. Se apoya en el PATCH de /api/citas/bloqueos, que ya pone las
- * vallas (cada cual toca lo suyo, los cierres del centro solo dirección):
- * aquí un 403 solo se enseña.
+ * Rodrigo): cambiar la categoría, el concepto, la fecha y la duración sin ir a
+ * la pestaña de Bloqueos. Se apoya en el PATCH de /api/citas/bloqueos, que ya
+ * pone las vallas (cada cual toca lo suyo, los cierres del centro solo
+ * dirección): aquí un 403 solo se enseña.
+ *
+ * `categorias` son las del centro (01/09/2026), tal como las devuelve el
+ * listado de bloqueos. Vacías —el centro no las usa— y el desplegable no se
+ * enseña: el modal se queda exactamente como estaba.
  */
-export function BloqueoModal({ bloqueo, onClose, onSaved }) {
+export function BloqueoModal({ bloqueo, categorias = [], talleres = [], onClose, onSaved }) {
   const [label, setLabel] = useState(bloqueo.label ?? "");
+  const [categoryKey, setCategoryKey] = useState(bloqueo.categoryKey ?? "");
+  const [tallerId, setTallerId] = useState(bloqueo.tallerId ?? "");
   const [startDate, setStartDate] = useState(toDateInput(bloqueo.start));
   const [startTime, setStartTime] = useState(toTimeInput(bloqueo.start));
   const [endDate, setEndDate] = useState(toDateInput(bloqueo.end));
@@ -38,6 +44,11 @@ export function BloqueoModal({ bloqueo, onClose, onSaved }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           label: label.trim() || "Vacaciones",
+          // Vacía = quitarle la categoría. El servidor descarta la que no esté
+          // dada de alta, así que aquí no hace falta validar nada.
+          categoryKey: categoryKey || null,
+          // Y qué taller se da en el tramo. Vacío = no es un taller.
+          tallerId: tallerId || null,
           startAt: inicio.toISOString(),
           endAt: fin.toISOString(),
         }),
@@ -64,6 +75,43 @@ export function BloqueoModal({ bloqueo, onClose, onSaved }) {
             <h3 className="font-display text-lg text-neutral-900 mt-0.5 truncate">{bloqueo.titulo}</h3>
           </div>
           <div className="px-5 py-4 space-y-3">
+            {categorias.length > 0 && (
+              <div>
+                <label className="block text-[11px] font-medium text-neutral-500 mb-1">Categoría</label>
+                <select
+                  value={categoryKey}
+                  onChange={(e) => setCategoryKey(e.target.value)}
+                  className={inputCls}
+                >
+                  <option value="">Sin categoría</option>
+                  {categorias.map((c) => (
+                    <option key={c.key} value={c.key}>{c.label}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {/* ¿Este tramo es un TALLER? (01/09/2026, Rodrigo). Hasta hoy los
+                talleres «salían como bloqueos y ya»: la hora quedaba tachada y
+                de lo que pasaba dentro no quedaba nada. Marcándolo aquí, desde
+                el propio taller se registra la sesión del grupo. */}
+            {talleres.length > 0 && (
+              <div>
+                <label className="block text-[11px] font-medium text-neutral-500 mb-1">Taller</label>
+                <select value={tallerId} onChange={(e) => setTallerId(e.target.value)} className={inputCls}>
+                  <option value="">No es un taller</option>
+                  {talleres.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+                {tallerId && (
+                  <p className="text-[10px] text-neutral-400 mt-1">
+                    El registro de la sesión se escribe desde{" "}
+                    <a href="/clinica/talleres" className="underline hover:no-underline">Talleres</a>: uno para
+                    todo el grupo, más la nota de cada paciente.
+                  </p>
+                )}
+              </div>
+            )}
             <div>
               <label className="block text-[11px] font-medium text-neutral-500 mb-1">Concepto</label>
               <input value={label} onChange={(e) => setLabel(e.target.value)} className={inputCls} placeholder="Vacaciones" />

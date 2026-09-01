@@ -5,6 +5,13 @@
  * array, observations como objeto de 4 campos, contentSections de 7 secciones,
  * coordinaciones con enum válido. Enganchado a los team_members reales del tenant.
  *
+ * Cada paciente cuelga de su FAMILIA (una ficha de cliente que paga) por
+ * patients.client_id, con sus citas a nombre de la familia y el paciente puesto:
+ * es la cadena «pacientes separados del pagador» que anuncia la demo de clínica,
+ * y la que usan el buscador por paciente de Facturación
+ * (lib/clients/familiasPorPaciente.js), el reparto de cuotas y el portal. Sin el
+ * enlace, todo eso sale vacío (pasó en producción, visto el 31/08/2026).
+ *
  * ⚠️ VACÍA la historia clínica del tenant antes de sembrar. Solo para el
  * escaparate (`demo`) — ver el freno de abajo.
  *
@@ -18,6 +25,7 @@
  * escribe el comando a mano, con la copia hecha y sabiendo lo que se hace.
  */
 
+import { Op } from "sequelize";
 import { getTenantDb } from "../lib/db/tenantDb.js";
 import { AREA_KEYS } from "../lib/clinica/performanceAreas.js";
 import { exigirTenantDePruebas } from "./_guard-datos-reales.js";
@@ -28,7 +36,8 @@ exigirTenantDePruebas(SLUG, {
   script: "seed-clinica-demo.js",
   destruye:
     "pacientes, sesiones clínicas, informes, coordinaciones y métricas de desempeño " +
-    "del tenant (y, en cascada, planes de intervención e inscripciones a talleres).",
+    "del tenant (y, en cascada, planes de intervención e inscripciones a talleres), " +
+    "más las citas enlazadas a paciente y las familias de muestra de seeds anteriores.",
 });
 
 function log(m) { process.stdout.write(`  ${m}\n`); }
@@ -97,7 +106,7 @@ async function main() {
   process.stdout.write("══════════════════════════════════════════════\n");
 
   const { models } = getTenantDb(SLUG);
-  const { Patient, ClinicSession, ClinicalReport, Coordination, PerformanceMetric, TeamMember } = models;
+  const { Patient, ClinicSession, ClinicalReport, Coordination, PerformanceMetric, TeamMember, Client, Booking, EventType } = models;
 
   const team = await TeamMember.findAll({ where: { status: "active" } });
   if (team.length === 0) throw new Error(`No hay team_members activos en ${SLUG}; siembra el equipo primero.`);
@@ -108,38 +117,67 @@ async function main() {
   await ClinicSession.destroy({ where: {} });
   await ClinicalReport.destroy({ where: {} });
   await PerformanceMetric.destroy({ where: {} });
+  // Las citas CON paciente son del elenco que se va: la FK es SET NULL y
+  // quedarían como citas fantasma a nombre de familias que se borran ahora.
+  await Booking.destroy({ where: { patientId: { [Op.ne]: null } } })
+    .catch((e) => log(`⚠ citas con paciente sin borrar: ${e.message}`));
   await Patient.destroy({ where: {} });
+  // Y las familias de muestra de seeds anteriores (llevan la marca
+  // customFields.showcase); las fichas creadas a mano no la llevan y se quedan.
+  await Client.destroy({ where: { customFields: { [Op.contains]: { showcase: "familia" } } } })
+    .catch((e) => log(`⚠ familias previas sin borrar: ${e.message}`));
   log("✓ datos clínicos previos vaciados");
 
-  // ── Pacientes ──
-  const N = 8;
+  // ── Familias + Pacientes ──
+  // El niño y quien paga son fichas distintas: cada paciente cuelga de su
+  // familia por patients.client_id (comparten primer apellido para que la
+  // cadena se VEA al buscar al niño en Facturación o abrir la ficha).
+  const FAMILIAS = [2, 1, 1, 1, 1, 1, 1]; // 8 pacientes; la primera con dos hermanos
+  const N = FAMILIAS.reduce((a, b) => a + b, 0);
+  const slugMail = (s) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]/g, "");
   const patients = [];
-  for (let i = 0; i < N; i++) {
-    const firstName = NOMBRES[i % NOMBRES.length];
-    const lastName = `${pick(APELLIDOS)} ${pick(APELLIDOS)}`;
-    const age = rand(6, 13);
-    const therapist = team[i % team.length];
-    const status = i === N - 1 ? "discharged" : i === N - 2 ? "paused" : "active";
-    const p = await Patient.create({
-      firstName,
-      lastName,
-      age,
-      birthDate: ymdAgo(age * 365 + rand(0, 300)),
-      educationCenter: pick(CENTROS),
-      educationLevel: pick(NIVELES),
-      referralReason: motivo(firstName),
-      referredBy: pick(DERIVA),
-      objectives: [...new Set([pick(OBJETIVOS), pick(OBJETIVOS), pick(OBJETIVOS)])],
-      mainTherapistId: therapist.id,
-      enrollmentDate: ymdAgo(rand(120, 400)),
-      attendanceFrequency: pick(FRECS),
-      status,
-      dischargeDate: status === "discharged" ? ymdAgo(rand(5, 30)) : null,
-      dischargeReason: status === "discharged" ? "Objetivos alcanzados. Alta terapéutica." : null,
+  const familiaDe = new Map(); // patient.id → su ficha de familia
+  for (const nHijos of FAMILIAS) {
+    const apellidoFamilia = pick(APELLIDOS);
+    const familia = await Client.create({
+      type: "individual",
+      name: `${pick(["Marta", "Álvaro", "Cristina", "Raúl", "Silvia", "Óscar", "Teresa", "Andrés"])} ${apellidoFamilia} ${pick(APELLIDOS)}`,
+      email: `familia.${slugMail(apellidoFamilia)}${rand(10, 99)}@example.com`,
+      phone: `+34 6${rand(10, 99)} ${rand(100, 999)} ${rand(100, 999)}`,
+      status: "active",
+      customFields: { showcase: "familia" },
     });
-    patients.push(p);
+    for (let h = 0; h < nHijos; h++) {
+      const i = patients.length;
+      const firstName = NOMBRES[i % NOMBRES.length];
+      const lastName = `${apellidoFamilia} ${pick(APELLIDOS)}`;
+      const age = rand(6, 13);
+      const therapist = team[i % team.length];
+      const status = i === N - 1 ? "discharged" : i === N - 2 ? "paused" : "active";
+      const p = await Patient.create({
+        clientId: familia.id,
+        relationship: pick(["hijo", "hija"]),
+        firstName,
+        lastName,
+        age,
+        birthDate: ymdAgo(age * 365 + rand(0, 300)),
+        educationCenter: pick(CENTROS),
+        educationLevel: pick(NIVELES),
+        referralReason: motivo(firstName),
+        referredBy: pick(DERIVA),
+        objectives: [...new Set([pick(OBJETIVOS), pick(OBJETIVOS), pick(OBJETIVOS)])],
+        mainTherapistId: therapist.id,
+        enrollmentDate: ymdAgo(rand(120, 400)),
+        attendanceFrequency: pick(FRECS),
+        status,
+        dischargeDate: status === "discharged" ? ymdAgo(rand(5, 30)) : null,
+        dischargeReason: status === "discharged" ? "Objetivos alcanzados. Alta terapéutica." : null,
+      });
+      patients.push(p);
+      familiaDe.set(p.id, familia);
+    }
   }
-  log(`✓ ${patients.length} pacientes`);
+  log(`✓ ${patients.length} pacientes en ${FAMILIAS.length} familias (pagador enlazado)`);
 
   // ── Sesiones (2-6 por paciente) ──
   let nSess = 0;
@@ -150,6 +188,7 @@ async function main() {
       const daysBack = 4 + k * rand(7, 14);
       await ClinicSession.create({
         patientId: p.id,
+        clientId: p.clientId, // foto del pagador, como hace la app (lib/clinica/patientClient.js)
         therapistId: p.mainTherapistId,
         sessionDate: dateAgo(daysBack),
         duration: pick([45, 50, 55, 60]),
@@ -167,6 +206,40 @@ async function main() {
   }
   log(`✓ ${nSess} sesiones`);
 
+  // ── Citas: a nombre de la familia y con el paciente puesto, como agenda la
+  // app. Los tipos de cita los sembró seed-sandbox-data; sin tipos no hay
+  // citas posibles y se dice en vez de reventar (este seed también corre en
+  // tenants sin módulo de citas).
+  let nCitas = 0;
+  const tiposCita = await EventType.findAll({ where: { active: true } }).catch(() => []);
+  if (tiposCita.length) {
+    for (const p of patients) {
+      const familia = familiaDe.get(p.id);
+      const agenda = [{ cuando: dateAgo(rand(5, 25), rand(16, 19)), status: "completed" }];
+      if (p.status === "active") agenda.push({ cuando: dateAgo(-rand(2, 12), rand(16, 19)), status: "confirmed" });
+      for (const cita of agenda) {
+        const et = pick(tiposCita);
+        await Booking.create({
+          eventTypeId: et.id,
+          teamMemberId: p.mainTherapistId,
+          patientId: p.id,
+          clientId: p.clientId,
+          clientName: familia.name,
+          clientEmail: familia.email,
+          clientPhone: familia.phone,
+          scheduledAt: cita.cuando,
+          duration: et.duration,
+          modality: Array.isArray(et.modalities) && et.modalities.length ? pick(et.modalities) : "presencial",
+          status: cita.status,
+        });
+        nCitas++;
+      }
+    }
+    log(`✓ ${nCitas} citas a nombre de la familia, con su paciente`);
+  } else {
+    log("· sin tipos de cita en el tenant: agenda de pacientes no sembrada");
+  }
+
   // ── Informes (los 2 primeros pacientes con contenido completo) ──
   let nRep = 0;
   for (let i = 0; i < patients.length; i++) {
@@ -177,6 +250,7 @@ async function main() {
     const status = forceOverdue ? "reviewed" : pick(["draft", "reviewed", "delivered"]);
     await ClinicalReport.create({
       patientId: p.id,
+      clientId: p.clientId,
       therapistId: p.mainTherapistId,
       reportType: pick(["evolution", "evolution", "admission"]),
       reportDate: ymdAgo(rand(3, 40)),
@@ -203,6 +277,7 @@ async function main() {
       ...COORDS[i],
       coordinationDate: dateAgo(rand(5, 60), 12),
       relatedPatientId: p.id,
+      clientId: p.clientId,
       createdById: p.mainTherapistId,
     });
     nCoord++;
@@ -240,7 +315,7 @@ async function main() {
   }
   log(`✓ ${nPerf} métricas de desempeño (${team.length} terapeutas × 6 meses)`);
 
-  process.stdout.write(`\n✓ Seed clínico completado en ${SLUG}: ${patients.length} pacientes · ${nSess} sesiones · ${nRep} informes · ${nCoord} coordinaciones · ${nPerf} métricas\n\n`);
+  process.stdout.write(`\n✓ Seed clínico completado en ${SLUG}: ${patients.length} pacientes en ${FAMILIAS.length} familias · ${nCitas} citas · ${nSess} sesiones · ${nRep} informes · ${nCoord} coordinaciones · ${nPerf} métricas\n\n`);
   process.exit(0);
 }
 

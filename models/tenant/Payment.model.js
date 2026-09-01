@@ -66,6 +66,14 @@ export function definePayment(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      // De que CUOTA asignada nacio este cobro (01/09/2026, billing_cuotas).
+      // Lo rellena solo la generacion mensual; el cobro apuntado a mano sigue
+      // naciendo a NULL. Es lo que evita generar dos veces el mismo mes: sin
+      // esta columna, "ya generado" habria que adivinarlo por importe y fecha.
+      cuotaId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       // ── El puente con el dinero de verdad (29/08/2026) ──────────────────
       // Hasta hoy un cobro era una anotación a mano: importe, fecha, método y
       // notas. No había NINGÚN identificador externo, así que desde un cobro no

@@ -33,6 +33,9 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       if (searchParams.get("from")) where.issueDate[Op.gte] = searchParams.get("from");
       if (searchParams.get("to")) where.issueDate[Op.lte] = searchParams.get("to");
     }
+    // Se calcula una vez: lo usan el include Y la lista de ordenaciones válidas.
+    const patientInclude = invoicePatientInclude(tenantModels, hasModule);
+
     const q = (searchParams.get("q") || "").trim();
     /*
      * Todas las palabras, cada una en cualquiera de los campos (28/08/2026):
@@ -64,6 +67,18 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       paidAmount: "paidAmount",
       "client.name": [{ model: Client, as: "client" }, "name"],
       "employee.displayName": [{ model: TeamMember, as: "employee" }, "displayName"],
+      /*
+       * Ordenar por paciente es lo que hace posible AGRUPAR POR PACIENTE en la
+       * lista (01/09/2026, petición de Aumenta). Agrupar solo lo que cabe en la
+       * página sería mentira: con el orden puesto, los grupos siguen enteros
+       * aunque la lista pase de página.
+       *
+       * Va condicionado al módulo, como el include: sin tabla de pacientes esta
+       * clave no puede ni ofrecerse (Sequelize pediría un alias que no existe).
+       */
+      ...(patientInclude.length
+        ? { "patient.lastName": [{ model: tenantModels.Patient, as: "patient" }, "lastName"] }
+        : {}),
     };
     const order = parseSortOrder(
       searchParams.get("sortBy"),
@@ -77,7 +92,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       include: [
         { model: Client, as: "client", attributes: ATRIBUTOS_CLIENTE_FACTURA },
         { model: TeamMember, as: "employee", attributes: ["id", "displayName"] },
-        ...invoicePatientInclude(tenantModels, hasModule),
+        ...patientInclude,
       ],
       order,
       limit,

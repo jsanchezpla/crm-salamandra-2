@@ -355,6 +355,16 @@ export const MODULES = {
     // Preguntas propias del tipo de cita (04/08/2026), en vez de enganchar un
     // formulario del módulo Formularios.
     "migrate-preguntas-cita",
+    // La categoría de un bloqueo (01/09/2026): reunión de equipo, trabajo
+    // interno, gestión documental… El modelo declara `category_key`, así que
+    // sin esta columna CUALQUIER lectura de bloqueos da 42703. VA ANTES del
+    // despliegue.
+    "migrate-citas-categorias-bloqueo",
+    // Qué TALLER se da en un tramo bloqueado (01/09/2026). Va aquí y no con el
+    // resto del encargo de talleres (bloque `clinica`) porque `team_blocks` es
+    // de Citas y el modelo declara `taller_id` para todos: un centro con Citas
+    // y sin Clínica se quedaría sin la columna. VA ANTES del despliegue.
+    "migrate-citas-bloqueo-taller",
   ],
 
   calendar: ["migrate-calendar-citas-fks"],
@@ -392,6 +402,11 @@ export const MODULES = {
     // El concepto de cobro del taller (31/08/2026): sin concept_id el modelo
     // lo pide y todo GET de talleres da 42703.
     "migrate-talleres-concepto",
+    // El REGISTRO DE SESIÓN de un taller (01/09/2026): la tabla
+    // `taller_sesiones` y el puntero `clinic_sessions.taller_sesion_id`. El
+    // modelo de sesiones declara esa columna, así que sin ella toda lectura de
+    // la historia clínica da 42703. VA ANTES del despliegue.
+    "migrate-taller-sesiones",
     "migrate-clinica-module",
     // El autor del acta puede no estar en la plantilla (02/08/2026): campo de
     // texto libre y created_by_id opcional.
@@ -470,6 +485,12 @@ export const MODULES = {
     // columnas el modelo pide patient_id/concept_id y todo GET de cobros da 42703.
     "migrate-payments-terapia",
     "migrate-clients-cuota",
+    // Las cuotas asignadas (quien paga que todos los meses) y payments.cuota_id.
+    // 01/09/2026, ANTES del despliegue: el modelo pide las columnas por nombre.
+    "migrate-billing-cuotas",
+    // Entradas y salidas de caja: lo que pasa por el cajon y no es un cobro.
+    // 01/09/2026, ANTES del despliegue.
+    "migrate-arqueo-movimientos",
     // La retención de IRPF del gasto (31/08/2026): sin irpf_rate/irpf_amount
     // el modelo las pide y todo GET de gastos da 42703.
     "migrate-costs-irpf",

@@ -15,7 +15,13 @@ const STATUSES = ["draft", "ai_pending", "registered", "published"];
 // preparación van por su propio endpoint (son ficheros, no texto).
 // `internalNotes` (29/08/2026) va por el mismo motivo: lo que el equipo anota
 // para sí mismo se escribe y se corrige cuando toca, no solo al crear.
-const PATCH_FIELDS = ["sessionDate", "duration", "objectives", "activities", "performance", "observations", "status", "prepText", "parentFeedback", "internalNotes", "contentSections"];
+// `aiTranscription` y `aiReviewedAt` (01/09/2026): desde que el botón de la IA
+// acepta TEXTO PEGADO, una sesión sin audio puede rellenarse desde el cajón con
+// lo que la profesional apuntó en un bloc de notas. Ese texto es de dónde salió
+// el registro y merece guardarse —si no, lo que ella escribió y la IA no supo
+// colocar se pierde— y la marca de que ahí ha intervenido la IA también.
+// `aiTranscription` va con candado abajo: se escribe UNA vez y no se pisa.
+const PATCH_FIELDS = ["sessionDate", "duration", "objectives", "activities", "performance", "observations", "status", "prepText", "parentFeedback", "internalNotes", "contentSections", "aiTranscription", "aiReviewedAt"];
 
 export const GET = withTenant(async (request, rc, ctx) => {
   if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
@@ -47,6 +53,23 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
   const updates = {};
   for (const k of PATCH_FIELDS) if (k in body) updates[k] = body[k];
   if ("objectives" in updates && !Array.isArray(updates.objectives)) updates.objectives = [];
+  // ── El texto del que salió el registro se escribe UNA vez ────────────────
+  // Es la prueba de dónde vino una nota clínica: la transcripción de un audio
+  // que ya no existe, o lo que se apuntó a mano. Dejar que un PATCH la
+  // reescriba sería poder borrar esa prueba desde el navegador, y encima sin
+  // que se note. Quien pegue notas nuevas sobre una sesión que ya tenía texto
+  // se queda con el suyo; lo que la IA saque de ellas sí entra en el registro.
+  if ("aiTranscription" in updates) {
+    const yaTiene = String(s.aiTranscription ?? "").trim();
+    const nuevo = String(updates.aiTranscription ?? "").trim();
+    if (yaTiene || !nuevo) delete updates.aiTranscription;
+    else updates.aiTranscription = nuevo;
+  }
+  if ("aiReviewedAt" in updates) {
+    const d = updates.aiReviewedAt ? new Date(updates.aiReviewedAt) : null;
+    if (!d || Number.isNaN(d.getTime())) delete updates.aiReviewedAt;
+    else updates.aiReviewedAt = d;
+  }
   // Los apartados vienen de un navegador: se limpian antes de guardarlos.
   if ("contentSections" in updates) updates.contentSections = limpiarContentSections(updates.contentSections);
   if ("sessionDate" in updates && updates.sessionDate) updates.sessionDate = new Date(updates.sessionDate);

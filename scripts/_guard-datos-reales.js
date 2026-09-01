@@ -32,12 +32,21 @@
  *   exigirTenantDePruebas(SLUG, { script: "seed-clinica-demo.js", destruye: "…" });
  */
 
+import { DEMO_SLUGS } from "../lib/demo/demos.js";
+
 /**
- * Los únicos tenants sobre los que se puede arrasar sin pensarlo. Cualquier
+ * Los únicos tenants sobre los que se puede arrasar sin pensarlo: las demos
+ * públicas (la MISMA lista blanca que usa el botón «Prueba una demo», así una
+ * demo nueva queda cubierta sola) más los tenants de laboratorio. Cualquier
  * slug que no esté aquí se trata como cliente real: es deliberado que la lista
  * corta sea esta y no la contraria.
+ *
+ * Hasta el 31/08/2026 la lista era fija y no incluía las demos por oficio,
+ * nacidas DESPUÉS del freno: `seed-clinica-demo.js demo_clinica` moría aquí,
+ * `crear-demos-por-oficio.js` se tragaba el código de salida y demo_clinica se
+ * quedaba con los pacientes genéricos del sandbox.
  */
-const TENANTS_DE_PRUEBA = new Set(["demo", "demo_golden", "sandbox", "test"]);
+const TENANTS_DE_PRUEBA = new Set([...DEMO_SLUGS, "demo_golden", "sandbox", "test"]);
 
 /** Bandera que hay que teclear entera para saltarse el freno. */
 const BANDERA = "--si-quiero-tocar-un-cliente-real";

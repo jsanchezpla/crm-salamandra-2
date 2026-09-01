@@ -64,6 +64,45 @@ export function defineTeamBlock(sequelize) {
         allowNull: false,
         defaultValue: "Vacaciones",
       },
+      /**
+       * DE QUÉ es el bloqueo (01/09/2026, Rodrigo): la clave de una de las
+       * categorías del centro (`settings.citas.categoriasBloqueo`).
+       *
+       * Es una clave suelta y NO una FK: las categorías viven en el JSONB de
+       * master, como las plantillas de informe o las especialidades de
+       * derivación, así que aquí no hay tabla a la que apuntar. Eso además le
+       * da la tolerancia que hace falta — borrar una categoría no puede
+       * romper los bloqueos que la usaban: se quedan con una clave que ya no
+       * está y vuelven a pintarse y a leerse como los de siempre.
+       *
+       * Nullable, y así nace: es opcional en todos los tenants y un bloqueo
+       * sin categoría se comporta exactamente como antes de existir esto.
+       */
+      categoryKey: {
+        type: DataTypes.STRING(64),
+        allowNull: true,
+      },
+      /**
+       * El TALLER que se da en este tramo (01/09/2026, Rodrigo): «los talleres
+       * hay que ponerlos y dejar claro que ahora salen como bloqueos y ya».
+       *
+       * Y era literal: HHSS, Grupo de Apoyo y Mente Activa se apuntan en la
+       * agenda como un bloqueo con su nombre escrito a mano, así que la hora
+       * queda ocupada y de lo que pasa dentro no queda nada. Con esto el
+       * bloqueo deja de ser solo una hora tachada: sabe QUÉ taller es, y desde
+       * él se registra la sesión del grupo (`taller_sesiones`).
+       *
+       * Sigue siendo un bloqueo y no una cita, por lo mismo de siempre (ver
+       * arriba): un taller no tiene UN paciente al que mandarle el recordatorio.
+       *
+       * Nullable y sin FK dura: la inmensa mayoría de los bloqueos no son
+       * talleres, y dar de baja un taller no puede borrar las horas que ya
+       * estaban puestas en la agenda.
+       */
+      tallerId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       notes: {
         type: DataTypes.TEXT,
         allowNull: true,

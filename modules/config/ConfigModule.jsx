@@ -31,6 +31,7 @@ import {
 import {
   AgendaCompartidaCard,
   AvisosWhatsappCard,
+  CategoriasBloqueoCard,
   ColorBloqueosCard,
   RecordatoriosCard,
   VideollamadaCard,
@@ -780,6 +781,18 @@ export default function ConfigModule({ modulos = null }) {
                 onGuardar={(v) => patchTenant({ colorBloqueos: v }, "Color de los bloqueos guardado")}
               />
             ) 
+
+          )}
+
+          {enZona(
+            "categoriasBloqueo",
+             isAdmin && (
+              <CategoriasBloqueoCard
+                categorias={cfg.categoriasBloqueo ?? []}
+                readOnly={!!cfg.readOnly}
+                onGuardar={(v) => patchTenant({ categoriasBloqueo: v }, "Categorías de bloqueo guardadas")}
+              />
+            )
 
           )}
 

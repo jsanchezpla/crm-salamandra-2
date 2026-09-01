@@ -13,8 +13,7 @@
  *     sprint 2026-07: 1·Preparación (con adjuntos), 2·Informe (objetivos,
  *     actividades, desempeño, observaciones) y 3·Devolución de la familia.
  *   - El audio es un bloque OPCIONAL dentro: si se sube y procesa, la IA
- *     rellena SOLO los apartados vacíos del informe — lo escrito a mano no se
- *     pisa (la regla de la casa, la misma que el volcado de informes).
+ *     propone el registro entero y ella elige apartado por apartado.
  *
  * «Preparar la sesión» (borrador antes de darla, 26/08 por la mañana) sigue
  * igual: se llega con ?preparar=1 desde el modal de la cita o con su enlace de
@@ -30,6 +29,27 @@
  * día y los adjuntos, y el texto cruza en los dos sentidos. Y como del
  * registro completo solo viaja la preparación, la pantalla avisa si hay algo
  * más escrito en vez de tirarlo callando.
+ *
+ * ── EL AUDIO YA RELLENA EL REGISTRO ENTERO (01/09/2026, Rodrigo) ───────────
+ * Hasta hoy «Procesar con IA» solo tocaba SIETE apartados —los de fábrica del
+ * punto 2— y solo si estaban vacíos. Quedaban siempre en blanco la preparación,
+ * la devolución de la familia, las notas internas y los apartados propios de la
+ * plantilla del centro, aunque estuvieran dictados en el audio.
+ *
+ * Ahora la pantalla manda al servidor SUS apartados (los de la plantilla
+ * elegida más los sueltos que se hayan añadido aquí) y lo ya tecleado, y lo que
+ * vuelve se enseña en `PropuestaIA`: lo tuyo al lado de lo propuesto, con
+ * mantener / añadir al final / sustituir. Nada entra solo — que era la otra
+ * mitad del encargo: antes, lo que la IA proponía para un apartado ya escrito
+ * se tiraba sin que nadie lo viera.
+ *
+ * ── Y NO HACE FALTA AUDIO (01/09/2026, Rodrigo, el mismo día) ─────────────
+ * «También debe poder coger texto libre, no solo la transcripción del audio.
+ * Por si apuntan todo en un bloc de notas y lo pasan ahí.» La tarjeta del audio
+ * pasa a ser la del MATERIAL: la zona de soltar el fichero y, debajo, un
+ * recuadro donde pegar lo apuntado. Un botón para las dos, y si se dan las dos
+ * se usan las dos. Sin audio no se sube nada ni se llama a Whisper — ni se
+ * pintan sus pasos, ni hace falta clave de OpenAI.
  *
  * ── LOS APARTADOS DEL PUNTO 2 SALEN DE UNA PLANTILLA (29/08/2026) ──────────
  * El «Informe de la sesión» tenía siete campos escritos a mano aquí dentro.
@@ -54,12 +74,14 @@ import {
   pidePreparar,
 } from "@/lib/clinica/prepararSesion.js";
 import ApartadosEditor from "@/components/clinica/ApartadosEditor.jsx";
+import PropuestaIA from "@/components/clinica/PropuestaIA.jsx";
 import {
   CLAVE_PLANTILLA,
   PLANTILLA_BASE,
   desdeFormulario,
   repartirValoresDeSesion,
 } from "@/lib/clinica/plantillas.js";
+import { bloquesDelRegistro, esEnvoltorio, MAX_NOTAS } from "@/lib/clinica/registroCompleto.js";
 
 const STATE = { FORM: "form", PROCESSING: "processing", PREPARING: "preparing" };
 
@@ -70,12 +92,16 @@ const ACEPTA_AUDIO = "audio/*,.m4a,.mp3,.wav,.ogg,.webm,.mp4";
 const ACEPTA_PREP = "image/*,audio/*,application/pdf";
 const MAX_PREP = 10;
 
-const PROCESSING_STEPS = [
-  "Subiendo audio…",
-  "Transcribiendo con Whisper…",
+// Los pasos que se pintan mientras la petición está en vuelo. Los dos primeros
+// solo cuando hay audio de verdad: sin él no se sube nada ni se llama a Whisper,
+// y enseñarlos sería contar un trabajo que no se está haciendo.
+const PASOS_AUDIO = ["Subiendo audio…", "Transcribiendo con Whisper…"];
+const PASOS_IA = [
   "Identificando objetivos trabajados…",
-  "Estructurando observaciones…",
+  "Repartiendo por los apartados del registro…",
+  "Preparación, devolución y notas internas…",
 ];
+const pasosDelProceso = (conAudio) => (conAudio ? [...PASOS_AUDIO, ...PASOS_IA] : ["Leyendo tus notas…", ...PASOS_IA]);
 
 // Lo que NO es un apartado de plantilla: los puntos 1 y 3 del registro. Los del
 // punto 2 se añaden a este mismo objeto según los pida la plantilla, con la
@@ -136,8 +162,17 @@ export default function NuevaSesionPage() {
   const [plantillas, setPlantillas] = useState([]);
   const [plantillaKey, setPlantillaKey] = useState("");
   const [file, setFile] = useState(null);
+  // Lo apuntado a mano (01/09/2026, Rodrigo): la otra puerta al mismo botón.
+  // No se borra al quitar el audio — son dos cosas independientes que se pueden
+  // dar por separado o juntas.
+  const [notas, setNotas] = useState("");
   const [processingStep, setProcessingStep] = useState(0);
-  const [result, setResult] = useState(null); // { transcription, structured, audioDurationSec, demo }
+  const [result, setResult] = useState(null); // { transcription, propuesta, structured, audioDurationSec, demo }
+  // La propuesta se guarda aparte del `result` porque se puede volver a abrir
+  // después de aplicarla (o de cerrarla sin aplicar): el panel es una decisión,
+  // no un paso del que no se vuelve.
+  const [propuesta, setPropuesta] = useState(null);
+  const [verPropuesta, setVerPropuesta] = useState(false);
   const [avisoAudio, setAvisoAudio] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -183,62 +218,70 @@ export default function NuevaSesionPage() {
   function ponerContenido(nuevos) {
     setForm((f) => ({ ...f, ...nuevos }));
     setApartados((prev) => {
-      const faltan = Object.keys(nuevos).filter((k) => !prev.some((a) => a.key === k));
+      // Los tres del envoltorio —preparación, devolución y notas internas— NO
+      // son apartados de plantilla: tienen su propia tarjeta y su columna. Si
+      // se colaran aquí saldrían DOS veces en la pantalla y, peor, se guardarían
+      // también dentro de `contentSections`.
+      const faltan = Object.keys(nuevos).filter((k) => !esEnvoltorio(k) && !prev.some((a) => a.key === k));
       if (!faltan.length) return prev;
       return [...prev, ...faltan.map((k) => ({ key: k, label: NOMBRES_AUDIO[k] ?? k, tipo: TIPO_AUDIO[k] ?? "texto" }))];
     });
   }
 
+  const pasos = pasosDelProceso(!!file);
+
   // Animación de los pasos mientras la petición está en vuelo.
   useEffect(() => {
     if (state !== STATE.PROCESSING) return;
     setProcessingStep(0);
-    const t = setInterval(() => setProcessingStep((s) => Math.min(s + 1, PROCESSING_STEPS.length - 1)), 700);
+    const t = setInterval(() => setProcessingStep((s) => Math.min(s + 1, pasos.length - 1)), 700);
     return () => clearInterval(t);
-  }, [state]);
+  }, [state, pasos.length]);
 
   /**
-   * Procesa el audio y rellena SOLO los apartados vacíos del informe: lo que la
-   * profesional ya haya escrito a mano no se pisa (misma regla que el volcado
-   * de sesiones en los informes). La transcripción se queda a la vista.
+   * Los bloques de ESTE registro, en el orden de la pantalla: preparación · los
+   * apartados de la plantilla elegida (con los sueltos añadidos aquí) ·
+   * devolución de la familia · notas internas. Es la misma función que usa el
+   * servidor para montar el prompt, así que lo que vuelve cae exactamente en los
+   * apartados que se están viendo.
    */
-  async function procesarAudio() {
-    if (!file) return;
+  const bloques = bloquesDelRegistro(apartados);
+
+  /**
+   * Manda el MATERIAL —el audio, las notas escritas, o los dos— y PROPONE el
+   * registro entero. No escribe nada: lo que vuelve se enseña en el panel y ella
+   * decide apartado por apartado (01/09/2026, Rodrigo).
+   */
+  async function procesarConIA() {
+    const texto = notas.trim();
+    if (!file && !texto) return;
     setState(STATE.PROCESSING);
     setErrorMsg(null);
     setAvisoAudio(null);
     try {
       const fd = new FormData();
-      fd.append("file", file, file.name);
+      if (file) fd.append("file", file, file.name);
+      if (texto) fd.append("texto", texto);
+      // Los apartados del centro y lo ya tecleado viajan con el material: sin
+      // ellos el servidor no sabría qué apartados tiene esta sesión y volvería a
+      // proponer los siete de fábrica.
+      fd.append("apartados", JSON.stringify(apartados));
+      fd.append("escrito", JSON.stringify(form));
       const r = await fetch("/api/clinica/sessions/transcribe", { method: "POST", body: fd });
       const j = await r.json();
-      if (!r.ok) throw new Error(j.error || "No se pudo procesar el audio");
-      const s = j.data.structured;
-      const propuesta = {
-        // Una línea por objetivo: es como entra un apartado de tipo lista.
-        objectives: (s.objectives ?? []).join("\n"),
-        activities: s.activities ?? "",
-        performance: s.performance ?? "",
-        familyComments: s.observations?.familyComments ?? "",
-        nextSessionNotes: s.observations?.nextSessionNotes ?? "",
-        homeworkTasks: s.observations?.homeworkTasks ?? "",
-        incidents: s.observations?.incidents ?? "",
-      };
-      let rellenados = 0;
-      let respetados = 0;
-      const nuevos = {};
-      for (const [k, v] of Object.entries(propuesta)) {
-        if (!String(v).trim()) continue;
-        if (String(form[k] ?? "").trim()) { respetados++; continue; }
-        nuevos[k] = v;
-        rellenados++;
-      }
-      ponerContenido(nuevos);
+      if (!r.ok) throw new Error(j.error || "No se pudo procesar");
       setResult(j.data);
+      const p = j.data.propuesta ?? {};
+      const cuantos = Object.values(p).filter((v) => String(v ?? "").trim()).length;
+      setPropuesta(p);
+      // Con propuesta se abre el panel directamente: es a lo que ha venido.
+      setVerPropuesta(cuantos > 0);
+      const deDonde = file && texto ? "Audio y notas leídos" : file ? "Audio transcrito" : "Notas leídas";
       setAvisoAudio(
-        `El audio ha rellenado ${rellenados} apartado(s) vacío(s)` +
-          (respetados ? `; ${respetados} ya tenían texto tuyo y no se han tocado.` : ".") +
-          " Revisa y edita antes de guardar."
+        j.data.avisoIA ??
+          (cuantos > 0
+            ? `${deDonde}. La IA propone ${cuantos} apartado(s): revísalos y elige cuáles entran.`
+            : `${deDonde}, pero la IA no ha sacado nada que repartir.`)
       );
       setState(STATE.FORM);
     } catch (e) {
@@ -247,11 +290,27 @@ export default function NuevaSesionPage() {
     }
   }
 
+  // Quitar el audio NO borra las notas escritas: son dos fuentes distintas y
+  // quien tenga las dos puede querer deshacerse solo de una.
   function quitarAudio() {
     setFile(null);
     setResult(null);
+    setPropuesta(null);
+    setVerPropuesta(false);
     setAvisoAudio(null);
     if (fileRef.current) fileRef.current.value = "";
+  }
+
+  /** Lo elegido en el panel entra en el formulario. Guardar sigue siendo suyo. */
+  function aplicarPropuesta(cambios) {
+    const cuantos = Object.keys(cambios).length;
+    ponerContenido(cambios);
+    setVerPropuesta(false);
+    setAvisoAudio(
+      cuantos > 0
+        ? `Se han escrito ${cuantos} apartado(s) con la propuesta de la IA. Revisa y edita antes de guardar.`
+        : "No has aplicado ningún apartado."
+    );
   }
 
   /**
@@ -338,11 +397,15 @@ export default function NuevaSesionPage() {
         parentFeedback: form.parentFeedback,
         internalNotes: form.internalNotes,
         status: "registered",
-        // Solo si hubo audio: transcripción, estructura cruda y duración. Un
-        // registro escrito a mano no ha pasado por la IA y no debe decir que sí.
+        // Solo si pasó por la IA. `aiTranscription` guarda el MATERIAL entero
+        // —la transcripción del audio, las notas pegadas, o las dos—: es de
+        // dónde salió el registro, y sin esto lo que ella escribiera y la IA no
+        // supiera colocar se perdería al guardar. `audioDurationSec` viene a
+        // null cuando no hubo audio, que es lo que distingue las dos vías. Un
+        // registro escrito a mano de principio a fin no manda nada de esto.
         ...(result
           ? {
-              aiTranscription: result.transcription,
+              aiTranscription: result.material ?? result.transcription,
               aiStructured: result.structured,
               audioDurationSec: result.audioDurationSec,
               aiReviewedAt: new Date().toISOString(),
@@ -473,6 +536,32 @@ export default function NuevaSesionPage() {
 
       {errorMsg && <div className="px-4 py-3 rounded-lg bg-rose-50 border border-rose-100 text-xs text-rose-700">{errorMsg}</div>}
 
+      {/* Lo que ha sacado la IA, para elegir apartado por apartado. Se le pasa
+          `form` como «lo tuyo»: si ya habías escrito, la propuesta se enseña al
+          lado y viene marcada la tuya. */}
+      {verPropuesta && propuesta && (
+        <PropuestaIA
+          bloques={bloques}
+          escrito={form}
+          propuesta={propuesta}
+          // El texto del que salió, tal cual se le mandó a la IA: si hubo audio
+          // y notas, las dos cosas con su rótulo. El panel lo enseña plegado.
+          transcription={result?.material ?? result?.transcription ?? ""}
+          // El rótulo dice la verdad de por dónde entró: decir «del audio»
+          // sobre unas notas pegadas es pequeño, pero es mentira.
+          titulo={
+            result?.audioDurationSec != null && notas.trim()
+              ? "Lo que ha sacado la IA del audio y tus notas"
+              : result?.audioDurationSec != null
+                ? "Lo que ha sacado la IA del audio"
+                : "Lo que ha sacado la IA de tus notas"
+          }
+          onAplicar={aplicarPropuesta}
+          onCerrar={() => setVerPropuesta(false)}
+          textoAplicar="Escribir en el registro"
+        />
+      )}
+
       {/* ── FORM: el registro completo, en texto y con el audio opcional ── */}
       {state === STATE.FORM && (
         <>
@@ -507,18 +596,19 @@ export default function NuevaSesionPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-xs font-semibold text-[var(--ink-900)]">
-                  ¿Tienes audio de la sesión? <span className="font-normal text-neutral-400">(opcional)</span>
-                  <HelpTooltip title="El audio no se guarda" className="ml-1.5 tracking-normal normal-case">
-                    Sirve para sacar el texto y se descarta. En la sesión quedan la transcripción y la
-                    duración, no la grabación: si quieres conservarla, guárdala tú. Lo que adjuntes en
-                    «Preparación», en cambio, sí se queda con la sesión.
+                  ¿Tienes audio o notas de la sesión? <span className="font-normal text-neutral-400">(opcional)</span>
+                  <HelpTooltip title="Qué se guarda y qué no" className="ml-1.5 tracking-normal normal-case">
+                    El audio sirve para sacar el texto y se descarta: en la sesión quedan la
+                    transcripción y la duración, no la grabación. Si quieres conservarla, guárdala tú.
+                    El texto que pegues sí se guarda con la sesión, como constancia de dónde salió el
+                    registro. Lo que adjuntes en «Preparación» también se queda.
                   </HelpTooltip>
                 </div>
                 {!file ? (
                   <p className="text-[11px] text-neutral-500 mt-0.5">
                     {zonaAudio.arrastrando
                       ? "Suéltalo aquí."
-                      : "Arrastra el audio aquí, pégalo con Ctrl+V o búscalo. La IA lo transcribe y rellena por ti los apartados vacíos del informe. m4a, mp3, wav, ogg, webm · máx. 25 MB."}
+                      : "Arrastra el audio aquí, pégalo con Ctrl+V o búscalo — o pega abajo lo que tengas apuntado. La IA te propone el registro entero, de la preparación a las notas internas; tú eliges qué entra. m4a, mp3, wav, ogg, webm · máx. 25 MB."}
                   </p>
                 ) : (
                   <p className="text-[11px] text-neutral-600 mt-0.5 truncate">
@@ -532,24 +622,74 @@ export default function NuevaSesionPage() {
                     Añadir audio
                   </button>
                 )}
-                {file && !result && (
-                  <>
-                    <button type="button" onClick={quitarAudio} className="text-xs px-3 py-2 text-neutral-500 hover:underline">Quitar</button>
-                    <button type="button" onClick={procesarAudio} className="text-xs font-medium px-4 py-2 rounded-lg text-white hover:opacity-90 inline-flex items-center gap-2" style={{ background: "var(--color-primary, #1B3A2D)" }}>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" /></svg>
-                      Procesar con IA
-                    </button>
-                  </>
-                )}
-                {file && result && (
-                  <button type="button" onClick={quitarAudio} className="text-xs px-3 py-2 text-neutral-500 hover:underline">Quitar audio</button>
+                {file && (
+                  <button type="button" onClick={quitarAudio} className="text-xs px-3 py-2 text-neutral-500 hover:underline">
+                    {result ? "Quitar audio" : "Quitar"}
+                  </button>
                 )}
               </div>
             </div>
 
+            {/* ── Las notas escritas (01/09/2026, Rodrigo) ──────────────────
+                «Por si apuntan todo en un bloc de notas y lo pasan ahí.» No
+                todo el mundo graba, y para la IA el audio y esto son lo mismo:
+                texto del que sacar el registro. Por eso comparten tarjeta y
+                comparten botón — y si se dan las dos cosas, se usan las dos. */}
+            <div className="mt-3 border-t border-neutral-100 pt-3">
+              <div className="flex flex-wrap items-baseline justify-between gap-2 mb-1.5">
+                <div className="eyebrow">{file ? "…y tus notas" : "O pega tus notas"}</div>
+                <span className={`text-[10px] ${notas.length > MAX_NOTAS ? "text-rose-600 font-medium" : "text-neutral-400"}`}>
+                  {notas.length > 0 && `${notas.length.toLocaleString("es-ES")} / ${MAX_NOTAS.toLocaleString("es-ES")}`}
+                </span>
+              </div>
+              <textarea
+                className={ta}
+                rows={notas ? 5 : 3}
+                placeholder="Pega aquí lo que tengas apuntado: el bloc de notas, el móvil, lo escrito a mano pasado a limpio… Tal cual, sin ordenarlo."
+                value={notas}
+                onChange={(e) => setNotas(e.target.value)}
+              />
+            </div>
+
+            {(file || notas.trim()) && (
+              <div className="mt-3 flex justify-end">
+                <button
+                  type="button"
+                  onClick={procesarConIA}
+                  disabled={notas.length > MAX_NOTAS}
+                  className="text-xs font-medium px-4 py-2 rounded-lg text-white hover:opacity-90 inline-flex items-center gap-2 disabled:opacity-40"
+                  style={{ background: "var(--color-primary, #1B3A2D)" }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" /></svg>
+                  {/* Se puede volver a pulsar: si añade más notas después de la
+                      primera pasada, obligarla a quitar el audio para volver a
+                      empezar sería absurdo. */}
+                  {result
+                    ? "Volver a procesar con IA"
+                    : file && notas.trim()
+                      ? "Procesar audio y notas con IA"
+                      : file
+                        ? "Procesar el audio con IA"
+                        : "Rellenar el registro con mis notas"}
+                </button>
+              </div>
+            )}
+
             {avisoAudio && (
-              <div className="mt-3 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-100 text-[11px] text-emerald-800">
-                {avisoAudio}{result?.demo ? " (datos de demostración)" : ""}
+              <div className="mt-3 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-100 text-[11px] text-emerald-800 flex flex-wrap items-center gap-2">
+                <span className="flex-1 min-w-[12rem]">{avisoAudio}{result?.demo ? " (datos de demostración)" : ""}</span>
+                {/* El panel se puede volver a abrir mientras no se quite el
+                    audio: se cierra sin querer, o se aplica media propuesta y
+                    luego se ve que faltaba un apartado. */}
+                {propuesta && Object.values(propuesta).some((v) => String(v ?? "").trim()) && (
+                  <button
+                    type="button"
+                    onClick={() => setVerPropuesta(true)}
+                    className="shrink-0 font-medium text-emerald-900 underline hover:no-underline"
+                  >
+                    Ver la propuesta de la IA
+                  </button>
+                )}
               </div>
             )}
             {result?.transcription && (
@@ -737,10 +877,14 @@ export default function NuevaSesionPage() {
           <div className="mx-auto w-16 h-16 rounded-2xl flex items-center justify-center text-white mb-5" style={{ background: "var(--color-primary, #1B3A2D)" }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-7 h-7 animate-spin"><path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
           </div>
-          <h2 className="font-display text-xl lg:text-2xl text-[var(--ink-900)]">Procesando audio con IA</h2>
-          <p className="text-xs text-neutral-500 mt-1">{file?.name}</p>
+          <h2 className="font-display text-xl lg:text-2xl text-[var(--ink-900)]">
+            {file ? "Procesando audio con IA" : "Rellenando el registro con tus notas"}
+          </h2>
+          <p className="text-xs text-neutral-500 mt-1">
+            {file?.name ?? `${notas.trim().length.toLocaleString("es-ES")} caracteres`}
+          </p>
           <ul className="mt-8 max-w-md mx-auto space-y-2 text-left">
-            {PROCESSING_STEPS.map((step, i) => {
+            {pasos.map((step, i) => {
               const done = i < processingStep;
               const current = i === processingStep;
               return (

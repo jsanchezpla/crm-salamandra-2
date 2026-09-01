@@ -11,6 +11,7 @@
 // (el padre refresca calendario y pendientes), borrar por onDeleted.
 
 import { useEffect, useState } from "react";
+import SelectorPaciente from "../../../components/citas/SelectorPaciente.jsx";
 import { colaDePreparacion } from "../../../lib/clinica/prepararSesion.js";
 import { fichaDeLaCita } from "../../../lib/citas/fichaDeLaCita.js";
 import { esRecuperable, rotuloFalta, citasQuePuedenRecuperar } from "../../../lib/citas/recuperacionFalta.js";
@@ -81,6 +82,9 @@ export function CitaDetalleModal({
   const [suggestNote, setSuggestNote] = useState(null);
   const [suggestSent, setSuggestSent] = useState(null); // confirmación tras enviar propuesta al centro
   const [saving, setSaving] = useState(false);
+  // Buscador de paciente: acotado a la familia de la cita (lo normal) o
+  // abierto a todo el centro. Ver la fila «Paciente» más abajo.
+  const [pacienteEnTodos, setPacienteEnTodos] = useState(false);
   const [formError, setFormError] = useState(null);
   const [detailNotes, setDetailNotes] = useState(openBooking.notes ?? "");
   // Fecha y hora editables desde la propia tarjeta (07/08/2026, Rodrigo):
@@ -614,17 +618,69 @@ export function CitaDetalleModal({
                 {patients.length > 0 && (
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="w-24 text-neutral-400 shrink-0">Paciente</span>
-                    <select
-                      value={openBooking.patientId ?? ""}
-                      onChange={(e) => assignPatient(e.target.value)}
-                      disabled={saving}
-                      className="flex-1 min-w-0 text-[13px] px-2 py-1 border border-neutral-200 rounded-md bg-white text-neutral-800 disabled:opacity-50"
-                    >
-                      <option value="">Sin asignar</option>
-                      {patients.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name || `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim()}</option>
-                      ))}
-                    </select>
+                    {/*
+                      UN BUSCADOR, NO UN DESPLEGABLE (01/09/2026, Rodrigo).
+
+                      Aquí se elegía sobre `patients`, la lista que el padre se
+                      baja de `/api/pacientes` — y ese endpoint corta en 300.
+                      Con los 1.174 pacientes de Aumenta, 874 NO estaban en el
+                      desplegable: no salir se lee exactamente igual que no
+                      existir, así que la cita se quedaba sin paciente o se le
+                      colgaba el que sí aparecía. Es el mismo agujero que se
+                      tapó en el alta de citas (28/08) y en las incidencias del
+                      equipo (31/08); esta ficha se había quedado atrás.
+
+                      Ahora se pregunta al SERVIDOR según se escribe, o sea que
+                      llega a todos. `patients` se queda solo de PUERTA: si el
+                      centro no lleva pacientes, la fila ni se pinta.
+                    */}
+                    <div className="flex-1 min-w-[11rem]">
+                      <SelectorPaciente
+                        /*
+                          La `key` no es adorno: el selector guarda la función
+                          de buscar en una ref y solo repregunta cuando cambia
+                          lo TECLEADO, así que al darle al interruptor la lista
+                          se quedaba con los resultados del ámbito anterior —
+                          decía «solo esta familia» enseñando los 1.174 del
+                          centro. Cambiar la key lo remonta y vuelve a
+                          preguntar con el ámbito nuevo.
+                        */
+                        key={pacienteEnTodos ? "todos" : "familia"}
+                        value={openBooking.patientId ?? ""}
+                        familia={pacienteEnTodos ? null : openBooking.clientId || null}
+                        onChange={(v) => assignPatient(v)}
+                        disabled={saving}
+                        aria-label="Paciente de la cita"
+                        placeholder="Sin asignar"
+                        // Poder volver a «ninguno»: una cita de la familia sin
+                        // atribuir a un hijo concreto es un caso real.
+                        opcionesFijas={[{ value: "", label: "Sin asignar" }]}
+                        className="text-[13px] px-2 py-1 border border-neutral-200 rounded-md bg-white text-neutral-800"
+                      />
+                    </div>
+                    {/*
+                      LA SALIDA DEL ACOTADO. Con la familia puesta se enseñan
+                      SUS hijos, que es lo que se busca casi siempre y ahorra
+                      teclear. Pero acotar sin salida crea un callejón: si esa
+                      ficha no tiene pacientes colgados, o la cita se enlazó a
+                      la familia equivocada, no habría forma de asignar a nadie
+                      —y eso sería peor que el desplegable que quitamos—. De ahí
+                      el interruptor.
+                    */}
+                    {openBooking.clientId && (
+                      <button
+                        type="button"
+                        onClick={() => setPacienteEnTodos((v) => !v)}
+                        title={
+                          pacienteEnTodos
+                            ? "Volver a enseñar solo los pacientes de esta familia"
+                            : "Buscar entre todos los pacientes del centro, no solo los de esta familia"
+                        }
+                        className="shrink-0 text-[11px] text-neutral-500 hover:text-neutral-800 underline underline-offset-2"
+                      >
+                        {pacienteEnTodos ? "solo esta familia" : "buscar en todos"}
+                      </button>
+                    )}
                     {/*
                       DE LA CITA A LO CLÍNICO (26/08/2026, Jorge y Aumenta).
 

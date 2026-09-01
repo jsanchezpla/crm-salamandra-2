@@ -22,8 +22,16 @@ export default function FacturarMesDrawer({ open, onClose, onDone }) {
   const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
-  // Aviso ≠ exclusión: quien ya tiene factura ese mes se marca, pero decide
-  // la persona (la factura manual de ese mes puede ser de otra cosa).
+  /*
+   * Quien YA TIENE factura emitida ese mes entra DESMARCADO (01/09/2026,
+   * petición de Aumenta: «si se ha hecho alguna factura manual, que cuente como
+   * emitida y no te dé la opción de hacerla múltiple, para no duplicar»).
+   *
+   * Desmarcado y no escondido a propósito: la factura manual de ese mes puede
+   * ser de otra cosa (un taller, un informe), y entonces su cuota SÍ hay que
+   * emitirla. Esconderlo dejaría a esa familia sin factura y sin que nadie se
+   * entere; desmarcado, el duplicado exige un clic deliberado.
+   */
   const [excluidos, setExcluidos] = useState(() => new Set());
   const [fecha, setFecha] = useState("");
   const [emitting, setEmitting] = useState(false);
@@ -32,6 +40,9 @@ export default function FacturarMesDrawer({ open, onClose, onDone }) {
   // concepto del catálogo (31/08/2026, Rodrigo) — los cobros sin concepto van
   // juntos en un grupo «resto» del mismo pagador.
   const [agrupacion, setAgrupacion] = useState("pagador");
+  // Qué facturar por forma de pago (01/09/2026, Rodrigo: «poder elegir lo que
+  // quieres facturar: banco, tarjeta, efectivo»). Vacío = todo, lo de siempre.
+  const [metodos, setMetodos] = useState([]);
 
   useEffect(() => {
     if (!open) return;
@@ -39,16 +50,22 @@ export default function FacturarMesDrawer({ open, onClose, onDone }) {
     setExcluidos(new Set());
     setErrorMsg(null);
     setLoading(true);
-    fetch(`/api/billing/invoices/bulk-issue?mes=${mes}&agrupacion=${agrupacion}`, { cache: "no-store" })
+    const qs = new URLSearchParams({ mes, agrupacion });
+    metodos.forEach((m) => qs.append("metodo", m));
+    fetch(`/api/billing/invoices/bulk-issue?${qs}`, { cache: "no-store" })
       .then((r) => r.json().then((j) => ({ ok: r.ok, j })))
       .then(({ ok, j }) => {
         if (!ok) throw new Error(j.error || "Error");
         setPreview(j.data);
         setFecha(j.data.fechaPropuesta || "");
+        // Los que ya tienen factura de ese mes nacen desmarcados (ver arriba).
+        setExcluidos(new Set(
+          (j.data.facturables ?? []).filter((g) => g.facturaPrevia).map((g) => g.grupoId ?? g.clientId)
+        ));
       })
       .catch((e) => { setPreview(null); setErrorMsg(e.message); })
       .finally(() => setLoading(false));
-  }, [open, mes, agrupacion]);
+  }, [open, mes, agrupacion, metodos]);
 
   const seleccionadas = useMemo(
     () => (preview?.facturables ?? []).filter((g) => !excluidos.has(g.grupoId ?? g.clientId)),
@@ -72,7 +89,7 @@ export default function FacturarMesDrawer({ open, onClose, onDone }) {
       const res = await fetch("/api/billing/invoices/bulk-issue", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mes, issueDate: fecha || undefined, exclude: [...excluidos], agrupacion }),
+        body: JSON.stringify({ mes, issueDate: fecha || undefined, exclude: [...excluidos], agrupacion, metodos }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error");
@@ -168,6 +185,26 @@ export default function FacturarMesDrawer({ open, onClose, onDone }) {
               )}
             </div>
 
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Qué facturar</label>
+              <div className="flex flex-wrap gap-2">
+                {[["transfer", "Banco"], ["direct_debit", "Domiciliación"], ["card", "Tarjeta"], ["cash", "Efectivo"]].map(([k, lbl]) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => setMetodos((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]))}
+                    className={`px-3 py-1.5 rounded-lg text-xs border transition ${metodos.includes(k) ? "border-transparent text-white" : "bg-white border-neutral-200 text-neutral-500"}`}
+                    style={metodos.includes(k) ? { background: "var(--color-primary, #1B3A2D)" } : undefined}
+                  >
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-neutral-400">
+                Sin elegir ninguna, entran todas las formas de pago.
+              </p>
+            </div>
+
             {loading && <div className="text-xs text-neutral-400 py-6 text-center">Recogiendo los cobros del mes...</div>}
             {errorMsg && <div className="text-xs text-red-600 bg-red-50 border border-red-100 px-3 py-2 rounded-lg">{errorMsg}</div>}
 
@@ -207,6 +244,16 @@ export default function FacturarMesDrawer({ open, onClose, onDone }) {
                 )}
 
                 {preview.facturables.length > 0 && (
+                  <div className="flex items-center justify-between text-[11px] text-neutral-500">
+                    <span>{seleccionadas.length} de {preview.facturables.length} marcadas</span>
+                    <span className="flex gap-2">
+                      <button type="button" onClick={() => setExcluidos(new Set())} className="underline hover:text-neutral-800">Marcar todas</button>
+                      <button type="button" onClick={() => setExcluidos(new Set(preview.facturables.map((g) => g.grupoId ?? g.clientId)))} className="underline hover:text-neutral-800">Desmarcar todas</button>
+                    </span>
+                  </div>
+                )}
+
+                {preview.facturables.length > 0 && (
                   <ul className="divide-y divide-neutral-50 border border-neutral-100 rounded-xl overflow-hidden max-h-72 overflow-y-auto ink-scroll">
                     {preview.facturables.map((g) => (
                       <li key={g.grupoId ?? g.clientId} className="px-4 py-2.5 flex items-center gap-3 text-xs">
@@ -222,8 +269,8 @@ export default function FacturarMesDrawer({ open, onClose, onDone }) {
                         </span>
                         {g.facturaPrevia && (
                           <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100"
-                            title="Este pagador ya tiene una factura emitida este mes. Puede ser de otra cosa; revisa antes de emitirle otra.">
-                            ya tiene factura este mes
+                            title="Ya tiene una factura emitida este mes, así que sale DESMARCADO para no duplicar. Si aquella era de otra cosa (un taller, un informe), márcalo a mano.">
+                            ya facturado este mes · desmarcado
                           </span>
                         )}
                         <span className="text-neutral-400">{g.cobros.length === 1 ? "1 cobro" : `${g.cobros.length} cobros`}</span>

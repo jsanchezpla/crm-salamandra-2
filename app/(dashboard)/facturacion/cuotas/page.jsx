@@ -1,0 +1,858 @@
+"use client";
+
+/**
+ * /facturacion/cuotas — quién paga qué todos los meses, y el botón que genera
+ * los cobros del mes (01/09/2026, petición de Aumenta).
+ *
+ * Tres cosas que antes no se podían hacer:
+ *   · dar de alta la MISMA cuota a un grupo de pacientes de una vez;
+ *   · darla de baja, modificarla o eliminarla;
+ *   · generar los cobros de un mes entero de una pasada, prorrateando el mes
+ *     del alta y el de la baja.
+ *
+ * Los cobros nacen PENDIENTES: generar no es cobrar. Se pasan a cobrado desde
+ * Cobros cuando el dinero entra de verdad — Morosidad y el portal miran eso.
+ */
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
+import Select from "@/components/ui/Select.jsx";
+import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
+import { fmtMoney, fmtDate } from "../_components/Kpi.jsx";
+
+const inputCls =
+  "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
+
+const METODOS = [
+  { value: "transfer", label: "Banco (transferencia)" },
+  { value: "direct_debit", label: "Domiciliación" },
+  { value: "card", label: "Tarjeta" },
+  { value: "cash", label: "Efectivo" },
+];
+const METODO_CORTO = { transfer: "Banco", direct_debit: "Domiciliación", card: "Tarjeta", cash: "Efectivo" };
+
+const hoyIso = () => new Date().toISOString().slice(0, 10);
+const mesActual = () => new Date().toISOString().slice(0, 7);
+
+const CUOTA_VACIA = () => ({
+  conceptIds: [],
+  amount: "",
+  method: "transfer",
+  dayOfMonth: "",
+  startDate: hoyIso(),
+  endDate: "",
+  notes: "",
+});
+
+export default function CuotasPage() {
+  const [cuotas, setCuotas] = useState([]);
+  const [conceptos, setConceptos] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState(null);
+  const [okMsg, setOkMsg] = useState(null);
+
+  const [verBajas, setVerBajas] = useState(false);
+  const [filtroMetodo, setFiltroMetodo] = useState("");
+  const [busca, setBusca] = useState("");
+
+  const [showAlta, setShowAlta] = useState(false);
+  const [editando, setEditando] = useState(null); // cuota que se edita
+  const [showGenerar, setShowGenerar] = useState(false);
+
+  const cargar = useCallback(async () => {
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const qs = new URLSearchParams();
+      if (verBajas) qs.set("todas", "1");
+      if (filtroMetodo) qs.set("metodo", filtroMetodo);
+      const r = await fetch(`/api/billing/cuotas?${qs}`, { cache: "no-store" });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || "No se pudieron cargar las cuotas");
+      setCuotas(j.data?.cuotas ?? []);
+    } catch (e) {
+      setErrorMsg(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [verBajas, filtroMetodo]);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  useEffect(() => {
+    fetch("/api/billing/conceptos", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => j.ok && setConceptos(j.data?.conceptos ?? []))
+      .catch(() => {});
+  }, []);
+
+  const porId = useMemo(() => new Map(conceptos.map((c) => [String(c.id), c])), [conceptos]);
+
+  // El importe que se cobrará: el pactado, o la suma de sus conceptos.
+  const importeDe = useCallback(
+    (c) => {
+      if (c.amount !== null && c.amount !== undefined && c.amount !== "") return Number(c.amount);
+      return (Array.isArray(c.conceptIds) ? c.conceptIds : []).reduce(
+        (s, id) => s + Number(porId.get(String(id))?.unitPrice || 0), 0
+      );
+    },
+    [porId]
+  );
+
+  const visibles = useMemo(() => {
+    const t = busca.trim().toLowerCase();
+    if (!t) return cuotas;
+    return cuotas.filter((c) => {
+      const nombre = `${c.client?.fiscalName || c.client?.name || ""} ${c.patient ? `${c.patient.firstName} ${c.patient.lastName}` : ""}`;
+      return nombre.toLowerCase().includes(t);
+    });
+  }, [cuotas, busca]);
+
+  const totalMes = visibles.filter((c) => c.active).reduce((s, c) => s + importeDe(c), 0);
+
+  async function darDeBaja(cuota) {
+    const fecha = window.prompt(
+      `Fecha de baja de la cuota de ${cuota.client?.name ?? "esta familia"}.\n\nEl mes de la baja se cobra prorrateado hasta ese día.`,
+      hoyIso()
+    );
+    if (!fecha) return;
+    await guardarParcial(cuota.id, { endDate: fecha, active: false }, "Cuota dada de baja");
+  }
+
+  async function reactivar(cuota) {
+    await guardarParcial(cuota.id, { active: true, endDate: null }, "Cuota reactivada");
+  }
+
+  async function guardarParcial(id, cuerpo, mensaje) {
+    setErrorMsg(null);
+    try {
+      const r = await fetch(`/api/billing/cuotas/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cuerpo),
+      });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || "No se pudo guardar");
+      setOkMsg(mensaje);
+      await cargar();
+    } catch (e) {
+      setErrorMsg(e.message);
+    }
+  }
+
+  async function borrar(cuota) {
+    if (!window.confirm(`¿Eliminar la cuota de ${cuota.client?.name ?? "esta familia"}?\n\nSolo se puede si todavía no ha generado ningún cobro. Si ya cobró algo, dale de baja.`)) return;
+    setErrorMsg(null);
+    try {
+      const r = await fetch(`/api/billing/cuotas/${cuota.id}`, { method: "DELETE" });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || "No se pudo eliminar");
+      setOkMsg("Cuota eliminada");
+      await cargar();
+    } catch (e) {
+      setErrorMsg(e.message);
+    }
+  }
+
+  return (
+    <div className="p-4 lg:p-8">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
+        <div>
+          <div className="eyebrow">Operativa · Cuotas</div>
+          <h1 className="font-display text-2xl text-[var(--ink-900)] mt-1 flex items-center gap-2">
+            Cuotas mensuales
+            <HelpTooltip title="Cuotas mensuales" placement="bottom">
+              Lo que paga cada familia TODOS los meses. Con la cuota puesta, el botón{" "}
+              <strong className="text-white">Generar el mes</strong> crea los cobros de todas de una
+              vez, prorrateando el mes del alta y el de la baja.
+              {" "}
+              Los cobros nacen <strong className="text-white">pendientes</strong>: generar no es
+              cobrar. Se pasan a cobrado en Cobros cuando el dinero entra.
+            </HelpTooltip>
+          </h1>
+          <p className="text-xs text-neutral-400 mt-1">
+            {visibles.length} {visibles.length === 1 ? "cuota" : "cuotas"}
+            {totalMes > 0 && <> · <span className="tabular">{fmtMoney(totalMes)}</span> al mes</>}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <Link href="/facturacion" className="text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">← Volver</Link>
+          <button
+            onClick={() => setShowGenerar(true)}
+            className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide border border-neutral-300 text-neutral-700 hover:bg-neutral-50 transition"
+          >Generar el mes</button>
+          <button
+            onClick={() => setShowAlta(true)}
+            className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white"
+            style={{ background: "var(--color-primary, #1B3A2D)" }}
+          >+ Nueva cuota</button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <input
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder="Buscar por familia o paciente..."
+          className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition w-full sm:w-72"
+        />
+        <Select
+          value={filtroMetodo}
+          onChange={setFiltroMetodo}
+          options={[{ value: "", label: "Todos los métodos" }, ...METODOS]}
+          className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200"
+        />
+        <label className="flex items-center gap-2 text-xs text-neutral-600">
+          <input type="checkbox" checked={verBajas} onChange={(e) => setVerBajas(e.target.checked)} />
+          Ver también las de baja
+        </label>
+      </div>
+
+      {errorMsg && <div className="mb-4 px-4 py-3 bg-red-50 border border-red-100 rounded-lg text-xs text-red-600">{errorMsg}</div>}
+      {okMsg && <div className="mb-4 px-4 py-3 bg-emerald-50 border border-emerald-100 rounded-lg text-xs text-emerald-700">{okMsg}</div>}
+
+      <div className="bg-white border border-neutral-100 rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[880px]">
+            <thead>
+              <tr className="border-b border-neutral-100 text-left text-[11px] uppercase tracking-wide text-neutral-400">
+                <th className="px-4 py-3 font-medium">Familia</th>
+                <th className="px-4 py-3 font-medium">Paciente</th>
+                <th className="px-4 py-3 font-medium">Concepto</th>
+                <th className="px-4 py-3 font-medium text-right">Al mes</th>
+                <th className="px-4 py-3 font-medium">Cómo</th>
+                <th className="px-4 py-3 font-medium">Día</th>
+                <th className="px-4 py-3 font-medium">Vigencia</th>
+                <th className="px-4 py-3 font-medium text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading && cuotas.length === 0 && (
+                <tr><td colSpan={8} className="text-center py-12 text-xs text-neutral-400">Cargando...</td></tr>
+              )}
+              {!loading && visibles.length === 0 && (
+                <tr><td colSpan={8} className="text-center py-12 text-xs text-neutral-400">
+                  Todavía no hay cuotas. Da de alta la primera y podrás generar el mes entero de una vez.
+                </td></tr>
+              )}
+              {visibles.map((c) => {
+                const nombres = (Array.isArray(c.conceptIds) ? c.conceptIds : [])
+                  .map((id) => porId.get(String(id))?.name)
+                  .filter(Boolean);
+                return (
+                  <tr key={c.id} className={`border-b border-neutral-50 ${c.active ? "" : "bg-neutral-50/60 text-neutral-400"}`}>
+                    <td className="px-4 py-3 text-neutral-800">
+                      <Link href={`/clientes/${c.clientId}`} className="hover:underline">
+                        {c.client?.fiscalName || c.client?.name || "—"}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-neutral-500">
+                      {c.patient ? `${c.patient.firstName} ${c.patient.lastName}` : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-neutral-500">
+                      {nombres.length ? nombres.join(" + ") : <span className="italic text-neutral-300">sin conceptos</span>}
+                      {c.amount !== null && c.amount !== undefined && c.amount !== "" && nombres.length > 0 && (
+                        <span className="ml-1 text-[10px] text-amber-600" title="Tiene un importe pactado: manda sobre el precio de los conceptos">· pactado</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right font-semibold tabular text-neutral-900">{fmtMoney(importeDe(c))}</td>
+                    <td className="px-4 py-3 text-xs text-neutral-500">{METODO_CORTO[c.method] ?? "—"}</td>
+                    <td className="px-4 py-3 text-xs text-neutral-500">{c.dayOfMonth ? `día ${c.dayOfMonth}` : "—"}</td>
+                    <td className="px-4 py-3 text-xs text-neutral-500">
+                      desde {fmtDate(c.startDate)}
+                      {c.endDate && <span className="text-rose-500"> · baja {fmtDate(c.endDate)}</span>}
+                    </td>
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                      <button onClick={() => setEditando(c)} className="text-[11px] text-neutral-500 hover:text-neutral-900 mr-2">Editar</button>
+                      {c.active ? (
+                        <button onClick={() => darDeBaja(c)} className="text-[11px] text-amber-600 hover:text-amber-800 mr-2">Dar de baja</button>
+                      ) : (
+                        <button onClick={() => reactivar(c)} className="text-[11px] text-emerald-600 hover:text-emerald-800 mr-2">Reactivar</button>
+                      )}
+                      <button onClick={() => borrar(c)} className="text-[11px] text-rose-500 hover:text-rose-700">Borrar</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {showAlta && (
+        <DrawerCuota
+          conceptos={conceptos}
+          onClose={() => setShowAlta(false)}
+          onDone={(msg) => { setShowAlta(false); setOkMsg(msg); cargar(); }}
+        />
+      )}
+
+      {editando && (
+        <DrawerCuota
+          conceptos={conceptos}
+          cuota={editando}
+          onClose={() => setEditando(null)}
+          onDone={(msg) => { setEditando(null); setOkMsg(msg); cargar(); }}
+        />
+      )}
+
+      {showGenerar && (
+        <DrawerGenerar onClose={() => setShowGenerar(false)} onDone={() => cargar()} />
+      )}
+    </div>
+  );
+}
+
+/* ── Alta (individual o EN GRUPO) y edición ────────────────────────────────
+ * El mismo drawer para las dos cosas: en el alta se eligen destinatarios (uno
+ * o cuarenta) y en la edición el destinatario ya está fijado. Lo que se teclea
+ * —conceptos, importe, método, día, fechas— es idéntico, y separarlo en dos
+ * formularios era garantizar que dentro de un mes divergieran.
+ */
+function DrawerCuota({ conceptos, cuota = null, onClose, onDone }) {
+  const editando = !!cuota;
+  const [form, setForm] = useState(() =>
+    cuota
+      ? {
+          conceptIds: Array.isArray(cuota.conceptIds) ? cuota.conceptIds.map(String) : [],
+          amount: cuota.amount ?? "",
+          method: cuota.method ?? "transfer",
+          dayOfMonth: cuota.dayOfMonth ?? "",
+          startDate: String(cuota.startDate ?? "").slice(0, 10),
+          endDate: cuota.endDate ? String(cuota.endDate).slice(0, 10) : "",
+          notes: cuota.notes ?? "",
+        }
+      : CUOTA_VACIA()
+  );
+  const [destinatarios, setDestinatarios] = useState([]);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState(null);
+  const [resultado, setResultado] = useState(null);
+
+  const porId = useMemo(() => new Map(conceptos.map((c) => [String(c.id), c])), [conceptos]);
+  const sumaConceptos = form.conceptIds.reduce((s, id) => s + Number(porId.get(String(id))?.unitPrice || 0), 0);
+  const importeFinal = form.amount === "" ? sumaConceptos : Number(form.amount || 0);
+
+  function alternarConcepto(id) {
+    setForm((f) => ({
+      ...f,
+      conceptIds: f.conceptIds.includes(id) ? f.conceptIds.filter((x) => x !== id) : [...f.conceptIds, id],
+    }));
+  }
+
+  async function guardar() {
+    setError(null);
+    if (!editando && destinatarios.length === 0) {
+      setError("Elige al menos un paciente o una familia");
+      return;
+    }
+    setGuardando(true);
+    try {
+      const cuerpo = {
+        conceptIds: form.conceptIds,
+        amount: form.amount === "" ? null : Number(form.amount),
+        method: form.method || null,
+        dayOfMonth: form.dayOfMonth === "" ? null : Number(form.dayOfMonth),
+        startDate: form.startDate,
+        endDate: form.endDate || null,
+        notes: form.notes || null,
+      };
+      const r = editando
+        ? await fetch(`/api/billing/cuotas/${cuota.id}`, {
+            method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cuerpo),
+          })
+        : await fetch("/api/billing/cuotas", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...cuerpo, destinatarios: destinatarios.map((d) => ({ clientId: d.clientId, patientId: d.patientId })) }),
+          });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || "No se pudo guardar");
+
+      if (editando) { onDone("Cuota actualizada"); return; }
+      // En grupo puede haber saltadas (ya tenían cuota): se enseñan antes de
+      // cerrar, que si no nadie se entera de que faltan.
+      if (j.data?.omitidas?.length) setResultado(j.data);
+      else onDone(`${j.data.creadas} ${j.data.creadas === 1 ? "cuota creada" : "cuotas creadas"}`);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/40 z-40" onClick={() => !guardando && onClose()} />
+      <aside className="fixed top-14 lg:top-0 right-0 bottom-0 w-full sm:w-[620px] bg-white z-50 shadow-pop overflow-y-auto ink-scroll slide-right">
+        <div className="px-6 pt-6 pb-4 border-b border-neutral-100 flex items-start justify-between gap-3">
+          <div>
+            <div className="eyebrow">{editando ? "Editar" : "Alta"}</div>
+            <h2 className="font-display text-xl text-neutral-900 mt-1">
+              {editando ? "Modificar la cuota" : "Nueva cuota mensual"}
+            </h2>
+            {!editando && (
+              <p className="text-[11px] text-neutral-400 mt-1">
+                Se puede dar de alta la misma cuota a varios pacientes de una vez.
+              </p>
+            )}
+          </div>
+          <button onClick={() => !guardando && onClose()} className="text-neutral-300 hover:text-neutral-700 transition-colors p-1">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {resultado ? (
+          <div className="px-6 py-5 space-y-4">
+            <p className="text-sm text-neutral-800">
+              <span className="font-semibold text-emerald-700">{resultado.creadas} creadas</span>
+              {" · "}
+              <span className="font-semibold text-amber-700">{resultado.omitidas.length} sin crear</span>
+            </p>
+            <ul className="divide-y divide-neutral-50 border border-neutral-100 rounded-xl overflow-hidden">
+              {resultado.omitidas.map((o, i) => (
+                <li key={i} className="px-4 py-2.5 flex items-center gap-3 text-xs">
+                  <span className="min-w-0 flex-1 truncate text-neutral-800">{o.nombre ?? o.clientId}</span>
+                  <span className="text-amber-700">{o.motivo}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="flex justify-end">
+              <button onClick={() => onDone(`${resultado.creadas} cuotas creadas`)}
+                className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white"
+                style={{ background: "var(--color-primary, #1B3A2D)" }}>Cerrar</button>
+            </div>
+          </div>
+        ) : (
+          <div className="px-6 py-5 space-y-5">
+            {error && <div className="text-xs text-red-600 bg-red-50 border border-red-100 px-3 py-2 rounded-lg">{error}</div>}
+
+            {editando ? (
+              <div className="rounded-xl border border-neutral-100 bg-neutral-50 px-4 py-3 text-sm">
+                <div className="text-neutral-800">{cuota.client?.fiscalName || cuota.client?.name}</div>
+                {cuota.patient && (
+                  <div className="text-xs text-neutral-500">{cuota.patient.firstName} {cuota.patient.lastName}</div>
+                )}
+              </div>
+            ) : (
+              <SelectorDestinatarios valores={destinatarios} onChange={setDestinatarios} />
+            )}
+
+            <div>
+              <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Conceptos del catálogo</label>
+              {conceptos.length === 0 ? (
+                <p className="text-xs text-neutral-400 mt-1">
+                  No hay conceptos todavía. Créalos en{" "}
+                  <Link href="/facturacion/configuracion" className="underline">Configuración → Conceptos y cuotas</Link>{" "}
+                  y así la cuota se actualiza sola cuando suba el precio.
+                </p>
+              ) : (
+                <div className="mt-1 max-h-44 overflow-y-auto border border-neutral-100 rounded-xl divide-y divide-neutral-50">
+                  {conceptos.map((c) => (
+                    <label key={c.id} className="flex items-center gap-3 px-3 py-2 text-xs cursor-pointer hover:bg-neutral-50">
+                      <input type="checkbox" checked={form.conceptIds.includes(String(c.id))}
+                        onChange={() => alternarConcepto(String(c.id))}
+                        className="accent-[var(--color-primary,#1B3A2D)]" />
+                      <span className="min-w-0 flex-1 truncate text-neutral-800">{c.name}</span>
+                      <span className="tabular text-neutral-500">{fmtMoney(c.unitPrice)}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Importe al mes</label>
+                <input type="number" step="0.01" value={form.amount} placeholder={sumaConceptos ? String(sumaConceptos) : "0,00"}
+                  onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} className={inputCls} />
+                <p className="text-[10px] text-neutral-400">
+                  {form.amount === ""
+                    ? "Vacío = lo que digan sus conceptos (una subida de precio se aplica sola)."
+                    : "Precio pactado: manda sobre el de los conceptos."}
+                </p>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Cómo se cobra</label>
+                <Select value={form.method} onChange={(v) => setForm((f) => ({ ...f, method: v }))}
+                  options={METODOS} className={inputCls} />
+                <p className="text-[10px] text-neutral-400">Es lo que permite generar «solo las de banco».</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Día de cobro</label>
+                <input type="number" min="1" max="31" value={form.dayOfMonth} placeholder="1"
+                  onChange={(e) => setForm((f) => ({ ...f, dayOfMonth: e.target.value }))} className={inputCls} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Desde *</label>
+                <input type="date" value={form.startDate}
+                  onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))} className={inputCls} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Baja</label>
+                <input type="date" value={form.endDate}
+                  onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))} className={inputCls} />
+              </div>
+            </div>
+            <p className="text-[10px] text-neutral-400 -mt-3">
+              El mes del alta y el de la baja se cobran prorrateados por días, y la cuenta queda
+              escrita en el cobro.
+            </p>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Notas</label>
+              <textarea rows={2} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} className={inputCls} />
+            </div>
+
+            <div className="flex items-center justify-between gap-2 pt-3 border-t border-neutral-100">
+              <p className="text-xs text-neutral-500">
+                {editando ? "Se cobrará " : `${destinatarios.length} ${destinatarios.length === 1 ? "destinatario" : "destinatarios"} · `}
+                <b className="tabular text-neutral-900">{fmtMoney(importeFinal)}</b>
+                {!editando && destinatarios.length > 1 && <> · <span className="tabular">{fmtMoney(importeFinal * destinatarios.length)}</span> al mes en total</>}
+              </p>
+              <div className="flex gap-2 shrink-0">
+                <button type="button" onClick={onClose}
+                  className="px-4 py-2 text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">Cancelar</button>
+                <button type="button" onClick={guardar} disabled={guardando || !form.startDate}
+                  className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white disabled:opacity-50"
+                  style={{ background: "var(--color-primary, #1B3A2D)" }}>
+                  {guardando ? "Guardando..." : editando ? "Guardar" : "Dar de alta"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </aside>
+    </>
+  );
+}
+
+/* ── Los destinatarios del alta en grupo ───────────────────────────────────
+ * Se buscan PACIENTES (que es como los conoce el centro) y de cada uno se
+ * arrastra su familia pagadora, que es quien acaba pagando. Sin módulo
+ * asistencial no hay pacientes: se cae al selector de fichas de siempre.
+ */
+function SelectorDestinatarios({ valores, onChange }) {
+  const [texto, setTexto] = useState("");
+  const [resultados, setResultados] = useState([]);
+  const [hayPacientes, setHayPacientes] = useState(true);
+  const [buscando, setBuscando] = useState(false);
+
+  // El vaciado va DENTRO del temporizador, no en el cuerpo del efecto: un
+  // setState sincrono ahi encadena renders (y lo canta el lint).
+  useEffect(() => {
+    const t = texto.trim();
+    const id = setTimeout(() => {
+      if (t.length < 2) { setResultados([]); return; }
+      setBuscando(true);
+      fetch(`/api/pacientes?q=${encodeURIComponent(t)}&limit=10`, { cache: "no-store" })
+        .then(async (r) => {
+          // Sin modulo asistencial la puerta responde 403: se cae al selector
+          // de fichas en vez de dejar el buscador mudo.
+          if (r.status === 403) { setHayPacientes(false); return { data: {} }; }
+          return r.json();
+        })
+        .then((j) => setResultados(j?.data?.patients ?? []))
+        .catch(() => setResultados([]))
+        .finally(() => setBuscando(false));
+    }, 250);
+    return () => clearTimeout(id);
+  }, [texto]);
+
+  function añadir(p) {
+    if (!p.clientId) return; // sin familia pagadora no se puede cobrar
+    if (valores.some((v) => v.patientId === p.id)) return;
+    onChange([...valores, {
+      patientId: p.id,
+      clientId: p.clientId,
+      etiqueta: `${p.firstName} ${p.lastName}`,
+      familia: p.client?.name ?? "",
+    }]);
+    setTexto("");
+    setResultados([]);
+  }
+
+  function añadirFamilia(clientId, ficha) {
+    if (!clientId || valores.some((v) => v.clientId === clientId && !v.patientId)) return;
+    onChange([...valores, { patientId: null, clientId, etiqueta: ficha?.name ?? "Familia", familia: ficha?.name ?? "" }]);
+  }
+
+  return (
+    <div className="space-y-2">
+      <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">
+        A quién se le pone esta cuota *
+      </label>
+
+      {hayPacientes ? (
+        <div className="relative">
+          <input value={texto} onChange={(e) => setTexto(e.target.value)}
+            placeholder="Buscar paciente por nombre…" className={inputCls} />
+          {texto.trim().length >= 2 && (
+            <div className="absolute z-10 left-0 right-0 mt-1 bg-white border border-neutral-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+              {buscando && <div className="px-3 py-2 text-xs text-neutral-400">Buscando…</div>}
+              {!buscando && resultados.length === 0 && <div className="px-3 py-2 text-xs text-neutral-400">Sin resultados</div>}
+              {resultados.map((p) => (
+                <button key={p.id} type="button" onClick={() => añadir(p)}
+                  disabled={!p.clientId}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed">
+                  <span className="text-neutral-800">{p.firstName} {p.lastName}</span>
+                  <span className="text-neutral-400"> · {p.client?.name ?? "sin familia pagadora"}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <SelectorCliente value="" onChange={añadirFamilia} fuente="billing" className={inputCls}
+          placeholder="Buscar familia…" />
+      )}
+
+      {valores.length > 0 && (
+        <ul className="flex flex-wrap gap-1.5">
+          {valores.map((v, i) => (
+            <li key={`${v.clientId}-${v.patientId ?? "x"}`}
+              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-neutral-100 text-[11px] text-neutral-700">
+              {v.etiqueta}
+              <button type="button" onClick={() => onChange(valores.filter((_, j) => j !== i))}
+                className="text-neutral-400 hover:text-rose-600">×</button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {valores.length > 1 && (
+        <p className="text-[10px] text-neutral-400">
+          Se creará una cuota por cada uno. Quien ya tenga una cuota activa se salta y te lo digo.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* ── Generar los cobros del mes ────────────────────────────────────────────── */
+function DrawerGenerar({ onClose, onDone }) {
+  const [mes, setMes] = useState(mesActual());
+  const [metodos, setMetodos] = useState([]);
+  const [preview, setPreview] = useState(null);
+  const [excluidas, setExcluidas] = useState(() => new Set());
+  const [cargando, setCargando] = useState(false);
+  const [generando, setGenerando] = useState(false);
+  const [error, setError] = useState(null);
+  const [resultado, setResultado] = useState(null);
+
+  useEffect(() => {
+    setCargando(true);
+    setError(null);
+    setExcluidas(new Set());
+    const qs = new URLSearchParams({ mes });
+    metodos.forEach((m) => qs.append("metodo", m));
+    fetch(`/api/billing/cuotas/generar?${qs}`, { cache: "no-store" })
+      .then((r) => r.json().then((j) => ({ ok: r.ok, j })))
+      .then(({ ok, j }) => {
+        if (!ok) throw new Error(j.error || "Error");
+        setPreview(j.data);
+      })
+      .catch((e) => { setPreview(null); setError(e.message); })
+      .finally(() => setCargando(false));
+  }, [mes, metodos]);
+
+  const elegidas = useMemo(
+    () => (preview?.aGenerar ?? []).filter((f) => !excluidas.has(f.cuotaId)),
+    [preview, excluidas]
+  );
+  const importe = elegidas.reduce((s, f) => s + Number(f.importe || 0), 0);
+
+  function alternarMetodo(m) {
+    setMetodos((prev) => (prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]));
+  }
+
+  async function generar() {
+    setGenerando(true);
+    setError(null);
+    try {
+      const r = await fetch("/api/billing/cuotas/generar", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mes, metodos, excluir: [...excluidas] }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "Error");
+      setResultado(j.data);
+      onDone?.();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setGenerando(false);
+    }
+  }
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/40 z-40" onClick={() => !generando && onClose()} />
+      <aside className="fixed top-14 lg:top-0 right-0 bottom-0 w-full sm:w-[600px] bg-white z-50 shadow-pop overflow-y-auto ink-scroll slide-right">
+        <div className="px-6 pt-6 pb-4 border-b border-neutral-100 flex items-start justify-between gap-3">
+          <div>
+            <div className="eyebrow">Cuotas</div>
+            <h2 className="font-display text-xl text-neutral-900 mt-1">Generar el mes</h2>
+            <p className="text-[11px] text-neutral-400 mt-1">
+              Un cobro por cuota vigente, PENDIENTE de cobrar. Relanzarlo no duplica.
+            </p>
+          </div>
+          <button onClick={() => !generando && onClose()} className="text-neutral-300 hover:text-neutral-700 transition-colors p-1">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {resultado ? (
+          <div className="px-6 py-5 space-y-4">
+            <div className="text-sm text-neutral-800">
+              <span className="font-semibold text-emerald-700">
+                {resultado.creados} {resultado.creados === 1 ? "cobro creado" : "cobros creados"}
+              </span>
+              {resultado.saltados > 0 && <> · <span className="text-amber-700">{resultado.saltados} saltados</span></>}
+              <span className="text-neutral-400"> · <span className="tabular">{fmtMoney(resultado.importe)}</span></span>
+            </div>
+            <p className="text-xs text-neutral-500">
+              Están en <Link href="/facturacion/cobros" className="underline font-semibold">Cobros</Link> como{" "}
+              <b>pendientes</b>. Según entre el dinero, se pasan a cobrados; solo entonces cuentan
+              para Morosidad y para «Facturar el mes».
+            </p>
+            <ul className="divide-y divide-neutral-50 border border-neutral-100 rounded-xl overflow-hidden max-h-72 overflow-y-auto">
+              {resultado.resultados.map((r) => (
+                <li key={`${r.cuotaId}-${r.resultado}`} className="px-4 py-2.5 flex items-center gap-3 text-xs">
+                  <span className="min-w-0 flex-1 truncate text-neutral-800">
+                    {r.nombre}{r.paciente && <span className="text-neutral-400"> · {r.paciente}</span>}
+                  </span>
+                  {r.resultado === "creado"
+                    ? <span className="text-emerald-700">creado</span>
+                    : <span className="text-amber-700">{r.motivo}</span>}
+                  <span className="font-semibold tabular text-neutral-900">{fmtMoney(r.importe)}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="flex justify-end">
+              <button onClick={onClose} className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white"
+                style={{ background: "var(--color-primary, #1B3A2D)" }}>Cerrar</button>
+            </div>
+          </div>
+        ) : (
+          <div className="px-6 py-5 space-y-4">
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Mes</label>
+              <input type="month" value={mes} onChange={(e) => setMes(e.target.value)} className={inputCls} />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Qué generar</label>
+              <div className="flex flex-wrap gap-2">
+                {METODOS.map((m) => (
+                  <button key={m.value} type="button" onClick={() => alternarMetodo(m.value)}
+                    className={`px-3 py-1.5 rounded-lg text-xs border transition ${metodos.includes(m.value) ? "border-transparent text-white" : "bg-white border-neutral-200 text-neutral-500"}`}
+                    style={metodos.includes(m.value) ? { background: "var(--color-primary, #1B3A2D)" } : undefined}>
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-neutral-400">Sin elegir ninguno, entran todas.</p>
+            </div>
+
+            {cargando && <div className="text-xs text-neutral-400 py-6 text-center">Mirando qué cuotas tocan…</div>}
+            {error && <div className="text-xs text-red-600 bg-red-50 border border-red-100 px-3 py-2 rounded-lg">{error}</div>}
+
+            {!cargando && preview && (
+              <>
+                <p className="text-xs text-neutral-500">
+                  {preview.aGenerar.length === 0
+                    ? "No hay cuotas pendientes de generar en ese mes."
+                    : <>
+                        <b>{preview.totales.cuotas}</b> {preview.totales.cuotas === 1 ? "cuota" : "cuotas"},{" "}
+                        <b className="tabular">{fmtMoney(preview.totales.importe)}</b>
+                        {preview.totales.prorrateadas > 0 && <> · {preview.totales.prorrateadas} prorrateadas</>}
+                      </>}
+                </p>
+
+                {preview.repetidas.length > 0 && (
+                  <div className="bg-neutral-50 border border-neutral-100 rounded-xl px-4 py-3 text-[11px] text-neutral-500">
+                    {preview.repetidas.length} {preview.repetidas.length === 1 ? "cuota ya tenía" : "cuotas ya tenían"} su cobro de este mes: no se vuelven a generar.
+                  </div>
+                )}
+
+                {preview.sinImporte.length > 0 && (
+                  <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+                    <p className="text-xs font-semibold text-amber-800 mb-1.5">
+                      {preview.sinImporte.length} sin importe: no se pueden generar
+                    </p>
+                    <ul className="space-y-1 max-h-28 overflow-y-auto">
+                      {preview.sinImporte.map((f) => (
+                        <li key={f.cuotaId} className="text-[11px] text-amber-800 truncate">{f.nombre} — {f.motivo}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {preview.totales.sinMetodo > 0 && (
+                  <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-2 text-[11px] text-amber-800">
+                    {preview.totales.sinMetodo} sin método de cobro: se registrarán como{" "}
+                    <b>{METODO_CORTO[preview.metodoPorDefecto]}</b>.
+                  </div>
+                )}
+
+                {preview.aGenerar.length > 0 && (
+                  <>
+                    <div className="flex items-center justify-between text-[11px] text-neutral-500">
+                      <span>{elegidas.length} de {preview.aGenerar.length} marcadas</span>
+                      <span className="flex gap-2">
+                        <button type="button" onClick={() => setExcluidas(new Set())} className="underline hover:text-neutral-800">Marcar todas</button>
+                        <button type="button" onClick={() => setExcluidas(new Set(preview.aGenerar.map((f) => f.cuotaId)))} className="underline hover:text-neutral-800">Desmarcar todas</button>
+                      </span>
+                    </div>
+                    <ul className="divide-y divide-neutral-50 border border-neutral-100 rounded-xl overflow-hidden max-h-72 overflow-y-auto ink-scroll">
+                      {preview.aGenerar.map((f) => (
+                        <li key={f.cuotaId} className="px-4 py-2.5 flex items-center gap-3 text-xs">
+                          <input type="checkbox" checked={!excluidas.has(f.cuotaId)}
+                            onChange={() => setExcluidas((prev) => {
+                              const n = new Set(prev);
+                              if (n.has(f.cuotaId)) n.delete(f.cuotaId); else n.add(f.cuotaId);
+                              return n;
+                            })}
+                            className="accent-[var(--color-primary,#1B3A2D)]" />
+                          <span className="min-w-0 flex-1 truncate text-neutral-800">
+                            {f.nombre}
+                            {f.paciente && <span className="text-neutral-400"> · {f.paciente}</span>}
+                            {f.rotulo && <span className="text-amber-600"> · {f.rotulo}</span>}
+                          </span>
+                          <span className="text-neutral-400">{METODO_CORTO[f.method] ?? "—"}</span>
+                          <span className="font-semibold tabular text-neutral-900">{fmtMoney(f.importe)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+
+                <div className="flex items-center justify-between gap-2 pt-3 border-t border-neutral-100">
+                  <p className="text-[10px] text-neutral-400 min-w-0">
+                    Los cobros nacen pendientes: generar no es cobrar.
+                  </p>
+                  <div className="flex gap-2 shrink-0">
+                    <button type="button" onClick={onClose}
+                      className="px-4 py-2 text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">Cancelar</button>
+                    <button type="button" onClick={generar} disabled={generando || elegidas.length === 0}
+                      className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white disabled:opacity-50"
+                      style={{ background: "var(--color-primary, #1B3A2D)" }}>
+                      {generando ? "Generando..." : `Generar ${elegidas.length} · ${fmtMoney(importe)}`}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </aside>
+    </>
+  );
+}

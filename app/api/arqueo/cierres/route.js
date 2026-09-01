@@ -3,6 +3,8 @@ import { ok, created, forbidden, error, notFound } from "../../../../lib/utils/a
 import { auditar, datosPeticion, resumen } from "../../../../lib/utils/auditoria.js";
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
 import { Op } from "sequelize";
+import { saldoDeMovimientos } from "../../../../lib/billing/caja.js";
+import { madridDayRange } from "../../../../lib/utils/madridDate.js";
 
 /**
  * Cierres de caja (arqueo).
@@ -16,36 +18,55 @@ import { Op } from "sequelize";
  */
 
 /**
- * Lo que debería haber: fondo inicial + cobros en efectivo de ese día.
+ * Lo que debería haber: fondo inicial + cobros en efectivo del día + entradas
+ * − salidas de caja (01/09/2026).
  *
- * ⚠️ LIMITACIÓN CONOCIDA: `Payment` no guarda en QUÉ caja se cobró, así que con
- * dos o más cajas el esperado sale igual para todas y el arqueo dejaría de
- * cuadrar. Hoy no afecta a nadie —Aumenta tiene una sola caja («Recepción»), y
- * es lo normal— pero el día que un cliente abra la segunda hay que añadir
- * `payments.cash_point_id` ANTES, no después. Se recibe `cashPointId` ya para
- * no cambiar la firma cuando llegue ese día.
+ * Los apuntes de caja (`cash_movements`) entraron aquí porque sin ellos el
+ * arqueo descuadraba todos los días: por el cajón pasa la mensajería, el sobre
+ * para el banco y el cambio, y nada de eso es un cobro. Esos sí van filtrados
+ * por caja, que es de donde salieron.
+ *
+ * El día es el de MADRID y no el del servidor (que en producción va en UTC):
+ * agrupando por el del servidor, un cobro de las 00:30 caía en el día anterior
+ * y el arqueo no cuadraba con lo que la persona acababa de contar.
+ *
+ * ⚠️ LIMITACIÓN CONOCIDA, la de siempre: `Payment` no guarda en QUÉ caja se
+ * cobró, así que con dos o más cajas la parte de COBROS sale igual para todas.
+ * Hoy no afecta a nadie —Aumenta tiene una sola caja («Recepción»), y es lo
+ * normal— pero el día que un cliente abra la segunda hay que añadir
+ * `payments.cash_point_id` ANTES, no después.
  */
 async function calcularEsperado(tenantModels, cashPointId, fecha, openingAmount) {
-  const { Payment } = tenantModels;
+  const { Payment, CashMovement } = tenantModels;
 
-  // Ventana del día completo en hora local del servidor.
-  const desde = new Date(`${fecha}T00:00:00`);
-  const hasta = new Date(`${fecha}T23:59:59.999`);
+  // Ventana del día completo en hora de MADRID (exacta en los cambios de hora).
+  const { start, end } = madridDayRange(new Date(`${fecha}T12:00:00Z`));
 
   const cobros = await Payment.findAll({
     where: {
       method: "cash",
       status: "completed",
-      paidAt: { [Op.between]: [desde, hasta] },
+      paidAt: { [Op.gte]: start, [Op.lt]: end },
     },
     attributes: ["id", "amount"],
   });
 
+  const movimientos = cashPointId
+    ? await CashMovement.findAll({
+        where: { cashPointId, date: fecha },
+        attributes: ["id", "direction", "amount"],
+      })
+    : [];
+
   const efectivo = cobros.reduce((s, p) => s + Number(p.amount || 0), 0);
+  const caja = saldoDeMovimientos(movimientos.map((m) => m.toJSON()));
   return {
     efectivoDelDia: +efectivo.toFixed(2),
     numCobros: cobros.length,
-    esperado: +(Number(openingAmount || 0) + efectivo).toFixed(2),
+    entradas: caja.entradas,
+    salidas: caja.salidas,
+    numMovimientos: movimientos.length,
+    esperado: +(Number(openingAmount || 0) + efectivo + caja.neto).toFixed(2),
   };
 }
 

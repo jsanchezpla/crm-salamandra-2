@@ -13,8 +13,17 @@ import PatientDocumentsSection from "@/components/clinica/PatientDocumentsSectio
 import PatientExternalContactsSection from "@/components/clinica/PatientExternalContactsSection.jsx";
 import InterventionPlanSection from "@/components/clinica/InterventionPlanSection.jsx";
 import PreviewBanner from "../../clinica/_components/PreviewBanner.jsx";
+import PropuestaIA from "@/components/clinica/PropuestaIA.jsx";
 import { REPORT_TYPES, REPORT_TYPE_LABEL } from "@/lib/clinica/serialize.js";
-import { apartadosConPlantillas, valorDeApartado, valoresDeSesion } from "@/lib/clinica/plantillas.js";
+import {
+  aFormulario,
+  apartadosConPlantillas,
+  desdeFormulario,
+  repartirValoresDeSesion,
+  valorDeApartado,
+  valoresDeSesion,
+} from "@/lib/clinica/plantillas.js";
+import { bloquesDelRegistro, CLAVES_ENVOLTORIO, esEnvoltorio, MAX_NOTAS } from "@/lib/clinica/registroCompleto.js";
 import { SPECIALTY_LABEL } from "@/lib/clinica/specialties.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 import { enlaceDeVuelta } from "@/lib/clients/volver.js";
@@ -109,6 +118,105 @@ function SessionDrawer({ session, patient, onClose, onPublish, onSaved, busy }) 
   const [enviando, setEnviando] = useState(false);
   const [errorEnvio, setErrorEnvio] = useState(null);
 
+  // ── Completar el registro con IA desde su transcripción (01/09/2026) ─────
+  // La transcripción se quedaba guardada en la sesión sin poder volver a
+  // usarla: si el registro había quedado a medias, tocaba releerla y teclear.
+  // Aquí se le vuelve a pasar Claude por encima y ella elige qué entra.
+  const [completando, setCompletando] = useState(false);
+  const [propuesta, setPropuesta] = useState(null); // { propuesta, bloques, escrito, material }
+  const [errorIA, setErrorIA] = useState(null);
+  // Las notas pegadas a mano (01/09/2026, Rodrigo). Es lo que hace que este
+  // botón sirva para las 22.045 sesiones de Aumenta, que no tienen audio
+  // ninguno: sin esto solo valía para las grabadas.
+  const [notasIA, setNotasIA] = useState("");
+  const [pegando, setPegando] = useState(false);
+  const tieneTranscripcion = !!String(session.aiTranscription ?? "").trim();
+
+  async function completarConIA() {
+    const texto = notasIA.trim();
+    if (!tieneTranscripcion && !texto) return;
+    setCompletando(true);
+    setErrorIA(null);
+    try {
+      const r = await fetch(`/api/clinica/sessions/${session.id}/completar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ texto }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error(j.error || "La IA no ha podido completar el registro");
+      setPropuesta(j.data);
+    } catch (e) {
+      setErrorIA(e.message);
+    } finally {
+      setCompletando(false);
+    }
+  }
+
+  /**
+   * Lo elegido en el panel se guarda por el PATCH de siempre.
+   *
+   * Los tres del envoltorio van por su nombre (tienen columna propia) y los
+   * apartados pasan por el MISMO reparto que usa el formulario de alta: lo de
+   * fábrica a sus columnas y lo nuevo al JSONB. Se parte de lo que ya hay
+   * escrito para no borrar los apartados que ella no haya tocado.
+   *
+   * ⚠️ La lista de apartados se toma de la que devolvió el SERVIDOR con la
+   * propuesta, no de la que calcula esta pantalla. No es un detalle:
+   * `repartirValoresDeSesion` con una lista VACÍA deja en blanco objetivos,
+   * actividades, desempeño y las cuatro observaciones —está escrito así a
+   * propósito, para que un apartado que la plantilla ya no usa no arrastre un
+   * valor de otro sitio—. Y aquí la lista de la pantalla puede estar vacía por
+   * un momento: sale de `/api/clinica/plantillas`, que se pide al abrir el
+   * cajón, y una sesión vieja no trae su propia foto de apartados. Sería un
+   * borrado silencioso de una nota clínica firmada.
+   */
+  async function aplicarPropuesta(cambios) {
+    const claves = Object.keys(cambios);
+    if (!claves.length) return;
+    setGuardando(true);
+    setErrorIA(null);
+    try {
+      const body = {};
+      for (const k of CLAVES_ENVOLTORIO) if (k in cambios) body[k] = cambios[k];
+      const deApartados = claves.filter((k) => !esEnvoltorio(k));
+      const delServidor = (propuesta?.bloques ?? []).filter((b) => !esEnvoltorio(b.key));
+      const lista = delServidor.length ? delServidor : apartados;
+      if (deApartados.length && lista.length) {
+        const mezcla = { ...aFormulario(valores, lista), ...(propuesta?.escrito ?? {}) };
+        for (const k of deApartados) mezcla[k] = cambios[k];
+        const reparto = repartirValoresDeSesion(desdeFormulario(mezcla, lista), lista);
+        // La foto de apartados y los cuerpos nuevos los pone el reparto; lo que
+        // ya hubiera en el JSONB y él no toca —de qué plantilla salió— se
+        // conserva, o el registro perdería su procedencia al aplicar la IA.
+        reparto.contentSections = { ...(session.contentSections ?? {}), ...reparto.contentSections };
+        Object.assign(body, reparto);
+      }
+      // De dónde salió esto. Si la sesión no tenía texto guardado y se ha
+      // rellenado desde unas notas pegadas, esas notas SON la fuente del
+      // registro y se quedan con él: lo que ella escribió y la IA no supo
+      // colocar se perdería si no. El servidor tiene la última palabra —
+      // `aiTranscription` se escribe una vez y no se pisa (sessions/[id]).
+      if (!tieneTranscripcion && propuesta?.material) {
+        body.aiTranscription = propuesta.material;
+        body.aiReviewedAt = new Date().toISOString();
+      }
+      const r = await fetch(`/api/clinica/sessions/${session.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error(j.error || "No se pudo guardar");
+      setPropuesta(null);
+      onSaved?.();
+    } catch (e) {
+      setErrorIA(e.message);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
   async function enviarALaFamilia() {
     if (session.deliveredDocumentId && !window.confirm("Se sube un PDF nuevo y se retira el anterior de su área privada. ¿Seguimos?")) return;
     setEnviando(true);
@@ -181,6 +289,23 @@ function SessionDrawer({ session, patient, onClose, onPublish, onSaved, busy }) 
 
   return (
     <>
+      {/* La propuesta de la IA, encima del cajón (z-60). `escrito` y `bloques`
+          los manda el servidor: son lo que había en la sesión y con qué
+          apartados se escribió, así que lo que se compara en pantalla es
+          exactamente lo que se va a guardar. */}
+      {propuesta && (
+        <PropuestaIA
+          bloques={propuesta.bloques ?? bloquesDelRegistro(apartados)}
+          escrito={propuesta.escrito ?? {}}
+          propuesta={propuesta.propuesta ?? {}}
+          transcription={propuesta.material ?? session.aiTranscription ?? ""}
+          guardando={guardando}
+          onAplicar={aplicarPropuesta}
+          onCerrar={() => setPropuesta(null)}
+          titulo="Lo que ha sacado la IA de esta sesión"
+          textoAplicar="Guardar lo elegido"
+        />
+      )}
       <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} aria-hidden="true" />
       <aside className="fixed right-0 top-14 lg:top-0 bottom-0 z-50 w-full sm:w-[640px] bg-white shadow-2xl overflow-y-auto">
         <div className="sticky top-0 bg-white border-b border-neutral-100 px-5 lg:px-7 py-4 flex items-start justify-between gap-3 z-10">
@@ -209,9 +334,96 @@ function SessionDrawer({ session, patient, onClose, onPublish, onSaved, busy }) 
           {session.aiReviewedAt && (
             <div className="bg-sky-50 border border-sky-100 rounded-lg px-3 py-2.5 flex items-start gap-2.5">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4 text-sky-700 mt-0.5 shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" /></svg>
-              <p className="text-[11px] text-sky-900 leading-relaxed flex-1"><span className="font-semibold">Transcrito y estructurado por IA.</span> Revisado el {fmtDate(session.aiReviewedAt)}.</p>
+              {/* Qué dice el cartel depende de POR DÓNDE entró el texto: con
+                  audio hubo transcripción de verdad, sin él lo que hay son las
+                  notas que escribió ella. `audioDurationSec` es lo que los
+                  separa — decir «transcrito» de un texto pegado sería falso. */}
+              <p className="text-[11px] text-sky-900 leading-relaxed flex-1">
+                <span className="font-semibold">
+                  {session.audioDurationSec != null
+                    ? "Transcrito del audio y estructurado por IA."
+                    : "Registro estructurado por IA a partir de un texto escrito."}
+                </span>{" "}
+                Revisado el {fmtDate(session.aiReviewedAt)}.
+              </p>
             </div>
           )}
+
+          {/* ── Completar el registro con IA (01/09/2026) ───────────────────
+              Sale en TODA sesión abierta, tenga audio o no: desde que el botón
+              acepta texto pegado, siempre hay de dónde sacar el registro —y eso
+              es justo lo que lo hace útil para las 22.045 sesiones importadas
+              de Aumenta, ninguna con transcripción. La sesión CERRADA
+              («published») no se toca desde aquí: para eso está reabrirla. */}
+          {session.status !== "published" && (
+            <div className="border border-neutral-200 rounded-lg px-3 py-2.5 space-y-2.5">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex-1 min-w-[14rem]">
+                  <p className="text-[11px] text-neutral-700 leading-relaxed">
+                    <span className="font-semibold">Rellenar el registro con la IA.</span> Reparte el texto de
+                    esta sesión por todos los apartados —preparación, informe, devolución de la familia y
+                    notas internas— y tú eliges cuáles entran.
+                  </p>
+                  <p className="text-[10px] text-neutral-400 mt-0.5">
+                    {tieneTranscripcion
+                      ? "Se usa la transcripción ya guardada; el audio no se vuelve a subir. Puedes añadir notas sueltas."
+                      : "Esta sesión no tiene audio: pega abajo lo que tengas apuntado."}
+                  </p>
+                </div>
+                <button
+                  onClick={completarConIA}
+                  disabled={completando || guardando || busy || (!tieneTranscripcion && !notasIA.trim()) || notasIA.length > MAX_NOTAS}
+                  className="shrink-0 text-xs font-medium px-3.5 py-2 rounded-lg text-white disabled:opacity-50 inline-flex items-center gap-2"
+                  style={{ background: "var(--color-primary, #1B3A2D)" }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" /></svg>
+                  {completando ? "Leyendo…" : "Completar con IA"}
+                </button>
+              </div>
+
+              {/* El recuadro de notas: abierto de par en par cuando no hay
+                  transcripción (es la única fuente posible) y plegado detrás de
+                  un enlace cuando sí la hay, para no estorbar en el caso normal. */}
+              {tieneTranscripcion && !pegando && (
+                <button
+                  onClick={() => setPegando(true)}
+                  className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline"
+                >
+                  + Añadir notas escritas
+                </button>
+              )}
+              {(!tieneTranscripcion || pegando) && (
+                <div>
+                  <div className="flex flex-wrap items-baseline justify-between gap-2 mb-1">
+                    <div className="text-[10px] uppercase tracking-wider text-neutral-400">
+                      {tieneTranscripcion ? "Notas escritas (se suman a la transcripción)" : "Tus notas de la sesión"}
+                    </div>
+                    {/* Se dice porque no es evidente: en una sesión que YA
+                        tiene texto guardado, estas notas se usan y no se
+                        guardan —el texto original no se pisa (ver el candado
+                        del PATCH)—, así que lo que valga la pena tiene que
+                        acabar en un apartado del registro. */}
+                    {tieneTranscripcion && (
+                      <span className="text-[10px] text-neutral-400 basis-full order-3">
+                        Se usan para rellenar; el texto guardado de la sesión no se cambia.
+                      </span>
+                    )}
+                    <span className={`text-[10px] ${notasIA.length > MAX_NOTAS ? "text-rose-600 font-medium" : "text-neutral-400"}`}>
+                      {notasIA.length > 0 && `${notasIA.length.toLocaleString("es-ES")} / ${MAX_NOTAS.toLocaleString("es-ES")}`}
+                    </span>
+                  </div>
+                  <textarea
+                    className={ta}
+                    rows={3}
+                    value={notasIA}
+                    onChange={(e) => setNotasIA(e.target.value)}
+                    placeholder="Pega aquí lo que tengas apuntado: el bloc de notas, el móvil, lo escrito a mano pasado a limpio… Tal cual, sin ordenarlo."
+                  />
+                </div>
+              )}
+            </div>
+          )}
+          {errorIA && <div className="px-3 py-2 rounded-lg bg-rose-50 border border-rose-100 text-[11px] text-rose-700">{errorIA}</div>}
 
           {/* El registro, con SUS apartados: los de la plantilla con la que se
               escribió, y los sueltos que le añadieran (lib/clinica/plantillas.js).
@@ -833,6 +1045,14 @@ export default function PacienteFichaPage() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-display text-sm text-[var(--ink-900)]">{se.therapist?.name ?? "—"}</span>
                           <span className={`inline-flex items-center gap-1 ${ss.bg} ${ss.text} text-[9px] font-medium px-1.5 py-0.5 rounded-full`}><span className={`w-1 h-1 rounded-full ${ss.dot}`} />{se.statusLabel}</span>
+                          {/* Sale de un TALLER (01/09/2026): el cuerpo del
+                              registro lo escribió una vez quien lo dio, para
+                              todo el grupo, y lo propio de este paciente es su
+                              nota individual. Sin decirlo, se leería como una
+                              sesión individual que nadie recuerda haber dado. */}
+                          {se.tallerSesionId && (
+                            <span className="text-[9px] font-medium text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded-full">Taller</span>
+                          )}
                           <span className="text-[10px] text-neutral-400">{se.duration ?? "—"} min</span>
                         </div>
                         <p className="text-[11px] text-neutral-600 mt-1 line-clamp-2">{se.preview}</p>
