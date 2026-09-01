@@ -532,6 +532,31 @@ function SessionDrawer({ session, patient, onClose, onPublish, onSaved, busy }) 
           </div>
 
           <div className="border-t border-neutral-100 pt-4 flex flex-wrap gap-2 items-center">
+            {/* ── EDITAR EL REGISTRO ENTERO (01/09/2026, Rodrigo) ───────────
+                «También quiero poder editar a posteriori el propio registro de
+                sesión.» Hasta hoy, de aquí solo se podían retocar la
+                preparación, la devolución y las notas internas: el cuerpo —los
+                apartados del informe de la sesión— no se tocaba desde ninguna
+                parte una vez guardado. Se edita en la MISMA pantalla en la que
+                se escribió, con sus apartados y su plantilla.
+
+                No para las sesiones de TALLER: su cuerpo lo escribe una vez
+                quien da el taller y se copia a todos los asistentes, así que lo
+                que se corrigiera aquí se perdería en la siguiente propagación
+                sin decir nada. Esas se editan desde el taller. */}
+            {session.tallerSesionId ? (
+              <span className="text-[11px] text-neutral-500">
+                Este registro sale de un taller: el cuerpo se edita desde el taller, en Clínica → Talleres.
+              </span>
+            ) : (
+              <Link
+                href={`/pacientes/${patient.id}/sesiones/${session.id}`}
+                title="Abre el registro completo para seguir escribiéndolo: apartados, preparación, devolución y notas internas."
+                className="text-xs font-medium px-3 py-2 rounded-lg border border-neutral-300 text-[var(--ink-900)] hover:border-neutral-500"
+              >
+                Editar registro
+              </Link>
+            )}
             {/* El PDF del registro (29/08/2026, Rodrigo). Abre en pestaña nueva
                 y no publica nada: lleva los apartados y la devolución de la
                 familia, nunca la preparación ni las notas internas. */}

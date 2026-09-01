@@ -10,7 +10,8 @@
  * Rodrigo, 01/09/2026: «guardar la preparación de la sesión clínica no
  * funciona, no se guarda nada como borrador». Y no se guardaba.
  *
- * `/pacientes/[id]/sesiones/nueva` tiene DOS pantallas que piden lo mismo: el
+ * El editor del registro (hoy `components/clinica/RegistroSesionEditor.jsx`,
+ * entonces `/pacientes/[id]/sesiones/nueva`) tiene DOS pantallas que piden lo mismo: el
  * registro completo (su tarjeta «1 · Preparación») y «Preparar la sesión», a la
  * que se llega con `?preparar=1` o con el enlace «Guárdala solo como
  * preparación». La segunda guardaba su texto en un estado propio (`prepSolo`)
@@ -26,7 +27,7 @@
  * estados el fallo vuelve, y vuelve mudo.
  *
  * ── POR QUÉ SE LEE EL TEXTO Y NO SE EJECUTA ────────────────────────────────
- * Es una página de React con hooks, `useSearchParams` y tres fetch: montarla
+ * Es un componente de React con hooks, `useSearchParams` y tres fetch: montarla
  * pide un DOM y un router de Next. Lo que se rompió es una palabra —qué estado
  * lee cada `value=`—, así que leer el fichero atrapa exactamente esa clase de
  * fallo y cuesta milisegundos. Cada aserción exige además que su ANCLA exista:
@@ -41,7 +42,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const RUTA = path.join(RAIZ, "app", "(dashboard)", "pacientes", "[id]", "sesiones", "nueva", "page.jsx");
+// El formulario dejó de ser una página el 01/09/2026: la MISMA pantalla sirve
+// para estrenar un registro y para seguir editándolo, así que vive en
+// `components/` y dos rutas finísimas la montan. Lo que esta prueba vigila no
+// cambia por eso — la preparación sigue teniendo que salir de un solo estado.
+const RUTA = path.join(RAIZ, "components", "clinica", "RegistroSesionEditor.jsx");
 const fuente = fs.readFileSync(RUTA, "utf8");
 // Sin comentarios: el porqué del arreglo NOMBRA el estado viejo, y buscarlo en
 // el fichero entero daría un falso positivo eterno.

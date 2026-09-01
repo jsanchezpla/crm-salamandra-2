@@ -21,7 +21,11 @@ const STATUSES = ["draft", "ai_pending", "registered", "published"];
 // el registro y merece guardarse —si no, lo que ella escribió y la IA no supo
 // colocar se pierde— y la marca de que ahí ha intervenido la IA también.
 // `aiTranscription` va con candado abajo: se escribe UNA vez y no se pisa.
-const PATCH_FIELDS = ["sessionDate", "duration", "objectives", "activities", "performance", "observations", "status", "prepText", "parentFeedback", "internalNotes", "contentSections", "aiTranscription", "aiReviewedAt"];
+// `bookingId` (01/09/2026): de qué CITA es este registro. Se parchea porque las
+// sesiones preparadas antes de hoy no pudieron guardarlo, y son justo las que se
+// duplicaban: la pantalla las ADOPTA la primera vez que se vuelve a su cita.
+// Va con candado abajo, como `aiTranscription`: se escribe UNA vez y no se pisa.
+const PATCH_FIELDS = ["sessionDate", "duration", "objectives", "activities", "performance", "observations", "status", "prepText", "parentFeedback", "internalNotes", "contentSections", "aiTranscription", "aiReviewedAt", "bookingId"];
 
 export const GET = withTenant(async (request, rc, ctx) => {
   if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
@@ -64,6 +68,16 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
     const nuevo = String(updates.aiTranscription ?? "").trim();
     if (yaTiene || !nuevo) delete updates.aiTranscription;
     else updates.aiTranscription = nuevo;
+  }
+  // ── La cita de un registro también se escribe UNA vez ───────────────────
+  // Reapuntar una sesión a OTRA cita movería una nota clínica de sitio desde
+  // el navegador: la sesión del martes pasaría a ser la del jueves y nadie se
+  // enteraría. Aquí solo se permite lo que hace falta —adoptar una sesión que
+  // todavía no era de ninguna cita— y solo con un id con forma de id.
+  if ("bookingId" in updates) {
+    const nuevo = String(updates.bookingId ?? "").trim();
+    if (String(s.bookingId ?? "").trim() || !UUID_RE.test(nuevo)) delete updates.bookingId;
+    else updates.bookingId = nuevo;
   }
   if ("aiReviewedAt" in updates) {
     const d = updates.aiReviewedAt ? new Date(updates.aiReviewedAt) : null;

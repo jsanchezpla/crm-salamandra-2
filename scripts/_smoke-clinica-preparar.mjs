@@ -71,7 +71,7 @@ describe("fechaDePreparacion — llega por la URL, así que se acota", () => {
 describe("colaDePreparacion — lo que cuelga el modal de la cita", () => {
   it("lleva la fecha de la cita", () => {
     assert.equal(
-      colaDePreparacion("2026-08-28T17:00:00.000Z", AHORA),
+      colaDePreparacion("2026-08-28T17:00:00.000Z", { ahora: AHORA }),
       "?preparar=1&fecha=2026-08-28T17%3A00%3A00.000Z"
     );
   });
@@ -79,17 +79,39 @@ describe("colaDePreparacion — lo que cuelga el modal de la cita", () => {
   it("sin fecha válida sigue llevando a preparar", () => {
     // Un enlace que no lleva a ninguna parte es peor que uno que abre el
     // formulario con la fecha de hoy: eso se corrige de un vistazo.
-    assert.equal(colaDePreparacion(null, AHORA), "?preparar=1");
-    assert.equal(colaDePreparacion("el jueves", AHORA), "?preparar=1");
+    assert.equal(colaDePreparacion(null, { ahora: AHORA }), "?preparar=1");
+    assert.equal(colaDePreparacion("el jueves", { ahora: AHORA }), "?preparar=1");
+  });
+
+  it("y lleva la CITA, que es lo que evita duplicar el registro", () => {
+    // 01/09/2026: sin este id, volver a la misma cita abría un formulario en
+    // blanco y guardarlo creaba otra sesión del mismo día.
+    const q = new URLSearchParams(
+      colaDePreparacion("2026-08-28T17:00:00.000Z", { bookingId: "b-1", ahora: AHORA })
+    );
+    assert.equal(q.get("cita"), "b-1");
+  });
+
+  it("sin cita no cuelga el parámetro vacío", () => {
+    // Un `cita=` a secas obligaría a la pantalla a distinguir «no viene» de
+    // «viene vacío», que es justo la clase de detalle que se olvida.
+    assert.equal(new URLSearchParams(colaDePreparacion(null, { ahora: AHORA })).has("cita"), false);
+    assert.equal(
+      new URLSearchParams(colaDePreparacion(null, { bookingId: "   ", ahora: AHORA })).has("cita"),
+      false
+    );
   });
 
   it("ida y vuelta: lo que cuelga la cita es lo que entiende la pantalla", () => {
-    const q = new URLSearchParams(colaDePreparacion("2026-08-28T17:00:00.000Z", AHORA));
+    const q = new URLSearchParams(
+      colaDePreparacion("2026-08-28T17:00:00.000Z", { bookingId: "b-1", ahora: AHORA })
+    );
     assert.equal(pidePreparar(q.get("preparar")), true);
     assert.equal(
       fechaDePreparacion(q.get("fecha"), AHORA).toISOString(),
       "2026-08-28T17:00:00.000Z"
     );
+    assert.equal(q.get("cita"), "b-1");
   });
 });
 
@@ -155,6 +177,16 @@ describe("payloadDePreparacion — lo que se manda al alta de sesión", () => {
     assert.throws(() => payloadDePreparacion({ ...base, patientId: null }), /paciente/i);
     assert.throws(() => payloadDePreparacion({ ...base, therapistId: null }), /terapeuta/i);
     assert.throws(() => payloadDePreparacion(), /paciente/i);
+  });
+
+  it("con cita, la lleva; sin cita, ni la menciona", () => {
+    // 01/09/2026: `bookingId` es lo que hace que volver a esa cita traiga ESTE
+    // registro. Y una sesión escrita desde la ficha del paciente no sale de
+    // ninguna cita: mandar la clave a null obligaría al endpoint a distinguir
+    // «no viene» de «viene vacío».
+    assert.equal(payloadDePreparacion({ ...base, bookingId: "b-1" }).bookingId, "b-1");
+    assert.equal("bookingId" in payloadDePreparacion(base), false);
+    assert.equal("bookingId" in payloadDePreparacion({ ...base, bookingId: "  " }), false);
   });
 
   it("las observaciones van completas y vacías, como en el alta con audio", () => {

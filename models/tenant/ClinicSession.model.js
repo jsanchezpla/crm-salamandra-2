@@ -169,6 +169,35 @@ export function defineClinicSession(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      /**
+       * ── DE QUÉ CITA es este registro (01/09/2026, Aumenta por Rodrigo) ────
+       *
+       * «Si estoy editando la sesión de una cita y salgo y entro, no me tiene
+       * que generar una sesión nueva: tiene que seguir editando la misma hasta
+       * que le dé a finalizar.» Y las generaba: «Preparar sesión» llevaba solo
+       * el paciente y la FECHA, así que cada vuelta al modal de la cita abría
+       * un formulario en blanco y guardarlo creaba OTRA sesión del mismo día.
+       * La primera se quedaba en la ficha, con la preparación escrita dentro,
+       * y había que ir a buscarla por la pestaña de sesiones.
+       *
+       * La fecha no bastaba para casarlas: se puede corregir a mano en el
+       * propio formulario, y dos citas seguidas del mismo paciente comparten
+       * día. Hacía falta la CITA, que es lo único que identifica «esta sesión».
+       * Con esto la regla es una y se lee sola: **una cita, un registro**.
+       *
+       * Null en las 22.045 sesiones de siempre y en toda sesión escrita desde
+       * la ficha del paciente (que no nace de ninguna cita), así que no cambia
+       * nada de lo que ya hay.
+       *
+       * Sin FK dura, por lo mismo que `tallerSesionId`: borrar una cita del
+       * calendario no puede llevarse por delante la nota clínica de la sesión
+       * que sí se dio. El puntero se queda colgando y no molesta a nadie.
+       */
+      bookingId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: "booking_id",
+      },
       // Cliente/pagador (2026-07-23). Foto tomada del paciente al crear la
       // sesión, para llegar a la ficha del cliente sin depender del salto
       // paciente→cliente, que es frágil. El terapeuta ya se guarda aparte.
@@ -183,6 +212,12 @@ export function defineClinicSession(sequelize) {
       indexes: [
         { fields: ["patient_id", "session_date"], name: "clinic_sessions_patient_date_idx" },
         { fields: ["therapist_id", "session_date"], name: "clinic_sessions_therapist_date_idx" },
+        // «¿Esta cita ya tiene registro?» se pregunta CADA vez que se abre el
+        // modal de una cita con paciente. Sin índice serían 22.045 filas por
+        // pregunta en Aumenta. No es único a propósito: si una sesión de las
+        // viejas se adopta a mano y ya había otra, prefiero dos filas y que la
+        // pantalla elija a un 500 en mitad de la agenda.
+        { fields: ["booking_id"], name: "clinic_sessions_booking_idx" },
       ],
     }
   );
