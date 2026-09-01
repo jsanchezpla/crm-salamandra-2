@@ -340,8 +340,11 @@ export default function ConfiguracionPage() {
                 </tr>
               ) : (
                 <tr key={c.id} className={`border-b border-neutral-50 ${c.active ? "" : "opacity-40"}`}>
-                  <td className="px-2 py-2 font-medium text-neutral-800">{c.name}</td>
-                  <td className="px-2 py-2 text-neutral-500 max-w-[260px] truncate" title={c.description || ""}>{c.description || "—"}</td>
+                  {/* Nombre y texto de factura ENTEROS (01/09/2026, Rodrigo:
+                      «en la configuración de las cuotas se ve todo cortado»):
+                      lo que no cabe baja de línea en vez de cortarse. */}
+                  <td className="px-2 py-2 font-medium text-neutral-800 min-w-[180px] break-words">{c.name}</td>
+                  <td className="px-2 py-2 text-neutral-500 max-w-[320px] break-words" title={c.description || ""}>{c.description || "—"}</td>
                   {/* Un concepto a 0 € se marca: las cuotas que solo lo lleven a él
                       no se pueden generar, y así se ve dónde hay que poner precio. */}
                   <td className={`px-2 py-2 text-right tabular-nums ${Number(c.unitPrice) === 0 ? "text-amber-600 font-semibold" : ""}`}
@@ -371,8 +374,12 @@ export default function ConfiguracionPage() {
           </table>
         </div>
         {puedeFacturar && (
-          <div className="mt-3 grid grid-cols-2 lg:grid-cols-7 gap-2 items-end">
-            <input className={inputCls} placeholder="Nombre *" value={nuevoConcepto.name} onChange={(e) => setNuevoConcepto((v) => ({ ...v, name: e.target.value }))} />
+          /* Dos filas de cuatro, no siete campos en una (01/09/2026, Rodrigo:
+             «en la configuración de las cuotas se ve todo cortado»): a siete
+             columnas cada caja medía 36 px y los rótulos se quedaban en «Im» y
+             «me» — no se leía ni lo que estabas tecleando. */
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 items-end">
+            <input className={`${inputCls} lg:col-span-2`} placeholder="Nombre *" value={nuevoConcepto.name} onChange={(e) => setNuevoConcepto((v) => ({ ...v, name: e.target.value }))} />
             <input className={`${inputCls} lg:col-span-2`} placeholder="Texto en la factura (vacío = el nombre)" value={nuevoConcepto.description} onChange={(e) => setNuevoConcepto((v) => ({ ...v, description: e.target.value }))} />
             <input type="number" min="0" step="0.01" className={inputCls} placeholder="Importe €" value={nuevoConcepto.unitPrice} onChange={(e) => setNuevoConcepto((v) => ({ ...v, unitPrice: e.target.value }))} />
             <input type="number" min="0" max="100" step="0.01" className={inputCls} placeholder="IVA %" value={nuevoConcepto.vatRate} onChange={(e) => setNuevoConcepto((v) => ({ ...v, vatRate: e.target.value }))} />

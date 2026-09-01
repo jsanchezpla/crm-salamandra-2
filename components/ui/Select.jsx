@@ -53,6 +53,10 @@ export default function Select({
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const [query, setQuery] = useState("");
+  // Por qué lado se despliega el panel. Desde que puede ser MÁS ANCHO que el
+  // botón (para no cortar los nombres), uno pegado al borde derecho se saldría
+  // de la pantalla: ahí se ancla a la derecha y crece hacia dentro.
+  const [aLaDerecha, setALaDerecha] = useState(false);
   const rootRef = useRef(null);
   const listRef = useRef(null);
   const searchRef = useRef(null);
@@ -98,6 +102,10 @@ export default function Select({
       const idx = filtered.findIndex((o) => String(o.value) === String(value));
       setActive(idx >= 0 ? idx : 0);
       if (searchable && searchRef.current) searchRef.current.focus();
+      // ANCHO_MAX es el mismo tope que la clase max-w del panel (30rem).
+      const ANCHO_MAX = 480;
+      const caja = rootRef.current?.getBoundingClientRect();
+      if (caja) setALaDerecha(caja.left + Math.max(ANCHO_MAX, caja.width) > window.innerWidth - 16);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -183,6 +191,7 @@ export default function Select({
         onClick={() => !disabled && setOpen((o) => !o)}
         onKeyDown={onKeyDown}
         className={`${structural} ${className || defaultVisual} ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+        title={selected && typeof selected.label === "string" ? selected.label : undefined}
       >
         <span className={`truncate ${selected ? "text-neutral-800" : "text-neutral-400"}`}>
           {selected ? selected.label : placeholder}
@@ -194,7 +203,9 @@ export default function Select({
       </button>
 
       {open && (
-        <div className="absolute z-50 left-0 right-0 mt-1 rounded-md border border-neutral-200 bg-white shadow-lg overflow-hidden">
+        // El panel arranca en el ancho del botón y CRECE con el contenido
+        // hasta un tope, en vez de estrangular las opciones largas.
+        <div className={`absolute z-50 ${aLaDerecha ? "right-0" : "left-0"} min-w-full w-max max-w-[min(30rem,calc(100vw-2rem))] mt-1 rounded-md border border-neutral-200 bg-white shadow-lg overflow-hidden`}>
           {searchable && (
             <div className="p-1.5 border-b border-neutral-100">
               <input
@@ -230,7 +241,10 @@ export default function Select({
                   onMouseEnter={() => !opt.disabled && setActive(idx)}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => pick(idx)}
-                  className={`px-3 py-1.5 text-sm truncate ${opt.disabled ? "text-neutral-300 cursor-not-allowed" : "cursor-pointer"} ${
+                  title={typeof opt.label === "string" ? opt.label : undefined}
+                  // Sin truncate: lo que no quepa a lo ancho baja de línea. Una
+                  // opción cortada obliga a adivinar cuál se está eligiendo.
+                  className={`px-3 py-1.5 text-sm break-words ${opt.disabled ? "text-neutral-300 cursor-not-allowed" : "cursor-pointer"} ${
                     !highlight && isSelected ? "font-medium" : ""
                   }`}
                   style={

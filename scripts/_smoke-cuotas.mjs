@@ -45,6 +45,8 @@ import {
   mesVigente,
   debeElMes,
   cuotaDeBaja,
+  bajaTrasMeses,
+  mesesDeTramo,
 } from "../lib/billing/cuotas.js";
 import { prorrateoDeCuota } from "../lib/billing/prorrateo.js";
 
@@ -358,5 +360,53 @@ describe("cuotaDeBaja: apagada o caducada, y cae al cuadro de bajas sola", () =>
   it("viva y sin caducar no es baja (la fecha de fin futura no adelanta nada)", () => {
     assert.equal(cuotaDeBaja({ active: true, endDate: "2026-12-31" }, "2026-09-01"), false);
     assert.equal(cuotaDeBaja({ active: true }, "2026-09-01"), false);
+  });
+});
+
+/*
+ * «DURANTE N MESES Y LUEGO DE BAJA» (01/09/2026, Rodrigo). El drawer ya tenía
+ * la casilla de fecha de fin, pero contar los meses lo hacía el usuario: tres
+ * meses desde el 15 de septiembre NO es el 15 de diciembre. El botón «3 meses»
+ * escribe la fecha, y esto fija la cuenta y su encaje con el tramo.
+ */
+describe("bajaTrasMeses: el mes del alta cuenta como el primero", () => {
+  it("3 meses desde septiembre terminan el 30 de noviembre", () => {
+    assert.equal(bajaTrasMeses("2026-09-01", 3), "2026-11-30");
+    assert.equal(bajaTrasMeses("2026-09-15", 3), "2026-11-30");
+  });
+  it("1 mes es el propio mes del alta, hasta su último día", () => {
+    assert.equal(bajaTrasMeses("2026-09-20", 1), "2026-09-30");
+  });
+  it("cruza el año y clava febrero (28 o 29)", () => {
+    assert.equal(bajaTrasMeses("2026-11-01", 4), "2027-02-28");
+    assert.equal(bajaTrasMeses("2027-11-01", 4), "2028-02-29");
+    assert.equal(bajaTrasMeses("2026-09-01", 12), "2027-08-31");
+  });
+  it("sin alta legible o con meses absurdos no inventa fecha", () => {
+    assert.equal(bajaTrasMeses("", 3), null);
+    assert.equal(bajaTrasMeses("2026-09-01", 0), null);
+    assert.equal(bajaTrasMeses("2026-09-01", "hola"), null);
+  });
+  it("la fecha que sale cubre EXACTAMENTE esos meses y ni uno más", () => {
+    const c = { startDate: "2026-09-15", endDate: bajaTrasMeses("2026-09-15", 3) };
+    assert.equal(debeElMes([c], "2026-08"), false);
+    for (const m of ["2026-09", "2026-10", "2026-11"]) assert.equal(debeElMes([c], m), true);
+    assert.equal(debeElMes([c], "2026-12"), false);
+    // El último mes se cobra ENTERO: la baja cae en el último día del mes.
+    assert.equal(tramoDelMes("2026-11", c).completo, true);
+    // Y el primero prorrateado, que es lo que ya hacía el alta a mitad de mes.
+    assert.equal(tramoDelMes("2026-09", c).diasCobrados, 16);
+  });
+});
+
+describe("mesesDeTramo: cuántos meses cubre, para poder decirlo en la pantalla", () => {
+  it("es el inverso de bajaTrasMeses", () => {
+    for (const n of [1, 3, 6, 9, 12]) {
+      assert.equal(mesesDeTramo("2026-09-15", bajaTrasMeses("2026-09-15", n)), n);
+    }
+  });
+  it("sin fecha de baja no hay número: es indefinida", () => {
+    assert.equal(mesesDeTramo("2026-09-01", null), null);
+    assert.equal(mesesDeTramo("2026-09-01", "2026-08-31"), null);
   });
 });

@@ -21,7 +21,8 @@ import Select from "@/components/ui/Select.jsx";
 import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
 import { useDialogo } from "@/components/ui/Dialogo.jsx";
 import { fmtMoney, fmtDate } from "../_components/Kpi.jsx";
-import { cuotaDeBaja } from "../../../../lib/billing/cuotas.js";
+import { cuotaDeBaja, bajaTrasMeses, mesesDeTramo } from "../../../../lib/billing/cuotas.js";
+import { ivaPorDefecto } from "../../../../lib/billing/ivaPorDefecto.js";
 import { cuotaCasaCon, rotuloPacienteDeCuota } from "../../../../lib/billing/cuotaPacientes.js";
 
 const inputCls =
@@ -34,6 +35,19 @@ const METODOS = [
   { value: "cash", label: "Efectivo" },
 ];
 const METODO_CORTO = { transfer: "Banco", direct_debit: "Domiciliación", card: "Tarjeta", cash: "Efectivo" };
+
+/*
+ * «Durante N meses y luego de baja» (01/09/2026, Rodrigo). La casilla de fecha
+ * de fin ya estaba, pero contar los meses lo hacía el usuario: tres meses desde
+ * el 15 de septiembre NO es el 15 de diciembre, es el 30 de noviembre. Estos
+ * botones escriben la fecha; la cuenta vive en lib/billing/cuotas.js.
+ */
+const DURACIONES = [
+  { meses: 3, label: "3 meses" },
+  { meses: 6, label: "6 meses" },
+  { meses: 9, label: "9 meses" },
+  { meses: 12, label: "1 año" },
+];
 
 const hoyIso = () => new Date().toISOString().slice(0, 10);
 const mesActual = () => new Date().toISOString().slice(0, 7);
@@ -64,6 +78,9 @@ export default function CuotasPage() {
   const [buscaBajas, setBuscaBajas] = useState("");
 
   const [showAlta, setShowAlta] = useState(false);
+  // Al abrir el alta desde «+ Crear cuota nueva», el formulario del catálogo
+  // viene ya desplegado: el usuario venía justamente a crearla.
+  const [altaConCatalogo, setAltaConCatalogo] = useState(false);
   const [editando, setEditando] = useState(null); // cuota que se edita
   const [showGenerar, setShowGenerar] = useState(false);
 
@@ -101,7 +118,20 @@ export default function CuotasPage() {
       .catch(() => {});
   }, []);
 
+  // El IVA con el que nace una cuota nueva del catálogo: el del emisor (0 si
+  // está exento), la misma regla que en facturas y presupuestos.
+  const [ivaSugerido, setIvaSugerido] = useState(21);
+  useEffect(() => {
+    fetch("/api/billing/settings", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => j.ok && setIvaSugerido(ivaPorDefecto(j.data)))
+      .catch(() => {});
+  }, []);
+
   const porId = useMemo(() => new Map(conceptos.map((c) => [String(c.id), c])), [conceptos]);
+
+  // Una cuota recién creada en el catálogo entra en la lista sin recargar.
+  const conceptoCreado = useCallback((c) => setConceptos((cs) => [...cs, c]), []);
 
   // El importe que se cobrará: el pactado, o la suma de sus conceptos.
   const importeDe = useCallback(
@@ -278,7 +308,7 @@ export default function CuotasPage() {
             className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide border border-neutral-300 text-neutral-700 hover:bg-neutral-50 transition"
           >Generar el mes</button>
           <button
-            onClick={() => setShowAlta(true)}
+            onClick={() => { setAltaConCatalogo(false); setShowAlta(true); }}
             className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white"
             style={{ background: "var(--color-primary, #1B3A2D)" }}
           >+ Nueva cuota</button>
@@ -302,8 +332,16 @@ export default function CuotasPage() {
               label: `${c.name}${miembrosPorConcepto.get(String(c.id)) ? ` (${miembrosPorConcepto.get(String(c.id))})` : ""}`,
             })),
           ]}
-          className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 max-w-72"
+          className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 w-full sm:w-72"
         />
+        {/* Crear una cuota NUEVA del catálogo sin salir de aquí (01/09/2026,
+            Rodrigo: «no hay una opción de añadir cuota en la lista de cuotas»).
+            El desplegable de al lado solo deja ELEGIR entre las que ya existen;
+            esto abre el alta con el formulario de la cuota nueva desplegado. */}
+        <button
+          onClick={() => { setAltaConCatalogo(true); setShowAlta(true); }}
+          className="px-3 py-1.5 rounded-lg text-xs font-semibold text-neutral-600 bg-white border border-dashed border-neutral-300 hover:border-neutral-400 hover:text-neutral-900 transition"
+        >+ Crear cuota nueva</button>
         <Select
           value={filtroMetodo}
           onChange={setFiltroMetodo}
@@ -365,6 +403,10 @@ export default function CuotasPage() {
                     <td className="px-4 py-3 text-xs text-neutral-500">
                       desde {fmtDate(c.startDate)}
                       {c.endDate && <span className="text-rose-500"> · baja {fmtDate(c.endDate)}</span>}
+                      {/* Cuántos meses son, para no contarlos con los dedos. */}
+                      {mesesDeTramo(c.startDate, c.endDate) && (
+                        <span className="text-neutral-400"> · {mesesDeTramo(c.startDate, c.endDate)} {mesesDeTramo(c.startDate, c.endDate) === 1 ? "mes" : "meses"}</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right whitespace-nowrap">
                       <button onClick={() => setEditando(c)} className="text-[11px] text-neutral-500 hover:text-neutral-900 mr-2">Editar</button>
@@ -443,6 +485,9 @@ export default function CuotasPage() {
       {showAlta && (
         <DrawerCuota
           conceptos={conceptos}
+          ivaSugerido={ivaSugerido}
+          onConceptoCreado={conceptoCreado}
+          abrirCatalogo={altaConCatalogo}
           inicial={filtroConcepto ? { conceptIds: [filtroConcepto] } : null}
           onClose={() => setShowAlta(false)}
           onDone={(msg) => { setShowAlta(false); setOkMsg(msg); cargar(); }}
@@ -452,6 +497,8 @@ export default function CuotasPage() {
       {editando && (
         <DrawerCuota
           conceptos={conceptos}
+          ivaSugerido={ivaSugerido}
+          onConceptoCreado={conceptoCreado}
           cuota={editando}
           onClose={() => setEditando(null)}
           onDone={(msg) => { setEditando(null); setOkMsg(msg); cargar(); }}
@@ -473,8 +520,10 @@ export default function CuotasPage() {
  * —conceptos, importe, método, día, fechas— es idéntico, y separarlo en dos
  * formularios era garantizar que dentro de un mes divergieran.
  */
-function DrawerCuota({ conceptos, cuota = null, inicial = null, onClose, onDone }) {
+function DrawerCuota({ conceptos, cuota = null, inicial = null, ivaSugerido = 21, onConceptoCreado, abrirCatalogo = false, onClose, onDone }) {
   const editando = !!cuota;
+  // El formulario de «una cuota nueva del catálogo», dentro del propio alta.
+  const [creandoCuotaCatalogo, setCreandoCuotaCatalogo] = useState(abrirCatalogo);
   const [form, setForm] = useState(() =>
     cuota
       ? {
@@ -606,12 +655,33 @@ function DrawerCuota({ conceptos, cuota = null, inicial = null, onClose, onDone 
             )}
 
             <div>
-              <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Conceptos del catálogo</label>
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Cuotas del catálogo</label>
+                {!creandoCuotaCatalogo && (
+                  <button type="button" onClick={() => setCreandoCuotaCatalogo(true)}
+                    className="text-[11px] font-semibold text-neutral-500 hover:text-neutral-900">+ Crear una nueva</button>
+                )}
+              </div>
+
+              {/* La cuota nueva se crea AQUÍ y queda marcada (01/09/2026). */}
+              {creandoCuotaCatalogo && (
+                <AltaCuotaCatalogo
+                  ivaSugerido={ivaSugerido}
+                  onCancelar={() => setCreandoCuotaCatalogo(false)}
+                  onCreada={(c) => {
+                    onConceptoCreado?.(c);
+                    setForm((fo) => ({ ...fo, conceptIds: [...fo.conceptIds, String(c.id)] }));
+                    setCreandoCuotaCatalogo(false);
+                  }}
+                />
+              )}
+
               {conceptos.length === 0 ? (
                 <p className="text-xs text-neutral-400 mt-1">
-                  No hay conceptos todavía. Créalos en{" "}
-                  <Link href="/facturacion/configuracion" className="underline">Configuración → Conceptos y cuotas</Link>{" "}
-                  y así la cuota se actualiza sola cuando suba el precio.
+                  No hay ninguna cuota en el catálogo todavía. Crea la primera con{" "}
+                  <b>+ Crear una nueva</b> — es el mismo catálogo de{" "}
+                  <Link href="/facturacion/configuracion" className="underline">Configuración → Conceptos y cuotas</Link>,
+                  y por eso una subida de precio se aplica sola a todas las familias.
                 </p>
               ) : (
                 <div className="mt-1 max-h-44 overflow-y-auto border border-neutral-100 rounded-xl divide-y divide-neutral-50">
@@ -664,8 +734,33 @@ function DrawerCuota({ conceptos, cuota = null, inicial = null, onClose, onDone 
                   onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))} className={inputCls} />
               </div>
             </div>
-            <p className="text-[10px] text-neutral-400 -mt-3">
-              El mes del alta y el de la baja se cobran prorrateados por días, y la cuenta queda
+            {/* «Durante N meses»: escribe la fecha de baja para no contarla a
+                mano (01/09/2026, Rodrigo). Volver a pulsar el mismo la quita. */}
+            <div className="-mt-3 flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mr-1">Durante</span>
+              {DURACIONES.map((d) => {
+                const fecha = bajaTrasMeses(form.startDate, d.meses);
+                const puesta = !!fecha && form.endDate === fecha;
+                return (
+                  <button key={d.meses} type="button" disabled={!fecha}
+                    onClick={() => setForm((fo) => ({ ...fo, endDate: puesta ? "" : fecha }))}
+                    title={fecha ? `Baja el ${fecha.slice(8, 10)}/${fecha.slice(5, 7)}/${fecha.slice(0, 4)}` : "Pon antes la fecha de alta"}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] border transition disabled:opacity-40 ${puesta ? "border-transparent text-white" : "bg-white border-neutral-200 text-neutral-500 hover:border-neutral-400"}`}
+                    style={puesta ? { background: "var(--color-primary, #1B3A2D)" } : undefined}>
+                    {d.label}
+                  </button>
+                );
+              })}
+              {form.endDate && (
+                <button type="button" onClick={() => setForm((fo) => ({ ...fo, endDate: "" }))}
+                  className="px-2 py-1 text-[11px] text-neutral-400 hover:text-rose-600">quitar fin</button>
+              )}
+            </div>
+            <p className="text-[10px] text-neutral-400 -mt-2">
+              {form.endDate
+                ? `Se cobran ${mesesDeTramo(form.startDate, form.endDate) ?? "?"} ${mesesDeTramo(form.startDate, form.endDate) === 1 ? "mes" : "meses"} y al terminar pasa sola al cuadro de bajas, sin salir del grupo: un clic la reintegra.`
+                : "Sin fecha de baja se cobra todos los meses hasta que se dé de baja a mano."}
+              {" "}El mes del alta y el de la baja se cobran prorrateados por días, y la cuenta queda
               escrita en el cobro.
             </p>
 
@@ -1019,5 +1114,100 @@ function DrawerGenerar({ onClose, onDone }) {
         )}
       </aside>
     </>
+  );
+}
+
+
+/* ── Una cuota NUEVA del catálogo, sin salir de aquí ────────────────────────
+ * 01/09/2026, Rodrigo: «crear nueva cuota no crea realmente una nueva cuota,
+ * porque no hay una opción de añadir cuota en la lista de cuotas». Y era
+ * verdad: «+ Nueva cuota» da de alta a QUIÉN paga, pero la cuota en sí —lo que
+ * el centro llama la cuota: «Logopedia 60x2 · 190 €»— solo se creaba en
+ * Configuración, y desde aquí lo único que había era un enlace de texto.
+ *
+ * Es el MISMO catálogo y la misma puerta (POST /api/billing/conceptos), no una
+ * copia: lo que se cree aquí sale en Configuración, en las facturas y en los
+ * talleres, y subirle el precio allí se aplica solo a todas las familias que
+ * la tengan sin importe pactado. Aquí se piden los tres datos que hacen falta
+ * para cobrarla; el texto de factura, la categoría y el resto se afinan allí.
+ */
+function AltaCuotaCatalogo({ ivaSugerido = 21, onCreada, onCancelar }) {
+  const [name, setName] = useState("");
+  const [unitPrice, setUnitPrice] = useState("");
+  const [vatRate, setVatRate] = useState(String(ivaSugerido));
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function crear() {
+    if (guardando) return;
+    if (!name.trim()) { setError("Ponle nombre a la cuota"); return; }
+    setGuardando(true);
+    setError(null);
+    try {
+      const r = await fetch("/api/billing/conceptos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          unitPrice: Number(unitPrice || 0),
+          vatRate: Number(vatRate || 0),
+          // Nace desde la pantalla de cuotas mensuales: eso es lo que es.
+          periodicity: "mensual",
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j.error || "No se pudo crear la cuota");
+      onCreada(j.data);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <div className="mt-2 rounded-xl border border-dashed border-neutral-300 bg-neutral-50/60 px-3 py-3 space-y-2">
+      <p className="text-[10px] font-semibold text-neutral-500 uppercase tracking-widest">Cuota nueva del catálogo</p>
+      {error && <p className="text-[11px] text-red-600">{error}</p>}
+      <div className="flex flex-col sm:flex-row gap-2">
+        <input
+          value={name}
+          autoFocus
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && crear()}
+          placeholder="Nombre — p. ej. Logopedia 60 min x2"
+          className={`${inputCls} sm:flex-1`}
+        />
+        <input
+          type="number" step="0.01" value={unitPrice}
+          onChange={(e) => setUnitPrice(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && crear()}
+          placeholder="€ al mes"
+          className={`${inputCls} sm:w-28`}
+        />
+        <input
+          type="number" step="0.01" min="0" max="100" value={vatRate}
+          onChange={(e) => setVatRate(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && crear()}
+          placeholder="IVA %"
+          title="IVA en %"
+          className={`${inputCls} sm:w-20`}
+        />
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px] text-neutral-400">
+          Se guarda en el catálogo del centro y queda marcada aquí abajo.
+        </p>
+        <div className="flex gap-2 shrink-0">
+          <button type="button" onClick={onCancelar}
+            className="px-3 py-1.5 text-[11px] font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">Cancelar</button>
+          <button type="button" onClick={crear} disabled={guardando || !name.trim()}
+            className="px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wide text-white disabled:opacity-50"
+            style={{ background: "var(--color-primary, #1B3A2D)" }}>
+            {guardando ? "Creando..." : "Crear cuota"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
