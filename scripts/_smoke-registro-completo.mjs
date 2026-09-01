@@ -41,6 +41,7 @@ import {
   bloquesDelRegistro,
   esEnvoltorio,
   estructuraHistorica,
+  leerRespuesta,
   materialParaLaIA,
   mensajeDeRegistro,
   normalizarPropuesta,
@@ -304,5 +305,86 @@ describe("La frontera de las notas internas al aplicar la propuesta", () => {
     for (const k of ["objectives", "activities", "entorno_familiar", "apartados", "toString"]) {
       assert.equal(esEnvoltorio(k), false, `${k} no es un bloque del envoltorio`);
     }
+  });
+});
+
+/**
+ * ── «A VECES FALLA QUE LO MANDE AL REGISTRO» (01/09/2026, Rodrigo) ──────────
+ *
+ * El fallo no estaba en la IA: estaba en cómo se LEÍA lo que contestaba. Un
+ * `JSON.parse` dentro de un `try/catch` que en el `catch` ponía `{}` convertía
+ * dos accidentes normales —una respuesta que se queda sin sitio y una respuesta
+ * con texto alrededor— en un registro vacío y en el mensaje «la IA no ha sacado
+ * nada que repartir», que era mentira: sí sacó, y se tiró por el camino.
+ *
+ * Estas pruebas fijan que lo que llegó entero se APROVECHA y que la incidencia
+ * se puede contar. Sin ellas, el día que alguien "simplifique" `leerRespuesta`
+ * de vuelta a un `JSON.parse` pelado, el fallo vuelve exactamente igual de mudo.
+ */
+describe("leer lo que contesta Claude sin tirar el registro por el camino", () => {
+  const BLOQUES = bloquesDelRegistro([
+    { key: "objectives", label: "Objetivos trabajados", tipo: "lista" },
+    { key: "activities", label: "Actividades realizadas", tipo: "texto" },
+  ]);
+
+  it("un JSON limpio no tiene incidencia", () => {
+    const { objeto, incidencia } = leerRespuesta('{"activities":"Memory."}');
+    assert.equal(incidencia, null);
+    assert.equal(objeto.activities, "Memory.");
+  });
+
+  it("las vallas de markdown siguen sin molestar", () => {
+    const { objeto, incidencia } = leerRespuesta('```json\n{"activities":"Memory."}\n```');
+    assert.equal(incidencia, null);
+    assert.equal(objeto.activities, "Memory.");
+  });
+
+  it("con preámbulo y coletilla se rescata el JSON de en medio", () => {
+    const { objeto, incidencia } = leerRespuesta(
+      'Aquí tienes el registro:\n{"activities":"Memory."}\nEspero que te sirva.'
+    );
+    assert.equal(incidencia, "envuelta");
+    assert.equal(objeto.activities, "Memory.");
+  });
+
+  it("una respuesta CORTADA a mitad de frase conserva los apartados completos", () => {
+    // Tal cual llega cuando se acaban los tokens: la última cadena sin cerrar.
+    const cortada = '{"prepText":"Se revisa el material.","activities":"Memory y luego trabajo de atenci';
+    const { objeto, incidencia } = leerRespuesta(cortada);
+    assert.equal(incidencia, "cortada");
+    assert.equal(objeto.prepText, "Se revisa el material.");
+    assert.ok(!("activities" in objeto), "el apartado a medio escribir no entra");
+
+    // Y lo que de verdad importa: esto ya NO llega vacío al formulario.
+    const propuesta = normalizarPropuesta(cortada, BLOQUES);
+    assert.equal(propuestaVacia(propuesta), false);
+    assert.equal(propuesta.prepText, "Se revisa el material.");
+  });
+
+  it("una respuesta cortada DENTRO de una lista no arrastra a los de antes", () => {
+    const cortada = '{"activities":"Memory.","objectives":["Atención sostenida","Memoria de tra';
+    const { objeto, incidencia } = leerRespuesta(cortada);
+    assert.equal(incidencia, "cortada");
+    assert.equal(objeto.activities, "Memory.");
+  });
+
+  it("una llave dentro de una cadena no engaña al rescate", () => {
+    // La coma va DENTRO del texto: si el rescate no distinguiera cadenas,
+    // cortaría aquí y se comería el apartado entero.
+    const cortada = '{"activities":"Trabajo de atención, memoria y lenguaje.","objectives":["Aten';
+    const { objeto } = leerRespuesta(cortada);
+    assert.equal(objeto.activities, "Trabajo de atención, memoria y lenguaje.");
+  });
+
+  it("lo que no hay manera de leer se declara ilegible, no vacío", () => {
+    assert.equal(leerRespuesta("No puedo ayudarte con eso.").incidencia, "ilegible");
+    assert.equal(leerRespuesta("").incidencia, "vacia");
+    assert.deepEqual(leerRespuesta("cualquier cosa").objeto, {});
+  });
+
+  it("un objeto ya parseado pasa de largo", () => {
+    const { objeto, incidencia } = leerRespuesta({ activities: "Memory." });
+    assert.equal(incidencia, null);
+    assert.equal(objeto.activities, "Memory.");
   });
 });

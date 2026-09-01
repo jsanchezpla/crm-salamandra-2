@@ -12,6 +12,7 @@ import {
   estructuraHistorica,
   materialParaLaIA,
   MAX_NOTAS,
+  MAX_TRANSCRIPCION,
   propuestaDemo,
   TRANSCRIPCION_DEMO,
 } from "../../../../../lib/clinica/registroCompleto.js";
@@ -46,9 +47,22 @@ function jsonDelForm(form, campo) {
  * OPCIONAL: si no hay audio, no se llama a Whisper y no se gasta un céntimo de
  * OpenAI.
  *
- * Campos del multipart (hace falta `file` **o** `texto`, o los dos):
- *   · `file`       (opcional) el audio.
+ * ── UN AUDIO SE TRANSCRIBE UNA SOLA VEZ (01/09/2026, Rodrigo) ─────────────
+ * «Cuando intento usar la IA después de haber usado el audio, solo entiende que
+ * estoy volviendo a intentar retranscribir el audio en lugar de hacerlo
+ * independiente.» Antes, cada pasada volvía a SUBIR el mismo fichero y a
+ * llamar a Whisper: la profesional lo pagaba dos veces, esperaba dos veces y la
+ * pantalla se quedaba enganchada al audio. Ahora la pantalla manda en
+ * `transcripcion` el texto que ya sacó Whisper y aquí no se transcribe nada: se
+ * va derecho a Claude con el material de esta pasada, sea el que sea.
+ *
+ * Campos del multipart (hace falta `file`, `texto` **o** `transcripcion`):
+ *   · `file`       (opcional) el audio, cuando todavía no se ha transcrito.
  *   · `texto`      (opcional) lo que haya apuntado a mano; máx. MAX_NOTAS.
+ *   · `transcripcion` (opcional) lo que YA sacó Whisper en una pasada anterior.
+ *                  Se usa tal cual y NO se vuelve a llamar a OpenAI. Si además
+ *                  viene `file`, manda el fichero: un audio nuevo deja vieja
+ *                  cualquier transcripción anterior.
  *   · `apartados`  (opcional, JSON) los del bloque 2 con los que se está
  *                  escribiendo esta sesión. Los manda la PANTALLA porque es
  *                  quien sabe qué plantilla se ha elegido y qué apartados
@@ -91,10 +105,19 @@ export const POST = withTenant(async (request, _rc, ctx) => {
   const notas = String(form?.get("texto") ?? "").trim();
   const subido = form?.get("file");
   const file = subido && typeof subido !== "string" ? subido : null;
+  // Un audio nuevo deja vieja la transcripción anterior: si vienen los dos,
+  // manda el fichero y esto se descarta.
+  const yaTranscrito = file ? "" : String(form?.get("transcripcion") ?? "").trim();
 
-  if (!file && !notas) return error("Sube un audio o pega tus notas de la sesión.");
+  if (!file && !notas && !yaTranscrito) return error("Sube un audio o pega tus notas de la sesión.");
   if (notas.length > MAX_NOTAS) {
     return error(`Las notas no pueden pasar de ${MAX_NOTAS.toLocaleString("es-ES")} caracteres.`, 413);
+  }
+  // La transcripción no se mide con la vara de las notas —25 MB de audio dan
+  // muchísimo más de 20.000 caracteres—, pero tampoco entra sin tope: viene por
+  // el formulario y hay que acotar el cuerpo de la petición.
+  if (yaTranscrito.length > MAX_TRANSCRIPCION) {
+    return error("La transcripción es demasiado larga para volver a procesarla.", 413);
   }
   if (file && typeof file.size === "number" && file.size > MAX_AUDIO_BYTES) {
     return error("El audio supera el máximo de 25 MB", 413);
@@ -112,7 +135,7 @@ export const POST = withTenant(async (request, _rc, ctx) => {
   if (fake) {
     const bloques = bloquesDelRegistro(apartados);
     const propuesta = propuestaDemo(bloques);
-    const transcription = file ? TRANSCRIPCION_DEMO : "";
+    const transcription = file ? TRANSCRIPCION_DEMO : yaTranscrito;
     return ok({
       transcription,
       material: materialParaLaIA({ transcripcion: transcription, notas }),
@@ -123,8 +146,8 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     });
   }
 
-  // ── Real: (audio → Whisper) + notas → Claude ──
-  let transcription = "";
+  // ── Real: (audio → Whisper, solo la primera vez) + notas → Claude ──
+  let transcription = yaTranscrito;
   let audioDurationSec = null;
   if (file) {
     try {
@@ -150,6 +173,7 @@ export const POST = withTenant(async (request, _rc, ctx) => {
 
   let structured;
   let propuesta;
+  let incidencia = null;
   try {
     const r = await structureSession({
       transcription: material,
@@ -160,6 +184,7 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     });
     propuesta = r.propuesta;
     structured = r.structured;
+    incidencia = r.incidencia;
   } catch (e) {
     if (e.code === "NO_API_KEY") return error("El resumen con IA no está configurado (falta la clave de Anthropic).", 503);
     console.error("[clinica:structure]", e);
@@ -179,5 +204,23 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     });
   }
 
-  return ok({ transcription, material, propuesta, structured, audioDurationSec, demo: false, ...(avisoAudioMudo ? { avisoIA: avisoAudioMudo } : {}) });
+  // Lo que le pasó a la respuesta de Claude, dicho en cristiano. Antes esto no
+  // salía de aquí y una respuesta cortada llegaba a la pantalla como «la IA no
+  // ha sacado nada que repartir» — que es lo contrario de lo que pasó.
+  const avisoIncidencia =
+    incidencia === "cortada"
+      ? "La IA se ha quedado sin sitio antes de terminar: tienes lo que llegó entero. Revisa si falta algún apartado y, si falta, vuelve a procesar."
+      : incidencia === "ilegible" || incidencia === "vacia"
+        ? "La IA ha contestado en un formato que no se ha podido leer. Vuelve a procesar: no hay que subir el audio otra vez."
+        : null;
+
+  return ok({
+    transcription,
+    material,
+    propuesta,
+    structured,
+    audioDurationSec,
+    demo: false,
+    ...(avisoAudioMudo || avisoIncidencia ? { avisoIA: avisoAudioMudo ?? avisoIncidencia } : {}),
+  });
 });
