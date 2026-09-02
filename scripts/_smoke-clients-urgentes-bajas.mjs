@@ -209,7 +209,7 @@ describe("la excepción: de baja pero con hora cogida sí sale", () => {
   it("sin agenda en el schema, la excepción se cae y no se pregunta por bookings", async () => {
     // Un centro con fichas pero sin `citas` no tiene la tabla: preguntar por
     // ella reventaría la carpeta entera con un 42P01.
-    for (const key of DE_FAMILIA) {
+    for (const key of DE_FAMILIA_EXCLUYEN) {
       const s = fakeSequelize();
       await filasDe(s, ESQUEMA, key, { conCitas: false });
       const where = whereDe(s.sqls[0]);
