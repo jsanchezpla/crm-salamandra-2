@@ -243,6 +243,21 @@ terapeutas y sus horas/roles se cargan aparte.
   (`IncidenciaAssignee` → `incidencia_assignees`, N-a-N con `team_members`;
   `assignedToId` queda como espejo del primero) y una `verification` al resolver
   (resuelta / parcial / no resuelta; `migrate-incidencias-verificacion.js`).
+- **Los comentarios avisan (02/09/2026, Rodrigo)**: hasta entonces el
+  comentario se guardaba (append atómico en el JSONB) y ahí se quedaba —la
+  campana solo conocía `incidencia_pending`, que mira el ESTADO, y un
+  comentario no lo cambia—. Ahora el PATCH con `comment` toca la campana de
+  quien ya está en la conversación (quien la registró, los responsables por la
+  pivote y quien comentó antes; nunca el autor; si no queda nadie, dirección)
+  con el tipo `incidencia_comentario`, fuera de `AUTO_TYPES`
+  (`lib/clinica/avisoComentarioIncidencia.js`; cruce ficha→usuario por
+  `TeamMember.userId`; `notifyAdmins` admite `excepto` para no avisar a quien
+  escribe). El aviso enlaza a `/equipo/incidencias?incidencia=<id>` y la
+  pantalla abre ESA ficha fresca del servidor; el modal vuelve a pedir la
+  incidencia al abrirse (la copia del listado podía llevar un rato), el listado
+  se refresca solo al volver a la pestaña y enseña el nº de comentarios, y el
+  serializer devuelve `updatedAt`. Prueba:
+  `scripts/_smoke-aviso-comentario-incidencia.mjs` (`node:test`, ligera).
 - **Taxonomía revisada (29/08/2026, Aumenta por Rodrigo)**: DIEZ categorías, en
   el orden en que las escribió el centro — Terapéutica, Organizativa,
   Documental, Administrativa, Coordinación / apoyo, Tecnológica / material,

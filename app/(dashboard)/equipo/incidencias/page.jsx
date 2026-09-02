@@ -57,8 +57,11 @@ export default function IncidenciasPage() {
       .catch(() => {});
   }, []);
 
-  const load = () => {
-    setLoading(true); setErrorMsg(null);
+  // `silencioso` (02/09/2026): refresco de fondo al volver a la pestaña, sin
+  // sustituir la lista por «Cargando…» mientras llega.
+  const load = ({ silencioso = false } = {}) => {
+    if (!silencioso) setLoading(true);
+    setErrorMsg(null);
     const params = new URLSearchParams();
     if (statusTab) params.set("status", statusTab);
     if (category) params.set("category", category);
@@ -75,6 +78,33 @@ export default function IncidenciasPage() {
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [statusTab, category, registroId, responsableId]);
+
+  // Deep-link desde la campana (02/09/2026): `?incidencia=<id>` abre ESA ficha
+  // fresca del servidor, no la copia del listado. Se lee de window.location y
+  // no de useSearchParams por lo mismo que en /soporte: la Suspense boundary
+  // que exige no se resolvía. Se limpia la URL para que un F5 no la reabra.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("incidencia");
+    if (!id) return;
+    window.history.replaceState(null, "", window.location.pathname);
+    fetch(`/api/clinica/incidencias/${id}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => { if (j.ok) setModal({ mode: "view", incidencia: j.data }); else setErrorMsg(j.error); })
+      .catch(() => {});
+  }, []);
+
+  // Un compañero comenta mientras esta pestaña está en segundo plano: al volver,
+  // el listado se pone al día solo. Antes solo se recargaba al cambiar un filtro.
+  useEffect(() => {
+    const alVolver = () => { if (document.visibilityState === "visible") load({ silencioso: true }); };
+    document.addEventListener("visibilitychange", alVolver);
+    window.addEventListener("focus", alVolver);
+    return () => {
+      document.removeEventListener("visibilitychange", alVolver);
+      window.removeEventListener("focus", alVolver);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusTab, category, registroId, responsableId]);
 
   const rows = data?.incidencias ?? [];
   // ¿Se está filtrando por responsable? Con `null` («las mías») solo si el
@@ -192,6 +222,14 @@ export default function IncidenciasPage() {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
                       </svg>
                       {r.docsCount}
+                    </span>
+                  )}
+                  {r.comments?.length > 0 && (
+                    <span className="shrink-0 inline-flex items-center gap-0.5 text-[11px] text-neutral-400" title={`${r.comments.length} comentario${r.comments.length === 1 ? "" : "s"}`}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3.5 h-3.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.76c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 011.037-.443 48.282 48.282 0 005.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+                      </svg>
+                      {r.comments.length}
                     </span>
                   )}
                   <span className={`shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full ${STATUS_PILL[r.verificationLevel ?? r.statusLevel] ?? STATUS_PILL.gray}`}>

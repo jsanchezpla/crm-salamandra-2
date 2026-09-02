@@ -448,6 +448,7 @@ function filaCompleta() {
     verification: "parcial",
     resolvedAt: null,
     createdAt: "2026-08-04T09:00:00.000Z",
+    updatedAt: "2026-08-04T10:30:00.000Z",
   };
 }
 
@@ -486,6 +487,7 @@ describe("serializeIncidencia: la forma exacta que consume el frontend", () => {
       verificationLevel: "amber",
       resolvedAt: null,
       createdAt: "2026-08-04T09:00:00.000Z",
+      updatedAt: "2026-08-04T10:30:00.000Z",
     });
   });
 

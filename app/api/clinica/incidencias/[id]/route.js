@@ -1,6 +1,7 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound } from "../../../../../lib/utils/apiResponse.js";
 import { resolveCurrentTeamMemberId } from "../../../../../lib/team/currentTeamMember.js";
+import { avisarComentarioIncidencia } from "../../../../../lib/clinica/avisoComentarioIncidencia.js";
 import { incidenciaFueraDeAlcance, puedeBorrarIncidencia } from "../../../../../lib/clinica/alcanceIncidencias.js";
 import {
   serializeIncidencia,
@@ -180,6 +181,18 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
   if (responsables) await sincronizarResponsables(row, responsables, M);
 
   const full = await Incidencia.findByPk(id, { include: INCLUDES(M) });
+  if (commentEntry) {
+    // Que los compañeros se enteren (02/09/2026): hasta hoy el comentario se
+    // guardaba y ahí se quedaba. Best-effort: el comentario YA está guardado.
+    // Regla y destinatarios en lib/clinica/avisoComentarioIncidencia.js.
+    await avisarComentarioIncidencia({
+      ctx,
+      row: full,
+      comentario: commentEntry,
+      autorTeamMemberId: commentEntry.authorId,
+      autorUserId: request.headers.get("x-user-id"),
+    });
+  }
   return ok(serializeIncidencia(full));
 });
 

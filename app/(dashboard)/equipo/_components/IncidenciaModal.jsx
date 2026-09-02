@@ -138,6 +138,42 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
+  // Ficha FRESCA al abrir (02/09/2026): el listado puede llevar un rato cargado
+  // y un compañero ha podido comentar entre medias; abrirla desde la copia del
+  // listado enseñaba el hilo viejo. Si el servidor la trae más nueva que la
+  // copia, se vuelcan también los campos editables: aún no ha dado tiempo a
+  // tocar nada.
+  const volcarCampos = (d) => {
+    setTitle(d.title ?? "");
+    setCategory(d.category ?? "terapeutica");
+    setSubcategory(d.subcategory ?? "");
+    setPriority(d.priority ?? "medium");
+    setDate(d.date ?? new Date().toISOString().slice(0, 10));
+    setPatientId(d.patientId ?? "");
+    setAssigneeIds(Array.isArray(d.assignees) && d.assignees.length ? d.assignees.map((a) => a.id) : d.assignedToId ? [d.assignedToId] : []);
+    setDescription(d.description ?? "");
+    setResolution(d.resolution ?? "");
+    setVerification(d.verification ?? "");
+    setReportedById(d.reportedById ?? "");
+  };
+  useEffect(() => {
+    if (!inc?.id) return;
+    let vivo = true;
+    fetch(`/api/clinica/incidencias/${inc.id}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (!vivo || !j.ok) return;
+        const fresca = j.data;
+        const cambio = fresca.updatedAt !== inc.updatedAt
+          || (fresca.comments?.length ?? 0) !== (inc.comments?.length ?? 0);
+        setInc(fresca);
+        if (cambio) volcarCampos(fresca);
+      })
+      .catch(() => {});
+    return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inc?.id]);
+
   // ── Documentos adjuntos (26/08/2026, Aumenta) ─────────────────────────────
   // En una incidencia existente se suben al momento; en una NUEVA se dejan en
   // cola y se suben justo después de crearla (el documento necesita el id).
