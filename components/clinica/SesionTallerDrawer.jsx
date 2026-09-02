@@ -21,10 +21,25 @@
  *
  * Lo que se guarda aquí lo reparte el servidor (`lib/clinica/propagarTaller.js`):
  * esta pantalla no sabe —ni tiene que saber— cómo se copia a cada ficha.
+ *
+ * ── EL AUDIO Y LA IA (03/09/2026, Rodrigo: «añade audio e IA a la sesión de
+ * taller») ─────────────────────────────────────────────────────────────────
+ * La misma tarjeta que tiene el registro de sesión normal: un audio, o lo
+ * apuntado en el bloc de notas, o los dos; la IA propone el registro ENTERO
+ * del taller —el cuerpo común, la nota de cada niño que vino y las notas
+ * internas— y se elige bloque a bloque en `PropuestaIA`. Nada se escribe solo.
+ *
+ * Lo que la hace distinta del registro normal es la lista de asistentes: viaja
+ * con el material para que la IA sepa a quién puede nombrar, y lo que se diga
+ * de un niño va a SU nota y a ningún otro sitio (`lib/clinica/tallerCompleto.js`).
+ * Un audio se transcribe una sola vez; la transcripción se guarda con la sesión
+ * para poder volver a pasar la IA sin subirlo otra vez.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ApartadosEditor from "./ApartadosEditor.jsx";
+import PropuestaIA from "./PropuestaIA.jsx";
+import useZonaSoltar, { useEvitarSoltarFuera } from "@/components/ui/useZonaSoltar.js";
 import {
   PLANTILLA_BASE,
   aFormulario,
@@ -32,9 +47,17 @@ import {
   desdeFormulario,
 } from "@/lib/clinica/plantillas.js";
 import { ETIQUETA_NOTA_POR_DEFECTO } from "@/lib/clinica/tallerSesion.js";
+import { MAX_NOTAS } from "@/lib/clinica/registroCompleto.js";
+import { BLOQUE_INTERNAS, escritoDelTaller, pacienteDeClave } from "@/lib/clinica/tallerCompleto.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition";
+const ta =
+  "w-full px-3 py-2 text-xs border border-neutral-200 rounded-lg focus:outline-none focus:border-neutral-400 leading-relaxed";
+
+const ACEPTA_AUDIO = "audio/*,.m4a,.mp3,.wav,.ogg,.webm,.mp4";
+const fmtSize = (b) => (b == null ? "" : b < 1024 * 1024 ? `${Math.round(b / 1024)} KB` : `${(b / (1024 * 1024)).toFixed(1)} MB`);
+const fmtDur = (s) => (s == null ? "" : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`);
 
 /** "2026-09-01T17:00:00Z" → "2026-09-01" y "19:00" en hora de Madrid. */
 function partirEnMadrid(valor) {
@@ -97,6 +120,26 @@ export default function SesionTallerDrawer({
   const [equipo, setEquipo] = useState([]);
   const [teamMemberId, setTeamMemberId] = useState("");
 
+  // ── El audio y la IA (03/09/2026) ─────────────────────────────────────────
+  // Mismas piezas que en el registro normal: el fichero, lo que sacó Whisper
+  // de ESE fichero (se transcribe una sola vez), si entra en esta pasada, las
+  // notas escritas, y la propuesta —que se puede volver a abrir—.
+  const [file, setFile] = useState(null);
+  const [transcripcionAudio, setTranscripcionAudio] = useState("");
+  const [duracionAudio, setDuracionAudio] = useState(null);
+  const [usarAudio, setUsarAudio] = useState(true);
+  const [notas, setNotas] = useState("");
+  // De qué texto salió el registro (lo que LEYÓ la IA en la última pasada):
+  // es lo que se guarda con la sesión, como en el registro normal.
+  const [materialIA, setMaterialIA] = useState("");
+  const [procesando, setProcesando] = useState(false);
+  const [propuesta, setPropuesta] = useState(null);
+  const [bloquesIA, setBloquesIA] = useState([]);
+  const [verPropuesta, setVerPropuesta] = useState(false);
+  const [avisoIA, setAvisoIA] = useState(null);
+  const [demoIA, setDemoIA] = useState(false);
+  const fileRef = useRef(null);
+
   const cargar = useCallback(async () => {
     setCargando(true);
     setErr(null);
@@ -127,6 +170,11 @@ export default function SesionTallerDrawer({
         setEtiquetaNota(d.etiquetaNota || ETIQUETA_NOTA_POR_DEFECTO);
         setAsistentes(d.asistentes ?? []);
         setTeamMemberId(d.teamMemberId ?? "");
+        // Lo que ya leyó la IA otro día: se puede volver a pasar sin audio.
+        const material = String(d.aiTranscription ?? "").trim();
+        setTranscripcionAudio(material);
+        setMaterialIA(material);
+        setDuracionAudio(d.audioDurationSec ?? null);
       } else {
         const aps = apartadosConPlantillas({}, lista);
         setApartados(aps);
@@ -193,6 +241,122 @@ export default function SesionTallerDrawer({
     setAsistentes((prev) => prev.map((a) => (a.patientId === patientId ? { ...a, [campo]: valor } : a)));
   }
 
+  // ── La pasada de IA ───────────────────────────────────────────────────────
+  useEvitarSoltarFuera();
+
+  /** Un audio nuevo deja vieja la transcripción del anterior. */
+  function ponerAudio(f) {
+    setFile(f);
+    setTranscripcionAudio("");
+    setDuracionAudio(null);
+    setUsarAudio(true);
+    setErr(null);
+  }
+
+  // Quitar el audio NO borra las notas escritas: son dos fuentes distintas.
+  function quitarAudio() {
+    setFile(null);
+    setTranscripcionAudio("");
+    setDuracionAudio(null);
+    setMaterialIA("");
+    setUsarAudio(true);
+    setPropuesta(null);
+    setVerPropuesta(false);
+    setAvisoIA(null);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  const zonaAudio = useZonaSoltar({
+    accept: ACEPTA_AUDIO,
+    queSeEspera: "un audio del taller",
+    apagada: procesando || guardando || !!transcripcionAudio,
+    pegar: true,
+    onFicheros: ([f]) => ponerAudio(f),
+    onAviso: setErr,
+  });
+
+  // Qué entra del audio en esta pasada: el fichero (hay que transcribirlo), la
+  // transcripción que ya hay (si se deja marcada), o nada.
+  const queEntra = file && !transcripcionAudio ? "audio" : transcripcionAudio && usarAudio ? "transcripcion" : "nada";
+  const conAudio = queEntra !== "nada";
+  const losQueVinieron = asistentes.filter((a) => a.asistio);
+  const escritoAhora = escritoDelTaller({ valores, asistentes: losQueVinieron, internalNotes: internas });
+
+  /**
+   * Manda el material —el audio, las notas, o los dos— con la lista de los que
+   * vinieron, y PROPONE el registro entero del taller. No escribe nada: lo que
+   * vuelve se elige bloque a bloque.
+   */
+  async function procesarConIA() {
+    const texto = notas.trim();
+    if (!conAudio && !texto) return;
+    setProcesando(true);
+    setErr(null);
+    setAvisoIA(null);
+    try {
+      const fd = new FormData();
+      if (queEntra === "audio") fd.append("file", file, file.name);
+      else if (queEntra === "transcripcion") fd.append("transcripcion", transcripcionAudio);
+      if (texto) fd.append("texto", texto);
+      fd.append("apartados", JSON.stringify(apartados));
+      // Solo los que VINIERON tienen nota: a quien faltó no se le puede
+      // escribir nada de una sesión a la que no fue.
+      fd.append("asistentes", JSON.stringify(losQueVinieron.map((a) => ({ patientId: a.patientId, nombre: a.nombre }))));
+      fd.append("etiquetaNota", etiquetaNota || ETIQUETA_NOTA_POR_DEFECTO);
+      fd.append("escrito", JSON.stringify(escritoAhora));
+      const r = await fetch("/api/clinica/taller-sesiones/transcribe", { method: "POST", body: fd });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "No se pudo procesar");
+      if (queEntra === "audio") {
+        setTranscripcionAudio(String(j.data.transcription ?? "").trim());
+        setDuracionAudio(j.data.audioDurationSec ?? null);
+      }
+      setMaterialIA(String(j.data.material ?? "").trim());
+      setDemoIA(!!j.data.demo);
+      const p = j.data.propuesta ?? {};
+      const cuantos = Object.values(p).filter((v) => String(v ?? "").trim()).length;
+      setPropuesta(p);
+      setBloquesIA(Array.isArray(j.data.bloques) ? j.data.bloques : []);
+      setVerPropuesta(cuantos > 0);
+      const notasDeNinos = Object.keys(j.data.reparto?.notas ?? {}).length;
+      setAvisoIA(
+        j.data.avisoIA ??
+          (cuantos > 0
+            ? `La IA propone ${cuantos} bloque(s)${notasDeNinos ? `, con nota para ${notasDeNinos} asistente(s)` : ""}: revísalos y elige cuáles entran.`
+            : "La IA no ha sacado nada que repartir.")
+      );
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setProcesando(false);
+    }
+  }
+
+  /**
+   * Lo elegido en el panel entra en el formulario: lo común a sus apartados,
+   * la nota de cada niño a SU casilla, lo interno a las notas internas.
+   * Guardar sigue siendo cosa de quien escribe.
+   */
+  function aplicarPropuesta(cambios) {
+    let cuantos = 0;
+    for (const [clave, valor] of Object.entries(cambios ?? {})) {
+      const pid = pacienteDeClave(clave);
+      if (pid) {
+        if (!asistentes.some((a) => a.patientId === pid)) continue;
+        cambiarAsistente(pid, "nota", valor);
+      } else if (clave === BLOQUE_INTERNAS.key) {
+        setInternas(valor);
+      } else if (apartados.some((a) => a.key === clave)) {
+        setValores((prev) => ({ ...prev, [clave]: valor }));
+      } else {
+        continue;
+      }
+      cuantos += 1;
+    }
+    setVerPropuesta(false);
+    setAvisoIA(cuantos > 0 ? `Se han escrito ${cuantos} bloque(s) con la propuesta de la IA. Revisa y edita antes de guardar.` : "No has aplicado ningún bloque.");
+  }
+
   async function guardar() {
     setErr(null);
     if (!fecha) { setErr("Pon la fecha de la sesión"); return; }
@@ -218,6 +382,10 @@ export default function SesionTallerDrawer({
         internalNotes: internas,
         etiquetaNota,
         status: cerrada ? "published" : "registered",
+        // De qué texto salió (03/09/2026): lo que leyó la IA, si se usó. Se
+        // guarda con la sesión para poder volver a pasarla sin el audio.
+        aiTranscription: materialIA || transcripcionAudio || "",
+        audioDurationSec: duracionAudio ?? null,
         // Solo los que vinieron. A los desmarcados se les quita su registro —
         // salvo que ya se le haya enviado a su familia, que eso lo frena el
         // servidor y lo cuenta en la respuesta.
@@ -241,7 +409,8 @@ export default function SesionTallerDrawer({
     }
   }
 
-  const vinieron = asistentes.filter((a) => a.asistio).length;
+  const vinieron = losQueVinieron.length;
+  const hayPropuesta = propuesta && Object.values(propuesta).some((v) => String(v ?? "").trim());
 
   return (
     <>
@@ -299,6 +468,127 @@ export default function SesionTallerDrawer({
                   ))}
                 </select>
               </label>
+
+              {/* ── 0. El audio y el bloc de notas, con IA (03/09/2026) ─── */}
+              <section
+                {...zonaAudio.props}
+                className={`rounded-xl border p-4 transition-colors ${
+                  zonaAudio.arrastrando ? "border-[var(--color-primary,#1B3A2D)] bg-emerald-50/40" : "border-neutral-200 bg-neutral-50/60"
+                }`}
+              >
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept={ACEPTA_AUDIO}
+                  className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) ponerAudio(f); }}
+                />
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-neutral-800">Audio y bloc de notas, con IA</div>
+                    {!file && !transcripcionAudio ? (
+                      <p className="text-[11px] text-neutral-500 mt-0.5">
+                        {zonaAudio.arrastrando
+                          ? "Suéltalo aquí."
+                          : "Arrastra el audio del taller aquí, pégalo con Ctrl+V o búscalo — o pega abajo lo que tengas apuntado. La IA propone el registro del grupo, la nota de cada niño que vino y las notas internas; tú eliges qué entra. m4a, mp3, wav, ogg, webm · máx. 25 MB."}
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-neutral-600 mt-0.5 truncate">
+                        {file ? `${file.name} · ${fmtSize(file.size)}` : "Texto guardado con la sesión"}
+                        {duracionAudio != null ? ` · ${fmtDur(duracionAudio)}` : ""}
+                        {transcripcionAudio ? " · ya transcrito" : ""}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    {!file && !transcripcionAudio && (
+                      <button
+                        type="button"
+                        onClick={() => fileRef.current?.click()}
+                        disabled={procesando || guardando}
+                        className="text-xs font-medium px-3 py-2 rounded-lg border border-neutral-200 bg-white hover:border-neutral-400 text-neutral-700 disabled:opacity-50"
+                      >
+                        Añadir audio
+                      </button>
+                    )}
+                    {(file || transcripcionAudio) && (
+                      <button type="button" onClick={quitarAudio} disabled={procesando || guardando} className="text-xs px-3 py-2 text-neutral-500 hover:underline disabled:opacity-50">
+                        Quitar
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-3 border-t border-neutral-100 pt-3">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2 mb-1.5">
+                    <div className="eyebrow">{file || transcripcionAudio ? "…y tus notas" : "O pega tus notas"}</div>
+                    <span className={`text-[10px] ${notas.length > MAX_NOTAS ? "text-rose-600 font-medium" : "text-neutral-400"}`}>
+                      {notas.length > 0 && `${notas.length.toLocaleString("es-ES")} / ${MAX_NOTAS.toLocaleString("es-ES")}`}
+                    </span>
+                  </div>
+                  <textarea
+                    className={ta}
+                    rows={notas ? 5 : 3}
+                    placeholder="Pega aquí lo que tengas apuntado del taller: lo del grupo y lo de cada niño, tal cual, nombrándolos."
+                    value={notas}
+                    onChange={(e) => setNotas(e.target.value)}
+                    disabled={procesando || guardando}
+                  />
+                </div>
+
+                {transcripcionAudio && (
+                  <label className="mt-3 flex items-start gap-2 text-[11px] text-neutral-600 cursor-pointer">
+                    <input type="checkbox" className="mt-0.5" checked={usarAudio} onChange={(e) => setUsarAudio(e.target.checked)} />
+                    <span>
+                      Usar también el texto ya transcrito en esta pasada.
+                      <span className="text-neutral-400"> Desmárcalo para que la IA lea solo tus notas. No se vuelve a transcribir nada.</span>
+                    </span>
+                  </label>
+                )}
+
+                {(conAudio || notas.trim()) && (
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={procesarConIA}
+                      disabled={procesando || guardando || notas.length > MAX_NOTAS || (!conAudio && !notas.trim())}
+                      className="text-xs font-medium px-4 py-2 rounded-lg text-white hover:opacity-90 inline-flex items-center gap-2 disabled:opacity-40"
+                      style={{ background: "var(--color-primary, #1B3A2D)" }}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" /></svg>
+                      {procesando
+                        ? queEntra === "audio" ? "Transcribiendo y repartiendo…" : "Repartiendo…"
+                        : queEntra === "audio"
+                          ? notas.trim() ? "Procesar audio y notas con IA" : "Procesar el audio con IA"
+                          : queEntra === "transcripcion"
+                            ? notas.trim() ? "Proponer otra vez con la transcripción y mis notas" : "Proponer otra vez con la transcripción"
+                            : "Rellenar el registro con mis notas"}
+                    </button>
+                  </div>
+                )}
+                {vinieron === 0 && (conAudio || notas.trim()) && (
+                  <p className="mt-2 text-[11px] text-amber-700">
+                    No hay nadie marcado como que vino: la IA solo propondrá el registro del grupo, sin notas individuales.
+                  </p>
+                )}
+
+                {avisoIA && (
+                  <div className="mt-3 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-100 text-[11px] text-emerald-800 flex flex-wrap items-center gap-2">
+                    <span className="flex-1 min-w-[12rem]">{avisoIA}{demoIA ? " (datos de demostración)" : ""}</span>
+                    {hayPropuesta && (
+                      <button type="button" onClick={() => setVerPropuesta(true)} className="shrink-0 font-medium text-emerald-900 underline hover:no-underline">
+                        Ver la propuesta de la IA
+                      </button>
+                    )}
+                  </div>
+                )}
+                {transcripcionAudio && (
+                  <details className="mt-3 border-t border-neutral-100 pt-3">
+                    <summary className="eyebrow cursor-pointer">Texto del que sale el registro</summary>
+                    <p className="mt-1.5 text-xs text-neutral-600 leading-relaxed italic whitespace-pre-line">«{transcripcionAudio}»</p>
+                  </details>
+                )}
+              </section>
 
               {/* ── 1. El registro del grupo ───────────────────────────── */}
               <section>
@@ -424,7 +714,7 @@ export default function SesionTallerDrawer({
             Cancelar
           </button>
           <button
-            type="button" onClick={guardar} disabled={guardando || cargando}
+            type="button" onClick={guardar} disabled={guardando || cargando || procesando}
             className="px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide text-white disabled:opacity-50 transition"
             style={{ background: "var(--color-primary, #1B3A2D)" }}
           >
@@ -432,6 +722,21 @@ export default function SesionTallerDrawer({
           </button>
         </div>
       </div>
+
+      {/* La propuesta de la IA, bloque a bloque: lo del grupo, la nota de cada
+          niño y las internas. `escritoAhora` es «lo tuyo»; si ya escribiste,
+          se enseña al lado y se respeta salvo que digas otra cosa. */}
+      {verPropuesta && propuesta && (
+        <PropuestaIA
+          bloques={bloquesIA}
+          escrito={escritoAhora}
+          propuesta={propuesta}
+          transcription={materialIA}
+          titulo="Lo que ha sacado la IA del taller"
+          onAplicar={aplicarPropuesta}
+          onCerrar={() => setVerPropuesta(false)}
+        />
+      )}
     </>
   );
 }

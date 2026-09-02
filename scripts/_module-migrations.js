@@ -465,6 +465,11 @@ export const MODULES = {
     // modelo de sesiones declara esa columna, así que sin ella toda lectura de
     // la historia clínica da 42703. VA ANTES del despliegue.
     "migrate-taller-sesiones",
+    // El audio y la IA en la sesión de taller (03/09/2026):
+    // `taller_sesiones.ai_transcription` y `audio_duration_sec`. El modelo las
+    // declara, así que sin ellas abrir una sesión de taller da 42703. VA
+    // ANTES del despliegue.
+    "migrate-taller-sesiones-ia",
     /*
      * Los GRUPOS de un taller y todo lo que cuelga de una cita de taller
      * (01/09/2026): «hay que poder poner varios grupos distintos para la misma

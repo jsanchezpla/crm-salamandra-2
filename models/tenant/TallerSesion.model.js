@@ -136,6 +136,27 @@ export function defineTallerSesion(sequelize) {
         allowNull: true,
       },
       /**
+       * ── De qué TEXTO salió este registro (03/09/2026, Rodrigo: «añade
+       * audio e IA a la sesión de taller») ─────────────────────────────
+       *
+       * Lo mismo que `clinic_sessions.ai_transcription`: la transcripción del
+       * audio del taller, las notas pegadas, o las dos. Se guarda para que la
+       * IA se pueda volver a pasar sin subir el audio otra vez, y como
+       * constancia. Material del equipo: no se propaga a los pacientes ni
+       * sale en ningún PDF. Null en todo lo escrito antes de esa fecha.
+       * `audio_duration_sec` la mide Whisper; null sin audio.
+       */
+      aiTranscription: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: "ai_transcription",
+      },
+      audioDurationSec: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: "audio_duration_sec",
+      },
+      /**
        * El bloqueo de agenda del que salió, cuando se registra desde ahí. Sin FK
        * dura y nullable: quitar el bloqueo de la agenda no puede borrar lo que
        * se escribió del taller, y una sesión se puede registrar sin que nadie

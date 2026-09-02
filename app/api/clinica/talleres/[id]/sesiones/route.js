@@ -3,6 +3,7 @@ import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { ok, created, error, forbidden, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
 import { auditar, datosPeticion } from "../../../../../../lib/utils/auditoria.js";
 import { limpiarContentSections } from "../../../../../../lib/clinica/plantillas.js";
+import { MAX_TRANSCRIPCION } from "../../../../../../lib/clinica/registroCompleto.js";
 import { apartadoDeNota, apartadosComunes, valoresComunes } from "../../../../../../lib/clinica/tallerSesion.js";
 import { propagarSesionDeTaller } from "../../../../../../lib/clinica/propagarTaller.js";
 import { resolveCurrentTeamMemberId } from "../../../../../../lib/team/currentTeamMember.js";
@@ -168,6 +169,17 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       duration: body.duration != null && body.duration !== "" ? Number(body.duration) : null,
       contentSections,
       internalNotes: typeof body.internalNotes === "string" && body.internalNotes.trim() ? body.internalNotes.trim() : null,
+      // De qué texto salió el registro (03/09/2026): la transcripción del
+      // audio y/o las notas que leyó la IA, si se usó. Acotada como en el
+      // registro normal.
+      aiTranscription:
+        typeof body.aiTranscription === "string" && body.aiTranscription.trim()
+          ? body.aiTranscription.trim().slice(0, MAX_TRANSCRIPCION)
+          : null,
+      audioDurationSec:
+        Number.isFinite(Number(body.audioDurationSec)) && Number(body.audioDurationSec) > 0
+          ? Math.round(Number(body.audioDurationSec))
+          : null,
       teamBlockId: typeof body.teamBlockId === "string" && UUID_RE.test(body.teamBlockId) ? body.teamBlockId : null,
       status: body.status === "published" ? "published" : "registered",
       createdById: request.headers.get("x-user-id") || null,

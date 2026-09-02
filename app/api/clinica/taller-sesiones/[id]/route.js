@@ -2,6 +2,7 @@ import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { auditar, datosPeticion } from "../../../../../lib/utils/auditoria.js";
 import { limpiarContentSections } from "../../../../../lib/clinica/plantillas.js";
+import { MAX_TRANSCRIPCION } from "../../../../../lib/clinica/registroCompleto.js";
 import {
   ETIQUETA_NOTA_POR_DEFECTO,
   apartadosComunes,
@@ -97,6 +98,10 @@ export const GET = withTenant(async (request, { params }, ctx) => {
       teamMemberName: fila.profesional?.displayName ?? null,
       status: fila.status,
       internalNotes: fila.internalNotes ?? "",
+      // De qué texto salió el registro (03/09/2026): para volver a pasar la IA
+      // sin subir el audio otra vez. Material del equipo, solo para esta pantalla.
+      aiTranscription: fila.aiTranscription ?? "",
+      audioDurationSec: fila.audioDurationSec ?? null,
       contentSections: fila.contentSections ?? {},
       teamBlockId: fila.teamBlockId ?? null,
       // El título del apartado privado tal como se guardó, para que al reabrir
@@ -161,6 +166,18 @@ export const PUT = withTenant(async (request, { params }, ctx) => {
     }
     if (body.status !== undefined) {
       cambios.status = body.status === "published" ? "published" : "registered";
+    }
+    // De qué texto salió (03/09/2026): la transcripción del audio y/o las
+    // notas pegadas, tal como las leyó la IA. Solo si la pantalla lo manda;
+    // vacío = se borra (se quitó el audio).
+    if (body.aiTranscription !== undefined) {
+      const t = typeof body.aiTranscription === "string" ? body.aiTranscription.trim() : "";
+      if (t.length > MAX_TRANSCRIPCION) return error("La transcripción es demasiado larga", 413);
+      cambios.aiTranscription = t || null;
+    }
+    if (body.audioDurationSec !== undefined) {
+      const n = Number(body.audioDurationSec);
+      cambios.audioDurationSec = Number.isFinite(n) && n > 0 ? Math.round(n) : null;
     }
     if (body.contentSections !== undefined) {
       const limpio = limpiarContentSections(body.contentSections);
