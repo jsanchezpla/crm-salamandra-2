@@ -28,7 +28,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * así que `…/captura.png` no pasaría por él — ni reparto por host, ni sello de
  * sesión, ni cabecera de usuario. El nombre viaja en `Content-Disposition`.
  */
-export const GET = withTenant(async (request, { params }) => {
+export const GET = withTenant(async (request, { params }, ctx) => {
   try {
     const usuarioId = request.headers.get("x-user-id");
     if (!usuarioId) return unauthorized();
@@ -40,7 +40,9 @@ export const GET = withTenant(async (request, { params }) => {
     // Un 404 en los tres casos, sin distinguirlos: decir «existe pero no es
     // tuyo» ya es contar algo.
     if (!adj || !adj.aviso) return notFound("Adjunto no encontrado");
-    if (adj.aviso.usuarioId !== usuarioId) return notFound("Adjunto no encontrado");
+    // Desde el 02/09/2026 (AV-0015) el adjunto es de todo el equipo del cliente, no solo de quien lo subió.
+    const deSuCliente = (ctx.tenant?.id && adj.aviso.tenantId === ctx.tenant.id) || adj.aviso.tenantSlug === ctx.slug;
+    if (!deSuCliente) return notFound("Adjunto no encontrado");
     // Un adjunto que cuelga de una nota nuestra no existe para él.
     if (adj.subidoPor === "salamandra" && adj.mensajeId) return notFound("Adjunto no encontrado");
 

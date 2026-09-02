@@ -404,7 +404,10 @@ export default function AyudaModule({ esDemo = false }) {
         )}
 
         <div className="mt-8">
-          <h2 className="text-[13px] font-semibold text-gray-700 mb-3">Lo que nos has mandado</h2>
+          <h2 className="text-[13px] font-semibold text-gray-700 mb-1">Lo que nos habéis mandado</h2>
+          <p className="text-[12px] text-gray-400 mb-3">
+            Aquí sale lo de todo tu equipo, para no mandarnos la misma duda dos veces.
+          </p>
           {cargando ? (
             <p className="text-[13px] text-gray-400">Cargando…</p>
           ) : avisos.length === 0 ? (
@@ -428,6 +431,9 @@ export default function AyudaModule({ esDemo = false }) {
                         <div className="text-sm text-gray-900 font-medium truncate">{a.asunto}</div>
                         <div className="text-[11px] text-gray-400 mt-0.5">
                           {a.ref} · {fecha(a.createdAt)}
+                          {/* Desde el 02/09/2026 se ven los de todo el equipo:
+                              cada fila dice de quién es cuando no es tuya. */}
+                          {a.esMio === false && ` · de ${a.usuarioNombre || "un compañero"}`}
                           {a.mensajes.length > 0 && ` · ${a.mensajes.length} respuesta${a.mensajes.length > 1 ? "s" : ""}`}
                         </div>
                       </div>
@@ -752,7 +758,9 @@ function Detalle({ avisoId, onVisto, onCerrar }) {
               </div>
 
               <div>
-                <div className="text-[11px] text-gray-400 mb-1">Tú · {fechaHora(aviso.createdAt)}</div>
+                <div className="text-[11px] text-gray-400 mb-1">
+                  {aviso.esMio === false ? aviso.usuarioNombre || "Un compañero" : "Tú"} · {fechaHora(aviso.createdAt)}
+                </div>
                 <p className="text-[13px] text-gray-800 whitespace-pre-wrap leading-relaxed">{aviso.cuerpo}</p>
                 {/* Las del alta: las que NO cuelgan de ningún mensaje. */}
                 <Capturas lista={(aviso.adjuntos ?? []).filter((a) => !a.mensajeId)} onVer={setViendo} />
@@ -761,7 +769,9 @@ function Detalle({ avisoId, onVisto, onCerrar }) {
               {aviso.mensajes.map((m) => (
                 <div key={m.id} className={m.autorTipo === "salamandra" ? "" : "text-right"}>
                   <div className="text-[11px] text-gray-400 mb-1">
-                    {m.autorTipo === "salamandra" ? m.autorNombre || "Salamandra" : "Tú"} ·{" "}
+                    {m.autorTipo === "salamandra"
+                      ? m.autorNombre || "Salamandra"
+                      : m.autorNombre || (aviso.esMio === false ? "Un compañero" : "Tú")} ·{" "}
                     {fechaHora(m.createdAt)}
                   </div>
                   <p

@@ -166,9 +166,17 @@ por descuido, como si siguiera esperándonos.
 
 ## Quién ve qué
 
-- **El cliente ve los SUYOS**, no los de su empresa. En master no hay schema que
-  aísle nada, así que el aislamiento lo pone `usuario_id`. Un aviso puede ser
-  perfectamente una queja sobre su propio centro.
+- **El cliente ve los de TODO SU EQUIPO** (desde el 02/09/2026, AV-0015 de
+  Aumenta: «si no te vamos a mandar la misma duda varias personas»). Hasta ese
+  día cada usuario veía solo los suyos, con el argumento de que un aviso puede
+  ser una queja sobre su propio centro; pesó más el trabajo duplicado. En
+  master no hay schema que aísle nada, así que el aislamiento lo pone
+  `tenant_id` (`listarDelTenant` / `leerDelTenant` en `buzonStore.js`, y el
+  endpoint de adjuntos comprueba lo mismo). Lo que sigue siendo de UNO es lo
+  que le toca hacer a él: el «Nueva respuesta», el punto del menú y la campana
+  solo se los lleva quien escribió el aviso (`esMio` en `serializarAviso(...,
+  { para: "cliente", quienMira })`; abrir un aviso ajeno NO apunta
+  `visto_cliente_at`). Cada fila dice de quién es.
 - **La prioridad y el reparto son nuestros** y no se le enseñan. Un desplegable
   de urgencia en manos de quien reporta se satura en «alta» en dos semanas. Lo
   que sí decide él es `bloquea`, que no es una opinión.

@@ -1,7 +1,7 @@
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, error, notFound, serverError } from "../../../../lib/utils/apiResponse.js";
 import { serializarAviso } from "../../../../lib/buzon/buzon.js";
-import { leerDeUsuario, marcarVistoPorCliente } from "../../../../lib/buzon/buzonStore.js";
+import { leerDelTenant, marcarVistoPorCliente } from "../../../../lib/buzon/buzonStore.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -16,18 +16,18 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  *
  * Abrirlo cuenta como «lo he visto», que es lo que apaga el punto del menú.
  */
-export const GET = withTenant(async (request, { params }) => {
+export const GET = withTenant(async (request, { params }, ctx) => {
   try {
     const { id } = await params;
     if (!UUID_RE.test(String(id ?? ""))) return error("id inválido", 422);
 
     const usuarioId = request.headers.get("x-user-id");
-    const aviso = await leerDeUsuario(id, { usuarioId });
+    const aviso = await leerDelTenant(id, { tenantId: ctx.tenant?.id, tenantSlug: ctx.slug });
     if (!aviso) return notFound("Ese aviso no existe");
 
-    await marcarVistoPorCliente(aviso);
+    await marcarVistoPorCliente(aviso, usuarioId);
 
-    return ok(serializarAviso(aviso, { para: "cliente" }));
+    return ok(serializarAviso(aviso, { para: "cliente", quienMira: usuarioId }));
   } catch (err) {
     return serverError(err);
   }

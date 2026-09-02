@@ -13,8 +13,8 @@ import {
 import {
   crearAviso,
   crearAdjunto,
-  listarDeUsuario,
-  leerDeUsuario,
+  listarDelTenant,
+  leerDelTenant,
   contarSinVer,
   esSinTabla,
   COMANDO_MIGRACION,
@@ -58,12 +58,12 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   try {
     const usuarioId = request.headers.get("x-user-id");
     const [{ avisos, soloLectura }, sinVer] = await Promise.all([
-      listarDeUsuario(usuarioId),
+      listarDelTenant({ tenantId: ctx.tenant?.id, tenantSlug: ctx.slug }),
       contarSinVer(usuarioId),
     ]);
 
     return ok({
-      avisos: avisos.map((a) => serializarAviso(a, { para: "cliente" })),
+      avisos: avisos.map((a) => serializarAviso(a, { para: "cliente", quienMira: usuarioId })),
       sinVer,
       // `soloLectura` = las tablas todavía no existen (se despliega el código y
       // la migración se corre a mano después). La pantalla lo dice en vez de
@@ -178,9 +178,9 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     await avisarnos({ aviso: serializarAviso(aviso, { para: "salamandra" }) });
 
     // Se relee para que la respuesta lleve ya los adjuntos recién guardados.
-    const completo = (await leerDeUsuario(aviso.id, { usuarioId })) ?? aviso;
+    const completo = (await leerDelTenant(aviso.id, { tenantId: ctx.tenant?.id, tenantSlug: ctx.slug })) ?? aviso;
     return created({
-      ...serializarAviso(completo, { para: "cliente" }),
+      ...serializarAviso(completo, { para: "cliente", quienMira: usuarioId }),
       // Si las capturas fallaron, el aviso SÍ entró: hay que decir las dos
       // cosas o el cliente se queda pensando que no ha llegado nada.
       avisoAdjuntos: falloAdjuntos,

@@ -702,6 +702,10 @@ describe("serializarAviso: al cliente le llega EXACTAMENTE esto, ni un campo má
       createdAt: "2026-08-13T09:00:00.000Z",
       ultimoMensajeAt: "2026-08-14T10:00:00.000Z",
       sinLeer: true,
+      // Desde el 02/09/2026 (AV-0015) el equipo entero ve la lista: cada
+      // aviso dice de quién es, y `esMio` decide el «Tú» y el «Nueva respuesta».
+      usuarioNombre: "María",
+      esMio: true,
       mensajes: [
         {
           id: "m0",
@@ -732,6 +736,25 @@ describe("serializarAviso: al cliente le llega EXACTAMENTE esto, ni un campo má
         },
       ],
     });
+  });
+
+  it("un compañero del mismo centro lo ve, pero sin «Nueva respuesta» y sin que sea suyo (02/09/2026)", () => {
+    const fila = { ...avisoCompleto(), usuarioId: "u-maria" };
+    const paraMaria = serializarAviso(fila, { para: "cliente", quienMira: "u-maria" });
+    const paraSilvia = serializarAviso(fila, { para: "cliente", quienMira: "u-silvia" });
+    assert.equal(paraMaria.esMio, true);
+    assert.equal(paraMaria.sinLeer, true);
+    assert.equal(paraSilvia.esMio, false);
+    assert.equal(paraSilvia.sinLeer, false);
+    assert.equal(paraSilvia.usuarioNombre, "María");
+    // Y sigue sin ver lo nuestro: ni prioridad, ni correo, ni notas internas.
+    assert.equal(paraSilvia.prioridad, undefined);
+    assert.equal(paraSilvia.usuarioEmail, undefined);
+    assert.deepEqual(paraSilvia.mensajes.map((m) => m.id), paraMaria.mensajes.map((m) => m.id));
+    // Sin `quienMira` (pruebas, back-office) se considera suyo, como siempre.
+    assert.equal(serializarAviso(fila, { para: "cliente" }).esMio, true);
+    // Y a nosotros no nos añade nada: la vista de Salamandra no lleva `esMio`.
+    assert.equal(serializarAviso(fila, { para: "salamandra", quienMira: "u-silvia" }).esMio, undefined);
   });
 
   it("el adjunto de un mensaje VISIBLE sí viaja con el cliente (solo se va el de la nota interna)", () => {

@@ -4,7 +4,7 @@ import { isDemoTenant } from "../../../../../lib/demo/isDemo.js";
 import { enforceRateLimit } from "../../../../../lib/utils/rateLimit.js";
 import { validarMensaje, serializarAviso, MB_POR_ADJUNTO } from "../../../../../lib/buzon/buzon.js";
 import {
-  leerDeUsuario,
+  leerDelTenant,
   anadirMensaje,
   crearAdjunto,
   esSinTabla,
@@ -73,7 +73,7 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     const v = validarMensaje(body);
     if (!v.ok) return error(v.error, v.status);
 
-    const aviso = await leerDeUsuario(id, { usuarioId });
+    const aviso = await leerDelTenant(id, { tenantId: ctx.tenant?.id, tenantSlug: ctx.slug });
     if (!aviso) return notFound("Ese aviso no existe");
 
     const usuario = await quienEscribe(request, ctx);
@@ -102,9 +102,9 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       falloAdjuntos = r.error;
     }
 
-    const fresco = await leerDeUsuario(id, { usuarioId });
+    const fresco = await leerDelTenant(id, { tenantId: ctx.tenant?.id, tenantSlug: ctx.slug });
     return created({
-      ...serializarAviso(fresco, { para: "cliente" }),
+      ...serializarAviso(fresco, { para: "cliente", quienMira: usuarioId }),
       avisoAdjuntos: falloAdjuntos,
     });
   } catch (err) {
