@@ -966,6 +966,61 @@ export default function PacienteFichaPage() {
                 <p className="text-[11px] text-neutral-400">Este paciente no tiene un cliente pagador enlazado.</p>
               )}
             </div>
+            {/*
+              PADRES Y TUTORES DE LA FAMILIA (02/09/2026, AV-0023 y AV-0024 de
+              Aumenta). En Organízate cada paciente tenía su apartado de tutores;
+              aquí solo se veían en la ficha de la FAMILIA (Clientes), a la que
+              las terapeutas no entran, y quien miraba un paciente veía un solo
+              nombre y creía que los demás datos se habían perdido. No se habían
+              perdido: 1.846 tutores en producción, 813 familias con dos o más.
+
+              Es el mismo dato en otra pantalla, y de SOLO LECTURA a propósito:
+              se editan donde viven (la ficha de la familia), y aquí no viaja
+              ni el DNI ni quién firma (`tutoresParaFicha`). Con teléfono y
+              correo como enlaces, que es para lo que lo pidieron: llamar.
+            */}
+            {patient.client && (
+              <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5" data-testid="padres-y-tutores">
+                <div className="eyebrow mb-3 flex items-center gap-1.5">
+                  Padres y tutores
+                  <HelpTooltip title="Padres y tutores" placement="bottom" className="tracking-normal">
+                    Los padres o tutores de la familia de este paciente, con su teléfono y su correo,
+                    para poder llamarles sin pasar por Clientes.
+                    {" "}
+                    <strong className="text-white">Se editan en la ficha de la familia</strong>: aquí solo se consultan.
+                  </HelpTooltip>
+                </div>
+                {patient.client.guardians?.length ? (
+                  <ul className="space-y-2">
+                    {patient.client.guardians.map((g, i) => (
+                      <li key={g.id ?? i} className="text-[11px]">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-neutral-800">{g.name}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-neutral-100 text-neutral-500">{g.relationshipLabel}</span>
+                        </div>
+                        <div className="text-neutral-600 flex items-center gap-3 flex-wrap mt-0.5">
+                          {g.phone && (
+                            <a href={`tel:${g.phone}`} className="hover:underline">
+                              <span className="text-neutral-400">☎</span> {g.phone}
+                            </a>
+                          )}
+                          {g.email && (
+                            <a href={`mailto:${g.email}`} className="hover:underline break-all">
+                              <span className="text-neutral-400">✉</span> {g.email}
+                            </a>
+                          )}
+                          {!g.phone && !g.email && <span className="text-neutral-400">sin teléfono ni correo apuntados</span>}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-[11px] text-neutral-400">
+                    La familia no tiene padres ni tutores apuntados. Se apuntan en su ficha, en Clientes.
+                  </p>
+                )}
+              </div>
+            )}
             <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
               <div className="eyebrow mb-3">Datos y consentimientos</div>
               <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px] mb-3">

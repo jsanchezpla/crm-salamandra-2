@@ -41,9 +41,12 @@ function therapistInclude(TeamMember) {
 
 // Include del cliente pagador + sus contactos (para mostrar en la ficha del
 // paciente los contactos del que paga, sin duplicarlos). Sólo con módulo clients.
+// Desde el 02/09/2026 también sus `guardians`: la ficha del paciente enseña a
+// los padres y tutores de la familia (AV-0023 y AV-0024 de Aumenta), y el
+// serializador los recorta antes de que salgan (sin DNI ni firmante).
 function payerInclude({ Client, ClientContactMethod }, hasModule) {
   if (!hasModule("clients") || !Client) return [];
-  const inc = { model: Client, as: "client", attributes: ["id", "name", "separated"] };
+  const inc = { model: Client, as: "client", attributes: ["id", "name", "separated", "guardians"] };
   if (ClientContactMethod) {
     inc.include = [{ model: ClientContactMethod, as: "contactMethods", attributes: ["id", "kind", "value", "label", "isPrimary"] }];
   }
