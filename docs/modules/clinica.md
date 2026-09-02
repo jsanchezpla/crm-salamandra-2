@@ -492,6 +492,31 @@ desde ninguna parte una vez guardado.
   corrigiera se perdería en la propagación siguiente. El cajón lo dice y no
   ofrece el botón.
 
+**3. «Marqué la falta y me sigue pidiendo que complete la sesión.»**
+(02/09/2026, AV-0026 de Aumenta.) La terapeuta prepara la sesión desde la cita
+—borrador con `booking_id`—, el paciente no viene, marca la falta… y seguían
+el botón «Marcar completada», el enlace «Seguir con la sesión» y, en la ficha
+del paciente, el borrador como una sesión de hoy por completar.
+
+- **Al pasar la cita a falta o a cancelada**, `PATCH /api/citas/bookings/[id]`
+  llama a `retirarBorradoresDeLaCita()` (`lib/clinica/borradorDeCita.js`): los
+  borradores de esa cita que están EN BLANCO se borran; uno con algo escrito
+  (preparación, adjuntos, cualquier apartado, la devolución, notas internas,
+  lo de la IA) se conserva. Lo decide `borradorVacio()`, fijado en
+  `_smoke-borrador-de-cita.mjs`; lo borrado queda en la auditoría de la cita
+  (`borradorRetirado`). No hay estado «no dada» a propósito: sería un cuarto
+  estado que tendrían que aprender estadísticas, informes y PDF para decir
+  algo que la cita ya sabe.
+- **El que se conserva no se disfraza de sesión**: `GET /api/clinica/sessions`
+  añade `bookingStatus` a cada registro que sale de una cita
+  (`estadoDeLasCitas()`, una consulta para toda la lista) y la ficha del
+  paciente rotula el borrador «Preparada · el paciente no vino» (o «Preparada ·
+  cita cancelada») en vez de «Borrador» (`rotuloDeBorrador()`).
+- **El modal de la cita** esconde «Marcar completada» tras una falta, y
+  «Preparar sesión / Seguir con la sesión» en una falta o una cancelada
+  (`citaNoSeDio()`). Una falta marcada por error se corrige desde la ficha del
+  paciente («Cambiar» en sus citas), no desde el modal.
+
 ### Arrastrar y soltar ficheros (28/08/2026, Lau de Aumenta)
 
 El audio de la sesión le llega por WhatsApp: lo descarga y le queda a la vista

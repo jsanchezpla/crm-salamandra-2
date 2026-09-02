@@ -15,6 +15,7 @@ import SelectorPaciente from "../../../components/citas/SelectorPaciente.jsx";
 import PanelTallerCita from "../../../components/citas/PanelTallerCita.jsx";
 import SesionTallerDrawer from "../../../components/clinica/SesionTallerDrawer.jsx";
 import { colaDePreparacion } from "../../../lib/clinica/prepararSesion.js";
+import { citaNoSeDio } from "../../../lib/clinica/borradorDeCita.js";
 import { fichaDeLaCita } from "../../../lib/citas/fichaDeLaCita.js";
 import { esRecuperable, rotuloFalta, citasQuePuedenRecuperar } from "../../../lib/citas/recuperacionFalta.js";
 import { esPresunta, estadoEfectivo } from "../../../lib/citas/asistencia.js";
@@ -756,19 +757,29 @@ export function CitaDetalleModal({
                         >
                           Ver ficha
                         </a>
-                        <a
-                          href={`/pacientes/${openBooking.patientId}/sesiones/nueva${colaDePreparacion(openBooking.scheduledAt, { bookingId: openBooking.id, profesionalId: openBooking.teamMemberId })}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title={
-                            sesionDeEstaCita
-                              ? "Sigue con el registro que ya empezaste para esta cita. No se crea uno nuevo."
-                              : "Escribe la preparación de esta sesión antes de darla. Se guarda como borrador con el día y la hora de la cita."
-                          }
-                          className="shrink-0 text-[12px] px-2 py-1 rounded-md border border-neutral-200 text-neutral-600 hover:border-neutral-400 hover:text-neutral-800 transition-colors"
-                        >
-                          {sesionDeEstaCita ? "Seguir con la sesión" : "Preparar sesión"}
-                        </a>
+                        {/*
+                          Y NO en una cita que no se dio (02/09/2026, AV-0026):
+                          tras una falta o una cancelación no hay sesión que
+                          preparar ni que seguir. El borrador en blanco que
+                          hubiera lo retira el propio PATCH de la cita; el que
+                          tenga algo escrito sigue en la ficha del paciente,
+                          rotulado con cómo acabó la cita.
+                        */}
+                        {!citaNoSeDio(openBooking) && (
+                          <a
+                            href={`/pacientes/${openBooking.patientId}/sesiones/nueva${colaDePreparacion(openBooking.scheduledAt, { bookingId: openBooking.id, profesionalId: openBooking.teamMemberId })}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={
+                              sesionDeEstaCita
+                                ? "Sigue con el registro que ya empezaste para esta cita. No se crea uno nuevo."
+                                : "Escribe la preparación de esta sesión antes de darla. Se guarda como borrador con el día y la hora de la cita."
+                            }
+                            className="shrink-0 text-[12px] px-2 py-1 rounded-md border border-neutral-200 text-neutral-600 hover:border-neutral-400 hover:text-neutral-800 transition-colors"
+                          >
+                            {sesionDeEstaCita ? "Seguir con la sesión" : "Preparar sesión"}
+                          </a>
+                        )}
                       </>
                     )}
                   </div>
@@ -1076,7 +1087,14 @@ export function CitaDetalleModal({
                     </button>
                   </>
                 ) : (
-                  openBooking.status !== "completed" && (
+                  /*
+                   * Y TAMPOCO tras una falta (02/09/2026, AV-0026): salía
+                   * «Marcar completada» al lado del rótulo «Falta
+                   * injustificada», y se leía como que aún faltaba algo por
+                   * hacer. Una falta marcada por error se corrige desde la
+                   * ficha del paciente («Cambiar» en sus citas).
+                   */
+                  openBooking.status !== "completed" && openBooking.status !== "no_show" && (
                     <button
                       onClick={markCompleted}
                       disabled={saving}

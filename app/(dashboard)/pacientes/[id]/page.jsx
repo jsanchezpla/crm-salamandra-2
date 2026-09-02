@@ -28,6 +28,7 @@ import { bloquesDelRegistro, CLAVES_ENVOLTORIO, esEnvoltorio, MAX_NOTAS } from "
 import { SPECIALTY_LABEL } from "@/lib/clinica/specialties.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 import { enlaceDeVuelta } from "@/lib/clients/volver.js";
+import { rotuloDeBorrador } from "@/lib/clinica/borradorDeCita.js";
 
 const REPORT_TYPE_OPTIONS = REPORT_TYPES.map((value) => ({ value, label: REPORT_TYPE_LABEL[value] }));
 
@@ -1105,7 +1106,12 @@ export default function PacienteFichaPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-display text-sm text-[var(--ink-900)]">{se.therapist?.name ?? "—"}</span>
-                          <span className={`inline-flex items-center gap-1 ${ss.bg} ${ss.text} text-[9px] font-medium px-1.5 py-0.5 rounded-full`}><span className={`w-1 h-1 rounded-full ${ss.dot}`} />{se.statusLabel}</span>
+                          {/* Un borrador preparado para una cita que fue falta o
+                              se canceló NO es una sesión por completar
+                              (02/09/2026, AV-0026): se dice cómo acabó la cita
+                              en vez de «Borrador», que aquí se leía como «te
+                              falta rellenar esto». lib/clinica/borradorDeCita.js */}
+                          <span className={`inline-flex items-center gap-1 ${ss.bg} ${ss.text} text-[9px] font-medium px-1.5 py-0.5 rounded-full`}><span className={`w-1 h-1 rounded-full ${ss.dot}`} />{rotuloDeBorrador(se) ?? se.statusLabel}</span>
                           {/* Sale de un TALLER (01/09/2026): el cuerpo del
                               registro lo escribió una vez quien lo dio, para
                               todo el grupo, y lo propio de este paciente es su

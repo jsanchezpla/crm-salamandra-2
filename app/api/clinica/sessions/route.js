@@ -4,6 +4,7 @@ import { ok, created, error, forbidden } from "../../../../lib/utils/apiResponse
 import { serializeSession } from "../../../../lib/clinica/serialize.js";
 import { logClinicaAudit, auditSummary } from "../../../../lib/clinica/audit.js";
 import { limpiarContentSections } from "../../../../lib/clinica/plantillas.js";
+import { estadoDeLasCitas } from "../../../../lib/clinica/borradorDeCita.js";
 
 function gate(ctx) {
   return ctx.hasModule("clinica") || ctx.hasModule("pacientes");
@@ -13,7 +14,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 export const GET = withTenant(async (request, _rc, ctx) => {
   if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
-  const { ClinicSession, TeamMember } = ctx.tenantModels;
+  const { ClinicSession, TeamMember, Booking } = ctx.tenantModels;
   const sp = new URL(request.url).searchParams;
   const where = {};
   if (sp.get("patientId")) where.patientId = sp.get("patientId");
@@ -29,7 +30,18 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     order: [["sessionDate", "DESC"]],
     limit,
   });
-  return ok({ sessions: rows.map(serializeSession), total: rows.length });
+  /*
+   * CÓMO ACABÓ LA CITA de cada registro (02/09/2026, AV-0026 de Aumenta): un
+   * borrador preparado para una cita que fue falta no es una sesión por
+   * completar, y la ficha del paciente necesita saberlo para no rotularlo
+   * «Borrador». Una consulta para toda la lista; `null` en las 22.045 de
+   * siempre, que no salen de ninguna cita, y en un tenant sin `citas`.
+   */
+  const estados = await estadoDeLasCitas({ Booking, sesiones: rows });
+  return ok({
+    sessions: rows.map((r) => ({ ...serializeSession(r), bookingStatus: estados.get(r.bookingId) ?? null })),
+    total: rows.length,
+  });
 });
 
 export const POST = withTenant(async (request, _rc, ctx) => {

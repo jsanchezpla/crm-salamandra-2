@@ -24,6 +24,7 @@ import { getTenantResendConfig } from "../../../../../lib/outreach/resendConfig.
 import { reembolsarCitaSiProcede } from "../../../../../lib/citas/reembolsoCita.js";
 import { tieneRetencionPendiente } from "../../../../../lib/citas/cobroCita.js";
 import { abrirIncidenciaPorFalta } from "../../../../../lib/citas/incidenciaPorFalta.js";
+import { retirarBorradoresDeLaCita } from "../../../../../lib/clinica/borradorDeCita.js";
 
 /*
  * Aquí vivía una segunda copia del «tu cita ha sido cancelada», y era la que se
@@ -416,6 +417,24 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
     await row.update(updates);
     await row.reload();
 
+    /*
+     * EL REGISTRO PREPARADO DE UNA CITA QUE NO SE DA (02/09/2026, AV-0026 de
+     * Aumenta). «Preparar sesión» deja un borrador colgado de esta cita; si el
+     * paciente no viene (o la cita se cancela), el borrador EN BLANCO se
+     * retira —solo confundía: la ficha del paciente lo enseñaba como una
+     * sesión de hoy por completar— y el que tenga algo escrito se conserva,
+     * porque es trabajo de alguien. La regla, con su prueba, en
+     * lib/clinica/borradorDeCita.js. Sin módulo clínico no hay modelo y no
+     * se hace nada.
+     */
+    let borradorRetirado = null;
+    if (statusChanged && (updates.status === "no_show" || updates.status === "cancelled")) {
+      borradorRetirado = await retirarBorradoresDeLaCita({
+        ClinicSession: tenantModels.ClinicSession,
+        bookingId: row.id,
+      });
+    }
+
     // Cancelar desde el panel es cancelar el profesional: si la cita estaba
     // cobrada, el dinero vuelve íntegro. Un 'no_show' NO devuelve nada (el
     // paciente no se presentó), y por eso se distinguen los dos casos.
@@ -500,7 +519,13 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
       entity: "Booking",
       entityId: row.id,
       before,
-      after: { ...row.toJSON(), ...(reembolso ? { reembolso } : {}) },
+      after: {
+        ...row.toJSON(),
+        ...(reembolso ? { reembolso } : {}),
+        // Cuántos borradores en blanco se retiraron con la falta (y cuántos se
+        // conservaron por tener algo escrito): lo destructivo, en la auditoría.
+        ...(borradorRetirado?.borrados ? { borradorRetirado } : {}),
+      },
       ip,
     });
 
