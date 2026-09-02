@@ -387,7 +387,7 @@ describe("lo que NO se ha cambiado sin querer", () => {
     const s = fakeSequelize();
     await filasDe(s, ESQUEMA, "reserva_plaza");
     assert.match(s.sqls[0], /custom_fields \? 'reservaPlaza'/);
-    assert.match(s.sqls[0], /->>'aviso'\) IS NULL, c\.name/);
+    assert.match(s.sqls[0], /->>'orden'\)::int, 9\), c\.name/);
     // Y una carpeta opcional sin filas no se enseña.
     const vacio = fakeSequelize();
     const carpetas = await carpetasCon(vacio, ESQUEMA, null);

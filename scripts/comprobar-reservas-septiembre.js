@@ -227,7 +227,10 @@ async function main() {
           x.crm != null ? `septiembre CRM ${eur(x.crm)}${x.cobrado ? ` (cobrado ${eur(x.cobrado)})` : ""}` : "sin cobro de septiembre",
           x.org != null ? `Organízate ${eur(x.org)}` : null,
         ].filter(Boolean).join(" · ");
-        marcas.push({ fid: x.fid, valor: { curso: "2026-2027", importe: IMPORTE, reservas: x.n, pacientes: pacientesRes, cuota: x.cuota, septiembreCrm: x.crm, cobrado: x.cobrado, organizate: x.org, situacion: SITUACION[categoria], aviso: avisoDe(x.fid, categoria), resumen, fecha: "2026-09-02" } });
+        const aviso = avisoDe(x.fid, categoria);
+        // El orden en la carpeta: primero lo que hay que mirar de verdad.
+        const orden = /vuelta a descontar/.test(aviso ?? "") ? 0 : /compensar/.test(aviso ?? "") ? 1 : aviso === "sin descuento" ? 2 : aviso === "sin cuota en el CRM" ? 3 : aviso === "sin cobro de septiembre" ? 4 : 9;
+        marcas.push({ fid: x.fid, valor: { curso: "2026-2027", importe: IMPORTE, reservas: x.n, pacientes: pacientesRes, cuota: x.cuota, septiembreCrm: x.crm, cobrado: x.cobrado, organizate: x.org, situacion: SITUACION[categoria], aviso, orden, resumen, fecha: "2026-09-02" } });
       }
     }
     process.stdout.write(`  Marcar en la ficha (custom_fields.reservaPlaza): ${marcas.length} familias · con aviso: ${marcas.filter((m) => m.valor.aviso).length}${CONFIRM ? "" : "  (EN SECO)"}\n`);
