@@ -156,6 +156,39 @@ async function main() {
     if (sinCasar.length) process.stdout.write(`  Sin casar: ${sinCasar.length} nombres (se listan solo iniciales): ${sinCasar.map((n) => n.split(/\s+/).map((w) => w[0]).join(".")).join(", ")}\n\n`);
   }
 
+  // ── --listar: la tabla con nombres, para el despacho ─────────────────────
+  // Una línea por familia con reserva: categoría, familia, pacientes con
+  // reserva, N, cuota, CRM (cobrado), Organízate y si esta noche se le volvió
+  // a descontar o se le anotó la compensación. Sale por stdout en TSV para
+  // guardarla en un fichero fuera del repo, nunca para pegarla en un chat.
+  if (args.includes("--listar")) {
+    const { Client } = models;
+    const clientes = new Map((await Client.findAll({ attributes: ["id", "name"], raw: true })).map((c) => [String(c.id), c.name]));
+    const nombresPorFamilia = new Map();
+    for (const nombre of reservas) {
+      const p = porNombre.get(norm(nombre));
+      if (!p?.clientId) continue;
+      const f = String(p.clientId);
+      if (!nombresPorFamilia.has(f)) nombresPorFamilia.set(f, []);
+      nombresPorFamilia.get(f).push(nombre);
+    }
+    const marcaDe = (f) => {
+      const notas = cobros.filter((c) => String(c.clientId) === f).map((c) => String(c.notes ?? "")).join(" | ");
+      if (/vuelta a descontar/.test(notas)) return "vuelta a descontar";
+      if (/a compensar/.test(notas)) return "a compensar";
+      return "";
+    };
+    const filas = [];
+    for (const [categoria, lista] of Object.entries(cat)) {
+      for (const x of lista) filas.push([categoria, clientes.get(x.fid) ?? x.fid, (nombresPorFamilia.get(x.fid) ?? []).join(" / "), x.n, x.cuota ?? "", x.crm ?? "", x.cobrado ?? 0, x.org ?? "", marcaDe(x.fid)]);
+    }
+    filas.sort((a, b) => String(a[1]).localeCompare(String(b[1]), "es"));
+    process.stdout.write("__TSV__\n");
+    process.stdout.write(["categoria", "familia", "pacientes", "reservas", "cuota", "crm", "cobrado", "organizate", "marca"].join("\t") + "\n");
+    for (const f of filas) process.stdout.write(f.join("\t") + "\n");
+    process.stdout.write("__FIN__\n");
+  }
+
   if (!CORREGIR) process.exit(0);
 
   // ── Corregir las SIN DESCUENTO ───────────────────────────────────────────
