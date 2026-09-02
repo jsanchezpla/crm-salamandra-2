@@ -1,6 +1,7 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound } from "../../../../../lib/utils/apiResponse.js";
 import { resolveCurrentTeamMemberId } from "../../../../../lib/team/currentTeamMember.js";
+import { incidenciaFueraDeAlcance, puedeBorrarIncidencia } from "../../../../../lib/clinica/alcanceIncidencias.js";
 import {
   serializeIncidencia,
   isValidCategory,
@@ -25,7 +26,7 @@ const INCLUDES = (M) => [
   { model: M.TeamMember, as: "assignees", attributes: ["id", "displayName", "avatarColor"], through: { attributes: [] }, required: false },
 ];
 
-export const GET = withTenant(async (_request, rc, ctx) => {
+export const GET = withTenant(async (request, rc, ctx) => {
   if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
   // Pantalla de EQUIPO AVANZADO: se vende aparte del módulo Equipo
   // básico (que es solo plantilla, usuarios, roles y accesos).
@@ -35,6 +36,8 @@ export const GET = withTenant(async (_request, rc, ctx) => {
   const M = ctx.tenantModels;
   const row = await M.Incidencia.findByPk(id, { include: INCLUDES(M) });
   if (!row) return notFound("Incidencia no encontrada");
+  // Quién ve qué (02/09/2026, Aumenta AV-0018): una ajena no existe para ti.
+  if (await incidenciaFueraDeAlcance(request, ctx, row)) return notFound("Incidencia no encontrada");
   return ok(serializeIncidencia(row));
 });
 
@@ -53,6 +56,7 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
   const { Incidencia, Patient, TeamMember } = M;
   const row = await Incidencia.findByPk(id);
   if (!row) return notFound("Incidencia no encontrada");
+  if (await incidenciaFueraDeAlcance(request, ctx, row)) return notFound("Incidencia no encontrada");
 
   let body;
   try {
@@ -180,13 +184,20 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
 });
 
 // DELETE — borrado físico. Solo dirección.
+// Borrar (02/09/2026, Aumenta AV-0013): dirección cualquiera; el resto SOLO la
+// que registró —una incidencia abierta por error se la quita quien la abrió—.
 export const DELETE = withTenant(async (request, rc, ctx) => {
   if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
-  if (!ADMIN_ROLES.has(ctx.user?.role)) return forbidden("Solo dirección puede eliminar incidencias");
   const { id } = await rc.params;
   if (!UUID_RE.test(id)) return error("id inválido");
-  const row = await ctx.tenantModels.Incidencia.findByPk(id);
+  const M = ctx.tenantModels;
+  const row = await M.Incidencia.findByPk(id);
   if (!row) return notFound("Incidencia no encontrada");
+  const esAdmin = ADMIN_ROLES.has(ctx.user?.role);
+  const yoSoy = esAdmin ? null : await resolveCurrentTeamMemberId(request, M);
+  if (!puedeBorrarIncidencia({ esAdmin, row, teamMemberId: yoSoy })) {
+    return forbidden("Solo dirección, o quien la registró, puede eliminar una incidencia");
+  }
   await row.destroy();
   return ok({ deleted: id });
 });

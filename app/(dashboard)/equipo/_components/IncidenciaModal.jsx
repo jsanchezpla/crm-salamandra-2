@@ -105,9 +105,13 @@ function ResponsablesDropdown({ therapists, assigneeIds, onToggle, inputCls }) {
  * Modal de incidencia — crea una nueva o gestiona una existente
  * (editar campos, cambiar estado, comentar, borrar).
  */
-export default function IncidenciaModal({ mode = "create", incidencia = null, therapists = [], patients = [], isAdmin = false, onClose, onSaved }) {
+export default function IncidenciaModal({ mode = "create", incidencia = null, therapists = [], patients = [], isAdmin = false, yoSoy = null, onClose, onSaved }) {
   const [inc, setInc] = useState(incidencia); // se refresca tras cada PATCH
   const isNew = mode === "create" && !inc;
+  // Borrar (02/09/2026, Aumenta AV-0013): dirección cualquiera; el resto solo
+  // la que registró ella misma —la abierta por error—. Misma regla que el
+  // DELETE del endpoint (`lib/clinica/alcanceIncidencias.js`).
+  const puedeBorrar = !isNew && (isAdmin || (Boolean(yoSoy) && inc?.reportedById === yoSoy));
 
   const [title, setTitle] = useState(inc?.title ?? "");
   const [category, setCategory] = useState(inc?.category ?? "terapeutica");
@@ -583,8 +587,8 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
 
         <div className="px-5 py-4 border-t border-neutral-100 flex items-center justify-between gap-2">
           <div>
-            {!isNew && isAdmin && (
-              <button onClick={delIncidencia} disabled={busy} className="text-[11px] text-rose-600 hover:underline disabled:opacity-50">Eliminar</button>
+            {puedeBorrar && (
+              <button onClick={delIncidencia} disabled={busy} title="Borra la incidencia del todo (por ejemplo, una abierta por error)" className="text-[11px] font-medium text-rose-600 border border-rose-200 rounded-lg px-3 py-1.5 hover:bg-rose-50 disabled:opacity-50">Eliminar incidencia</button>
             )}
           </div>
           <div className="flex gap-2">

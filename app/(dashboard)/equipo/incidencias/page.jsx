@@ -80,7 +80,12 @@ export default function IncidenciasPage() {
   // ¿Se está filtrando por responsable? Con `null` («las mías») solo si el
   // servidor sabe quién soy: quien no tiene ficha de equipo las ve todas, y
   // decirle «con estos filtros» sería mentirle.
-  const filtrandoPorResponsable = responsableId === null ? Boolean(data?.yoSoy) : Boolean(responsableId);
+  // Quien no es dirección solo ve las suyas (02/09/2026, Aumenta): para ella no
+  // hay filtro de responsable que valga, el alcance ya es «las mías».
+  const soloLasMias = data?.alcance === "mias";
+  const filtrandoPorResponsable = soloLasMias
+    ? false
+    : responsableId === null ? Boolean(data?.yoSoy) : Boolean(responsableId);
   const counts = data?.counts ?? { pending: 0, in_progress: 0, resolved: 0 };
   const totalCount = counts.pending + counts.in_progress + counts.resolved;
   const tabCount = (k) => (k === "" ? totalCount : counts[k] ?? 0);
@@ -101,7 +106,11 @@ export default function IncidenciasPage() {
               «Parcial» y «No resuelta» están dentro de «En proceso»: no tienen pestaña propia.
             </HelpTooltip>
           </h1>
-          <p className="text-xs text-neutral-400 mt-1">Registro y seguimiento de incidencias del equipo.</p>
+          <p className="text-xs text-neutral-400 mt-1">
+            {soloLasMias
+              ? "Ves las incidencias que registraste tú o que tienes asignadas. Dirección las ve todas."
+              : "Registro y seguimiento de incidencias del equipo."}
+          </p>
         </div>
         <button
           onClick={() => setModal({ mode: "create", incidencia: null })}
@@ -131,12 +140,18 @@ export default function IncidenciasPage() {
             dos desplegables era ruido. Cuál es cuál lo dice la opción neutra
             de cada uno, que es la que se ve mientras no hay filtro puesto. */}
         <div className="sm:ml-auto flex flex-wrap gap-2">
-          <Select value={registroId} onChange={setRegistroId} aria-label="Filtrar por quién registró la incidencia"
-            options={[{ value: "", label: "Registrada por cualquiera" }, ...(data?.therapists ?? []).map((t) => ({ value: t.id, label: t.name }))]}
-            className="text-xs border border-neutral-200 rounded-lg px-3 py-2 bg-white hover:border-neutral-300 cursor-pointer" />
-          <Select value={responsableId ?? data?.yoSoy ?? ""} onChange={setResponsableId} aria-label="Filtrar por responsable"
-            options={[{ value: "", label: "Cualquier responsable" }, ...(data?.therapists ?? []).map((t) => ({ value: t.id, label: t.name }))]}
-            className="text-xs border border-neutral-200 rounded-lg px-3 py-2 bg-white hover:border-neutral-300 cursor-pointer" />
+          {/* Los dos filtros por persona solo tienen sentido para quien ve las
+              de todo el equipo: a una terapeuta el servidor ya le da las suyas. */}
+          {!soloLasMias && (
+            <>
+              <Select value={registroId} onChange={setRegistroId} aria-label="Filtrar por quién registró la incidencia"
+                options={[{ value: "", label: "Registrada por cualquiera" }, ...(data?.therapists ?? []).map((t) => ({ value: t.id, label: t.name }))]}
+                className="text-xs border border-neutral-200 rounded-lg px-3 py-2 bg-white hover:border-neutral-300 cursor-pointer" />
+              <Select value={responsableId ?? data?.yoSoy ?? ""} onChange={setResponsableId} aria-label="Filtrar por responsable"
+                options={[{ value: "", label: "Cualquier responsable" }, ...(data?.therapists ?? []).map((t) => ({ value: t.id, label: t.name }))]}
+                className="text-xs border border-neutral-200 rounded-lg px-3 py-2 bg-white hover:border-neutral-300 cursor-pointer" />
+            </>
+          )}
           <Select value={category} onChange={setCategory}
             options={[{ value: "", label: "Todas las categorías" }, ...INCIDENCIA_CATEGORIES.map((c) => ({ value: c.key, label: c.label }))]}
             className="text-xs border border-neutral-200 rounded-lg px-3 py-2 bg-white hover:border-neutral-300 cursor-pointer" />
@@ -196,6 +211,7 @@ export default function IncidenciasPage() {
           therapists={data?.therapists ?? []}
           patients={data?.patients ?? []}
           isAdmin={isAdmin}
+          yoSoy={data?.yoSoy ?? null}
           onClose={() => setModal(null)}
           onSaved={load}
         />

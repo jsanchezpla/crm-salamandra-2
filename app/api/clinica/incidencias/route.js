@@ -3,6 +3,7 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden } from "../../../../lib/utils/apiResponse.js";
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
 import { madridToday } from "../../../../lib/utils/madridDate.js";
+import { veTodasLasIncidencias, whereIncidenciasVisibles } from "../../../../lib/clinica/alcanceIncidencias.js";
 import {
   serializeIncidencia,
   isValidCategory,
@@ -71,8 +72,16 @@ export const GET = withTenant(async (request, _rc, ctx) => {
    */
   const yoSoy = await resolveCurrentTeamMemberId(request, M);
 
+  // ── Quién ve qué (02/09/2026, Aumenta AV-0018) ────────────────────────────
+  // Dirección ve todas; el resto, solo las que registró o tiene asignadas. La
+  // regla vive en `lib/clinica/alcanceIncidencias.js` y entra como AND para no
+  // pisar el `where.id` que ponen los filtros de abajo. Para quien no es
+  // dirección, `mine=1` sobra: su alcance YA es «las mías».
+  const esAdmin = veTodasLasIncidencias(ctx);
+  if (!esAdmin) where[Op.and] = [await whereIncidenciasVisibles(M, yoSoy)];
+
   let assignedToId = sp.get("assignedToId");
-  if (sp.get("mine") === "1") {
+  if (sp.get("mine") === "1" && esAdmin) {
     /*
      * Sin ficha de equipo —direccion, o quien entra con un usuario que no esta
      * en la plantilla— «las mias» no significa nada, y antes esto ponia un id
@@ -143,6 +152,8 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     patients,
     // Quien mira, si esta en la plantilla. `null` = no tiene ficha de equipo.
     yoSoy,
+    // Para que la pantalla diga si está viendo todas o solo las suyas.
+    alcance: esAdmin ? "todas" : "mias",
   });
 });
 

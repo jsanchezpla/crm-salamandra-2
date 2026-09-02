@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
+import { incidenciaFueraDeAlcance } from "../../../../../../lib/clinica/alcanceIncidencias.js";
 import { ok, created, error, forbidden, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
 import {
   MAX_FILE_SIZE_BYTES,
@@ -39,7 +40,7 @@ function serialize(doc) {
   };
 }
 
-export const GET = withTenant(async (_request, { params }, ctx) => {
+export const GET = withTenant(async (request, { params }, ctx) => {
   try {
     if (!gate(ctx)) return forbidden("Módulo Clínica/Pacientes no activo");
     if (!ctx.hasModule("team_avanzado")) return forbidden("Módulo Equipo avanzado no activo");
@@ -47,8 +48,9 @@ export const GET = withTenant(async (_request, { params }, ctx) => {
     if (!UUID_RE.test(id)) return error("id inválido");
     const { Incidencia, Document } = ctx.tenantModels;
 
-    const incidencia = await Incidencia.findByPk(id, { attributes: ["id"] });
+    const incidencia = await Incidencia.findByPk(id, { attributes: ["id", "reportedById", "assignedToId"] });
     if (!incidencia) return notFound("Incidencia no encontrada");
+    if (await incidenciaFueraDeAlcance(request, ctx, incidencia)) return notFound("Incidencia no encontrada");
 
     const rows = await Document.findAll({
       where: { incidenciaId: id },
@@ -71,8 +73,9 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     if (!ownerUserId) return error("No autorizado", 401);
     const { Incidencia, Document } = ctx.tenantModels;
 
-    const incidencia = await Incidencia.findByPk(id, { attributes: ["id", "patientId", "clientId"] });
+    const incidencia = await Incidencia.findByPk(id, { attributes: ["id", "patientId", "clientId", "reportedById", "assignedToId"] });
     if (!incidencia) return notFound("Incidencia no encontrada");
+    if (await incidenciaFueraDeAlcance(request, ctx, incidencia)) return notFound("Incidencia no encontrada");
 
     const count = await Document.count({ where: { incidenciaId: id } });
     if (count >= MAX_FILES_PER_INCIDENCIA) {

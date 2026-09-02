@@ -1,4 +1,5 @@
 import { withTenant } from "../../../../../../../../lib/tenant/withTenant.js";
+import { incidenciaFueraDeAlcance } from "../../../../../../../../lib/clinica/alcanceIncidencias.js";
 import { error, forbidden, notFound, serverError } from "../../../../../../../../lib/utils/apiResponse.js";
 import { readDocumentStream } from "../../../../../../../../lib/documents/documentStorage.js";
 
@@ -13,13 +14,17 @@ function gate(ctx) {
  * Sirve el fichero por STREAM (Content-Disposition: attachment). Aislado a los
  * documentos de ESTA incidencia (source='incidencia').
  */
-export const GET = withTenant(async (_request, { params }, ctx) => {
+export const GET = withTenant(async (request, { params }, ctx) => {
   try {
     if (!gate(ctx)) return forbidden("Módulo Clínica/Pacientes no activo");
     if (!ctx.hasModule("team_avanzado")) return forbidden("Módulo Equipo avanzado no activo");
     const { id, docId } = await params;
     if (!UUID_RE.test(id) || !UUID_RE.test(docId)) return error("id inválido");
-    const { Document } = ctx.tenantModels;
+    const { Document, Incidencia } = ctx.tenantModels;
+
+    // Quién ve qué (02/09/2026): el adjunto es de su incidencia.
+    const incidencia = await Incidencia.findByPk(id, { attributes: ["id", "reportedById", "assignedToId"] });
+    if (!incidencia || (await incidenciaFueraDeAlcance(request, ctx, incidencia))) return notFound("Documento no encontrado");
 
     const row = await Document.findOne({ where: { id: docId, incidenciaId: id, source: "incidencia" } });
     if (!row) return notFound("Documento no encontrado");
