@@ -1685,6 +1685,21 @@ Rodrigo el mismo día:
   en `app/globals.css`) y con `expandRows` la jornada entera cabe en la
   pantalla sin desplazarse; se recuerda en `localStorage`.
 
+## Por terapeuta: una columna por agenda y arrastrar entre columnas (02/09/2026)
+
+AV-0016 de Aumenta: «viendo los dos horarios a la vez, mover la sesión de una
+agenda a la otra». Rodrigo: que lo cambien sin fricción. Botón «Por terapeuta»
+en la botonera (solo para quien ve más de una agenda):
+`modules/default/citas/AgendaPorTerapeuta.jsx` pinta un día con una columna
+por profesional del filtro (hasta 8; cada columna es un `FullCalendar` de día
+independiente, porque partir un día por persona en la propia librería es su
+plugin de recursos, de pago) y usa lo que trae de fábrica para arrastrar un
+evento de un calendario a otro (`droppable` + `eventReceive`): al soltar, UN
+`PATCH /api/citas/bookings/[id]` con `teamMemberId` y `scheduledAt`, que
+valida el solape y, si no deja, la cita vuelve con el aviso. Los bloqueos se
+ven pero no se arrastran ahí; «Volver» devuelve la agenda de siempre en el
+mismo día.
+
 ## Migraciones
 
 Las del módulo están registradas en `MODULES.citas` de

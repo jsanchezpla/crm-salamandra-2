@@ -29,6 +29,7 @@ import { fichaDeLaCita } from "@/lib/citas/fichaDeLaCita.js";
 import { NuevaCitaDrawer } from "./citas/NuevaCitaDrawer.jsx";
 import { Waitlist } from "./citas/Waitlist.jsx";
 import MiniMeses from "./citas/MiniMeses.jsx";
+import AgendaPorTerapeuta from "./citas/AgendaPorTerapeuta.jsx";
 
 /**
  * `conClientes` y `vocabulario` los resuelve la página (servidor): son para el
@@ -156,6 +157,25 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
    * queda como se dejó (localStorage), como la columna de meses.
    */
   const [compacta, setCompacta] = useState(false);
+  /*
+   * POR TERAPEUTA (02/09/2026, AV-0016 de Aumenta): un día con una columna
+   * por profesional, y las citas se arrastran de una columna a otra para
+   * pasárselas. Sustituye al calendario grande mientras está puesta; «Volver»
+   * lo trae de vuelta en el mismo día. Ver ./citas/AgendaPorTerapeuta.jsx.
+   */
+  const [porTerapeuta, setPorTerapeuta] = useState(false);
+  const [fechaColumnas, setFechaColumnas] = useState(() => new Date());
+  function abrirPorTerapeuta() {
+    const d = calendarRef.current?.getApi?.()?.getDate?.();
+    setFechaColumnas(d instanceof Date && !Number.isNaN(d.getTime()) ? d : new Date());
+    setPorTerapeuta(true);
+  }
+  function cerrarPorTerapeuta() {
+    // El calendario grande se vuelve a montar en el día que se estaba mirando.
+    calViewRef.current = { view: "timeGridDay", date: fechaColumnas.toISOString() };
+    setCalView({ view: "timeGridDay", date: fechaColumnas.toISOString() });
+    setPorTerapeuta(false);
+  }
   useEffect(() => {
     try { setCompacta(localStorage.getItem("citas.compacta") === "1"); } catch { /* sin memoria, arranca normal */ }
   }, []);
@@ -1047,7 +1067,19 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
               alPulsarDia={(d) => calendarRef.current?.getApi()?.gotoDate(d)}
             />
           )}
-          <div className="flex-1 min-w-0 min-h-0">
+          <div className="flex-1 min-w-0 min-h-0 flex flex-col">
+          {porTerapeuta ? (
+            <AgendaPorTerapeuta
+              teamMembers={teamMembers}
+              visibleTmIds={visibleTmIds}
+              fecha={fechaColumnas}
+              onFecha={setFechaColumnas}
+              vista={vista}
+              onEventClick={handleEventClick}
+              avisar={avisar}
+              onVolver={cerrarPorTerapeuta}
+            />
+          ) : (
           <FullCalendar
             ref={calendarRef}
             plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
@@ -1091,7 +1123,11 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
             headerToolbar={
               esMovil
                 ? { left: "compacta prev,next", center: "title", right: "listWeek,timeGridTresDias,timeGridDay" }
-                : { left: "meses compacta prev,next today", center: "title", right: "dayGridMonth,timeGridWeek,timeGridTresDias,timeGridDay,listWeek" }
+                : {
+                    left: `meses compacta${veTodaLaAgenda && teamMembers.length > 1 ? " porTerapeuta" : ""} prev,next today`,
+                    center: "title",
+                    right: "dayGridMonth,timeGridWeek,timeGridTresDias,timeGridDay,listWeek",
+                  }
             }
             /*
              * El botón que abre y cierra la columna de meses. Va DENTRO de la
@@ -1100,6 +1136,11 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
              * aparece: la columna no cabe y no se pinta.
              */
             customButtons={{
+              porTerapeuta: {
+                text: "Por terapeuta",
+                hint: "Un día con una columna por terapeuta; arrastra una cita a otra columna para pasársela",
+                click: abrirPorTerapeuta,
+              },
               compacta: {
                 text: compacta ? "Ajustar: sí" : "Ajustar",
                 hint: "Encoger las franjas para que la jornada entera quepa en la pantalla sin desplazarse",
@@ -1203,6 +1244,7 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
             height="100%"
             buttonText={{ today: "Hoy", month: "Mes", week: "Semana", day: "Día", list: "Lista" }}
           />
+          )}
           </div>
           </div>
         </div>

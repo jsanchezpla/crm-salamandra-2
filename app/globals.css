@@ -368,6 +368,12 @@ body {
    haya, así que la jornada entera cabe sin desplazarse. El texto de una cita
    corta se corta antes; se pidió ver el día completo y eso es lo que gana. */
 .agenda-compacta .fc .fc-timegrid-slot { height: 0.6em; }
+/* Columnas por terapeuta (02/09/2026, AV-0016): cada columna es un calendario
+   de día; franjas algo más bajas para que quepan varias agendas a la vez, y
+   sin la cabecera del día, que ya la pone la columna con el nombre. */
+.agenda-columna .fc .fc-timegrid-slot { height: 1.5em; }
+.agenda-columna .fc .fc-col-header { display: none; }
+.agenda-columna .fc .fc-timegrid-axis { width: 42px; }
 .agenda-compacta .fc .fc-timegrid-event .fc-event-main { padding-top: 0; padding-bottom: 0; line-height: 1.1; }
 /* El resaltado de una selección, igual: lo pinta la librería leyendo
    `--fc-highlight-color`, por el mismo motivo que el día de hoy. */
