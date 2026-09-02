@@ -7,10 +7,10 @@
 # ninguna copia reciente. Esto lo automatiza.
 #
 # QUÉ HACE: un pg_dump comprimido de TODA la base (todos los tenants + master)
-# MÁS los ficheros subidos (uploads/), guardando SOLO LA ÚLTIMA copia de cada
-# clase en el servidor y, si está configurado, copia a un destino FUERA del
-# servidor — una copia que SUMA (un borrado aquí no viaja allí) y que se poda
-# sola a las dos últimas (ver «CUÁNTAS SE GUARDAN»). Es idempotente.
+# MÁS los ficheros subidos (uploads/), guardando la ÚLTIMA SEMANA en el
+# servidor y, si está configurado, copia a un destino FUERA del servidor — una
+# copia que SUMA (un borrado aquí no viaja allí) y que se poda sola a las dos
+# últimas semanas (ver «CUÁNTAS SE GUARDAN»). Es idempotente.
 #
 # ─── LOS FICHEROS NO CABEN (28/08/2026) ──────────────────────────────────────
 # Hasta hoy, cada madrugada se empaquetaba el archivo ENTERO en un .tar.gz. Con
@@ -136,36 +136,41 @@
 # suma. Lo que ya llegó allí no lo borra este script pase lo que pase aquí, y no
 # hace falta que el proveedor tenga versionado ni papelera activados.
 #
-# ─── CUÁNTAS SE GUARDAN — SOLO LA ÚLTIMA (Rodrigo, 03/09/2026) ───────────────
+# ─── CUÁNTAS SE GUARDAN — UNA SEMANA AQUÍ, DOS FUERA (Rodrigo, 03/09/2026) ───
 # Hasta hoy se guardaba por EDAD: 14 días aquí y 90 fuera. Con el archivo de
 # Aumenta dentro (6,3 GB de uploads, más su espejo, más un paquete de 5,4 GB
 # cada domingo) el disco de 99 GB pasó de 85 GB libres a 14 y llegaron dos
 # correos de aviso seguidos. Rodrigo decidió que sobra historial:
 #
-#   · en el SERVIDOR se guarda LA ÚLTIMA copia de cada clase y nada más
-#     (COPIAS_EN_SERVIDOR=1): el volcado de esta noche y el paquete de ficheros
-#     más nuevo. «Eso siempre.»
-#   · FUERA se guardan LAS DOS ÚLTIMAS de cada clase (COPIAS_FUERA=2).
-#   · las noches de cambios de uploads-cambios/ siguen yendo por edad, ahora a
-#     7 días (RETENCION_DIAS), nunca menos de 3 noches. El espejo no es una
-#     copia vieja, es el estado de hoy: no se toca.
+#   · en el SERVIDOR se guarda LA ÚLTIMA SEMANA (DIAS_EN_SERVIDOR=7): los 7
+#     volcados nocturnos más nuevos y el último paquete de ficheros. «Eso
+#     siempre.»
+#   · FUERA se guardan LAS DOS ÚLTIMAS SEMANAS (DIAS_FUERA=14): 14 volcados
+#     y 2 paquetes.
+#   · las noches de cambios de uploads-cambios/ siguen yendo por edad, a 7
+#     días (RETENCION_DIAS = DIAS_EN_SERVIDOR), nunca menos de 3 noches. El
+#     espejo no es una copia vieja, es el estado de hoy: no se toca.
 #
-# Se cuenta POR NÚMERO y no por edad a propósito: «las N últimas» se deciden
-# por NOMBRE (llevan la fecha dentro y ordenan solas), sobre lo que hay, así
-# que un reloj loco o un servidor parado un mes no pueden dejar el destino
-# vacío. Los frenos que quedan, todos EN LA DUDA NO BORRA: si COPIAS_* no es
-# un entero mayor que cero no se borra nada y se avisa; fuera solo se poda si
-# la subida de esta noche salió bien Y el volcado de esta noche aparece en la
-# lista del destino; si el destino no se deja listar o contesta vacío, no se
-# toca; y solo se miran `auto-*.sql.gz` y `uploads-*.tar.gz` de la RAÍZ, nunca
-# las copias manuales ni lo que otro deje ahí. La rama rsync sigue sin borrar
-# nada en la otra máquina: que ese servidor tenga su propia limpieza.
+# Los días se traducen a NÚMERO de copias (`copias_en_dias`): un volcado por
+# noche, un paquete de ficheros por semana. Se cuenta por número y no por edad
+# a propósito: «las N últimas» se deciden por NOMBRE (llevan la fecha dentro y
+# ordenan solas), sobre lo que hay, así que un reloj loco o un servidor parado
+# un mes no pueden dejar el destino vacío. Los frenos que quedan, todos EN LA
+# DUDA NO BORRA: si DIAS_* no es un entero mayor que cero no se borra nada y se
+# avisa; fuera solo se poda si la subida de esta noche salió bien Y el volcado
+# de esta noche aparece en la lista del destino; si el destino no se deja
+# listar o contesta vacío, no se toca; y solo se miran `auto-*.sql.gz` y
+# `uploads-*.tar.gz` de la RAÍZ, nunca las copias manuales ni lo que otro deje
+# ahí. La rama rsync sigue sin borrar nada en la otra máquina: que ese servidor
+# tenga su propia limpieza.
 #
-# Lo que se pierde a cambio, dicho claro: fuera hay dos noches de historial,
-# no noventa. Una corrupción que se descubra a las tres semanas ya no tiene
-# copia sana a la que volver. Es una decisión de negocio, no técnica, y está
-# en docs/decisions/2026-09-03-solo-la-ultima-copia-en-el-servidor.md (que
-# supera la caducidad por edad de 2026-08-21-el-borrado-no-viaja.md).
+# Lo que se pierde a cambio, dicho claro: fuera hay dos semanas de historial,
+# no noventa días. Una corrupción que se descubra al mes ya no tiene copia sana
+# a la que volver. Es una decisión de negocio, no técnica, y está en
+# docs/decisions/2026-09-03-una-semana-aqui-dos-fuera.md (que supera la
+# caducidad por edad de 2026-08-21-el-borrado-no-viaja.md). Primero se pidió
+# «solo la última» y se aclaró el mismo día: el correo del lunes es un parte,
+# la copia es de cada noche.
 
 set -euo pipefail
 
@@ -176,11 +181,12 @@ CONTENEDOR_DB="${CONTENEDOR_DB:-crm-salamandra-db-1}"
 USUARIO_DB="${USUARIO_DB:-crm_user}"
 NOMBRE_DB="${NOMBRE_DB:-salamandra}"
 # ─── Cuántas copias se guardan (Rodrigo, 03/09/2026) ─────────────────────────
-# Por NÚMERO, no por edad — ver «CUÁNTAS SE GUARDAN» en la cabecera. De cada
-# clase (volcados de la base, paquetes de ficheros), las N más nuevas.
-COPIAS_EN_SERVIDOR="${COPIAS_EN_SERVIDOR:-1}" # aquí: la última y nada más
-COPIAS_FUERA="${COPIAS_FUERA:-2}"             # en el destino externo: las dos últimas
-RETENCION_DIAS="${RETENCION_DIAS:-7}"         # noches de cambios de uploads-cambios/ (era 14)
+# En días, pero contados por NÚMERO de copias y no por edad — ver «CUÁNTAS SE
+# GUARDAN» en la cabecera: un volcado por noche, un paquete de ficheros por
+# semana (`copias_en_dias`).
+DIAS_EN_SERVIDOR="${DIAS_EN_SERVIDOR:-7}"  # aquí: la última semana (7 volcados + 1 paquete)
+DIAS_FUERA="${DIAS_FUERA:-14}"             # fuera: las dos últimas semanas (14 volcados + 2 paquetes)
+RETENCION_DIAS="${RETENCION_DIAS:-$DIAS_EN_SERVIDOR}" # noches de cambios de uploads-cambios/ (era 14)
 MINIMO_BYTES="${MINIMO_BYTES:-100000}" # por debajo de esto, el volcado es basura
 # ─── Los ficheros subidos, desde el 28/08/2026 ───────────────────────────────
 # Ya no se empaqueta el archivo entero cada noche (ver «LOS FICHEROS NO CABEN»
@@ -296,9 +302,9 @@ cuerpo_semanal() {
   # destino rsync donde no se borra nada, es contarle al lector una limpieza
   # que no pasa.
   if [ "$modo_remoto" = "rclone" ]; then
-    echo "Se guardan: $COPIAS_EN_SERVIDOR copia(s) de cada clase aquí · $COPIAS_FUERA fuera del servidor · $RETENCION_DIAS noches de cambios de ficheros."
+    echo "Se guardan: $DIAS_EN_SERVIDOR días aquí · $DIAS_FUERA días fuera del servidor · $RETENCION_DIAS noches de cambios de ficheros."
   else
-    echo "Se guardan: $COPIAS_EN_SERVIDOR copia(s) de cada clase aquí · $RETENCION_DIAS noches de cambios de ficheros."
+    echo "Se guardan: $DIAS_EN_SERVIDOR días aquí · $RETENCION_DIAS noches de cambios de ficheros."
   fi
   echo ""
   echo "Copias de la base guardadas:     $(find "$DIR_BACKUPS" -maxdepth 1 -name 'auto-*.sql.gz' -type f | wc -l)"
@@ -316,7 +322,7 @@ cuerpo_semanal() {
   elif [ "$ok_remoto" = "1" ]; then
     echo "Copia fuera del servidor: OK → $DESTINO_REMOTO"
     if [ "$modo_remoto" = "rclone" ]; then
-      echo "(solo suma: un borrado aquí NO viaja allí; allí se guardan las $COPIAS_FUERA últimas de cada clase)"
+      echo "(solo suma: un borrado aquí NO viaja allí; allí se guardan los últimos $DIAS_FUERA días)"
     else
       echo "(solo suma: un borrado aquí NO viaja allí; allí NO se caduca nada —"
       echo "este script no borra en otra máquina: la limpieza la pone ese servidor)"
@@ -351,15 +357,24 @@ filtrar_clase() {
   done <<<"$2"
 }
 
+# Cuántas copias de una clase caben en N días: los volcados de la base son uno
+# por noche; los paquetes de ficheros, uno por semana (y nunca menos de uno).
+copias_en_dias() {
+  case "$1" in
+    uploads-*) echo $((($2 + 6) / 7)) ;;
+    *) echo "$2" ;;
+  esac
+}
+
 # ─── Poda en el destino externo ──────────────────────────────────────────────
 # La subida es `rclone copy`: allí no se borra nada, así que el destino crecería
 # sin fin. Desde el 03/09/2026 se poda POR NÚMERO (ver «CUÁNTAS SE GUARDAN» en
 # la cabecera): de cada clase —volcados de la base, paquetes de ficheros— se
-# quedan las $COPIAS_FUERA más nuevas y se borra el resto. Es la ÚNICA parte
+# quedan las que caben en $DIAS_FUERA días y se borra el resto. Es la ÚNICA parte
 # del script que borra algo que ya está fuera del servidor, y está escrita para
 # que EN LA DUDA NO BORRE. Cinco frenos, cualquiera la para en seco:
 #
-#   0. si COPIAS_FUERA no es un entero mayor que cero → no borra y avisa. En un
+#   0. si DIAS_FUERA no es un entero mayor que cero → no borra y avisa. En un
 #      camino que borra copias, un `[ 0 -lt abc ]` no es un error de tipos: es
 #      el último freno desarmado en silencio (bash lo da por falso y sigue);
 #   1. solo se llama si la subida de esta noche salió bien;
@@ -379,12 +394,12 @@ podar_en_destino() {
   local filtros=(--max-depth 1 --include "auto-*.sql.gz" --include "uploads-*.tar.gz")
   local todo n_todo clase lista n_clase n_sobran sobran lista_tmp borradas=0
 
-  if ! [[ "${COPIAS_FUERA-}" =~ ^[0-9]+$ ]] || [ "$COPIAS_FUERA" -lt 1 ]; then
-    echo "[$(date '+%F %T')] ⛔ COPIAS_FUERA vale '${COPIAS_FUERA-}': tiene que ser un entero mayor que cero."
+  if ! [[ "${DIAS_FUERA-}" =~ ^[0-9]+$ ]] || [ "$DIAS_FUERA" -lt 1 ]; then
+    echo "[$(date '+%F %T')] ⛔ DIAS_FUERA vale '${DIAS_FUERA-}': tiene que ser un entero mayor que cero."
     echo "[$(date '+%F %T')]    NO se poda nada en $DESTINO_REMOTO: con un ajuste que no se"
     echo "[$(date '+%F %T')]    entiende, los frenos no valen y esto borra copias de seguridad."
     avisar "⚠️ La poda de la copia externa está mal configurada" aviso \
-      "$(cuerpo_de_fallo "COPIAS_FUERA vale '${COPIAS_FUERA-}' y no es un entero mayor que cero; no se ha podado nada en $DESTINO_REMOTO")" || true
+      "$(cuerpo_de_fallo "DIAS_FUERA vale '${DIAS_FUERA-}' y no es un entero mayor que cero; no se ha podado nada en $DESTINO_REMOTO")" || true
     return 0
   fi
 
@@ -409,7 +424,7 @@ podar_en_destino() {
   for clase in 'auto-*.sql.gz' 'uploads-*.tar.gz'; do
     lista=$(filtrar_clase "$clase" "$todo" | sort)
     n_clase=$(contar_lineas "$lista")
-    n_sobran=$((n_clase - COPIAS_FUERA))
+    n_sobran=$((n_clase - $(copias_en_dias "$clase" "$DIAS_FUERA")))
     [ "$n_sobran" -gt 0 ] || continue
     # Ordenadas por nombre, las viejas van arriba: `head` se lleva las que sobran.
     sobran=$(printf '%s\n' "$lista" | head -n "$n_sobran")
@@ -422,7 +437,7 @@ podar_en_destino() {
     fi
   done
   rm -f "$lista_tmp"
-  echo "[$(date '+%F %T')] Poda externa: $borradas copia(s) borradas; quedan las $COPIAS_FUERA últimas de cada clase ($((n_todo - borradas)) fichero(s) allí)."
+  echo "[$(date '+%F %T')] Poda externa: $borradas copia(s) borradas; quedan los últimos $DIAS_FUERA días ($((n_todo - borradas)) fichero(s) allí)."
   return 0
 }
 
@@ -553,11 +568,12 @@ if [ -n "${DIR_CAMBIOS:-}" ] && [ -d "$DIR_CAMBIOS" ]; then
 fi
 
 # ─── Rotación ────────────────────────────────────────────────────────────────
-# Se guarda SOLO la última copia automática de cada clase (Rodrigo, 03/09/2026:
-# «en el servidor, la última; eso siempre»): el volcado de esta noche y el
-# paquete de ficheros más nuevo. Las manuales (pre-deploy-*, etc.) NO se tocan:
+# Se guarda la última SEMANA de copias automáticas (Rodrigo, 03/09/2026: «en
+# el servidor, la última semana; eso siempre»): los $DIAS_EN_SERVIDOR volcados
+# más nuevos y el último paquete de ficheros (`copias_en_dias`). Las manuales
+# (pre-deploy-*, etc.) NO se tocan:
 # son puntos de rescate deliberados. Se decide por NOMBRE y no por edad, como
-# en la poda de fuera; y si COPIAS_EN_SERVIDOR no es un entero mayor que cero,
+# en la poda de fuera; y si DIAS_EN_SERVIDOR no es un entero mayor que cero,
 # no se borra nada. Llega aquí solo si el volcado de esta noche ha salido bien
 # (si no, el script ya ha terminado antes): nunca se tira la de anoche sin
 # tener la de hoy.
@@ -566,21 +582,21 @@ fi
 # $DIR_BACKUPS, un `find` sin tope recorrería los ficheros de los clientes. Un
 # documento subido por alguien y llamado `uploads-2019.tar.gz` encajaría en el
 # patrón y se borraría de la copia de seguridad. Las copias están en la raíz.
-if [[ "${COPIAS_EN_SERVIDOR-}" =~ ^[0-9]+$ ]] && [ "$COPIAS_EN_SERVIDOR" -ge 1 ]; then
+if [[ "${DIAS_EN_SERVIDOR-}" =~ ^[0-9]+$ ]] && [ "$DIAS_EN_SERVIDOR" -ge 1 ]; then
   borradas=0
   for clase in 'auto-*.sql.gz' 'uploads-*.tar.gz'; do
     lista=$(find "$DIR_BACKUPS" -maxdepth 1 -name "$clase" -type f -printf '%f\n' | sort)
     n_clase=$(contar_lineas "$lista")
-    n_sobran=$((n_clase - COPIAS_EN_SERVIDOR))
+    n_sobran=$((n_clase - $(copias_en_dias "$clase" "$DIAS_EN_SERVIDOR")))
     [ "$n_sobran" -gt 0 ] || continue
     while IFS= read -r fichero; do
       [ -n "$fichero" ] || continue
       rm -f "$DIR_BACKUPS/$fichero" && borradas=$((borradas + 1))
     done <<<"$(printf '%s\n' "$lista" | head -n "$n_sobran")"
   done
-  echo "[$(date '+%F %T')] Rotación: $borradas copia(s) borradas; se guarda(n) la(s) $COPIAS_EN_SERVIDOR última(s) de cada clase."
+  echo "[$(date '+%F %T')] Rotación: $borradas copia(s) borradas; se guardan los últimos $DIAS_EN_SERVIDOR días."
 else
-  echo "[$(date '+%F %T')] ⛔ COPIAS_EN_SERVIDOR vale '${COPIAS_EN_SERVIDOR-}': tiene que ser un entero mayor que cero. NO se rota nada."
+  echo "[$(date '+%F %T')] ⛔ DIAS_EN_SERVIDOR vale '${DIAS_EN_SERVIDOR-}': tiene que ser un entero mayor que cero. NO se rota nada."
 fi
 
 total=$(find "$DIR_BACKUPS" -maxdepth 1 -name 'auto-*.sql.gz' -type f | wc -l)
@@ -595,8 +611,8 @@ echo "[$(date '+%F %T')] Copias automáticas guardadas: $total · espacio: $(du 
 #
 # Esto SUMA, no espeja: ni `sync` ni `--delete`, para que un borrado de aquí no
 # viaje allí (ver «EL BORRADO NO VIAJA» en la cabecera). Lo que sobre fuera lo
-# quita la poda propia del destino (las $COPIAS_FUERA últimas de cada clase),
-# no el reflejo de lo que pase aquí.
+# quita la poda propia del destino (los últimos $DIAS_FUERA días), no el
+# reflejo de lo que pase aquí.
 if [ -n "$DESTINO_REMOTO" ]; then
   echo "[$(date '+%F %T')] Copiando fuera del servidor → $DESTINO_REMOTO"
   ok_remoto=0

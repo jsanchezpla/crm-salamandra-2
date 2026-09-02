@@ -14,13 +14,14 @@ Type=oneshot
 #
 # Esa copia SUMA y no espeja: un borrado aquí NO viaja allí, así que lo de fuera
 # sobrevive a que alguien vacíe /opt/crm-salamandra/backups. Por eso el destino
-# tiene su propia poda, que desde el 03/09/2026 (Rodrigo) va POR NÚMERO y no
-# por edad: en el servidor se guarda solo la última copia de cada clase, fuera
-# las dos últimas, y las noches de cambios de ficheros duran 7 días. Los
-# valores por defecto son esos; solo hace falta tocarlos si se quiere más
-# historial (ver «CUÁNTAS SE GUARDAN» en la cabecera de backup-db.sh):
-#Environment="COPIAS_EN_SERVIDOR=1"
-#Environment="COPIAS_FUERA=2"
+# tiene su propia poda, que desde el 03/09/2026 (Rodrigo) va POR NÚMERO de
+# copias y no por edad: en el servidor se guarda la última semana (7 volcados
+# y 1 paquete de ficheros), fuera las dos últimas semanas (14 y 2), y las
+# noches de cambios de ficheros duran lo mismo que el servidor. Los valores
+# por defecto son esos; solo hace falta tocarlos si se quiere más historial
+# (ver «CUÁNTAS SE GUARDAN» en la cabecera de backup-db.sh):
+#Environment="DIAS_EN_SERVIDOR=7"
+#Environment="DIAS_FUERA=14"
 #Environment="RETENCION_DIAS=7"
 #
 # Si alguno no es un entero mayor que cero, el script no borra nada y manda
