@@ -1307,6 +1307,30 @@ el `ExportButtons.jsx` (Excel + ZIP de PDF) que llevan varias de ellas.
 Mobile: los drawers usan `top-14 lg:top-0 ... bottom-0` (CLAUDE.md regla 13)
 para respetar la barra del menú móvil.
 
+## Factura a nombre de un tutor de la familia (02/09/2026)
+
+Decisión de Rodrigo: dentro de una misma ficha conviven los tutores, y al
+facturar se puede pedir una factura para cada uno —o para una empresa o
+fundación—, por importe o por porcentaje (una sola forma por reparto), tantas
+como haga falta por el mismo paciente.
+
+- **Dónde vive**: `invoices.guardian_id` (migración
+  `migrate-invoices-a-nombre-de-tutor`, columna opcional). El pagador sigue
+  siendo `client_id` (la familia): la factura cuelga de su ficha, sus cobros y
+  su morosidad. `guardian_id` dice a QUIÉN se le emite: la entrada de
+  `clients.guardians`.
+- **A quién se le emite**: `lib/billing/datosFiscales.js` — `tutorDe`,
+  `fotoFiscalDeTutor` (nombre y DNI del tutor con la dirección fiscal de la
+  familia), `aNombreDe` (para las pantallas) y `faltaParaEmitirATutor` (sin
+  DNI no se emite; el candado está en `/issue` y en la pantalla). Al emitir se
+  congela la foto del tutor en `fiscal_snapshot`; un borrador imprime al tutor
+  vivo; la rectificativa conserva `guardian_id`.
+- **Cómo se pide**: en el reparto de una factura (`PatientReparto`), cada fila
+  elige «La familia», uno de sus tutores o «Otra ficha»; `POST /api/billing/invoices`
+  acepta `guardianId` y comprueba que sea un tutor de ESA ficha. Las listas
+  blancas de cliente traen `guardians` (`ATRIBUTOS_CLIENTE_FACTURA`,
+  `ATRIBUTOS_PARA_CONGELAR`). Prueba: `scripts/_smoke-factura-a-nombre-de-tutor.mjs`.
+
 ## Migración y backfill
 
 Fichero: `scripts/migrate-billing-rework.js`. Estructura en dos fases:

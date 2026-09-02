@@ -6,7 +6,7 @@ import { withEffectiveStatus } from "../../../../../../lib/billing/invoiceStatus
 import { applyStockMovementsForInvoice } from "../../../../../../lib/inventory/applyStockMovementsForInvoice.js";
 
 import { nifDeCliente } from "../../../../../../lib/billing/nifCliente.js";
-import { fotoFiscalDe } from "../../../../../../lib/billing/datosFiscales.js";
+import { fotoFiscalDe, tutorDe, fotoFiscalDeTutor, faltaParaEmitirATutor } from "../../../../../../lib/billing/datosFiscales.js";
 
 /**
  * POST /api/billing/invoices/[id]/issue
@@ -46,14 +46,22 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
     // de quién se emite) y cae al de la ficha. Sin ese respaldo, los clientes
     // que son empresas —cuyo `taxId` YA es su CIF— dejarían de poder emitir.
     const c = invoice.client;
-    const missing = [];
-    if (!c?.fiscalName && !c?.name) missing.push("razón social");
-    if (!nifDeCliente(c)) missing.push("NIF/CIF");
-    if (missing.length > 0) {
-      return error(
-        `El cliente no tiene datos fiscales completos: falta ${missing.join(" y ")}. Edita la ficha del cliente antes de emitir.`,
-        422
-      );
+    // A nombre de un TUTOR (02/09/2026): lo que tiene que estar completo es el
+    // tutor —nombre y DNI—, no la razón social de la familia.
+    const tutor = invoice.guardianId ? tutorDe(c, invoice.guardianId) : null;
+    if (invoice.guardianId) {
+      const falta = faltaParaEmitirATutor(invoice, c);
+      if (falta) return error(`${falta}. Corrígelo antes de emitir.`, 422);
+    } else {
+      const missing = [];
+      if (!c?.fiscalName && !c?.name) missing.push("razón social");
+      if (!nifDeCliente(c)) missing.push("NIF/CIF");
+      if (missing.length > 0) {
+        return error(
+          `El cliente no tiene datos fiscales completos: falta ${missing.join(" y ")}. Edita la ficha del cliente antes de emitir.`,
+          422
+        );
+      }
     }
 
     // Si el borrador se emite sin dueDate, aplicar el plazo por defecto del
@@ -90,7 +98,7 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
        * borrador que se pueda rehacer. Congelarla en cualquier otro punto sería
        * congelar un dato que todavía podía cambiar.
        */
-      updates.fiscalSnapshot = fotoFiscalDe(c);
+      updates.fiscalSnapshot = tutor ? fotoFiscalDeTutor(tutor, c) : fotoFiscalDe(c);
       await invoice.update(updates, { transaction: t });
 
       // El stock YA NO se descuenta aquí: se mueve en Pedidos (rework

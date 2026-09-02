@@ -1,5 +1,6 @@
 import { Op } from "sequelize";
 import { filtroPorNombre } from "../../../../lib/utils/busquedaDb.js";
+import { tutorDe } from "../../../../lib/billing/datosFiscales.js";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { logBillingAudit, resumenFactura, datosPeticion } from "../../../../lib/billing/audit.js";
 import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
@@ -115,6 +116,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     const {
       clientId,
       patientId,
+      guardianId,
       employeeId,
       partnerId,
       eventTypeId,
@@ -136,6 +138,18 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     // Enlace opcional factura↔paciente (el pagador sigue siendo clientId).
     const patRes = await resolveInvoicePatientId(patientId, tenantModels, hasModule);
     if (patRes.err) return error(patRes.err);
+
+    // A nombre de un TUTOR de la familia (02/09/2026): tiene que ser uno de
+    // los tutores de ESA ficha. La foto fiscal se congela al emitir
+    // (lib/billing/datosFiscales.js); aquí solo se guarda quién.
+    let resolvedGuardianId = null;
+    if (guardianId != null && guardianId !== "") {
+      const { Client } = tenantModels;
+      const ficha = Client ? await Client.findByPk(clientId, { attributes: ["id", "guardians"] }) : null;
+      const tutor = tutorDe(ficha, guardianId);
+      if (!tutor) return error("Ese tutor no está en la ficha de la familia", 422);
+      resolvedGuardianId = tutor.id;
+    }
 
     // Enlace opcional factura↔tipo de cita (29/08/2026, interno): de aquí
     // salen los «Ingresos por servicio» de la portada. Sin él, la factura
@@ -176,6 +190,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     const invoice = await Invoice.create({
       clientId,
       patientId: patRes.patientId,
+      guardianId: resolvedGuardianId,
       employeeId: employeeId || null,
       partnerId: partnerId || null,
       eventTypeId: resolvedEventTypeId,

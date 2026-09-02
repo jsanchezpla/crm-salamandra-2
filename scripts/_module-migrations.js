@@ -556,6 +556,9 @@ export const MODULES = {
     // columnas el modelo pide patient_id/concept_id y todo GET de cobros da 42703.
     "migrate-payments-terapia",
     "migrate-clients-cuota",
+    // A nombre de qué tutor va la factura (02/09/2026): invoices.guardian_id.
+    // ANTES del despliegue: el modelo pide la columna por nombre.
+    "migrate-invoices-a-nombre-de-tutor",
     // Las cuotas asignadas (quien paga que todos los meses) y payments.cuota_id.
     // 01/09/2026, ANTES del despliegue: el modelo pide las columnas por nombre.
     "migrate-billing-cuotas",

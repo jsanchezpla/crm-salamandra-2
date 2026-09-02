@@ -174,6 +174,7 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
            */
           fiscalSnapshot: locked.fiscalSnapshot ?? null,
           patientId: locked.patientId, // conserva el enlace factura↔paciente
+          guardianId: locked.guardianId ?? null, // y a nombre de qué tutor iba (02/09/2026)
           // Conserva el enlace factura↔tipo de cita: la rectificativa nace con
           // base NEGATIVA y estado activo, así que arrastrar el tipo es lo que
           // hace que «Ingresos por servicio» RESTE lo anulado en vez de dejar

@@ -31,10 +31,41 @@ export default function PatientReparto({ patientId, defaultPayerClientId, onClos
   const [period, setPeriod] = useState("");
   const [total, setTotal] = useState("");
   const [singlePayer, setSinglePayer] = useState(defaultPayerClientId || "");
+  /*
+   * CADA FILA ES UN PAGADOR (02/09/2026, decisión de Rodrigo): la familia
+   * entera (su ficha), UNO DE SUS TUTORES —a su nombre, con su DNI—, o otra
+   * ficha (una fundación, una empresa, una tía). `pagador` dice cuál de las
+   * tres cosas; `clientId` es siempre la ficha que paga (para un tutor, la de
+   * la familia) y `guardianId` solo va cuando la factura es a nombre de él.
+   * Importes o porcentajes, pero UNA sola forma para todas las filas.
+   */
   const [rows, setRows] = useState([
-    { clientId: defaultPayerClientId || "", amount: "", pct: "" },
-    { clientId: "", amount: "", pct: "" },
+    { pagador: defaultPayerClientId ? `ficha:${defaultPayerClientId}` : "otra", clientId: defaultPayerClientId || "", guardianId: null, amount: "", pct: "" },
+    { pagador: "otra", clientId: "", guardianId: null, amount: "", pct: "" },
   ]);
+  // Los tutores de la familia que paga, para ofrecerlos como pagadores.
+  const [tutores, setTutores] = useState([]);
+  useEffect(() => {
+    if (!defaultPayerClientId) { setTutores([]); return; }
+    let vivo = true;
+    fetch(`/api/clients/${defaultPayerClientId}/guardians`, { cache: "no-store" })
+      .then(async (r) => (r.ok ? r.json() : null))
+      .then((j) => { if (vivo) setTutores(Array.isArray(j?.data?.guardians) ? j.data.guardians : []); })
+      .catch(() => { if (vivo) setTutores([]); });
+    return () => { vivo = false; };
+  }, [defaultPayerClientId]);
+  const RELACION = { madre: "Madre", padre: "Padre", tutor: "Tutor/a", otro: "Otro" };
+  const rotuloTutor = (g) => `${RELACION[g.relationship] ?? "Tutor/a"} · ${g.name}${g.dni === null || g.dni === "" ? " (sin DNI)" : ""}`;
+  function elegirPagador(i, valor) {
+    if (valor.startsWith("tutor:")) {
+      const g = tutores.find((t) => `tutor:${t.id}` === valor);
+      setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, pagador: valor, clientId: defaultPayerClientId, guardianId: g?.id ?? null } : r)));
+    } else if (valor.startsWith("ficha:")) {
+      setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, pagador: valor, clientId: valor.slice(6), guardianId: null } : r)));
+    } else {
+      setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, pagador: "otra", clientId: "", guardianId: null } : r)));
+    }
+  }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   // Alta rápida de una empresa pagadora (p. ej. una fundación) sin salir del
@@ -60,7 +91,7 @@ export default function PatientReparto({ patientId, defaultPayerClientId, onClos
   const restante = round2(totalNum - repartido);
 
   const setRow = (i, k, v) => setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, [k]: v } : r)));
-  const addRow = () => setRows((rs) => [...rs, { clientId: "", amount: "", pct: "" }]);
+  const addRow = () => setRows((rs) => [...rs, { pagador: "otra", clientId: "", guardianId: null, amount: "", pct: "" }]);
   const removeRow = (i) => setRows((rs) => (rs.length <= 1 ? rs : rs.filter((_, idx) => idx !== i)));
   const repartirIgual = () => {
     if (!(totalNum > 0)) { setError("Indica antes el importe total."); return; }
@@ -105,13 +136,15 @@ export default function PatientReparto({ patientId, defaultPayerClientId, onClos
 
   const lineDesc = () => `${concept.trim() || "Cuota"}${period.trim() ? ` (${period.trim()})` : ""}`;
 
-  async function createInvoice(clientId, amount, extraCF) {
+  async function createInvoice(clientId, amount, extraCF, guardianId = null) {
     const res = await fetch(`/api/billing/invoices`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         clientId,
         patientId,
+        // A nombre de un tutor de la familia (02/09/2026), si la fila lo pide.
+        ...(guardianId ? { guardianId } : {}),
         issueDate: new Date().toISOString().slice(0, 10),
         lines: [{ description: lineDesc(), quantity: 1, unitPrice: Number(amount) }],
         customFields: { source: "reparto", ...(extraCF || {}) },
@@ -137,8 +170,12 @@ export default function PatientReparto({ patientId, defaultPayerClientId, onClos
     if (busy) return;
     // Los importes que valen son los EFECTIVOS: los tecleados en euros, o los
     // derivados de los porcentajes con su cierre al céntimo.
-    const conImporte = rows.map((r, i) => ({ clientId: r.clientId, amount: importesEfectivos[i] }));
+    const conImporte = rows.map((r, i) => ({ clientId: r.clientId, guardianId: r.guardianId ?? null, amount: importesEfectivos[i] }));
     const valid = conImporte.filter((r) => r.clientId && Number(r.amount) > 0);
+    // Dos filas al mismo pagador (misma ficha y mismo tutor, o ninguno) serían
+    // dos facturas a la misma persona por lo mismo: se avisa antes de crear.
+    const claves = valid.map((r) => `${r.clientId}|${r.guardianId ?? ""}`);
+    if (new Set(claves).size !== claves.length) { setError("Hay dos filas con el mismo pagador: junta sus importes en una."); return; }
     if (valid.length < 2) { setError("Añade al menos dos pagadores con importe."); return; }
     if (!(totalNum > 0)) { setError("Indica el importe total del servicio."); return; }
     if (porPct && !pctsCuadran) { setError("Los porcentajes tienen que sumar 100."); return; }
@@ -150,7 +187,7 @@ export default function PatientReparto({ patientId, defaultPayerClientId, onClos
         typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${patientId}-split`;
       const billingPeriod = period.trim() || null;
       for (const r of valid) {
-        const id = await createInvoice(r.clientId, r.amount, { splitGroupId, billingPeriod, source: "split" });
+        const id = await createInvoice(r.clientId, r.amount, { splitGroupId, billingPeriod, source: "split" }, r.guardianId);
         created.push(id);
       }
       onCreated?.(created.length);
@@ -229,7 +266,26 @@ export default function PatientReparto({ patientId, defaultPayerClientId, onClos
                 <div key={i} className="flex items-end gap-2">
                   <div className="flex-1 min-w-0">
                     {i === 0 && <label className={labelCls}>Pagador</label>}
-                    <SelectorCliente value={r.clientId} onChange={(v) => setRow(i, "clientId", v)} opcionesFijas={opcionesPagador} className={inputCls} />
+                    {/* La familia, uno de sus tutores a su nombre, u otra ficha
+                        (fundación, empresa…). Con «otra» se abre el buscador
+                        de fichas de siempre. */}
+                    <select
+                      className={inputCls}
+                      value={r.pagador ?? "otra"}
+                      onChange={(e) => elegirPagador(i, e.target.value)}
+                      aria-label="Quién paga esta parte"
+                    >
+                      {defaultPayerClientId && <option value={`ficha:${defaultPayerClientId}`}>La familia (su ficha)</option>}
+                      {tutores.map((g) => (
+                        <option key={g.id} value={`tutor:${g.id}`}>{rotuloTutor(g)}</option>
+                      ))}
+                      <option value="otra">Otra ficha (fundación, empresa, otra persona)…</option>
+                    </select>
+                    {(r.pagador ?? "otra") === "otra" && (
+                      <div className="mt-1">
+                        <SelectorCliente value={r.clientId} onChange={(v) => setRow(i, "clientId", v)} opcionesFijas={opcionesPagador} className={inputCls} />
+                      </div>
+                    )}
                   </div>
                   {porPct ? (
                     <>
@@ -307,7 +363,7 @@ export default function PatientReparto({ patientId, defaultPayerClientId, onClos
         <p className="text-[10px] text-neutral-400 mt-2">
           {mode === "single"
             ? "Se crea un borrador editable por el total. Emítelo y registra los cobros parciales en Facturación."
-            : "Se crean borradores editables (uno por pagador). Ajusta y emite cada uno en Facturación."}
+            : "Se crean borradores editables (uno por pagador). Los que van a nombre de un tutor salen con su nombre y su DNI; ajusta y emite cada uno en Facturación."}
         </p>
       </div>
     </>

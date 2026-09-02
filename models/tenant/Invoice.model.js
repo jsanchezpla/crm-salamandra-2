@@ -29,6 +29,22 @@ export function defineInvoice(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      /*
+       * A NOMBRE DE QUÉ TUTOR va la factura (02/09/2026, decisión de Rodrigo).
+       *
+       * El pagador sigue siendo `clientId` (la familia): la factura cuelga de
+       * su ficha, de sus cobros y de su morosidad. Esto dice a QUIÉN se le
+       * emite cuando no es la ficha entera sino uno de sus tutores —padres
+       * separados, cada uno con su parte—: el `id` de la entrada de
+       * `clients.guardians`. Al emitir se congela su nombre y su DNI en
+       * `fiscalSnapshot` (lib/billing/datosFiscales.js). Sin FK: el tutor vive
+       * en un JSONB. Columna propia y no customFields, por lo mismo que
+       * patientId: la rectificativa reinicia customFields a {}.
+       */
+      guardianId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       serviceType: {
         type: DataTypes.STRING,
         allowNull: true,
