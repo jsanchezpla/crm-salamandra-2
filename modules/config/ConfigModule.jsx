@@ -47,7 +47,7 @@ import {
   ReservaOnlineCard,
 } from "./tarjetas/Reservas.jsx";
 import { AreaPrivadaCard, BloqueoImpagoCard } from "./tarjetas/Portal.jsx";
-import { AiPermissionsCard, CategoriasExternasCard, DerivacionesCard, PlantillasClinicaCard } from "./tarjetas/Modulos.jsx";
+import { AiPermissionsCard, CategoriasExternasCard, CoordinadorasCard, DerivacionesCard, PlantillasClinicaCard } from "./tarjetas/Modulos.jsx";
 import { ContrasenaCard, CorreoCuentaCard } from "./tarjetas/Cuenta.jsx";
 
 /**
@@ -1020,6 +1020,22 @@ export default function ConfigModule({ modulos = null }) {
                   patchTenant(
                     { incidenciaPorFalta: v },
                     v.length ? "Guardado: las faltas abrirán una incidencia" : "Las faltas ya no abrirán incidencia"
+                  )
+                }
+              />
+            )
+          )}
+
+          {enZona(
+            "coordinadoras",
+            isAdmin && (
+              <CoordinadorasCard
+                coordinadoras={cfg.coordinadoras ?? []}
+                readOnly={!!cfg.readOnly}
+                onGuardar={(v) =>
+                  patchTenant(
+                    { coordinadoras: v },
+                    v.length ? "Guardado: coordinan la bandeja y los informes de todo el equipo" : "Sin coordinadoras: cada terapeuta ve solo lo suyo"
                   )
                 }
               />

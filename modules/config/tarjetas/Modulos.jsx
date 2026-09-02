@@ -513,3 +513,93 @@ export function AiPermissionsCard({ aiAccess, readOnly, onToggle }) {
     </div>
   );
 }
+
+/**
+ * CoordinadorasCard — quién coordina al equipo (02/09/2026, AV-0022 de Aumenta,
+ * decidido por Rodrigo). Las personas de esta lista ven en Inicio los informes
+ * vencidos de TODO el centro y pueden elegir la bandeja de cualquier terapeuta
+ * en «Mi trabajo»; el resto ve solo lo suyo. Dirección lo ve todo siempre.
+ * Misma forma que la tarjeta de incidencia por falta: lista de ids de equipo,
+ * se guarda a cada cambio.
+ */
+export function CoordinadorasCard({ coordinadoras = [], readOnly, onGuardar }) {
+  const [equipo, setEquipo] = useState([]);
+  const [disponible, setDisponible] = useState(true);
+  const [guardando, setGuardando] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/team?status=active&limit=500", { cache: "no-store" })
+      .then(async (r) => {
+        if (!r.ok) { setDisponible(false); return null; }
+        return r.json();
+      })
+      .then((j) => setEquipo(j?.data?.members ?? []))
+      .catch(() => setDisponible(false));
+  }, []);
+
+  if (!disponible) return null;
+
+  const elegidas = Array.isArray(coordinadoras) ? coordinadoras : [];
+  const nombreDe = (id) => equipo.find((m) => m.id === id)?.displayName ?? "Alguien que ya no está en el equipo";
+
+  async function cambiar(lista) {
+    setGuardando(true);
+    await onGuardar(lista);
+    setGuardando(false);
+  }
+
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl p-5" data-testid="coordinadoras">
+      <div className="text-sm font-semibold text-neutral-800">Coordinadoras del equipo</div>
+      <p className="text-xs text-neutral-400 mt-0.5 max-w-lg">
+        En Inicio cada terapeuta ve solo sus informes vencidos y su bandeja. Las personas de esta
+        lista ven los informes vencidos de todo el centro y pueden elegir en «Mi trabajo» la
+        bandeja de cualquier terapeuta. Dirección (admin) lo ve todo siempre, esté o no aquí.
+      </p>
+
+      {elegidas.length > 0 && (
+        <ul className="mt-3 flex flex-wrap gap-1.5">
+          {elegidas.map((id) => (
+            <li key={id} className="flex items-center gap-1.5 rounded-full bg-neutral-100 pl-3 pr-1.5 py-1 text-xs text-neutral-700">
+              {nombreDe(id)}
+              {!readOnly && (
+                <button
+                  type="button"
+                  disabled={guardando}
+                  onClick={() => cambiar(elegidas.filter((x) => x !== id))}
+                  className="text-neutral-400 hover:text-red-600 transition-colors disabled:opacity-40"
+                  aria-label={`Quitar a ${nombreDe(id)}`}
+                >
+                  ✕
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {!readOnly && (
+        <select
+          value=""
+          disabled={guardando}
+          onChange={(e) => e.target.value && cambiar([...elegidas, e.target.value])}
+          className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm mt-3 max-w-sm"
+          aria-label="Añadir a una coordinadora"
+        >
+          <option value="">{elegidas.length ? "Añadir a otra persona…" : "Elegir quién coordina…"}</option>
+          {equipo
+            .filter((m) => !elegidas.includes(m.id))
+            .map((m) => (
+              <option key={m.id} value={m.id}>{m.displayName}</option>
+            ))}
+        </select>
+      )}
+
+      <div className="mt-2 text-[11px] font-medium">
+        {elegidas.length
+          ? <span className="text-emerald-700">{elegidas.length === 1 ? "Una persona coordina" : `${elegidas.length} personas coordinan`}: ven la bandeja y los informes vencidos de todo el equipo.</span>
+          : <span className="text-neutral-400">Nadie coordina: cada terapeuta ve solo lo suyo; dirección, todo.</span>}
+      </div>
+    </div>
+  );
+}

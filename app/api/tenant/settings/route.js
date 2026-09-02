@@ -27,6 +27,7 @@ import {
   responsablesDeIncidenciaPorFalta,
   limpiarResponsables,
 } from "../../../../lib/citas/incidenciaPorFalta.js";
+import { coordinadorasDe } from "../../../../lib/clinica/coordinadoras.js";
 import {
   listarCuentas,
   listarRemitentes,
@@ -271,6 +272,11 @@ function diffConfiguracion(antes, despues, nombreAntes, nombreDespues) {
     (despues?.citas?.incidenciaPorFalta ?? []).length
   );
   anota(
+    "clinica.coordinadoras",
+    (antes?.clinica?.coordinadoras ?? []).length,
+    (despues?.clinica?.coordinadoras ?? []).length
+  );
+  anota(
     "citas.categoriasBloqueo",
     resumenCategorias(antes?.citas?.categoriasBloqueo),
     resumenCategorias(despues?.citas?.categoriasBloqueo)
@@ -416,6 +422,9 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
     // (01/09/2026). Lista vacia = apagado, que es como nace cualquier centro
     // (lib/citas/incidenciaPorFalta.js).
     incidenciaPorFalta: responsablesDeIncidenciaPorFalta(t),
+    // Quién coordina: ve los informes vencidos de todo el centro y puede
+    // elegir la bandeja de cualquier terapeuta (02/09/2026, AV-0022).
+    coordinadoras: coordinadorasDe(t),
     brand: {
       primaryColor: brand.primaryColor ?? null,
       secondaryColor: brand.secondaryColor ?? null,
@@ -889,6 +898,16 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
     };
   }
 
+  // Las coordinadoras (02/09/2026, AV-0022): misma limpieza y misma lógica
+  // —vacía es legítimo, es «nadie coordina»—, en `settings.clinica` porque lo
+  // que abre es la bandeja y los informes, que son del módulo asistencial.
+  if (Array.isArray(body.coordinadoras)) {
+    settings.clinica = {
+      ...(settings.clinica ?? {}),
+      coordinadoras: limpiarResponsables(body.coordinadoras),
+    };
+  }
+
   // Candado de la IA para empleados (no es un secreto): lista cerrada.
   if (body.aiAccess === "libre" || body.aiAccess === "restringido") {
     settings.aiAccess = body.aiAccess;
@@ -956,6 +975,7 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
     colorBloqueos: settings.citas?.colorBloqueos ?? COLOR_BLOQUEO_POR_DEFECTO,
     categoriasBloqueo: categoriasBloqueoDe({ settings }),
     incidenciaPorFalta: responsablesDeIncidenciaPorFalta({ settings }),
+    coordinadoras: coordinadorasDe({ settings }),
     brand: {
       primaryColor: settings.brand.primaryColor ?? null,
       secondaryColor: settings.brand.secondaryColor ?? null,
