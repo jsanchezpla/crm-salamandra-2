@@ -1,6 +1,6 @@
 /**
- * alta-pacientes-nuevos-organizate.js — las dos altas de Organízate posteriores
- * al volcado del 02/08 (29/08/2026).
+ * alta-pacientes-nuevos-organizate.js — las altas de Organízate posteriores
+ * al volcado del 02/08 (dos el 29/08/2026, una más el 02/09/2026).
  *
  * ⚠️ SIMULA POR DEFECTO. Sin `--confirm` no escribe nada.
  *
@@ -11,8 +11,10 @@
  * la agenda de esas dos terapeutas enseñaría el hueco vacío.
  *
  * Los datos salen de la ficha de cada uno en Organízate
- * (`opcion=pacientes&vista=pacientes_edit`), leída el 29/08/2026. Se copian
- * aquí en vez de en un JSON aparte porque son dos y así se ve de dónde vienen.
+ * (`opcion=pacientes&vista=pacientes_edit`), leída el día que se apunta cada
+ * uno. Se copian aquí en vez de en un JSON aparte porque son pocos y así se
+ * ve de dónde vienen; cada sincronización de agenda que encuentre un paciente
+ * nuevo allí añade su entrada aquí.
  *
  * Convención de la casa, mirada en producción antes de escribir esto:
  *   · el paciente ADULTO es su propio cliente, con su NIF;
@@ -78,6 +80,26 @@ const ALTAS = [
       { name: "Candela Díez de Baldeón Gómez", relationship: "madre", dni: "05689502S", phone: "622491811", email: "candecande80@hotmail.com" },
       { name: "David Machio Renes", relationship: "padre", dni: "49000800J", phone: null, email: null },
     ],
+  },
+  {
+    // 02/09/2026: la ficha en Organízate solo tiene nombre, fecha de nacimiento
+    // y móvil (pestaña Tutores vacía, sin DNI ni dirección). Menor sin tutor
+    // conocido: el cliente va a su nombre con ese móvil, y el centro completa
+    // quién es la familia cuando venga a la entrevista.
+    idPac: 1271,
+    firstName: "Lucas",
+    lastName: "Herranz Fernández",
+    birthDate: "2012-05-20",
+    dni: null,
+    address: null,
+    city: null,
+    postalCode: null,
+    phone: "655760825",
+    email: null,
+    notes: "Organízate: ficha sin tutores, DNI ni dirección (solo móvil).",
+    enrollmentDate: "2026-09-07", // su primera cita: entrevista inicial con Isabel Alberca
+    cliente: { nombre: "Lucas Herranz Fernández", nif: null },
+    tutores: [],
   },
 ];
 
