@@ -3,6 +3,7 @@ import { ok, error, forbidden, notFound } from "../../../../../lib/utils/apiResp
 import { resolveCurrentTeamMemberId } from "../../../../../lib/team/currentTeamMember.js";
 import { avisarComentarioIncidencia } from "../../../../../lib/clinica/avisoComentarioIncidencia.js";
 import { incidenciaFueraDeAlcance, puedeBorrarIncidencia } from "../../../../../lib/clinica/alcanceIncidencias.js";
+import { logClinicaAudit, auditSummary } from "../../../../../lib/clinica/audit.js";
 import {
   serializeIncidencia,
   isValidCategory,
@@ -211,6 +212,19 @@ export const DELETE = withTenant(async (request, rc, ctx) => {
   if (!puedeBorrarIncidencia({ esAdmin, row, teamMemberId: yoSoy })) {
     return forbidden("Solo dirección, o quien la registró, puede eliminar una incidencia");
   }
+  const before = auditSummary(row);
   await row.destroy();
+  // Lo destructivo deja rastro (02/09/2026; hasta hoy se borraba sin auditar):
+  // un resumen, nunca la fila entera —lib/clinica/audit.js—.
+  await logClinicaAudit({
+    tenantId: ctx.tenant.id,
+    userId: request.headers.get("x-user-id"),
+    action: "clinica.incidencia.deleted",
+    entity: "Incidencia",
+    entityId: id,
+    before,
+    after: null,
+    ip: request.headers.get("x-forwarded-for"),
+  });
   return ok({ deleted: id });
 });
