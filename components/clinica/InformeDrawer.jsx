@@ -103,7 +103,8 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
     const seguro = await confirmar({
       titulo: "Borrar este informe",
       texto: "Se borra el borrador entero, con todo lo escrito. No se puede deshacer.",
-      aceptar: "Borrar",
+      confirmar: "Borrar",
+      tono: "peligro",
     });
     if (!seguro) return;
     setBorrando(true);

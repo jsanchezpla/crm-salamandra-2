@@ -1,6 +1,6 @@
 import { Op } from "sequelize";
 import { filtroPorNombre } from "../../../../lib/utils/busquedaDb.js";
-import { tutorDe } from "../../../../lib/billing/datosFiscales.js";
+import { tutorDe, aNombreDe } from "../../../../lib/billing/datosFiscales.js";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { logBillingAudit, resumenFactura, datosPeticion } from "../../../../lib/billing/audit.js";
 import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
@@ -91,7 +91,10 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     const { count, rows } = await Invoice.findAndCountAll({
       where,
       include: [
-        { model: Client, as: "client", attributes: ATRIBUTOS_CLIENTE_FACTURA },
+        // Los tutores se piden para saber «a nombre de quién» va cada factura
+        // y se QUITAN antes de contestar (revisión 02/09/2026): llevan DNI y
+        // teléfono, y un listado no tiene por qué mandarlos al navegador.
+        { model: Client, as: "client", attributes: [...ATRIBUTOS_CLIENTE_FACTURA, "guardians"] },
         { model: TeamMember, as: "employee", attributes: ["id", "displayName"] },
         ...patientInclude,
       ],
@@ -100,7 +103,8 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       offset,
     });
 
-    return ok({ invoices: withEffectiveStatusList(rows), total: count, page, limit, pages: Math.ceil(count / limit) });
+    const invoices = withEffectiveStatusList(rows).map((inv) => sinTutores(inv));
+    return ok({ invoices, total: count, page, limit, pages: Math.ceil(count / limit) });
   } catch (err) {
     return serverError(err);
   }
@@ -230,3 +234,17 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     return serverError(err);
   }
 });
+
+/**
+ * La factura tal como sale al navegador: con `aNombreDe` resuelto (el tutor a
+ * cuyo nombre va, o null) y SIN la lista de tutores de la familia.
+ */
+function sinTutores(inv) {
+  const j = typeof inv?.toJSON === "function" ? inv.toJSON() : { ...inv };
+  const nombre = aNombreDe(j, j.client);
+  if (j.client && typeof j.client === "object") {
+    const { guardians: _tutores, ...resto } = j.client;
+    j.client = resto;
+  }
+  return { ...j, aNombreDe: nombre };
+}

@@ -31,14 +31,10 @@ import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import { COLOR_BLOQUEO_POR_DEFECTO, colorTextoSobre } from "@/lib/citas/coloresBloqueo.js";
 import { COLOR_CITA_POR_DEFECTO } from "@/lib/citas/filtros.js";
+import { toDateInput } from "./chips.jsx";
 
 /** Con más columnas que esto el día no se lee; se avisa y se enseñan las primeras. */
 const MAX_COLUMNAS = 8;
-
-function ymd(d) {
-  const p = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
 
 function sumarDias(d, n) {
   const x = new Date(d);
@@ -55,6 +51,9 @@ export default function AgendaPorTerapeuta({
   onEventClick,
   avisar,
   onVolver,
+  // Sube cuando el padre cambia algo desde fuera (el modal de la cita, un
+  // bloqueo, una cita nueva): las columnas vuelven a leer sus eventos.
+  version = 0,
 }) {
   const columnas = useMemo(() => {
     const lista = teamMembers.filter((m) => !visibleTmIds || visibleTmIds.includes(m.id));
@@ -75,53 +74,81 @@ export default function AgendaPorTerapeuta({
   useEffect(() => {
     for (const cal of refs.current.values()) cal.getApi?.().gotoDate(fecha);
   }, [fecha]);
+  useEffect(() => {
+    if (version > 0) refrescarTodas();
+  }, [version, refrescarTodas]);
 
   const [moviendo, setMoviendo] = useState(false);
 
-  /** Las citas de UNA terapeuta para el día que se mira, tal como las sirve el calendario. */
-  const eventosDe = useCallback(
-    (teamMemberId) => async (info, success, failure) => {
-      try {
-        const params = new URLSearchParams({ start: info.startStr, end: info.endStr, teamMemberIds: teamMemberId });
-        const r = await fetch(`/api/citas/bookings/calendar?${params}`, { cache: "no-store" });
-        const j = await r.json();
-        if (!j.ok) throw new Error(j.error || "Error cargando citas");
-        // Los bloqueos de esa persona y los cierres del centro, como bloques
-        // fijos: aquí no se arrastran (para eso está la agenda de siempre).
-        let fondos = [];
+  /*
+   * Los bloqueos del día se piden UNA vez aquí y cada columna se queda con los
+   * suyos (02/09/2026, tarde: con ocho columnas eran dieciséis peticiones
+   * iguales por cada día que se miraba). Se guardan en un ref y no en estado
+   * para que cambiarlos no re-renderice las ocho columnas; en cuanto llegan,
+   * se les pide a los calendarios que vuelvan a leer sus eventos.
+   */
+  const bloqueosRef = useRef([]);
+  useEffect(() => {
+    let vivo = true;
+    const desde = new Date(fecha); desde.setHours(0, 0, 0, 0);
+    const hasta = sumarDias(desde, 1);
+    fetch(`/api/citas/bloqueos?from=${encodeURIComponent(desde.toISOString())}&to=${encodeURIComponent(hasta.toISOString())}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((jb) => {
+        if (!vivo) return;
+        bloqueosRef.current = jb?.ok ? jb.data.bloqueos ?? [] : [];
+        refrescarTodas();
+      })
+      .catch(() => { if (vivo) { bloqueosRef.current = []; refrescarTodas(); } });
+    return () => { vivo = false; };
+  }, [fecha, refrescarTodas]);
+
+  /** Los bloqueos de una persona (y los del centro entero), como bloques fijos: aquí no se arrastran. */
+  const fondosDe = useCallback((teamMemberId) =>
+    bloqueosRef.current
+      .filter((b) => !b.teamMemberId || b.teamMemberId === teamMemberId)
+      .map((b) => {
+        const color = b.color || COLOR_BLOQUEO_POR_DEFECTO;
+        return {
+          id: `bloqueo-${b.id}`,
+          title:
+            [b.categoryLabel && b.categoryLabel !== b.label ? b.categoryLabel : null, b.label, b.teamMemberName || "Todo el centro"].filter(Boolean).join(" · ") +
+            (b.documentos > 0 ? " 📎" : ""),
+          start: b.startAt,
+          end: b.endAt,
+          display: "block",
+          backgroundColor: color,
+          borderColor: color,
+          textColor: colorTextoSobre(color),
+          editable: false,
+          startEditable: false,
+          extendedProps: { esBloqueo: true, bloqueoId: b.id, label: b.label, categoryKey: b.categoryKey ?? null, tallerId: b.tallerId ?? null },
+        };
+      }), []);
+
+  /**
+   * Las citas de UNA terapeuta para el día que se mira, tal como las sirve el
+   * calendario. Una función por columna, creada UNA vez (useMemo por ids): si
+   * cambiara en cada render, FullCalendar volvería a pedir los eventos en cada
+   * render del padre.
+   */
+  const eventosPorColumna = useMemo(() => {
+    const mapa = new Map();
+    for (const m of columnas) {
+      mapa.set(m.id, async (info, success, failure) => {
         try {
-          const rb = await fetch(`/api/citas/bloqueos?from=${info.startStr}&to=${info.endStr}`, { cache: "no-store" });
-          const jb = await rb.json();
-          if (jb.ok) {
-            fondos = (jb.data.bloqueos ?? [])
-              .filter((b) => !b.teamMemberId || b.teamMemberId === teamMemberId)
-              .map((b) => {
-                const color = b.color || COLOR_BLOQUEO_POR_DEFECTO;
-                return {
-                  id: `bloqueo-${b.id}`,
-                  title: [b.categoryLabel && b.categoryLabel !== b.label ? b.categoryLabel : null, b.label, b.teamMemberName || "Todo el centro"].filter(Boolean).join(" · "),
-                  start: b.startAt,
-                  end: b.endAt,
-                  display: "block",
-                  backgroundColor: color,
-                  borderColor: color,
-                  textColor: colorTextoSobre(color),
-                  editable: false,
-                  startEditable: false,
-                  extendedProps: { esBloqueo: true, bloqueoId: b.id, label: b.label, categoryKey: b.categoryKey ?? null, tallerId: b.tallerId ?? null },
-                };
-              });
-          }
-        } catch {
-          fondos = [];
+          const params = new URLSearchParams({ start: info.startStr, end: info.endStr, teamMemberIds: m.id });
+          const r = await fetch(`/api/citas/bookings/calendar?${params}`, { cache: "no-store" });
+          const j = await r.json();
+          if (!j.ok) throw new Error(j.error || "Error cargando citas");
+          success([...j.data, ...fondosDe(m.id)]);
+        } catch (err) {
+          failure(err);
         }
-        success([...j.data, ...fondos]);
-      } catch (err) {
-        failure(err);
-      }
-    },
-    []
-  );
+      });
+    }
+    return mapa;
+  }, [columnas, fondosDe]);
 
   /** La cita cae en OTRA columna: cambia de terapeuta (y de hora, si se soltó en otra). */
   async function recibir(teamMemberId, info) {
@@ -139,8 +166,20 @@ export default function AgendaPorTerapeuta({
       });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || "No se pudo pasar la cita a esa terapeuta");
+      /*
+       * La copia que soltó el arrastre NO viene de la fuente de eventos de esta
+       * columna: FullCalendar la añade suelta al recibirla, y al releer la
+       * fuente saldría dos veces (cazado en la demo el 02/09 por la tarde: la
+       * cita se veía duplicada en la columna de destino). Se retira y manda lo
+       * que devuelva el servidor en el refresco de abajo.
+       */
+      info.event.remove();
     } catch (err) {
+      // El calendario de origen ya soltó la cita y `revert` solo la quita del
+      // que recibe: se repintan TODAS antes de abrir el aviso, o la cita no
+      // estaría en ninguna columna mientras el aviso siga abierto.
       info.revert();
+      refrescarTodas();
       await avisar?.({ titulo: "La cita no se ha movido", texto: err.message });
     } finally {
       setMoviendo(false);
@@ -212,7 +251,7 @@ export default function AgendaPorTerapeuta({
                       ref={refDe(m.id)}
                       plugins={[timeGridPlugin, interactionPlugin]}
                       initialView="timeGridDay"
-                      initialDate={ymd(fecha)}
+                      initialDate={toDateInput(fecha)}
                       headerToolbar={false}
                       dayHeaders={false}
                       allDaySlot={false}
@@ -225,18 +264,17 @@ export default function AgendaPorTerapeuta({
                       slotEventOverlap={false}
                       expandRows={true}
                       height="100%"
-                      events={eventosDe(m.id)}
+                      events={eventosPorColumna.get(m.id)}
                       eventClick={onEventClick}
                       editable={true}
                       eventDurationEditable={false}
                       droppable={true}
                       eventDrop={mover}
-                      eventReceive={(info) => recibir(m.id, info)}
                       // El calendario de origen se queda sin la cita en cuanto
-                      // la otra columna la acepta; si el PATCH falla, `revert`
-                      // en el que recibe la devuelve y el refresco general
-                      // vuelve a pintarla donde estaba.
-                      eventLeave={() => {}}
+                      // la otra columna la acepta (eventLeave, sin manejador
+                      // propio); si el PATCH falla, el refresco general la
+                      // vuelve a pintar donde estaba.
+                      eventReceive={(info) => { recibir(m.id, info).catch(() => refrescarTodas()); }}
                     />
                   </div>
                 </div>

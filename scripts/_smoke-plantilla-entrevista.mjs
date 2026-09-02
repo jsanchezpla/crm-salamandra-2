@@ -23,6 +23,7 @@ import {
   plantillasDe,
   plantillaDe,
   normalizarApartados,
+  ocultasTrasGuardar,
   CLAVE_APARTADOS,
   CLAVE_PLANTILLA,
 } from "../lib/clinica/plantillas.js";
@@ -49,6 +50,14 @@ describe("la plantilla «Entrevista inicial»", () => {
     assert.equal(plantillasDe({ settings: {} }, "informe").some((p) => p.key === "entrevista_inicial"), false);
   });
 
+  it("si el centro la BORRA desde Configuración, no vuelve a aparecer (y si la vuelve a incluir, sí)", () => {
+    const guardada = [{ key: "base", name: "Registro", apartados: [{ key: "a", label: "A" }] }];
+    assert.deepEqual(ocultasTrasGuardar("registro", guardada), ["entrevista_inicial"]);
+    assert.deepEqual(ocultasTrasGuardar("registro", [...guardada, { key: "entrevista_inicial", name: "E", apartados: [{ key: "x", label: "X" }] }]), []);
+    const t = { settings: { clinica: { plantillas: { registro: guardada }, plantillasOcultas: { registro: ["entrevista_inicial"] } } } };
+    assert.deepEqual(plantillasDe(t, "registro").map((p) => p.key), ["base"]);
+  });
+
   it("si el centro guarda su propia «entrevista_inicial», manda la suya y no salen dos", () => {
     const t = { settings: { clinica: { plantillas: { registro: [{ key: "entrevista_inicial", name: "Entrevista (Aumenta)", apartados: [{ key: "motivo", label: "Motivo" }] }] } } } };
     const lista = plantillasDe(t, "registro");
@@ -59,10 +68,14 @@ describe("la plantilla «Entrevista inicial»", () => {
   it("la pista sobrevive a la limpieza (recortada) y no se inventa donde no la hay", () => {
     const [a, b] = normalizarApartados([
       { key: "x", label: "X", tipo: "texto", pista: "  qué va aquí  " },
-      { key: "y", label: "Y", tipo: "lista", pista: "z".repeat(1000) },
+      { key: "y", label: "Y", tipo: "lista", pista: "z".repeat(1500) },
     ]);
     assert.equal(a.pista, "qué va aquí");
-    assert.equal(b.pista.length, 400);
+    assert.equal(b.pista.length, 1000);
+    // Ninguna pista de fábrica se recorta: la más larga tiene que caber entera.
+    for (const ap of normalizarApartados(APARTADOS_ENTREVISTA_BASE)) {
+      assert.equal(ap.pista, APARTADOS_ENTREVISTA_BASE.find((x) => x.key === ap.key).pista, ap.label);
+    }
     const [c] = normalizarApartados([{ key: "c", label: "C" }]);
     assert.equal("pista" in c, false);
   });

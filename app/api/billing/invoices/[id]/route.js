@@ -4,6 +4,7 @@ import { calculateInvoice } from "../../../../../lib/billing/calculateInvoice.js
 import { withEffectiveStatus } from "../../../../../lib/billing/invoiceStatus.js";
 import { resolveInvoicePatientId, invoicePatientInclude } from "../../../../../lib/billing/patientLink.js";
 import { logBillingAudit, resumenFactura, datosPeticion } from "../../../../../lib/billing/audit.js";
+import { tutorDe, aNombreDe, faltaParaEmitirATutor } from "../../../../../lib/billing/datosFiscales.js";
 
 
 // GET /api/billing/invoices/[id]
@@ -25,7 +26,20 @@ export const GET = withTenant(async (request, { params }, { tenantModels, hasMod
     });
 
     if (!invoice) return notFound("Factura no encontrada");
-    return ok(withEffectiveStatus(invoice));
+    // «A nombre de» y lo que falta para emitir al tutor se resuelven AQUÍ y
+    // los tutores de la familia (DNI, teléfono) no viajan (revisión 02/09/2026).
+    const j = withEffectiveStatus(invoice);
+    const plano = typeof j?.toJSON === "function" ? j.toJSON() : { ...j };
+    const salida = {
+      ...plano,
+      aNombreDe: aNombreDe(plano, plano.client),
+      faltaTutor: plano.guardianId ? faltaParaEmitirATutor(plano, plano.client) : null,
+    };
+    if (salida.client && typeof salida.client === "object") {
+      const { guardians: _tutores, ...resto } = salida.client;
+      salida.client = resto;
+    }
+    return ok(salida);
   } catch (err) {
     return serverError(err);
   }
@@ -69,6 +83,28 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
         updates.eventTypeId = et.id;
       } else {
         updates.eventTypeId = null;
+      }
+    }
+
+    /*
+     * A NOMBRE DE UN TUTOR (revisión 02/09/2026). Se puede poner, cambiar o
+     * quitar (`null`), y tiene que ser un tutor de la familia que PAGA. Si se
+     * cambia de familia sin decir tutor, el tutor se quita: el de la familia
+     * anterior no es de esta, y dejarlo colgado bloqueaba la emisión para
+     * siempre («ya no está en la ficha de la familia») sin forma de quitarlo.
+     */
+    const cambiaFamilia = "clientId" in body && body.clientId && body.clientId !== invoice.clientId;
+    if ("guardianId" in body || cambiaFamilia) {
+      const pedido = "guardianId" in body ? body.guardianId : null;
+      if (pedido) {
+        const { Client } = tenantModels;
+        const clienteFinal = updates.clientId ?? invoice.clientId;
+        const ficha = Client ? await Client.findByPk(clienteFinal, { attributes: ["id", "guardians"] }) : null;
+        const tutor = tutorDe(ficha, pedido);
+        if (!tutor) return error("Ese tutor no está en la ficha de la familia que paga", 422);
+        updates.guardianId = tutor.id;
+      } else {
+        updates.guardianId = null;
       }
     }
 

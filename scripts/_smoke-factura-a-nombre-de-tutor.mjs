@@ -94,9 +94,9 @@ describe("aNombreDe y faltaParaEmitirATutor", () => {
   });
 });
 
-describe("las listas blancas traen a los tutores", () => {
-  it("para congelar y para la factura se piden los guardians", () => {
+describe("las listas blancas y los tutores", () => {
+  it("para congelar al emitir se piden los guardians; la lista de los listados NO los lleva (DNI y teléfono no viajan)", () => {
     assert.ok(ATRIBUTOS_PARA_CONGELAR.includes("guardians"));
-    assert.ok(ATRIBUTOS_CLIENTE_FACTURA.includes("guardians"));
+    assert.equal(ATRIBUTOS_CLIENTE_FACTURA.includes("guardians"), false);
   });
 });

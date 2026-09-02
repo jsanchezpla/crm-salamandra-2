@@ -17,6 +17,7 @@ import { useEffect, useMemo, useState } from "react";
 import Select from "@/components/ui/Select.jsx";
 import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
 import { repartoIgual, repartoPorPorcentajes, porcentajesCuadran } from "@/lib/billing/repartoImportes.js";
+import { GUARDIAN_RELATIONSHIP_LABEL } from "@/lib/clients/guardians.js";
 
 const eur = (n) => new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" }).format(Number(n) || 0);
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
@@ -54,8 +55,7 @@ export default function PatientReparto({ patientId, defaultPayerClientId, onClos
       .catch(() => { if (vivo) setTutores([]); });
     return () => { vivo = false; };
   }, [defaultPayerClientId]);
-  const RELACION = { madre: "Madre", padre: "Padre", tutor: "Tutor/a", otro: "Otro" };
-  const rotuloTutor = (g) => `${RELACION[g.relationship] ?? "Tutor/a"} · ${g.name}${g.dni === null || g.dni === "" ? " (sin DNI)" : ""}`;
+  const rotuloTutor = (g) => `${GUARDIAN_RELATIONSHIP_LABEL[g.relationship] ?? GUARDIAN_RELATIONSHIP_LABEL.tutor} · ${g.name}${g.dni === null || g.dni === "" ? " (sin DNI)" : ""}`;
   function elegirPagador(i, valor) {
     if (valor.startsWith("tutor:")) {
       const g = tutores.find((t) => `tutor:${t.id}` === valor);
@@ -123,7 +123,8 @@ export default function PatientReparto({ patientId, defaultPayerClientId, onClos
       setRows((rs) => {
         const idx = rs.findIndex((x) => !x.clientId);
         const donde = idx === -1 ? rs.length - 1 : idx;
-        return rs.map((r2, i) => (i === donde ? { ...r2, clientId: id } : r2));
+        // La empresa es «otra ficha»: la fila deja de ser de un tutor (revisión 02/09/2026).
+        return rs.map((r2, i) => (i === donde ? { ...r2, pagador: "otra", clientId: id, guardianId: null } : r2));
       });
       if (mode === "single" && !singlePayer) setSinglePayer(id);
       setNuevaEmpresa(null);

@@ -1675,9 +1675,13 @@ Rodrigo el mismo día:
   `lv` o `completa`; tarjeta «Semana de lunes a viernes» en Configuración →
   Agenda). Por centro y no global porque hay centros que abren los sábados.
 - **Las horas de la rejilla** salen del horario de apertura de Citas →
-  Disponibilidad (todas las franjas de `availability`): de la más temprana a
-  la más tardía con media hora de margen redondeada a la media hora; sin
-  horario, 07:00–22:00 como siempre.
+  Disponibilidad (todas las franjas de `availability`) **y de las horas reales
+  de las citas** (la más temprana y la más tardía de un mes atrás a cuatro
+  adelante, en una consulta agregada): de la más temprana a la más tardía con
+  media hora de margen redondeada a la media hora. FullCalendar no pinta lo
+  que cae fuera de la rejilla, así que sin la parte de las citas un horario de
+  apertura a medias ESCONDÍA citas (cazado en la demo el 02/09 por la tarde).
+  Sin horario ni citas, 07:00–22:00 como siempre.
 - Las dos cosas las cuenta `GET /api/citas/vista` (`vistaDe()` en
   `lib/citas/vistaAgenda.js`, prueba `_smoke-vista-agenda.mjs`) y el
   calendario las aplica como `hiddenDays`, `slotMinTime` y `slotMaxTime`.

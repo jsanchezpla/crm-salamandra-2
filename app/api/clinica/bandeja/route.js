@@ -1,5 +1,5 @@
 import { Op } from "sequelize";
-import { esCoordinadora } from "../../../../lib/clinica/coordinadoras.js";
+import { veTodoElEquipo } from "../../../../lib/clinica/coordinadoras.js";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, forbidden } from "../../../../lib/utils/apiResponse.js";
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
@@ -35,7 +35,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   // elegir la bandeja de otra persona; una terapeuta ve LA SUYA… salvo que
   // coordine (02/09/2026, AV-0022 de Aumenta): la lista de Configuración →
   // Módulos, lib/clinica/coordinadoras.js.
-  const canSwitch = !therapistId || esCoordinadora(ctx.tenant, therapistId);
+  const canSwitch = !therapistId || veTodoElEquipo({ tenant: ctx.tenant, role: ctx.user?.role, teamMemberId: therapistId });
   const asked = sp.get("therapistId");
   if (canSwitch && asked && UUID_RE.test(asked)) therapistId = asked;
   if (!therapistId) {

@@ -10,7 +10,6 @@ import Select from "@/components/ui/Select.jsx";
 import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
 
 import { nifDeCliente } from "../../../../lib/billing/nifCliente.js";
-import { aNombreDe, faltaParaEmitirATutor } from "../../../../lib/billing/datosFiscales.js";
 import { ivaPorDefecto } from "../../../../lib/billing/ivaPorDefecto.js";
 import PatientReparto from "@/components/billing/PatientReparto.jsx";
 import { ordenarConSugeridos } from "../../../../lib/billing/empleadosSugeridos.js";
@@ -699,7 +698,7 @@ export default function FacturasPage() {
           >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <div className="font-medium text-neutral-800 truncate">{fila.inv.client?.name ?? "—"}{aNombreDe(fila.inv, fila.inv.client) ? <span className="text-neutral-400 font-normal"> · a nombre de {aNombreDe(fila.inv, fila.inv.client)}</span> : null}</div>
+                <div className="font-medium text-neutral-800 truncate">{fila.inv.client?.name ?? "—"}{fila.inv.aNombreDe ? <span className="text-neutral-400 font-normal"> · a nombre de {fila.inv.aNombreDe}</span> : null}</div>
                 <div className="text-[11px] text-neutral-400 font-mono">
                   {fila.inv.status === "draft" ? <span className="italic">borrador</span> : fila.inv.number} · {fmtDate(fila.inv.issueDate)}
                 </div>
@@ -749,7 +748,7 @@ export default function FacturasPage() {
               ) : (
                 <tr key={fila.inv.id} onClick={() => openDetail(fila.inv)} className="border-b border-neutral-50 hover:bg-neutral-50/70 transition-colors cursor-pointer">
                   <td className="px-4 py-3 font-mono text-xs text-neutral-500">{fila.inv.status === "draft" ? <span className="italic text-neutral-400">borrador</span> : fila.inv.number}</td>
-                  <td className="px-4 py-3 text-neutral-800">{fila.inv.client?.name ?? "—"}{aNombreDe(fila.inv, fila.inv.client) ? <span className="text-neutral-400 text-xs"> · a nombre de {aNombreDe(fila.inv, fila.inv.client)}</span> : null}</td>
+                  <td className="px-4 py-3 text-neutral-800">{fila.inv.client?.name ?? "—"}{fila.inv.aNombreDe ? <span className="text-neutral-400 text-xs"> · a nombre de {fila.inv.aNombreDe}</span> : null}</td>
                   <td className="px-4 py-3 text-neutral-500 text-xs">{fila.inv.employee?.displayName ?? "—"}</td>
                   <td className="px-4 py-3 text-neutral-500 text-xs">{fmtDate(fila.inv.issueDate)}</td>
                   <td className="px-4 py-3"><StatusBadge status={fila.inv.status} /></td>
@@ -1344,9 +1343,7 @@ function DetailView({ invoice, puedeFacturar, onAction, onEdit, onOpenLinked, sa
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
         <DetailRow label="Cliente (pagador)" value={invoice.client?.fiscalName || invoice.client?.name} />
-        {aNombreDe(invoice, invoice.client) && (
-          <DetailRow label="A nombre de" value={aNombreDe(invoice, invoice.client)} />
-        )}
+        {invoice.aNombreDe && <DetailRow label="A nombre de" value={invoice.aNombreDe} />}
         {invoice.patient && (
           <DetailRow label="Paciente" value={`${invoice.patient.firstName} ${invoice.patient.lastName}`} />
         )}
@@ -1478,7 +1475,7 @@ function DetailView({ invoice, puedeFacturar, onAction, onEdit, onOpenLinked, sa
         const fiscalMissing = [];
         // A nombre de un tutor (02/09/2026): lo que tiene que estar completo
         // es el tutor, y lo dice con sus palabras (lib/billing/datosFiscales.js).
-        const faltaTutor = invoice.guardianId ? faltaParaEmitirATutor(invoice, invoice.client) : null;
+        const faltaTutor = invoice.guardianId ? invoice.faltaTutor ?? null : null;
         if (invoice.guardianId) {
           if (faltaTutor) fiscalMissing.push(faltaTutor);
         } else {

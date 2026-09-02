@@ -67,7 +67,33 @@ describe("horasDeApertura", () => {
 describe("vistaDe", () => {
   it("junta las dos reglas en lo que pide el calendario", () => {
     const v = vistaDe({ settings: { citas: { semanaLaboral: "lv" } } }, [{ startTime: "09:00", endTime: "20:00" }]);
-    assert.deepEqual(v, { semanaLaboral: "lv", hiddenDays: [0, 6], slotMinTime: "08:30:00", slotMaxTime: "20:30:00", desdeHorario: true });
+    assert.deepEqual(v, { semanaLaboral: "lv", hiddenDays: [0, 6], finDeSemanaConCitas: false, slotMinTime: "08:30:00", slotMaxTime: "20:30:00", desdeHorario: true });
+  });
+
+  it("las citas reales ABREN la rejilla cuando caen fuera del horario de apertura (la demo: franjas de mañana, citas a las 18:15)", () => {
+    const v = vistaDe({ settings: {} }, [{ startTime: "09:00", endTime: "14:00" }], { citas: { desde: "09:00", hasta: "19:00" } });
+    assert.equal(v.slotMinTime, "08:30:00");
+    assert.equal(v.slotMaxTime, "19:30:00");
+  });
+
+  it("sin horario de apertura pero con citas, la rejilla se acota por las citas (Aumenta)", () => {
+    const v = vistaDe({ settings: {} }, [], { citas: { desde: "09:15", hasta: "20:15" } });
+    assert.deepEqual([v.slotMinTime, v.slotMaxTime, v.desdeHorario], ["08:30:00", "21:00:00", true]);
+  });
+
+  it("con citas en fin de semana, el fin de semana NO se esconde aunque el ajuste sea L-V", () => {
+    const v = vistaDe({ settings: { citas: { semanaLaboral: "lv" } } }, [], { citas: { desde: "09:00", hasta: "14:00", finDeSemana: true } });
+    assert.deepEqual(v.hiddenDays, []);
+    assert.equal(v.finDeSemanaConCitas, true);
+    const sin = vistaDe({ settings: { citas: { semanaLaboral: "lv" } } }, [], { citas: { desde: "09:00", hasta: "14:00", finDeSemana: false } });
+    assert.deepEqual(sin.hiddenDays, [0, 6]);
+  });
+
+  it("unas citas mal leídas (sin horas, o fin antes del inicio) no rompen nada", () => {
+    const base = vistaDe({ settings: {} }, [{ startTime: "09:00", endTime: "14:00" }]);
+    assert.deepEqual(vistaDe({ settings: {} }, [{ startTime: "09:00", endTime: "14:00" }], { citas: null }), base);
+    assert.deepEqual(vistaDe({ settings: {} }, [{ startTime: "09:00", endTime: "14:00" }], { citas: { desde: "x", hasta: "y" } }), base);
+    assert.deepEqual(vistaDe({ settings: {} }, [{ startTime: "09:00", endTime: "14:00" }], { citas: { desde: "23:30", hasta: "00:30" } }), base);
   });
 });
 

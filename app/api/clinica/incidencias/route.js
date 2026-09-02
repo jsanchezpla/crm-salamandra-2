@@ -73,10 +73,16 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     const porTexto = await filtroPorNombre(Incidencia.sequelize, q, ["Incidencia.title", "Incidencia.description"]);
     const alternativas = porTexto ? [porTexto] : [];
     if (M.Patient) {
-      const porPaciente = await filtroPorNombre(M.Patient.sequelize, q, ["Patient.first_name", "Patient.last_name"]);
-      if (porPaciente) {
-        const pacientes = await M.Patient.findAll({ where: porPaciente, attributes: ["id"], limit: 300, raw: true });
-        if (pacientes.length) alternativas.push({ patientId: { [Op.in]: pacientes.map((p) => p.id) } });
+      // Best-effort, como en lib/clients/familiasPorPaciente.js: un centro sin
+      // tabla de pacientes (42P01) sigue buscando por asunto y descripción.
+      try {
+        const porPaciente = await filtroPorNombre(M.Patient.sequelize, q, ["Patient.first_name", "Patient.last_name"]);
+        if (porPaciente) {
+          const pacientes = await M.Patient.findAll({ where: porPaciente, attributes: ["id"], limit: 300, raw: true });
+          if (pacientes.length) alternativas.push({ patientId: { [Op.in]: pacientes.map((p) => p.id) } });
+        }
+      } catch (e) {
+        if (e?.original?.code !== "42P01" && e?.parent?.code !== "42P01") throw e;
       }
     }
     if (alternativas.length) (where[Op.and] ||= []).push(alternativas.length === 1 ? alternativas[0] : { [Op.or]: alternativas });

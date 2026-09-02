@@ -165,6 +165,20 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
    */
   const [porTerapeuta, setPorTerapeuta] = useState(false);
   const [fechaColumnas, setFechaColumnas] = useState(() => new Date());
+  // Cada cambio hecho desde fuera de las columnas (el modal, un bloqueo, una
+  // cita nueva) sube esto, y las columnas vuelven a leer sus eventos.
+  const [versionColumnas, setVersionColumnas] = useState(0);
+  /*
+   * Refrescar LO QUE SE ESTÉ VIENDO (revisión 02/09/2026): el calendario grande
+   * si está montado, y las columnas por terapeuta si es lo que hay. Antes cada
+   * acción hacía `calendarRef…refetchEvents()`, que en la vista por terapeuta
+   * es un ref nulo: marcar una falta o borrar una cita desde el modal dejaba
+   * las columnas enseñando lo de antes.
+   */
+  function refrescarAgenda() {
+    calendarRef.current?.getApi?.()?.refetchEvents();
+    setVersionColumnas((v) => v + 1);
+  }
   function abrirPorTerapeuta() {
     const d = calendarRef.current?.getApi?.()?.getDate?.();
     setFechaColumnas(d instanceof Date && !Number.isNaN(d.getTime()) ? d : new Date());
@@ -172,8 +186,12 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
   }
   function cerrarPorTerapeuta() {
     // El calendario grande se vuelve a montar en el día que se estaba mirando.
-    calViewRef.current = { view: "timeGridDay", date: fechaColumnas.toISOString() };
-    setCalView({ view: "timeGridDay", date: fechaColumnas.toISOString() });
+    // Si ese día está escondido (sábado con la semana L-V), la vista de un
+    // solo día se quedaría en blanco: se vuelve en Semana (revisión 02/09/2026).
+    const escondido = (vista.hiddenDays ?? []).includes(fechaColumnas.getDay());
+    const view = escondido ? "timeGridWeek" : "timeGridDay";
+    calViewRef.current = { view, date: fechaColumnas.toISOString() };
+    setCalView({ view, date: fechaColumnas.toISOString() });
     setPorTerapeuta(false);
   }
   useEffect(() => {
@@ -238,7 +256,7 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "No se pudo procesar la solicitud");
       loadChangeRequests();
-      if (action === "approve") calendarRef.current?.getApi().refetchEvents();
+      if (action === "approve") refrescarAgenda();
     } catch (e) {
       await avisar({ titulo: "No se ha podido", texto: e.message });
     } finally {
@@ -517,7 +535,7 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
   }, [visibleEtIds, visibleTmIds]);
 
   useEffect(() => {
-    calendarRef.current?.getApi().refetchEvents();
+    refrescarAgenda();
   }, [visibleEtIds, visibleTmIds]);
 
   /*
@@ -673,7 +691,7 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
         const j = await res.json();
         if (!j.ok) throw new Error(j.error || "No se pudo copiar la cita");
       }
-      calendarRef.current?.getApi().refetchEvents();
+      refrescarAgenda();
     } catch (err) {
       await avisar({ titulo: modo === "cortar" ? "La cita no se ha movido" : "La cita no se ha copiado", texto: err.message });
     }
@@ -739,7 +757,7 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
         });
         const j = await res.json();
         if (!j.ok) throw new Error(j.error || "No se pudo mover el bloqueo");
-        calendarRef.current?.getApi().refetchEvents();
+        refrescarAgenda();
       } catch (err) {
         info.revert();
         await avisar({ titulo: "El bloqueo no se ha movido", texto: err.message });
@@ -758,7 +776,7 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
       if (!j.ok) throw new Error(j.error || "No se pudo mover la cita");
       // FullCalendar ya la ha pintado en el hueco nuevo; refrescamos para
       // reconciliar con el servidor (color/estado/hora exacta).
-      calendarRef.current?.getApi().refetchEvents();
+      refrescarAgenda();
     } catch (err) {
       info.revert();
       await avisar({ titulo: "La cita no se ha movido", texto: err.message });
@@ -982,7 +1000,7 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
             refreshKey={waitlistKey}
             esAdmin={viewerIsAdmin}
             onCountChange={setPendingCount}
-            onActioned={() => { loadPendingCount(); calendarRef.current?.getApi().refetchEvents(); }}
+            onActioned={() => { loadPendingCount(); refrescarAgenda(); }}
           />
         </div>
       )}
@@ -1064,7 +1082,9 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
           {mesesAbiertos && !esMovil && (
             <MiniMeses
               vista={vistaRango}
-              alPulsarDia={(d) => calendarRef.current?.getApi()?.gotoDate(d)}
+              // En la vista por terapeuta el calendario grande no está
+              // montado: el día elegido va a las columnas.
+              alPulsarDia={(d) => (porTerapeuta ? setFechaColumnas(d) : calendarRef.current?.getApi()?.gotoDate(d))}
             />
           )}
           <div className="flex-1 min-w-0 min-h-0 flex flex-col">
@@ -1078,6 +1098,7 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
               onEventClick={handleEventClick}
               avisar={avisar}
               onVolver={cerrarPorTerapeuta}
+              version={versionColumnas}
             />
           ) : (
           <FullCalendar
@@ -1261,7 +1282,7 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
           onClose={() => setBloqueoAbierto(null)}
           onSaved={() => {
             setBloqueoAbierto(null);
-            calendarRef.current?.getApi().refetchEvents();
+            refrescarAgenda();
           }}
         />
       )}
@@ -1301,14 +1322,14 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
           onClose={() => setOpenBooking(null)}
           onChanged={(data) => {
             setOpenBooking(data);
-            calendarRef.current?.getApi().refetchEvents();
+            refrescarAgenda();
             // Cancelar/confirmar una pendiente cambia el número de la lista de
             // espera; sin esto el contador quedaba desactualizado (2026-07-23).
             loadPendingCount();
           }}
           onDeleted={() => {
             setOpenBooking(null);
-            calendarRef.current?.getApi().refetchEvents();
+            refrescarAgenda();
           }}
         />
       )}
@@ -1326,7 +1347,7 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
           avisar={avisar}
           onClose={() => setCreacion(null)}
           onCreated={() => {
-            calendarRef.current?.getApi().refetchEvents();
+            refrescarAgenda();
             setCreacion(null);
           }}
         />

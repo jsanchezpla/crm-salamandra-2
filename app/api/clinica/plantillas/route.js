@@ -4,7 +4,7 @@ import { invalidateTenantCache } from "../../../../lib/tenant/tenantResolver.js"
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
 import { auditar, datosPeticion } from "../../../../lib/utils/auditoria.js";
 import { assertNotDemoMasterWrite } from "../../../../lib/demo/isDemo.js";
-import { DOCUMENTOS, normalizarPlantillas, plantillasDe } from "../../../../lib/clinica/plantillas.js";
+import { DOCUMENTOS, normalizarPlantillas, plantillasDe, ocultasTrasGuardar } from "../../../../lib/clinica/plantillas.js";
 
 /**
  * /api/clinica/plantillas — las plantillas de informe y de registro de sesión
@@ -78,6 +78,9 @@ export const PUT = withTenant(async (request, _rc, ctx) => {
     const settings = { ...(fila.settings ?? {}) };
     const clinica = { ...(settings.clinica ?? {}) };
     clinica.plantillas = { ...(clinica.plantillas ?? {}), [doc]: plantillas };
+    // Las de fábrica que el centro ha quitado de la lista quedan anotadas para
+    // que `plantillasDe` no las vuelva a ofrecer (revisión 02/09/2026).
+    clinica.plantillasOcultas = { ...(clinica.plantillasOcultas ?? {}), [doc]: ocultasTrasGuardar(doc, plantillas) };
     settings.clinica = clinica;
     await fila.update({ settings });
     invalidateTenantCache(ctx.tenant.slug);

@@ -428,11 +428,23 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
      * se hace nada.
      */
     let borradorRetirado = null;
-    if (statusChanged && (updates.status === "no_show" || updates.status === "cancelled")) {
-      borradorRetirado = await retirarBorradoresDeLaCita({
-        ClinicSession: tenantModels.ClinicSession,
-        bookingId: row.id,
-      });
+    if (
+      statusChanged &&
+      (updates.status === "no_show" || updates.status === "cancelled") &&
+      (tenantHasModule("clinica") || tenantHasModule("pacientes"))
+    ) {
+      // Best-effort y SOLO con módulo clínico (revisión 02/09/2026): el
+      // modelo ClinicSession existe en todos los tenants pero su tabla no, y
+      // un 42P01 aquí —con la cita ya guardada— se llevaba por delante el
+      // reembolso, el aviso de la falta y el correo de cancelación de abajo.
+      try {
+        borradorRetirado = await retirarBorradoresDeLaCita({
+          ClinicSession: tenantModels.ClinicSession,
+          bookingId: row.id,
+        });
+      } catch (e) {
+        console.warn("[citas:borrador] no se pudo retirar el borrador de la cita", e?.message);
+      }
     }
 
     // Cancelar desde el panel es cancelar el profesional: si la cita estaba

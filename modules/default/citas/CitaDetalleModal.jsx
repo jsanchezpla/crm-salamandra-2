@@ -1112,6 +1112,23 @@ export function CitaDetalleModal({
                   </span>
                 )}
                 {/*
+                 * La salida de una falta marcada por error (revisión
+                 * 02/09/2026): sin «Marcar completada» a la vista, una cita sin
+                 * paciente (o en un centro sin fichas de paciente) no tenía por
+                 * dónde deshacerla. Un enlace discreto, que no se lee como
+                 * «te falta algo por hacer».
+                 */}
+                {openBooking.status === "no_show" && !openBooking.tallerGrupoId && (
+                  <button
+                    onClick={markCompleted}
+                    disabled={saving}
+                    title="Si la falta se marcó por error: la cita pasa a completada y su falta se cierra."
+                    className="text-[12px] px-2 py-1.5 rounded-md text-neutral-500 hover:text-neutral-800 underline underline-offset-2 disabled:opacity-50"
+                  >
+                    ¿Marcada por error? Sí vino
+                  </button>
+                )}
+                {/*
                  * Las dos faltas, cada una con su botón (01/09/2026, Rodrigo):
                  * «así queda claro cuándo han venido y cuándo no». Antes era un
                  * «No asistió» que abría un diálogo para elegir cuál de las dos
