@@ -15,6 +15,7 @@ import SelectorPaciente from "../../../components/citas/SelectorPaciente.jsx";
 import PanelTallerCita from "../../../components/citas/PanelTallerCita.jsx";
 import SesionTallerDrawer from "../../../components/clinica/SesionTallerDrawer.jsx";
 import { colaDePreparacion } from "../../../lib/clinica/prepararSesion.js";
+import { PLANTILLA_ENTREVISTA } from "../../../lib/clinica/plantillas.js";
 import { citaNoSeDio } from "../../../lib/clinica/borradorDeCita.js";
 import { fichaDeLaCita } from "../../../lib/citas/fichaDeLaCita.js";
 import { esRecuperable, rotuloFalta, citasQuePuedenRecuperar } from "../../../lib/citas/recuperacionFalta.js";
@@ -767,7 +768,7 @@ export function CitaDetalleModal({
                         */}
                         {!citaNoSeDio(openBooking) && (
                           <a
-                            href={`/pacientes/${openBooking.patientId}/sesiones/nueva${colaDePreparacion(openBooking.scheduledAt, { bookingId: openBooking.id, profesionalId: openBooking.teamMemberId })}`}
+                            href={`/pacientes/${openBooking.patientId}/sesiones/nueva${colaDePreparacion(openBooking.scheduledAt, { bookingId: openBooking.id, profesionalId: openBooking.teamMemberId, plantilla: openBooking.eventType?.isInitialAssessment ? PLANTILLA_ENTREVISTA.key : null })}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             title={

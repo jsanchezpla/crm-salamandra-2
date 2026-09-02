@@ -555,6 +555,30 @@ Tres peticiones del Buzón del 02/09, con la decisión de Rodrigo el mismo día.
   centro entero; y en `GET /api/clinica/bandeja`, `canSwitch` es verdad
   también para ellas, así que eligen la bandeja de cualquier terapeuta.
 
+### La entrevista inicial: un tipo de cita y su registro de 15 apartados (02/09/2026, Aumenta)
+
+AV-0017 pedía subir el documento de la entrevista inicial y que la IA redactara
+el informe. Rodrigo lo reencuadró: la entrevista inicial es un TIPO DE CITA
+(el que lleva la marca «valoración inicial», `EventType.isInitialAssessment`)
+y su registro de sesión tiene los 15 apartados de la entrevista del centro,
+que se rellenan desde el bloc de notas o el audio con IA como cualquier
+registro.
+
+- **La plantilla**: `PLANTILLA_ENTREVISTA` (`lib/clinica/plantillas.js`), clave
+  `entrevista_inicial`, 15 apartados con su **pista** (los subpuntos de la
+  entrevista). Se ofrece en todos los centros con clínica detrás de las suyas
+  (`plantillasDe`), y un centro puede guardar la suya con la misma clave desde
+  Configuración → Plantillas. La pista es un campo nuevo del apartado que
+  `normalizarApartados` conserva (hasta 400 caracteres), el formulario enseña
+  bajo el título (`ApartadosEditor`) y `bloquesDelRegistro` lleva al prompt de
+  la IA (`lineaDeBloque` ya la sabía leer).
+- **De la cita al registro**: el modal de una cita cuyo tipo es valoración
+  inicial monta «Preparar sesión» con `plantilla=entrevista_inicial`
+  (`colaDePreparacion`); el editor abre con esa plantilla y el borrador nace
+  con su foto (`payloadDePreparacion` manda `contentSections`), así que al
+  volver, completar con IA o imprimir el PDF salen los 15 apartados.
+- Fijado en `scripts/_smoke-plantilla-entrevista.mjs`.
+
 ### Arrastrar y soltar ficheros (28/08/2026, Lau de Aumenta)
 
 El audio de la sesión le llega por WhatsApp: lo descarga y le queda a la vista

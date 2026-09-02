@@ -102,6 +102,7 @@ import {
   fechaDePreparacion,
   paraInputLocal,
   payloadDePreparacion,
+  plantillaDePreparacion,
   pidePreparar,
   profesionalDePreparacion,
   proximasSesionesPendientes,
@@ -249,6 +250,10 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
   // El profesional QUE DA ESA CITA (01/09/2026). Solo estrenando registro: una
   // sesión que ya existe lleva su firma dentro y no se toca desde una URL.
   const profDeLaCita = sessionId ? "" : profesionalDePreparacion(query.get("prof"));
+  // Con qué plantilla se abre un registro NUEVO (02/09/2026): la cita de
+  // valoración inicial pide la de la entrevista. Solo estrenando: una sesión
+  // que ya existe se abre con SU foto.
+  const plantillaPedida = sessionId ? "" : plantillaDePreparacion(query.get("plantilla"));
 
   const [patient, setPatient] = useState(null);
   const [loadingPatient, setLoadingPatient] = useState(true);
@@ -420,8 +425,9 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
       // ── Estrenando registro: los apartados son los del centro ────────────
       if (!sessionId) {
         if (plantillasDelCentro.length) {
-          setPlantillaKey(plantillasDelCentro[0].key);
-          setApartados(plantillasDelCentro[0].apartados.map((a) => ({ ...a })));
+          const elegida = plantillasDelCentro.find((p) => p.key === plantillaPedida) ?? plantillasDelCentro[0];
+          setPlantillaKey(elegida.key);
+          setApartados(elegida.apartados.map((a) => ({ ...a })));
         }
         return;
       }
@@ -782,6 +788,10 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
         fecha: cuandoEsLaSesion(),
         prepText: form.prepText,
         bookingId: cita,
+        // La foto de la plantilla con la que se está preparando (02/09/2026):
+        // sin ella, la entrevista inicial se reabriría con el registro normal.
+        plantilla: plantillaKey,
+        apartados,
       });
       const r = await fetch("/api/clinica/sessions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const j = await r.json();

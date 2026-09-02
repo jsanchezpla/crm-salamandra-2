@@ -199,9 +199,12 @@ export default function ApartadosEditor({
               </div>
             )}
 
-            {(ayudas[a.key] || a.tipo === "lista") && (
+            {/* La ayuda del centro, o la pista del apartado (los subpuntos de
+                la entrevista inicial, 02/09/2026), y en las listas el recordatorio. */}
+            {(ayudas[a.key] || a.pista || a.tipo === "lista") && (
               <p className="text-[10px] text-neutral-400 mb-1.5">
-                {ayudas[a.key] ?? "Uno por línea."}
+                {ayudas[a.key] ?? a.pista ?? ""}
+                {a.tipo === "lista" ? `${ayudas[a.key] || a.pista ? " · " : ""}Uno por línea.` : ""}
               </p>
             )}
             <textarea
