@@ -30,6 +30,9 @@ papeles que no existen.
 > que cambió esa noche, y el paquete completo es semanal— y la rotación lleva
 > `-maxdepth 1` porque el espejo vive dentro de `backups/`. El porqué, en
 > [Los ficheros ya no caben en la copia](decisions/2026-08-28-los-ficheros-ya-no-caben-en-la-copia.md).
+> Y desde el **03/09/2026** la retención va por NÚMERO, no por días: solo la
+> última copia en el servidor, las dos últimas fuera (Rodrigo). Ver
+> [Solo la última copia en el servidor](decisions/2026-09-03-solo-la-ultima-copia-en-el-servidor.md).
 
 Un fallo de la copia externa **no aborta** el script: la local ya está hecha y
 perderla por un problema de red sería peor.
