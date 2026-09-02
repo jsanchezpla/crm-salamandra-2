@@ -1122,7 +1122,7 @@ export function CitaDetalleModal({
                   <button
                     onClick={markCompleted}
                     disabled={saving}
-                    title="Si la falta se marcó por error: la cita pasa a completada y su falta se cierra."
+                    title="Si la falta se marcó por error: la cita pasa a completada. La incidencia que abrió la falta queda abierta para que administración la cierre."
                     className="text-[12px] px-2 py-1.5 rounded-md text-neutral-500 hover:text-neutral-800 underline underline-offset-2 disabled:opacity-50"
                   >
                     ¿Marcada por error? Sí vino

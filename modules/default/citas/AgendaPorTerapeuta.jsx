@@ -101,7 +101,8 @@ export default function AgendaPorTerapeuta({
       })
       .catch(() => { if (vivo) { bloqueosRef.current = []; refrescarTodas(); } });
     return () => { vivo = false; };
-  }, [fecha, refrescarTodas]);
+    // `version`: un bloqueo editado o borrado desde el modal también entra aquí.
+  }, [fecha, version, refrescarTodas]);
 
   /** Los bloqueos de una persona (y los del centro entero), como bloques fijos: aquí no se arrastran. */
   const fondosDe = useCallback((teamMemberId) =>

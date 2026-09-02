@@ -1322,14 +1322,12 @@ como haga falta por el mismo paciente.
 - **A quién se le emite**: `lib/billing/datosFiscales.js` — `tutorDe`,
   `fotoFiscalDeTutor` (nombre y DNI del tutor con la dirección fiscal de la
   familia), `aNombreDe` (para las pantallas) y `faltaParaEmitirATutor` (sin
-  DNI no se emite; el candado está en `/issue` y en la pantalla). Al emitir se
+  DNI no se emite; el candado está en `/issue`; la pantalla lo enseña con el `faltaTutor` que le llega del servidor). Al emitir se
   congela la foto del tutor en `fiscal_snapshot`; un borrador imprime al tutor
   vivo; la rectificativa conserva `guardian_id`.
 - **Cómo se pide**: en el reparto de una factura (`PatientReparto`), cada fila
   elige «La familia», uno de sus tutores o «Otra ficha»; `POST /api/billing/invoices`
-  acepta `guardianId` y comprueba que sea un tutor de ESA ficha. Las listas
-  blancas de cliente traen `guardians` (`ATRIBUTOS_CLIENTE_FACTURA`,
-  `ATRIBUTOS_PARA_CONGELAR`). Prueba: `scripts/_smoke-factura-a-nombre-de-tutor.mjs`.
+  acepta `guardianId` y comprueba que sea un tutor de ESA ficha. Los tutores NO viajan a los listados: el listado y la ficha de la factura resuelven `aNombreDe` y `faltaTutor` en el servidor y quitan `client.guardians` de la respuesta (`ATRIBUTOS_CLIENTE_FACTURA` no los lleva; `ATRIBUTOS_PARA_CONGELAR` sí, para emitir). Prueba: `scripts/_smoke-factura-a-nombre-de-tutor.mjs`.
 
 ## Migración y backfill
 

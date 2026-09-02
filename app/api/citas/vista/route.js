@@ -19,11 +19,11 @@ export const GET = withTenant(async (_request, _rc, ctx) => {
     const { Availability, Booking } = ctx.tenantModels;
     let franjas = [];
     try {
-      const filas = Availability ? await Availability.findAll({ attributes: ["startTime", "endTime", "eventTypeId"], raw: true }) : [];
-      // Las franjas DEL CENTRO (sin tipo de cita) mandan, como en lib/citas/slots.js;
-      // las de un tipo concreto solo cuentan si el centro no tiene generales.
-      const delCentro = filas.filter((f) => !f.eventTypeId);
-      franjas = delCentro.length ? delCentro : filas;
+      // TODAS las franjas, las del centro y las de un tipo de cita: una franja
+      // de un tipo abre horas que se pueden reservar, y la rejilla tiene que
+      // poder pintarlas (revisión 02/09/2026: quedarse solo con las del centro
+      // dejaba fuera la tarde de un tipo concreto).
+      franjas = Availability ? await Availability.findAll({ attributes: ["startTime", "endTime"], raw: true }) : [];
     } catch {
       franjas = [];
     }
@@ -54,8 +54,11 @@ async function horasDeLasCitas(Booking) {
       attributes: [
         [fn("min", literal(`extract(hour from ${inicioLocal}) * 60 + extract(minute from ${inicioLocal})`)), "desde"],
         [fn("max", literal(`extract(epoch from (${finLocal} - date_trunc('day', ${inicioLocal}))) / 60`)), "hasta"],
-        // ¿Hay alguna en sábado o domingo? Entonces no se esconde el fin de semana.
-        [fn("bool_or", literal(`extract(dow from ${inicioLocal}) in (0, 6)`)), "finDeSemana"],
+        // ¿Hay alguna en sábado o domingo de las dos últimas semanas en adelante?
+        // Entonces no se esconde el fin de semana. Solo lo reciente y lo que
+        // viene: un taller de un sábado de hace diez meses no puede anular el
+        // ajuste de lunes a viernes que el centro ha pedido.
+        [literal(`bool_or(extract(dow from ${inicioLocal}) in (0, 6)) FILTER (WHERE "Booking"."scheduled_at" >= NOW() - INTERVAL '14 days')`), "finDeSemana"],
       ],
       where: {
         // Un año atrás y catorce meses adelante: la rejilla se decide una vez al

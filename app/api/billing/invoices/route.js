@@ -1,6 +1,6 @@
 import { Op } from "sequelize";
 import { filtroPorNombre } from "../../../../lib/utils/busquedaDb.js";
-import { tutorDe, aNombreDe } from "../../../../lib/billing/datosFiscales.js";
+import { tutorDe, aNombreDe, faltaParaEmitirATutor } from "../../../../lib/billing/datosFiscales.js";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { logBillingAudit, resumenFactura, datosPeticion } from "../../../../lib/billing/audit.js";
 import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
@@ -242,9 +242,12 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
 function sinTutores(inv) {
   const j = typeof inv?.toJSON === "function" ? inv.toJSON() : { ...inv };
   const nombre = aNombreDe(j, j.client);
+  // Y lo que falta para emitirla a ese tutor: la ficha de la factura se abre
+  // desde esta fila sin volver a pedirla, y el candado de «Emitir» lo lee.
+  const falta = j.guardianId ? faltaParaEmitirATutor(j, j.client) : null;
   if (j.client && typeof j.client === "object") {
     const { guardians: _tutores, ...resto } = j.client;
     j.client = resto;
   }
-  return { ...j, aNombreDe: nombre };
+  return { ...j, aNombreDe: nombre, faltaTutor: falta };
 }
