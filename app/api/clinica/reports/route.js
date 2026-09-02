@@ -1,7 +1,7 @@
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { clientIdOfPatient } from "../../../../lib/clinica/patientClient.js";
 import { ok, created, error, forbidden } from "../../../../lib/utils/apiResponse.js";
-import { serializeReport, REPORT_TYPES } from "../../../../lib/clinica/serialize.js";
+import { serializeReport, REPORT_TYPES, REPORT_TYPES_NUEVOS } from "../../../../lib/clinica/serialize.js";
 import { logClinicaAudit, auditSummary } from "../../../../lib/clinica/audit.js";
 
 function gate(ctx) {
@@ -45,11 +45,22 @@ export const POST = withTenant(async (request, _rc, ctx) => {
   }
   if (!body?.patientId) return error("patientId es obligatorio");
   if (!body?.therapistId) return error("therapistId es obligatorio");
+  // La entrevista inicial NO es un informe (03/09/2026, Rodrigo): es un
+  // registro de sesión con su plantilla de 15 apartados. Se rechaza con el
+  // motivo en vez de convertirla en silencio a «evolutivo», que es lo que
+  // haría el respaldo de abajo. Los informes `admission` que ya existen se
+  // siguen leyendo y editando (REPORT_TYPES, en el PATCH).
+  if (body.reportType === "admission") {
+    return error(
+      "La entrevista inicial no es un informe: se escribe como registro de sesión desde la ficha del paciente («Nuevo registro», plantilla «Entrevista inicial») o desde su cita de valoración inicial.",
+      422
+    );
+  }
   const cs = body.contentSections && typeof body.contentSections === "object" && !Array.isArray(body.contentSections) ? body.contentSections : {};
   const payload = {
     patientId: body.patientId,
     therapistId: body.therapistId,
-    reportType: TYPES.includes(body.reportType) ? body.reportType : "evolution",
+    reportType: REPORT_TYPES_NUEVOS.includes(body.reportType) ? body.reportType : "evolution",
     reportDate: body.reportDate || new Date().toISOString().slice(0, 10),
     dueDate: body.dueDate || null,
     contentSections: cs,

@@ -7,12 +7,14 @@ import SelectorPaciente from "@/components/citas/SelectorPaciente.jsx";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import PreviewBanner from "../_components/PreviewBanner.jsx";
 import InformeDrawer from "@/components/clinica/InformeDrawer.jsx";
-import { REPORT_TYPES, REPORT_TYPE_LABEL } from "@/lib/clinica/serialize.js";
+import { REPORT_TYPES_NUEVOS, REPORT_TYPE_LABEL } from "@/lib/clinica/serialize.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 // Opciones del desplegable derivadas del catálogo compartido: añadir un tipo
-// nuevo (como "Derivación") no debe obligar a tocar cada pantalla.
-const TYPE_OPTIONS = REPORT_TYPES.map((value) => ({ value, label: REPORT_TYPE_LABEL[value] }));
+// nuevo (como "Derivación") no debe obligar a tocar cada pantalla. Son los
+// tipos que se pueden CREAR: la entrevista inicial ya no está (03/09/2026),
+// es un registro de sesión con su plantilla (lib/clinica/serialize.js).
+const TYPE_OPTIONS = REPORT_TYPES_NUEVOS.map((value) => ({ value, label: REPORT_TYPE_LABEL[value] }));
 
 const STATUS_STYLES = {
   draft: { bg: "bg-neutral-100", text: "text-neutral-600", dot: "bg-neutral-400" },
@@ -297,6 +299,14 @@ export default function InformesPage() {
                 <input type="date" className={inputCls} value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} title="Fecha de entrega" />
               </div>
               <p className="text-[11px] text-neutral-400">Se crea como borrador. El contenido se redactará después.</p>
+              {/* La entrevista inicial NO es un informe (03/09/2026, Rodrigo):
+                  es un registro de sesión con sus 15 apartados, que se rellena
+                  desde el bloc de notas o el audio con IA. Se dice aquí porque
+                  aquí es donde se venía a buscarla. */}
+              <p className="text-[11px] text-neutral-400">
+                ¿Una entrevista inicial? No es un informe: se escribe como registro de sesión desde la ficha del paciente
+                («Nuevo registro», plantilla «Entrevista inicial») o desde su cita de valoración inicial.
+              </p>
               {formError && <p className="text-xs text-rose-600">{formError}</p>}
               <div className="flex justify-end gap-2 pt-1">
                 <button type="button" onClick={() => setShowCreate(false)} disabled={saving} className="px-4 py-2 rounded-lg border border-neutral-200 text-xs text-neutral-600 hover:bg-neutral-50 disabled:opacity-50">Cancelar</button>

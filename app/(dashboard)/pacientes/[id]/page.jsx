@@ -15,7 +15,7 @@ import PatientExternalContactsSection from "@/components/clinica/PatientExternal
 import InterventionPlanSection from "@/components/clinica/InterventionPlanSection.jsx";
 import PreviewBanner from "../../clinica/_components/PreviewBanner.jsx";
 import PropuestaIA from "@/components/clinica/PropuestaIA.jsx";
-import { REPORT_TYPES, REPORT_TYPE_LABEL } from "@/lib/clinica/serialize.js";
+import { REPORT_TYPES_NUEVOS, REPORT_TYPE_LABEL } from "@/lib/clinica/serialize.js";
 import {
   aFormulario,
   apartadosConPlantillas,
@@ -30,7 +30,9 @@ import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 import { enlaceDeVuelta } from "@/lib/clients/volver.js";
 import { rotuloDeBorrador } from "@/lib/clinica/borradorDeCita.js";
 
-const REPORT_TYPE_OPTIONS = REPORT_TYPES.map((value) => ({ value, label: REPORT_TYPE_LABEL[value] }));
+// Los tipos que se pueden CREAR: la entrevista inicial ya no está (03/09/2026),
+// es un registro de sesión con su plantilla (lib/clinica/serialize.js).
+const REPORT_TYPE_OPTIONS = REPORT_TYPES_NUEVOS.map((value) => ({ value, label: REPORT_TYPE_LABEL[value] }));
 
 /**
  * El formulario de «Nuevo informe», vacío. UNA SOLA COPIA, a propósito.
@@ -1285,6 +1287,17 @@ export default function PacienteFichaPage() {
                 <Select value={reportForm.reportType} onChange={(v) => setReportForm((f) => ({ ...f, reportType: v }))} options={REPORT_TYPE_OPTIONS} className={inputCls} />
                 <input type="date" className={inputCls} value={reportForm.dueDate} onChange={(e) => setReportForm((f) => ({ ...f, dueDate: e.target.value }))} title="Fecha de entrega" />
               </div>
+              {/* La entrevista inicial NO es un informe (03/09/2026, Rodrigo):
+                  es un registro de sesión con sus 15 apartados, que se rellena
+                  desde el bloc de notas o el audio con IA. El enlace abre el
+                  registro nuevo ya con esa plantilla. */}
+              <p className="text-[11px] text-neutral-400">
+                ¿Una entrevista inicial? No es un informe:{" "}
+                <Link href={`/pacientes/${patient.id}/sesiones/nueva?plantilla=entrevista_inicial`} className="underline hover:text-neutral-600">
+                  escríbela como registro de sesión
+                </Link>
+                , con sus 15 apartados y la IA del audio o del bloc de notas.
+              </p>
               {/* Derivación: a qué especialista externo se manda. El catálogo lo
                   fija cada centro (Configuración → Derivaciones). */}
               {reportForm.reportType === "referral" && derivaciones.length > 0 && (

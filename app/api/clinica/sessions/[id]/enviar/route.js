@@ -5,6 +5,7 @@ import { logClinicaAudit } from "@/lib/clinica/audit.js";
 import { serializeSession } from "@/lib/clinica/serialize.js";
 import { clientIdOfPatient } from "@/lib/clinica/patientClient.js";
 import { buildSessionPdfBuffer, sessionPdfFilename } from "@/lib/clinica/sessionPdf.js";
+import { includesDeLaSesion, argumentosDelPdfDeSesion } from "@/lib/clinica/argumentosDelPdf.js";
 import { documentoDeRegistro, motivoParaNoEnviar } from "@/lib/clinica/envioRegistro.js";
 import {
   quotaBytesDe,
@@ -48,34 +49,25 @@ export const POST = withTenant(async (request, rc, ctx) => {
     const { id } = await rc.params;
     if (!UUID_RE.test(id)) return error("id inválido", 422);
 
-    const { ClinicSession, Patient, TeamMember, Document } = ctx.tenantModels;
+    const { ClinicSession, TeamMember, Document } = ctx.tenantModels;
     if (!Document) return error("Este cliente no tiene el archivo de documentos activado", 503);
 
-    const session = await ClinicSession.findByPk(id, {
-      include: [{ model: TeamMember, as: "therapist", attributes: ["id", "displayName"] }],
-    });
+    const session = await ClinicSession.findByPk(id, { include: includesDeLaSesion(ctx.tenantModels) });
     if (!session) return notFound("Sesión no encontrada");
 
-    const patient = await Patient.findByPk(session.patientId, {
-      attributes: ["id", "firstName", "lastName", "clientId"],
-    });
-    const patientName = `${patient?.firstName ?? ""} ${patient?.lastName ?? ""}`.trim();
+    // Los MISMOS argumentos que «Ver PDF» (03/09/2026): lo que la profesional
+    // previsualiza es lo que recibe la familia.
+    const argumentos = await argumentosDelPdfDeSesion(session, ctx);
+    const { patientName } = argumentos;
 
     const clientId =
-      session.clientId ?? patient?.clientId ?? (await clientIdOfPatient(ctx.tenantModels, session.patientId));
+      session.clientId ?? argumentos.patientClientId ?? (await clientIdOfPatient(ctx.tenantModels, session.patientId));
     const motivo = motivoParaNoEnviar({ clientId });
     if (motivo) return error(motivo, 409);
 
     let buffer;
     try {
-      buffer = await buildSessionPdfBuffer({
-        session,
-        patientName,
-        therapistName: session.therapist?.displayName ?? null,
-        tenantName: ctx.tenant.name,
-        brand: ctx.tenant.settings?.brand ?? {},
-        tenant: ctx.tenant,
-      });
+      buffer = await buildSessionPdfBuffer(argumentos);
     } catch (err) {
       process.stderr.write(`[clinica:enviar-registro] PDF falló: ${err.message}\n`);
       return error("No se pudo generar el PDF del registro", 500);

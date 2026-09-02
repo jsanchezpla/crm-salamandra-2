@@ -31,7 +31,10 @@ export function defineClinicalReport(sequelize) {
       // 'referral' (Derivación) añadido en el sprint Aumenta 2026-07-28; la
       // especialidad destino va en contentSections.referralSpecialty
       // (claves de lib/clinica/derivaciones.js). 'admission' se ETIQUETA
-      // "Entrevista inicial" desde ese sprint (el valor en BD no cambia).
+      // "Entrevista inicial" desde ese sprint (el valor en BD no cambia), y
+      // desde el 03/09/2026 NO se crean más: la entrevista inicial es un
+      // registro de sesión con su plantilla (lib/clinica/plantillas.js,
+      // PLANTILLA_ENTREVISTA). Se queda en el enum por los que ya existen.
       // 'beca' (informe para la beca NEAE, 26/08/2026): sus apartados y los
       // nombres oficiales de la cabecera viven en lib/clinica/beca.js; el valor
       // lo añade al enum de cada schema scripts/migrate-informe-beca.js, que va
