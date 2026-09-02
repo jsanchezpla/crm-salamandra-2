@@ -68,6 +68,18 @@ else
   docker compose up -d --build --no-deps app
 fi
 
+# ─── La caché de compilación de Docker (02/09/2026) ──────────────────────────
+# Cada `--build` deja capas intermedias que nadie borra. El 02/09 había 42 GB
+# de caché de builds viejos en /var/lib/docker —más que las copias de
+# seguridad, 24 GB— y la copia nocturna avisaba de que el disco se acababa.
+# Nadie lo veía: no sale en `du` de las copias ni lo explica `df`. Se poda
+# aquí, justo después del build, dejando los 5 GB más recientes para que el
+# siguiente despliegue siga siendo rápido. Solo toca la caché de builds: ni
+# imágenes en uso, ni contenedores, ni volúmenes (la base vive en un volumen).
+# Nunca hace fallar el deploy: si la poda peta, la app ya está levantada.
+echo "→ Podando la caché de compilación de Docker (se dejan los 5 GB más recientes)..."
+docker builder prune -f --keep-storage 5GB 2>&1 | tail -1 || true
+
 echo "──────────────────────────────────────"
 echo "Deploy completado — $(date '+%H:%M:%S')"
 

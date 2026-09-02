@@ -11,6 +11,15 @@
  * de fallo, así que el silencio solo significa algo si se espera un correo cada
  * semana. Lo pidió Jorge el 20/08/2026 con esas palabras.
  *
+ * Y UN TERCERO, EL AVISO, QUE NO ES UN FALLO (02/09/2026). El chivato del disco
+ * y los frenos de la caducidad externa salían con la plantilla de FALLO —«La
+ * copia de seguridad ha fallado», «los datos de hoy pueden no estar
+ * respaldados»— cuando la copia había salido bien y lo único que pasaba es que
+ * el disco andaba justo. Rodrigo leyó dos mañanas seguidas que la copia
+ * fallaba, y no fallaba. Un aviso que grita más de lo que pasa se acaba
+ * ignorando, y el día que sea de verdad nadie lo mira. Ahora `--tipo aviso`
+ * dice lo que es: la copia está hecha, y hay algo que mirar.
+ *
  * DE QUIÉN SALE. De las credenciales de Resend del tenant `salamandra_solutions`,
  * el mismo camino que ya usa el buzón (`lib/buzon/avisarPorCorreo.js`). NO se usa
  * `RESEND_API_KEY` del entorno: en producción está vacía y `sendEmail` entraría
@@ -24,7 +33,7 @@
  *
  * USO (desde el host del VPS, con la app levantada):
  *   echo "cuerpo" | docker exec -i crm-salamandra-app-1 \
- *     node scripts/avisar-copia.mjs --asunto "..." [--tipo fallo|resumen]
+ *     node scripts/avisar-copia.mjs --asunto "..." [--tipo fallo|aviso|resumen]
  *
  * El cuerpo llega por la entrada estándar y se lee COMO FLUJO, no de una vez:
  * `docker exec -i` da una tubería no bloqueante y `readFileSync(0)` revienta con
@@ -53,7 +62,9 @@ async function leerCuerpo() {
 }
 
 const asunto = argumento("asunto", "Copia de seguridad del CRM");
-const tipo = argumento("tipo", "resumen") === "fallo" ? "fallo" : "resumen";
+const TIPOS = ["fallo", "aviso", "resumen"];
+const tipoPedido = argumento("tipo", "resumen");
+const tipo = TIPOS.includes(tipoPedido) ? tipoPedido : "resumen";
 const cuerpo = await leerCuerpo();
 
 if (!cuerpo) {
@@ -78,16 +89,35 @@ if (!apiKey || !fromEmail) {
   process.exit(1);
 }
 
+// Lo que dice cada tipo. El titular tiene que ser VERDAD: «ha fallado» solo
+// cuando la copia no se ha hecho (ver la cabecera, 02/09/2026).
+const TEXTOS = {
+  fallo: {
+    preheader: "La copia de esta noche NO se ha hecho",
+    title: "La copia de seguridad ha fallado",
+    intro: "Los datos de hoy pueden no estar respaldados. Esto es lo que dice el registro:",
+  },
+  aviso: {
+    preheader: "La copia se ha hecho, pero hay algo que mirar",
+    title: "Aviso de la copia de seguridad",
+    intro:
+      "La copia de esta noche SÍ se ha hecho. Esto no es un fallo, pero conviene " +
+      "mirarlo antes de que lo sea:",
+  },
+  resumen: {
+    preheader: "La copia diaria sigue en pie",
+    title: "Copia de seguridad: parte semanal",
+    intro: "Ningún fallo esta semana. El detalle, por si el tamaño o el número de copias no cuadra:",
+  },
+};
+
 // El cuerpo es texto plano del script de bash: se escapa entero y solo se
 // respetan los saltos de línea. Nada de HTML que venga de fuera.
 const html = renderLayout({
   tenantName: "Salamandra Solutions",
-  preheader: tipo === "fallo" ? "La copia de esta noche NO se ha hecho" : "La copia diaria sigue en pie",
-  title: tipo === "fallo" ? "La copia de seguridad ha fallado" : "Copia de seguridad: parte semanal",
-  intro:
-    tipo === "fallo"
-      ? "Los datos de hoy pueden no estar respaldados. Esto es lo que dice el registro:"
-      : "Ningún fallo esta semana. El detalle, por si el tamaño o el número de copias no cuadra:",
+  preheader: TEXTOS[tipo].preheader,
+  title: TEXTOS[tipo].title,
+  intro: TEXTOS[tipo].intro,
   bodyHtml: `<pre style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;line-height:1.5;white-space:pre-wrap;margin:0">${escapeHtml(cuerpo)}</pre>`,
   footer:
     "Lo manda solo el servidor, desde scripts/backup-db.sh. Si este correo deja " +
@@ -103,7 +133,7 @@ try {
     from: fromEmail,
     replyTo: replyTo || undefined,
     apiKey,
-    tags: [{ name: "tipo", value: tipo === "fallo" ? "copia-fallo" : "copia-resumen" }],
+    tags: [{ name: "tipo", value: `copia-${tipo}` }],
   });
   const { salio, motivo } = envioRealizado(res, `copia:${tipo}`);
   process.stdout.write(salio ? `[copia:aviso] correo enviado a ${DESTINO}\n` : `[copia:aviso] no salió: ${motivo}\n`);

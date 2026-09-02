@@ -213,6 +213,13 @@ destino_uploads="$DIR_BACKUPS/uploads-$marca.tar.gz"
 # BEST-EFFORT SIEMPRE, y por eso todo lleva `|| true`: si la app está caída o
 # Resend no contesta, la COPIA no puede fallar por culpa del correo. Una copia
 # buena sin aviso sigue siendo una copia buena.
+#
+# TRES TIPOS (02/09/2026): `fallo` solo cuando la copia NO se ha hecho o no ha
+# salido del servidor; `aviso` cuando la copia está hecha pero hay algo que
+# mirar (disco justo, caducidad externa frenada); `resumen` el parte del lunes.
+# Hasta hoy el disco justo iba como `fallo` y el correo decía «la copia ha
+# fallado» dos mañanas seguidas con la copia bien hecha. El titular tiene que
+# ser verdad, o se deja de leer.
 avisar() {
   [ "${AVISAR}" = "1" ] || return 0
   if ! printf '%s\n' "$3" | docker exec -i "$CONTENEDOR_APP" \
@@ -244,6 +251,22 @@ cuerpo_de_fallo() {
 #
 # NO aborta: una copia con el disco justo sigue siendo mejor que ninguna, y
 # quien tiene que decidir es una persona. Solo grita.
+#
+# Y dice DÓNDE mirar (02/09/2026): el primer aviso de disco decía «mira qué ha
+# crecido» y llevó a las copias, que ocupaban 24 GB — pero el disco se lo
+# estaba comiendo la caché de compilación de Docker, 42 GB de builds viejos
+# que ni `du` de las copias ni `df` enseñan. Desde entonces deploy.sh la poda,
+# y este correo trae `docker system df` para que se vea a la primera.
+cuerpo_de_disco() {
+  cuerpo_de_fallo "$1"
+  echo ""
+  echo "Qué ocupan las copias ($DIR_BACKUPS):"
+  du -sh "$DIR_BACKUPS" 2>/dev/null || true
+  echo ""
+  echo "Docker (la fila 'Build Cache' es el sospechoso habitual; se poda con"
+  echo "  docker builder prune -f --keep-storage 5GB):"
+  docker system df 2>/dev/null || echo "(docker system df no contestó)"
+}
 avisar_si_falta_disco() {
   local libre_kb libre_gb
   libre_kb=$(df -Pk "$DIR_BACKUPS" | awk 'NR==2 {print $4}')
@@ -255,8 +278,8 @@ avisar_si_falta_disco() {
   if [ "$libre_gb" -lt "$MINIMO_LIBRE_GB" ]; then
     echo "[$(date '+%F %T')] ⚠️ Quedan $libre_gb GB libres (mínimo $MINIMO_LIBRE_GB). Las copias"
     echo "[$(date '+%F %T')]    caben hoy, pero esto se acaba. Mira qué ha crecido."
-    avisar "⚠️ Al disco del CRM le quedan $libre_gb GB" fallo \
-      "$(cuerpo_de_fallo "quedan $libre_gb GB libres en $DIR_BACKUPS, por debajo del mínimo de $MINIMO_LIBRE_GB GB")" || true
+    avisar "⚠️ Al disco del CRM le quedan $libre_gb GB" aviso \
+      "$(cuerpo_de_disco "quedan $libre_gb GB libres en $DIR_BACKUPS, por debajo del mínimo de $MINIMO_LIBRE_GB GB (la copia de esta noche sí se hace)")" || true
   fi
   return 0
 }
@@ -349,7 +372,7 @@ caducar_en_destino() {
       echo "[$(date '+%F %T')] ⛔ $ajuste vale '${!ajuste-}', que no es un número entero."
       echo "[$(date '+%F %T')]    NO se caduca nada en $DESTINO_REMOTO: con un ajuste que no se"
       echo "[$(date '+%F %T')]    entiende, los frenos no valen y esto borra copias de seguridad."
-      avisar "⚠️ La caducidad de la copia externa está mal configurada" fallo \
+      avisar "⚠️ La caducidad de la copia externa está mal configurada" aviso \
         "$(cuerpo_de_fallo "$ajuste vale '${!ajuste-}' y no es un número entero; no se ha caducado nada en $DESTINO_REMOTO")" || true
       return 0
     fi
@@ -380,7 +403,7 @@ caducar_en_destino() {
     echo "[$(date '+%F %T')] ⛔ Caducar a $RETENCION_REMOTA_DIAS días dejaría $n_quedan de $n_todo fichero(s)"
     echo "[$(date '+%F %T')]    en $DESTINO_REMOTO (mínimo $MINIMO_REMOTO). NO se borra nada: esto no es"
     echo "[$(date '+%F %T')]    limpieza, es que algo va mal."
-    avisar "⚠️ La caducidad de la copia externa se ha frenado sola" fallo \
+    avisar "⚠️ La caducidad de la copia externa se ha frenado sola" aviso \
       "$(cuerpo_de_fallo "caducar a $RETENCION_REMOTA_DIAS días en $DESTINO_REMOTO habría dejado $n_quedan de $n_todo ficheros; se abortó el borrado")" || true
     return 0
   fi
@@ -391,7 +414,7 @@ caducar_en_destino() {
     echo "[$(date '+%F %T')] ⛔ Caducar a $RETENCION_REMOTA_DIAS días se llevaría $n_viejo de $n_todo fichero(s)"
     echo "[$(date '+%F %T')]    de $DESTINO_REMOTO en una sola noche (tope: $MAXIMO_BORRADO_PCT %). NO se borra"
     echo "[$(date '+%F %T')]    nada: eso no es la caducidad haciendo su trabajo, es que algo va mal."
-    avisar "⚠️ La caducidad de la copia externa se ha frenado sola" fallo \
+    avisar "⚠️ La caducidad de la copia externa se ha frenado sola" aviso \
       "$(cuerpo_de_fallo "caducar a $RETENCION_REMOTA_DIAS días en $DESTINO_REMOTO se habría llevado $n_viejo de $n_todo ficheros de una noche (tope $MAXIMO_BORRADO_PCT %); se abortó el borrado")" || true
     return 0
   fi
