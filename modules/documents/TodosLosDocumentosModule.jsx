@@ -62,7 +62,10 @@ export default function TodosLosDocumentosModule({ visibilidadInicial = "private
     };
   }, [visibility, q, reloadKey]);
 
-  const canManage = (row) => me && row.ownerUserId === me.id;
+  // Un adjunto de preparación de sesión se quita desde su sesión, no desde el
+  // archivo (02/09/2026, AV-0027): el servidor lo rechaza igual, esto solo
+  // evita enseñar una papelera que no va a funcionar.
+  const canManage = (row) => me && row.ownerUserId === me.id && row.source !== "sesion_preparacion";
 
   async function deleteDoc(doc) {
     if (!confirm(`¿Eliminar «${doc.fileName}»?`)) return;
@@ -153,6 +156,7 @@ export default function TodosLosDocumentosModule({ visibilidadInicial = "private
                   {fmtSize(doc.fileSize)} · {fmtDate(doc.createdAt)}
                   {visibility === "shared" && doc.ownerName ? ` · ${doc.ownerName}` : ""}
                   {doc.folderPath ? ` · 📁 ${doc.folderPath}` : ""}
+                  {doc.source === "sesion_preparacion" ? " · preparación de sesión" : ""}
                 </div>
               </div>
               <div className="flex items-center gap-1 shrink-0">

@@ -4,6 +4,7 @@ import { MODULE_KEYS } from "@/lib/tenant/moduleKeys.js";
 import { logDocumentsAudit, resolveOwnerNames, canViewDocument, serializeDocument } from "@/lib/documents/helpers.js";
 import { carpetasCompartidasCon } from "@/lib/documents/carpetasCompartidas.js";
 import { deleteDocumentFile } from "@/lib/documents/documentStorage.js";
+import { esAdjuntoDePreparacion } from "@/lib/clinica/prepFiles.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -43,6 +44,12 @@ export const DELETE = withTenant(async (request, { params }, ctx) => {
     const { Document } = ctx.tenantModels;
     const doc = await Document.findByPk(id);
     if (!doc) return notFound("Documento no encontrado");
+    // Un adjunto de la preparación de una sesión se quita desde su sesión
+    // (02/09/2026, AV-0027): borrarlo aquí dejaría el registro apuntando a un
+    // fichero que ya no está.
+    if (esAdjuntoDePreparacion(doc)) {
+      return error("Este adjunto es de la preparación de una sesión: se quita desde el registro de la sesión.", 409);
+    }
     if (doc.ownerUserId !== userId) return forbidden("Solo el propietario puede borrar el documento");
 
     const storagePath = doc.storagePath;

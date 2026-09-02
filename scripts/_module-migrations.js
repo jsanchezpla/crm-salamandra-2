@@ -203,6 +203,12 @@ export const CORE = [
   // de tabla `documents`; la FK a `incidencias` solo donde esa tabla existe.
   "migrate-documents-incidencia-link",
 
+  // El adjunto de PREPARACIÓN de una sesión, en el archivo central
+  // (`documents.clinic_session_id`, 02/09/2026, AV-0027 de Aumenta). CORE por el
+  // mismo criterio que sus dos hermanas: la columna la declara el modelo
+  // Document para todos. Aditiva; la FK a `clinic_sessions` solo donde existe.
+  "migrate-documents-session-link",
+
   // El documento que HAY QUE LEER y el bloqueo al que va aparejado
   // (`documents.team_block_id` + tabla `document_reads`, 01/09/2026, Rodrigo).
   // CORE por el mismo criterio que su hermana de aquí arriba: la columna vive

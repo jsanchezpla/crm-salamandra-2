@@ -86,7 +86,8 @@ export default function DocumentsModule({ avanzado = true }) {
     };
   }, [visibility, currentFolderId, reloadKey, avanzado]);
 
-  const canManage = (row) => me && row.ownerUserId === me.id;
+  // Un adjunto de preparación de sesión se quita desde su sesión (02/09/2026, AV-0027).
+  const canManage = (row) => me && row.ownerUserId === me.id && row.source !== "sesion_preparacion";
 
   function switchVisibility(v) {
     setVisibility(v);

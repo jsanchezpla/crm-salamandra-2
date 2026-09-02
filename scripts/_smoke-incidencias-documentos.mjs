@@ -106,8 +106,8 @@ const fichaBorrado = leer("app/api/pacientes/[id]/documents/[docId]/route.js");
 // Desde el 29/08/2026 son TRES: se sumó `sesion`, el registro de sesión que se
 // envía al área privada de la familia. Se ve y se descarga desde la ficha, pero
 // se retira desde su sesión (por eso no entra en el DELETE de aquí abajo).
-check('el GET de la ficha lista source paciente, incidencia Y sesion', fichaLista.includes('["paciente", "incidencia", "sesion"]'));
-check("la descarga desde la ficha acepta los tres", fichaDescarga.includes('["paciente", "incidencia", "sesion"]'));
+check("el GET de la ficha lista source paciente, incidencia, sesion Y sesion_preparacion (02/09/2026)", fichaLista.includes('["paciente", "incidencia", "sesion", "sesion_preparacion"]'));
+check("la descarga desde la ficha acepta los cuatro", fichaDescarga.includes('["paciente", "incidencia", "sesion", "sesion_preparacion"]'));
 check(
   "el DELETE de la ficha sigue SIN aceptar incidencia (se borra desde la incidencia)",
   fichaBorrado.includes('source: "paciente"') && !fichaBorrado.includes("incidencia")

@@ -69,6 +69,15 @@ export const DELETE = withTenant(async (request, rc, ctx) => {
     if (veto) return veto;
 
     await sesion.update({ prepFiles: listaPrepFiles(sesion).filter((f) => String(f.id) !== String(fileId)) });
+    // Y su fila del archivo central, si la tiene (02/09/2026, AV-0027): el
+    // fichero es el mismo, así que se va con él. Sin tabla o sin columna (centro
+    // sin migrar) no hay fila que quitar.
+    try {
+      const { Document } = ctx.tenantModels;
+      if (Document) await Document.destroy({ where: { clinicSessionId: id, storagePath: adjunto.storagePath } });
+    } catch {
+      /* sin fila en el archivo */
+    }
     await deleteDocumentFile(ctx.tenant.slug, adjunto.storagePath).catch(() => {});
 
     await logClinicaAudit({

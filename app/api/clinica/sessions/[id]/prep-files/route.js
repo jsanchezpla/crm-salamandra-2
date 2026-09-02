@@ -3,7 +3,13 @@ import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { created, error, forbidden, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
 import { logClinicaAudit } from "../../../../../../lib/clinica/audit.js";
 import { serializeSession } from "../../../../../../lib/clinica/serialize.js";
-import { extPermitida, listaPrepFiles, nuevoPrepFile, MAX_PREP_FILES } from "../../../../../../lib/clinica/prepFiles.js";
+import {
+  extPermitida,
+  listaPrepFiles,
+  nuevoPrepFile,
+  documentoDePrepFile,
+  MAX_PREP_FILES,
+} from "../../../../../../lib/clinica/prepFiles.js";
 import {
   MAX_FILE_SIZE_BYTES,
   TENANT_QUOTA_BYTES,
@@ -90,6 +96,22 @@ export const POST = withTenant(async (request, rc, ctx) => {
     } catch (dbErr) {
       await deleteDocumentFile(ctx.tenant.slug, storagePath);
       throw dbErr;
+    }
+
+    // Desde el 02/09/2026 (AV-0027) el adjunto tiene también su fila en el
+    // archivo central, para que se encuentre desde Documentos y desde la ficha
+    // del paciente. Best-effort: el adjunto ya está guardado en la sesión, que
+    // es la operación principal; sin tabla `documents` (centro sin el módulo)
+    // o si falla, se queda solo en la sesión.
+    try {
+      const { Document } = ctx.tenantModels;
+      if (Document) {
+        await Document.create(
+          documentoDePrepFile({ sesion, adjunto: entrada, ownerUserId: request.headers.get("x-user-id") || null })
+        );
+      }
+    } catch (docErr) {
+      console.warn("[prep-files] el adjunto no ha entrado en documents:", docErr?.message);
     }
 
     await logClinicaAudit({

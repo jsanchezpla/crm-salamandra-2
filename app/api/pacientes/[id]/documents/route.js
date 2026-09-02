@@ -59,7 +59,7 @@ export const GET = withTenant(async (request, { params }, ctx) => {
     // la familia tiene en su área privada se ve aquí, para que quien abra la
     // ficha sepa qué se le ha mandado sin ir a buscarlo sesión a sesión. Se
     // borra desde su sesión (reenviar reemplaza), no desde aquí.
-    const where = { patientId: id, source: { [Op.in]: ["paciente", "incidencia", "sesion"] } };
+    const where = { patientId: id, source: { [Op.in]: ["paciente", "incidencia", "sesion", "sesion_preparacion"] } };
     const q = (new URL(request.url).searchParams.get("q") || "").trim();
     if (q) where.fileName = { [Op.iLike]: `%${q}%` };
 

@@ -304,6 +304,14 @@ export default function PatientDocumentsSection({ patientId }) {
                         Enviado a la familia
                       </span>
                     )}
+                    {d.source === "sesion_preparacion" && (
+                      <span
+                        className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-sky-50 text-sky-700"
+                        title="Adjunto de la preparación de una sesión (02/09/2026). La familia no lo ve. Se quita desde el registro de la sesión, no desde aquí."
+                      >
+                        Preparación de sesión
+                      </span>
+                    )}
                   </div>
                   <div className="text-[11px] text-neutral-400">{fmtSize(d.fileSize)}</div>
                 </div>

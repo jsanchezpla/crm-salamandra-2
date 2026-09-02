@@ -24,7 +24,7 @@ export const GET = withTenant(async (request, { params }, ctx) => {
 
     // "incidencia" también: los adjuntos de incidencias con este paciente se
     // listan en su ficha y tienen que poder descargarse desde ella.
-    const row = await Document.findOne({ where: { id: docId, patientId: id, source: { [Op.in]: ["paciente", "incidencia", "sesion"] } } });
+    const row = await Document.findOne({ where: { id: docId, patientId: id, source: { [Op.in]: ["paciente", "incidencia", "sesion", "sesion_preparacion"] } } });
     if (!row) return notFound("Documento no encontrado");
 
     let stream;

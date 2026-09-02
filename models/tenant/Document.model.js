@@ -120,11 +120,23 @@ export function defineDocument(sequelize) {
         allowNull: true,
         field: "team_block_id",
       },
+      // Sesión clínica de cuyo apartado de PREPARACIÓN salió el adjunto
+      // (02/09/2026, AV-0027 de Aumenta: «que los documentos de las sesiones
+      // salgan también en Documentos»). Nullable: casi ningún documento viene
+      // de una sesión. FK ON DELETE SET NULL (migrate-documents-session-link):
+      // borrar la sesión no se lleva el adjunto del archivo.
+      clinicSessionId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: "clinic_session_id",
+      },
       // De dónde vino el documento: "manual" (subido en el módulo Documents),
       // "ficha" (adjunto desde la ficha de un cliente), "paciente" (documento de
       // un paciente), "contract_template" (contrato estándar de la clínica,
       // reutilizable en todos los pacientes), "incidencia" (adjunto a una
       // incidencia del equipo), "bloqueo" (aparejado a un tramo de la agenda),
+      // "sesion_preparacion" (adjunto de la preparación de una sesión clínica,
+      // 02/09/2026: nunca visible para la familia, se quita desde la sesión),
       // "nota", "factura"…
       // Sirve para filtrar el archivo central por origen.
       source: {
