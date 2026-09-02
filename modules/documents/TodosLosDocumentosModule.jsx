@@ -5,6 +5,7 @@ import Link from "next/link";
 import FileTypeIcon from "@/components/documents/FileTypeIcon.jsx";
 import PdfPreviewModal from "@/components/documents/PdfPreviewModal.jsx";
 import { fmtSize, fmtDate } from "@/components/documents/formato.js";
+import { tipoParaVerEnPantalla } from "@/lib/documents/verEnPantalla.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 /**
@@ -155,10 +156,10 @@ export default function TodosLosDocumentosModule({ visibilidadInicial = "private
                 </div>
               </div>
               <div className="flex items-center gap-1 shrink-0">
-                {doc.mimeType === "application/pdf" && (
+                {tipoParaVerEnPantalla(doc.fileName) && (
                   <button
                     onClick={() => setPreview(doc)}
-                    title="Vista previa"
+                    title="Ver sin descargar"
                     className="w-8 h-8 flex items-center justify-center rounded-md text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-4 h-4">

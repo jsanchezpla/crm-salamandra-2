@@ -7,6 +7,7 @@ import { carpetasCompartidasCon } from "@/lib/documents/carpetasCompartidas.js";
 import { readDocumentStream } from "@/lib/documents/documentStorage.js";
 import { resolveCurrentTeamMemberId } from "@/lib/team/currentTeamMember.js";
 import { marcarLeido } from "@/lib/documents/lecturas.js";
+import { tipoParaVerEnPantalla } from "@/lib/documents/verEnPantalla.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -35,8 +36,12 @@ export const GET = withTenant(async (request, { params }, ctx) => {
     // Además de lo de siempre: lo que vive en una carpeta compartida conmigo.
     const { todas } = await carpetasCompartidasCon({ tenantModels: ctx.tenantModels, userId });
     if (!canViewDocument(doc, userId, todas)) return forbidden("Sin acceso a este documento");
-    if (doc.mimeType !== "application/pdf") {
-      return error("La vista previa inline solo está disponible para PDF", 400);
+    // Qué se enseña en línea y como qué lo decide la lista blanca por EXTENSIÓN
+    // guardada (PDF e imágenes; SVG nunca), no el `mimeType` que declaró quien
+    // subió el fichero. Desde el 02/09/2026 (AV-0025 de Aumenta) ya no es solo PDF.
+    const tipoEnLinea = tipoParaVerEnPantalla(doc.storagePath || doc.fileName);
+    if (!tipoEnLinea) {
+      return error("Este tipo de archivo no se puede ver en pantalla: descárgalo.", 400);
     }
 
     let stream;
@@ -54,7 +59,7 @@ export const GET = withTenant(async (request, { params }, ctx) => {
     return new Response(Readable.toWeb(stream), {
       status: 200,
       headers: {
-        "Content-Type": "application/pdf",
+        "Content-Type": tipoEnLinea,
         "Content-Disposition": contentDisposition("inline", doc.fileName),
         "Content-Length": String(size),
         "X-Content-Type-Options": "nosniff",

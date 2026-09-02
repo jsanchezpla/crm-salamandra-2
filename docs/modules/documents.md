@@ -241,7 +241,7 @@ del paciente y el contrato del centro son filas de la misma tabla `documents`
 - **Seguridad**: MIME por **magic bytes** en los tipos que se saben verificar
   (PDF/OOXML), nombres saneados + UUID en disco, guards anti path-traversal,
   streaming en download/preview, `AuditLog` en toda mutación.
-- **Preview**: PDF inline (con `nosniff` + CSP); lo demás solo descarga directa.
+- **Preview**: PDF e imágenes inline (con `nosniff` + CSP); lo demás solo descarga directa. Desde el 02/09/2026 (AV-0025 de Aumenta, «que los archivos no tengan que descargarse para abrirlos») la lista blanca por EXTENSIÓN guardada vive en `lib/documents/verEnPantalla.js` (la misma del buzón, que la reexporta) y la usan el endpoint, las dos listas del archivo y los adjuntos de la ficha del paciente (`/api/pacientes/[id]/documents/[docId]/download?ver=1`, con el mismo `PdfPreviewModal` montado con `urls`). SVG nunca; DOCX/XLSX se descargan.
 
 **Histórico (hasta 07/2026):** Sprint 1 = solo backend y la UI (`/documentos`)
 era Sprint 2. Hoy los dos están en producción; la entrada del Sidebar es
@@ -381,7 +381,7 @@ responden 403.
 | POST | `/api/documents` | multipart `file` + `folderId?` + `visibility?`. Ver validaciones abajo |
 | GET | `/api/documents/[id]` | metadatos |
 | GET | `/api/documents/[id]/download` | **stream**, `Content-Disposition: attachment`, `nosniff` |
-| GET | `/api/documents/[id]/preview` | **solo PDF**, `inline`, `nosniff` + CSP `default-src 'none'; object-src 'self'` (400 si no es PDF) |
+| GET | `/api/documents/[id]/preview` | **PDF e imágenes** (lista blanca por extensión guardada, `lib/documents/verEnPantalla.js`; hasta el 02/09/2026 solo PDF), `inline`, `nosniff` + CSP `default-src 'none'; object-src 'self'` (400 si no se puede ver en pantalla) |
 | DELETE | `/api/documents/[id]` | solo owner. archivo físico + fila en transacción |
 | GET | `/api/documents/quota` | `{usedBytes, limitBytes, usedPercent, usedMB, limitMB}` (avanzado, como todo lo anterior desde `folders`) |
 

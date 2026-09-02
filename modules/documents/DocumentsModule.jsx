@@ -10,6 +10,7 @@ import PdfPreviewModal from "@/components/documents/PdfPreviewModal.jsx";
 import PedirLecturaModal from "@/components/documents/PedirLecturaModal.jsx";
 import CompartirCarpetaModal from "@/components/documents/CompartirCarpetaModal.jsx";
 import { fmtSize, fmtDate } from "@/components/documents/formato.js";
+import { tipoParaVerEnPantalla } from "@/lib/documents/verEnPantalla.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 const MAX_LEVEL = 3; // 0..3 → 4 niveles
@@ -423,10 +424,10 @@ export default function DocumentsModule({ avanzado = true }) {
                 </div>
               </div>
               <div className="flex items-center gap-1 shrink-0">
-                {doc.mimeType === "application/pdf" && (
+                {tipoParaVerEnPantalla(doc.fileName) && (
                   <button
                     onClick={() => setPreview(doc)}
-                    title="Vista previa"
+                    title="Ver sin descargar"
                     className="w-8 h-8 flex items-center justify-center rounded-md text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-4 h-4">

@@ -2,6 +2,7 @@ import { Op } from "sequelize";
 import { withTenant } from "../../../../../../../lib/tenant/withTenant.js";
 import { error, forbidden, notFound, serverError } from "../../../../../../../lib/utils/apiResponse.js";
 import { readDocumentStream } from "../../../../../../../lib/documents/documentStorage.js";
+import { tipoParaVerEnPantalla } from "../../../../../../../lib/documents/verEnPantalla.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -14,7 +15,7 @@ function gate(ctx) {
  * Sirve el fichero por STREAM (Content-Disposition: attachment). Aislado a los
  * documentos de ESTE paciente (source='paciente').
  */
-export const GET = withTenant(async (_request, { params }, ctx) => {
+export const GET = withTenant(async (request, { params }, ctx) => {
   try {
     if (!gate(ctx)) return forbidden("Módulo Clínica/Pacientes no activo");
     const { id, docId } = await params;
@@ -35,13 +36,22 @@ export const GET = withTenant(async (_request, { params }, ctx) => {
       throw err;
     }
 
+    // Ver sin descargar (02/09/2026, AV-0025 de Aumenta): con `?ver=1` un PDF o
+    // una imagen se sirve en línea, con el tipo que dice la lista blanca por
+    // EXTENSIÓN guardada y nunca el `mimeType` que declaró quien lo subió. Lo
+    // que no esté en la lista se descarga igual que siempre.
+    const quiereVer = new URL(request.url).searchParams.get("ver") === "1";
+    const tipoEnLinea = quiereVer ? tipoParaVerEnPantalla(row.storagePath || row.fileName) : null;
+
     const safeName = String(row.fileName || "archivo").replace(/[\r\n"]/g, "_");
     return new Response(stream, {
       status: 200,
       headers: {
-        "Content-Type": row.mimeType || "application/octet-stream",
-        "Content-Disposition": `attachment; filename="${safeName}"`,
+        "Content-Type": tipoEnLinea || row.mimeType || "application/octet-stream",
+        "Content-Disposition": `${tipoEnLinea ? "inline" : "attachment"}; filename="${safeName}"`,
         "Content-Length": String(size),
+        "X-Content-Type-Options": "nosniff",
+        ...(tipoEnLinea ? { "Content-Security-Policy": "default-src 'none'; object-src 'self'" } : {}),
         "Cache-Control": "private, no-cache",
       },
     });

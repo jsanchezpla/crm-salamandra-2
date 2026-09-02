@@ -13,6 +13,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import useZonaSoltar, { useEvitarSoltarFuera } from "@/components/ui/useZonaSoltar.js";
+import PdfPreviewModal from "@/components/documents/PdfPreviewModal.jsx";
+import { tipoParaVerEnPantalla } from "@/lib/documents/verEnPantalla.js";
 
 function fmtSize(n) {
   if (!n) return "";
@@ -45,6 +47,10 @@ export default function PatientDocumentsSection({ patientId }) {
   const [pending, setPending] = useState(null);
   const [pendingName, setPendingName] = useState("");
   const [busy, setBusy] = useState(false);
+  // Ver sin descargar (02/09/2026, AV-0025 de Aumenta): PDF e imágenes se abren
+  // en el mismo visor que el archivo de Documentos, contra los endpoints de
+  // la ficha (`?ver=1` los sirve en línea).
+  const [viendo, setViendo] = useState(null);
   const fileRef = useRef(null);
   const templateFileRef = useRef(null);
 
@@ -301,6 +307,15 @@ export default function PatientDocumentsSection({ patientId }) {
                   </div>
                   <div className="text-[11px] text-neutral-400">{fmtSize(d.fileSize)}</div>
                 </div>
+                {tipoParaVerEnPantalla(d.name) && (
+                  <button
+                    type="button"
+                    onClick={() => setViendo(d)}
+                    className="text-xs text-[var(--color-primary)] hover:underline shrink-0"
+                  >
+                    Ver
+                  </button>
+                )}
                 <a
                   href={`/api/pacientes/${patientId}/documents/${d.id}/download`}
                   className="text-xs text-[var(--color-primary)] hover:underline shrink-0"
@@ -329,6 +344,17 @@ export default function PatientDocumentsSection({ patientId }) {
           </div>
         )}
       </div>
+
+      {viendo && (
+        <PdfPreviewModal
+          doc={{ ...viendo, fileName: viendo.name }}
+          onClose={() => setViendo(null)}
+          urls={{
+            ver: `/api/pacientes/${patientId}/documents/${viendo.id}/download?ver=1`,
+            descargar: `/api/pacientes/${patientId}/documents/${viendo.id}/download`,
+          }}
+        />
+      )}
 
       {/* Modal de NOMBRE obligatorio al subir */}
       {pending && (
