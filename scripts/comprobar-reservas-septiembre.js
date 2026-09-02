@@ -189,6 +189,62 @@ async function main() {
     process.stdout.write("__FIN__\n");
   }
 
+  // ── --marcar: la lista, dentro del CRM ───────────────────────────────────
+  // Escribe en `clients.custom_fields.reservaPlaza` lo que sabe de cada familia
+  // con reserva (cuántas, qué pacientes, cuota, septiembre en el CRM y en
+  // Organízate, y el aviso si hay algo que mirar). De ahí la lee la carpeta
+  // «reserva_plaza» de Fichas a completar (lib/clients/urgentes.js). En seco
+  // salvo --confirm. Se puede repetir: pisa la clave, no el resto de campos.
+  if (args.includes("--marcar")) {
+    const { Client } = models;
+    const clientes = await Client.findAll({ attributes: ["id", "customFields"], raw: true });
+    const porCliente = new Map(clientes.map((c) => [String(c.id), c]));
+    const nombresPorFamilia = new Map();
+    for (const nombre of reservas) {
+      const p = porNombre.get(norm(nombre));
+      if (!p?.clientId) continue;
+      const f = String(p.clientId);
+      if (!nombresPorFamilia.has(f)) nombresPorFamilia.set(f, []);
+      nombresPorFamilia.get(f).push(nombre);
+    }
+    const avisoDe = (fid, categoria) => {
+      const notas = cobros.filter((c) => String(c.clientId) === fid).map((c) => String(c.notes ?? "")).join(" | ");
+      if (/vuelta a descontar/.test(notas)) return "vuelta a descontar el 02/09";
+      if (/a compensar/.test(notas)) return "pagó entero: 30 € a compensar";
+      if (categoria === "sinDescuento") return "sin descuento";
+      if (categoria === "sinCobro") return "sin cobro de septiembre";
+      if (categoria === "sinCuota") return "sin cuota en el CRM";
+      return null;
+    };
+    const SITUACION = { cuadra: "cuadra", sinDescuento: "sin descuento", otraCifra: "otra cifra", sinCobro: "sin cobro de septiembre", sinCuota: "sin cuota activa" };
+    const marcas = [];
+    for (const [categoria, lista] of Object.entries(cat)) {
+      for (const x of lista) {
+        const pacientesRes = nombresPorFamilia.get(x.fid) ?? [];
+        const resumen = [
+          `${x.n} reserva${x.n > 1 ? "s" : ""} (${pacientesRes.join(", ")})`,
+          x.cuota != null ? `cuota ${eur(x.cuota)}` : "sin cuota",
+          x.crm != null ? `septiembre CRM ${eur(x.crm)}${x.cobrado ? ` (cobrado ${eur(x.cobrado)})` : ""}` : "sin cobro de septiembre",
+          x.org != null ? `Organízate ${eur(x.org)}` : null,
+        ].filter(Boolean).join(" · ");
+        marcas.push({ fid: x.fid, valor: { curso: "2026-2027", importe: IMPORTE, reservas: x.n, pacientes: pacientesRes, cuota: x.cuota, septiembreCrm: x.crm, cobrado: x.cobrado, organizate: x.org, situacion: SITUACION[categoria], aviso: avisoDe(x.fid, categoria), resumen, fecha: "2026-09-02" } });
+      }
+    }
+    process.stdout.write(`  Marcar en la ficha (custom_fields.reservaPlaza): ${marcas.length} familias · con aviso: ${marcas.filter((m) => m.valor.aviso).length}${CONFIRM ? "" : "  (EN SECO)"}\n`);
+    if (CONFIRM) {
+      let n = 0;
+      for (const m of marcas) {
+        const actual = porCliente.get(m.fid);
+        if (!actual) continue;
+        const cf = actual.customFields && typeof actual.customFields === "object" && !Array.isArray(actual.customFields) ? actual.customFields : {};
+        await Client.update({ customFields: { ...cf, reservaPlaza: m.valor } }, { where: { id: m.fid } });
+        n++;
+      }
+      process.stdout.write(`  ✓ ${n} fichas marcadas\n`);
+    }
+    if (!CORREGIR) process.exit(0);
+  }
+
   if (!CORREGIR) process.exit(0);
 
   // ── Corregir las SIN DESCUENTO ───────────────────────────────────────────

@@ -514,6 +514,30 @@ ser 90 guardados seguidos escribiendo un embudo comercial en un cliente que no l
 enseña. Ya no: quien lo usa lo manda, y entonces se guarda. Es el mismo arreglo
 que se le hizo a `origin` el 08/08/2026 y por el mismo motivo.
 
+## La lista de las reservas de plaza vive en «Fichas a completar» (02/09/2026)
+
+Rodrigo, la noche del 02/09: «ponlo en el submódulo de Fichas a completar para
+que esté en el CRM». «Lo» es el cotejo de las 303 familias que pagaron la
+reserva de plaza del verano (30 €) contra su septiembre, hecho esa noche con
+`scripts/comprobar-reservas-septiembre.js`.
+
+No es un hueco de la ficha, así que no se calcula: `--marcar --confirm` escribe
+en `clients.custom_fields.reservaPlaza` lo que sabe de cada familia (cuántas
+reservas, qué pacientes, cuota, septiembre en el CRM y en Organízate, la
+situación y un `aviso` cuando hay algo que mirar, y un `resumen` ya redactado), y
+la carpeta `reserva_plaza` de `lib/clients/urgentes.js` lo lee tal cual:
+`WHERE c.custom_fields ? 'reservaPlaza'`, el resumen como `dato` y el aviso
+como chip ámbar en la fila. Sale ORDENADA con los avisos arriba: las familias a
+las que Organízate cobraba la cuota entera y hubo que volver a descontar (por si
+en realidad no debían tener descuento) y las que ya pagaron entero y tienen 30 €
+a compensar. «Está bien así» la saca de la lista, como en cualquier carpeta.
+
+Dos cosas a propósito: la carpeta es `opcional` —un centro sin la marca no la ve,
+ni a cero— y **no se calla por las de arriba**: no es un hueco, es otra
+pregunta, y una familia puede estar en las dos. Las bajas se esconden con la
+misma regla que el resto. Si algún curso se repite la reserva, se vuelve a
+lanzar el cotejo con la lista nueva y la clave se pisa.
+
 ## «Fichas a completar» no reclama datos de fichas archivadas (25/08/2026)
 
 Lo pidió Lau (Aumenta) el 14/08: la pantalla le sacaba una y otra vez gente que

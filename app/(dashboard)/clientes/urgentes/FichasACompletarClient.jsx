@@ -112,6 +112,17 @@ function Carpeta({ carpeta, abierta, onToggle, onRevisar, onNoVino, conEstado, m
                         Archivada
                       </span>
                     )}
+                    {/* El aviso de una lista de revisión (reserva de plaza,
+                        02/09/2026): lo que hay que mirar en esa familia, en
+                        dos palabras. Lo trae la fila; sin aviso, no hay chip. */}
+                    {f.aviso && (
+                      <span
+                        className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-800 align-middle"
+                        title="Hay algo que revisar en esta familia. El detalle está en la columna de al lado y en la nota de su cobro de septiembre."
+                      >
+                        {f.aviso}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-2 text-neutral-500 whitespace-nowrap">{fmt(f.dato)}</td>
                   <td className="px-4 py-2 text-right whitespace-nowrap">

@@ -364,20 +364,34 @@ describe("cómo se averigua qué tablas tiene el schema", () => {
 });
 
 describe("lo que NO se ha cambiado sin querer", () => {
-  it("las ocho carpetas siguen siendo las mismas, con su bloque", async () => {
+  it("las nueve carpetas siguen siendo las mismas, con su bloque (la de reservas de plaza es opcional)", async () => {
     assert.deepEqual(
-      CARPETAS.map((c) => [c.key, c.bloquea, c.entidad]),
+      CARPETAS.map((c) => [c.key, c.bloquea, c.entidad, !!c.opcional]),
       [
-        ["citas_sin_terapeuta", true, "patient"],
-        ["citas_sin_contacto", true, "patient"],
-        ["sin_tutor_ni_contacto", true, "client"],
-        ["sin_terapeuta", false, "patient"],
-        ["sin_tutor", false, "client"],
-        ["sin_contacto", false, "client"],
-        ["sin_correo", false, "client"],
-        ["sin_citas", false, "patient"],
+        ["citas_sin_terapeuta", true, "patient", false],
+        ["citas_sin_contacto", true, "patient", false],
+        ["sin_tutor_ni_contacto", true, "client", false],
+        ["sin_terapeuta", false, "patient", false],
+        ["sin_tutor", false, "client", false],
+        ["sin_contacto", false, "client", false],
+        ["sin_correo", false, "client", false],
+        ["sin_citas", false, "patient", false],
+        // 02/09/2026: la lista de revisión de las reservas de plaza, que vive en
+        // custom_fields.reservaPlaza y solo se enseña donde hay marca.
+        ["reserva_plaza", false, "client", true],
       ]
     );
+  });
+
+  it("«reserva de plaza» lee la marca de la ficha y pone los avisos arriba", async () => {
+    const s = fakeSequelize();
+    await filasDe(s, ESQUEMA, "reserva_plaza");
+    assert.match(s.sqls[0], /custom_fields \? 'reservaPlaza'/);
+    assert.match(s.sqls[0], /->>'aviso'\) IS NULL, c\.name/);
+    // Y una carpeta opcional sin filas no se enseña.
+    const vacio = fakeSequelize();
+    const carpetas = await carpetasCon(vacio, ESQUEMA, null);
+    assert.equal(carpetas.some((c) => c.key === "reserva_plaza"), false);
   });
 
   it("«Pacientes sin terapeuta» sigue siendo main_therapist_id IS NULL", async () => {
