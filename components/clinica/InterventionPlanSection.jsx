@@ -62,6 +62,136 @@ function ListaEditable({ etiqueta, valores, onChange, placeholder }) {
   );
 }
 
+/**
+ * Objetivos con IA (02/09/2026, Aumenta por el buzón AV-0019, Laura): la
+ * terapeuta escribe las ideas clave, Claude redacta objetivos de intervención
+ * adaptados al paciente y ella marca cuáles entran en el plan. No se guarda
+ * nada hasta pulsar «Guardar plan». El endpoint recibe lo que hay EN PANTALLA
+ * (`plan`) para no repetir objetivos ni ignorar un diagnóstico sin guardar.
+ */
+function ObjetivosConIa({ patientId, plan, onAnadir }) {
+  const [abierto, setAbierto] = useState(false);
+  const [ideas, setIdeas] = useState("");
+  const [pidiendo, setPidiendo] = useState(false);
+  const [fallo, setFallo] = useState(null);
+  const [propuesta, setPropuesta] = useState(null); // [{ texto, marcado }]
+  const [esEnsayo, setEsEnsayo] = useState(false);
+
+  async function proponer() {
+    setPidiendo(true);
+    setFallo(null);
+    try {
+      const res = await fetch(`/api/pacientes/${patientId}/plan/objetivos-ia`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ideas,
+          plan: {
+            diagnosis: plan.diagnosis,
+            consultationReasons: plan.consultationReasons,
+            previousInfo: plan.previousInfo,
+            objectives: plan.objectives,
+          },
+        }),
+      });
+      const j = await res.json();
+      if (!j.ok) throw new Error(j.error || "La IA no ha podido redactar los objetivos");
+      setPropuesta(j.data.objetivos.map((texto) => ({ texto, marcado: true })));
+      setEsEnsayo(Boolean(j.data.fake));
+    } catch (e) {
+      setFallo(e.message);
+    } finally {
+      setPidiendo(false);
+    }
+  }
+
+  function anadirMarcados() {
+    const elegidos = (propuesta ?? []).filter((p) => p.marcado).map((p) => p.texto);
+    if (!elegidos.length) return;
+    onAnadir(elegidos);
+    setPropuesta(null);
+    setIdeas("");
+  }
+
+  if (!abierto) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAbierto(true)}
+        className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline"
+      >
+        ✨ Redactar objetivos con IA a partir de ideas clave
+      </button>
+    );
+  }
+
+  const marcados = (propuesta ?? []).filter((p) => p.marcado).length;
+
+  return (
+    <div className="rounded-lg border border-neutral-200 bg-neutral-50/60 p-3 space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[10px] uppercase tracking-wider text-neutral-500">Objetivos con IA</div>
+        <button type="button" onClick={() => setAbierto(false)} className="text-neutral-400 hover:text-neutral-700 text-lg leading-none" aria-label="Cerrar">×</button>
+      </div>
+      <p className="text-[11px] text-neutral-500">
+        Escribe las ideas clave que quieres trabajar (áreas, conductas, apoyos…). La IA propone objetivos de
+        intervención adaptados a la edad y al plan de este paciente; tú eliges cuáles entran. Al modelo no le
+        llega el nombre del paciente.
+      </p>
+      <textarea
+        rows={3}
+        value={ideas}
+        onChange={(e) => setIdeas(e.target.value)}
+        maxLength={2000}
+        placeholder="Ej.: respetar turnos de palabra, frases de tres elementos, tolerar la frustración en juegos de reglas"
+        className={inputCls}
+      />
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={proponer}
+          disabled={pidiendo || ideas.trim().length < 3}
+          className="px-3 py-1.5 rounded-lg text-[11px] font-medium text-white disabled:opacity-40"
+          style={{ background: "var(--color-primary, #1B3A2D)" }}
+        >
+          {pidiendo ? "Redactando…" : propuesta ? "Volver a proponer" : "Proponer objetivos"}
+        </button>
+        {fallo && <span className="text-[11px] text-red-700">{fallo}</span>}
+      </div>
+
+      {propuesta && (
+        <div className="space-y-1.5 pt-1">
+          {esEnsayo && (
+            <p className="text-[11px] text-amber-700">Propuesta simulada: en la demo la IA no se llama de verdad.</p>
+          )}
+          {propuesta.map((p, i) => (
+            <label key={i} className="flex items-start gap-2 text-[12px] text-neutral-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={p.marcado}
+                onChange={() => setPropuesta(propuesta.map((x, j) => (j === i ? { ...x, marcado: !x.marcado } : x)))}
+                className="mt-0.5"
+              />
+              <span>{p.texto}</span>
+            </label>
+          ))}
+          <div className="flex items-center gap-3 pt-1">
+            <button
+              type="button"
+              onClick={anadirMarcados}
+              disabled={marcados === 0}
+              className="px-3 py-1.5 rounded-lg border border-neutral-300 bg-white text-[11px] font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-40"
+            >
+              Añadir {marcados === 1 ? "este objetivo" : `estos ${marcados} objetivos`} al plan
+            </button>
+            <span className="text-[11px] text-neutral-400">Después, «Guardar plan».</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Cumplimiento({ datos }) {
   if (!datos?.trimestres?.length) return null;
   return (
@@ -194,6 +324,15 @@ export default function InterventionPlanSection({ patientId, canEdit = true }) {
 
         <ListaEditable etiqueta="Objetivos" valores={form.objectives} placeholder="Atención sostenida"
           onChange={(v) => setForm({ ...form, objectives: v })} />
+        {canEdit && (
+          <ObjetivosConIa
+            patientId={patientId}
+            plan={form}
+            onAnadir={(nuevos) =>
+              setForm((f) => ({ ...f, objectives: [...f.objectives, ...nuevos.filter((n) => !f.objectives.includes(n))] }))
+            }
+          />
+        )}
         <ListaEditable etiqueta="Tipos de actividad" valores={form.activityTypes} placeholder="Juego de reglas"
           onChange={(v) => setForm({ ...form, activityTypes: v })} />
         <ListaEditable etiqueta="Metodologías" valores={form.methodologies} placeholder="Autoinstrucciones"
