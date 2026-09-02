@@ -532,6 +532,29 @@ del paciente, el borrador como una sesión de hoy por completar.
   (`citaNoSeDio()`). Una falta marcada por error se corrige desde la ficha del
   paciente («Cambiar» en sus citas), no desde el modal.
 
+### Borrar un informe en borrador, buscar incidencias y quién coordina (02/09/2026, Aumenta)
+
+Tres peticiones del Buzón del 02/09, con la decisión de Rodrigo el mismo día.
+
+- **Borrar un informe abierto por error (AV-0021).** `DELETE /api/clinica/reports/[id]`,
+  solo sobre un BORRADOR y solo para quien lo firma (su terapeuta) o dirección;
+  un informe revisado o entregado no se borra nunca, ni dirección. La regla es
+  `puedeBorrarInforme()` (`lib/clinica/alcanceInformes.js`, prueba
+  `_smoke-borrar-informe.mjs`); el botón «Borrar» del cajón solo se pinta en un
+  borrador y pide confirmación; el borrado queda en la auditoría
+  (`clinica.report.deleted`).
+- **Buscar incidencias por texto (AV-0011).** `GET /api/clinica/incidencias?q=`:
+  todas las palabras, cada una en asunto o descripción, o en el nombre del
+  paciente (por su tabla), con la misma regla sin tildes de Clientes y
+  facturas (`lib/utils/busquedaDb.js`). La pantalla manda la caja con 300 ms
+  de calma.
+- **Quién coordina (AV-0022).** `settings.clinica.coordinadoras` (Configuración
+  → Módulos, tarjeta «Coordinadoras del equipo»; `lib/clinica/coordinadoras.js`,
+  prueba `_smoke-coordinadoras.mjs`). En Inicio, «Informes vencidos» cuenta
+  solo los de quien mira salvo para dirección y coordinadoras, que ven el
+  centro entero; y en `GET /api/clinica/bandeja`, `canSwitch` es verdad
+  también para ellas, así que eligen la bandeja de cualquier terapeuta.
+
 ### Arrastrar y soltar ficheros (28/08/2026, Lau de Aumenta)
 
 El audio de la sesión le llega por WhatsApp: lo descarga y le queda a la vista

@@ -30,6 +30,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import ApartadosEditor from "./ApartadosEditor.jsx";
+import { useDialogo } from "../ui/Dialogo.jsx";
 import {
   CLAVE_APARTADOS,
   CLAVE_PLANTILLA,
@@ -83,11 +84,41 @@ function Campo({ label, ayuda, children }) {
   );
 }
 
-export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, busy }) {
+export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, onBorrado, busy }) {
   const patient = report.patient ?? { name: "—", age: null };
   const therapist = report.therapist ?? { name: "—" };
   const c = report.contentSections ?? {};
   const entregado = report.status === "delivered";
+  const { confirmar, dialogo } = useDialogo();
+  const [borrando, setBorrando] = useState(false);
+
+  /**
+   * BORRAR UN INFORME ABIERTO POR ERROR (02/09/2026, AV-0021 de Aumenta). Solo
+   * un borrador: el botón no se pinta en uno revisado o entregado. Quién puede
+   * lo decide el servidor (quien lo firma, o dirección) y, si no, lo dice con
+   * sus palabras.
+   */
+  async function borrar() {
+    if (borrando) return;
+    const seguro = await confirmar({
+      titulo: "Borrar este informe",
+      texto: "Se borra el borrador entero, con todo lo escrito. No se puede deshacer.",
+      aceptar: "Borrar",
+    });
+    if (!seguro) return;
+    setBorrando(true);
+    setErrorMsg(null);
+    try {
+      const r = await fetch(`/api/clinica/reports/${report.id}`, { method: "DELETE" });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error(j.error || "No se pudo borrar el informe");
+      onBorrado?.(report.id);
+    } catch (e) {
+      setErrorMsg(e.message);
+    } finally {
+      setBorrando(false);
+    }
+  }
 
   // El informe de beca (NEAE) solo lleva tres apartados y la firma: motivo de
   // consulta (el mismo dato que «motivo de intervención», con el rótulo de la
@@ -632,6 +663,16 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
               <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
               {report.statusLabel}
             </span>
+            {report.status === "draft" && (
+              <button
+                onClick={borrar}
+                disabled={borrando || guardando}
+                title="Borra este borrador. Un informe revisado o entregado no se puede borrar."
+                className="text-xs px-3 py-2 rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+              >
+                {borrando ? "Borrando…" : "Borrar"}
+              </button>
+            )}
             {/*
               VER EL PDF SIN MANDÁRSELO A NADIE (26/08/2026, Jorge).
 
@@ -671,6 +712,7 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
           </div>
         </div>
       </aside>
+      {dialogo}
     </>
   );
 }

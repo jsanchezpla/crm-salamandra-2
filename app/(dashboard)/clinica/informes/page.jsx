@@ -264,6 +264,8 @@ export default function InformesPage() {
           onClose={() => setSelectedId(null)}
           onDeliver={deliver}
           onGuardado={load}
+          // Borrado desde el cajón (02/09/2026): se cierra y la lista se relee.
+          onBorrado={() => { setSelectedId(null); load(); }}
           busy={busy}
         />
       )}

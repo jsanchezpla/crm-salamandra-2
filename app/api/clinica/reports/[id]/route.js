@@ -3,6 +3,8 @@ import { ok, error, forbidden, notFound } from "../../../../../lib/utils/apiResp
 import { serializeReport, REPORT_TYPES } from "../../../../../lib/clinica/serialize.js";
 import { logClinicaAudit, auditSummary } from "../../../../../lib/clinica/audit.js";
 import { limpiarContentSections } from "../../../../../lib/clinica/plantillas.js";
+import { resolveCurrentTeamMemberId } from "../../../../../lib/team/currentTeamMember.js";
+import { esDireccion, puedeBorrarInforme, motivoParaNoBorrar } from "../../../../../lib/clinica/alcanceInformes.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function gate(ctx) {
@@ -66,4 +68,39 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
     ip: request.headers.get("x-forwarded-for"),
   });
   return ok(serializeReport(r, ctx.tenant));
+});
+
+/**
+ * DELETE /api/clinica/reports/[id] — borrar un informe abierto por error
+ * (02/09/2026, AV-0021 de Aumenta). Solo un BORRADOR, y solo quien lo firma o
+ * dirección: la regla, con su prueba, en lib/clinica/alcanceInformes.js. Un
+ * informe revisado o entregado a una familia no se borra nunca —ni dirección—:
+ * ya es un documento que alguien ha leído.
+ */
+export const DELETE = withTenant(async (request, rc, ctx) => {
+  if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
+  const { id } = await rc.params;
+  if (!UUID_RE.test(id)) return error("id inválido");
+  const { ClinicalReport } = ctx.tenantModels;
+  const r = await ClinicalReport.findByPk(id);
+  if (!r) return notFound("Informe no encontrado");
+  const esAdmin = esDireccion(ctx.user?.role);
+  const yoSoy = esAdmin ? null : await resolveCurrentTeamMemberId(request, ctx.tenantModels);
+  if (!puedeBorrarInforme({ esAdmin, row: r, teamMemberId: yoSoy })) {
+    return forbidden(motivoParaNoBorrar({ esAdmin, row: r, teamMemberId: yoSoy }));
+  }
+  const before = auditSummary(r);
+  await r.destroy();
+  // Lo destructivo, en la auditoría: un resumen, nunca la fila entera.
+  await logClinicaAudit({
+    tenantId: ctx.tenant.id,
+    userId: request.headers.get("x-user-id"),
+    action: "clinica.report.deleted",
+    entity: "ClinicalReport",
+    entityId: id,
+    before,
+    after: null,
+    ip: request.headers.get("x-forwarded-for"),
+  });
+  return ok({ deleted: id });
 });
