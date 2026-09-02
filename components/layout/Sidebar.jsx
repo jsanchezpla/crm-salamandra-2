@@ -770,7 +770,10 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
 
   return (
     <>
-      {/* Backdrop (solo móvil) */}
+      {/* Backdrop (solo móvil). Cerrado se APAGA con `opacity-0`, no se
+          desmonta (por el fundido): ese `opacity-0` lo lee la regla
+          `.crm-flotante` de globals.css para no esconder la campana y el
+          Salamandrobot mientras el menú está cerrado (03/09/2026). */}
       <div
         className={`lg:hidden fixed inset-0 bg-black/60 z-40 transition-opacity duration-300 ${
           mobileOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"

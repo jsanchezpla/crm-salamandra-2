@@ -82,9 +82,16 @@ export default function Salamandrobot() {
    * mientras hay un panel abierto. Afectaba a los 69 paneles del CRM; alguien ya
    * lo había parcheado subiendo su panel a z-[61] (facturacion/presupuestos),
    * apaño que ya no hace falta.
+   *
+   * ABAJO A LA DERECHA otra vez desde el 03/09/2026 (Rodrigo). El 02/08 se
+   * subieron arriba y, en el mismo commit, la regla que los esconde tras un
+   * panel empezó a mirar también el fondo `z-40` del menú móvil, que está
+   * siempre en el DOM apagado con `opacity-0`: campana y bot invisibles para
+   * todo el mundo durante un mes. La regla ignora ahora los fondos apagados y
+   * `scripts/_smoke-widgets-flotantes.mjs` lo fija.
    */
   return (
-    <div className="crm-flotante fixed top-16 lg:top-4 right-4 z-30 flex flex-col-reverse items-end gap-3 print:hidden">
+    <div className="crm-flotante fixed bottom-4 right-4 z-30 flex flex-col items-end gap-3 print:hidden">
       {/* Panel de chat */}
       {open && (
         <div className="w-[min(92vw,22rem)] h-[min(70vh,32rem)] bg-white rounded-2xl shadow-2xl border border-neutral-200 flex flex-col overflow-hidden">

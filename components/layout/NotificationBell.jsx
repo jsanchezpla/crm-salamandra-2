@@ -75,8 +75,14 @@ export default function NotificationBell() {
   // Y además `crm-flotante`: el z-index solo NO evita el solape (probado hasta
   // z-10). Esa clase la usa globals.css para OCULTAR el botón mientras hay un
   // panel abierto — ver el comentario largo en Salamandrobot.jsx.
+  //
+  // ABAJO A LA DERECHA (Rodrigo, 03/09/2026), a la izquierda del Salamandrobot
+  // y con el desplegable abriéndose hacia ARRIBA. Del 02/08 al 03/09 estuvo
+  // arriba y, además, invisible para todo el mundo: la regla de globals.css
+  // que lo esconde tras un panel detectaba también el fondo apagado del menú
+  // móvil (ver el comentario de la regla). Lo fija _smoke-widgets-flotantes.
   return (
-    <div className="crm-flotante fixed z-30 top-[4.1875rem] lg:top-[1.1875rem] right-[5.25rem]">
+    <div className="crm-flotante fixed z-30 bottom-[1.375rem] right-[5.25rem]">
       {open && <div className="fixed inset-0 z-0" onClick={() => setOpen(false)} />}
 
       <button
@@ -99,7 +105,7 @@ export default function NotificationBell() {
           un panel de 320px colgado de ella se salía 29px por la izquierda en un
           móvil de 375px. Desde sm: vuelve a colgar de la campana. */}
       {open && (
-        <div className="fixed sm:absolute inset-x-3 sm:inset-x-auto top-[4.25rem] sm:top-full sm:mt-2 sm:right-0 sm:w-80 z-10 bg-white rounded-xl shadow-xl border border-neutral-100 overflow-hidden">
+        <div className="fixed sm:absolute inset-x-3 sm:inset-x-auto bottom-[4.25rem] sm:bottom-full sm:mb-2 sm:right-0 sm:w-80 z-10 bg-white rounded-xl shadow-xl border border-neutral-100 overflow-hidden">
           <div className="px-4 py-2.5 flex items-center justify-between border-b border-neutral-100">
             <span className="eyebrow">Notificaciones</span>
             {unread > 0 && (

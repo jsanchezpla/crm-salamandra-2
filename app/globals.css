@@ -12,23 +12,26 @@
  * abierto por encima — que además es lo correcto: con un panel abierto no
  * quieres el chat ni la campanita.
  *
- * Se detecta el overlay por su z: z-50 (la mayoría de paneles) y los z-[60..90]
+ * Se detecta el overlay por su z: z-40 (el fondo de un panel lateral, regla 13
+ * de CLAUDE.md), z-50 (el panel y la mayoría de modales) y los z-[60..90]
  * puntuales. Quedan fuera a propósito:
- *   · `z-40` — el fondo del menú móvil (`lg:hidden fixed inset-0 z-40`) está
- *     SIEMPRE en el DOM, solo oculto por `lg:hidden`, y `:has()` lo detecta
- *     igualmente: incluirlo escondía los botones flotantes en todo momento.
- *     No se pierde nada, porque un fondo z-40 siempre acompaña a un panel z-50.
+ *   · un fondo APAGADO con `opacity-0` — el del menú móvil (`lg:hidden fixed
+ *     inset-0 z-40`, Sidebar.jsx) está SIEMPRE en el DOM y cerrado solo se
+ *     apaga con `opacity-0`; `:has()` lo detecta igual aunque `lg:hidden` lo
+ *     esconda en escritorio. Sin el `:not(.opacity-0)` la regla escondía la
+ *     campana y el Salamandrobot EN TODO MOMENTO y para TODO EL MUNDO: pasó
+ *     desde el 02/08/2026 (cuando se añadió `z-40` sin este freno) hasta el
+ *     03/09/2026, y nadie lo vio porque los widgets simplemente no estaban.
  *   · `z-0` — el capturador de clics de la propia campanita; si no, se
  *     ocultaría a sí misma al abrir su desplegable.
  *
- * ⚠️ El fondo `z-40` se añadió el 02/08/2026, y era el fallo que hacía que los
- * widgets siguieran pisando botones de vez en cuando: la regla solo miraba
- * `z-50`, pero la convención del CRM (regla 13 de CLAUDE.md) es backdrop z-40 +
- * panel z-50, así que NINGÚN panel lateral moderno los ocultaba.
+ * Lo fija `scripts/_smoke-widgets-flotantes.mjs`: si alguien quita el
+ * `:not(.opacity-0)` de aquí o el `opacity-0` del fondo del menú, la prueba
+ * lo dice antes de que vuelvan a desaparecer en silencio.
  */
-.dashboard-shell:has(.fixed.inset-0.z-40) .crm-flotante,
-.dashboard-shell:has(.fixed.inset-0.z-50) .crm-flotante,
-.dashboard-shell:has(.fixed.inset-0[class*="z-["]) .crm-flotante {
+.dashboard-shell:has(.fixed.inset-0.z-40:not(.opacity-0)) .crm-flotante,
+.dashboard-shell:has(.fixed.inset-0.z-50:not(.opacity-0)) .crm-flotante,
+.dashboard-shell:has(.fixed.inset-0[class*="z-["]:not(.opacity-0)) .crm-flotante {
   display: none;
 }
 
