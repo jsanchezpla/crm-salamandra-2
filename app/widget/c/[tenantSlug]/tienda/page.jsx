@@ -30,12 +30,15 @@ const eur = (n) => new Intl.NumberFormat("es-ES", { style: "currency", currency:
 const BOTON =
   "inline-flex items-center justify-center rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition disabled:opacity-40 disabled:cursor-not-allowed";
 const CAMPO =
-  "w-full rounded-lg border border-[var(--widget-border)] bg-[var(--widget-card)] px-3 py-2 text-sm text-[var(--widget-text)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]";
+  "w-full rounded-lg border border-[var(--widget-border)] bg-[var(--widget-card)] px-3 py-2 text-sm text-[var(--widget-text)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-accent)]";
 
 export default function TiendaPage() {
   const { tenantSlug } = useParams();
 
   const [productos, setProductos] = useState(null);
+  // Los colores llegan CON el catálogo: el acento manda en los botones y el
+  // primario queda de respaldo (ver marcaDe() en la API pública de la tienda).
+  const [marca, setMarca] = useState(null);
   const [errorCarga, setErrorCarga] = useState(null);
   const [abierto, setAbierto] = useState(null);
   const [carrito, setCarrito] = useState([]);
@@ -54,6 +57,7 @@ export default function TiendaPage() {
         if (!vivo) return;
         if (!j?.ok) throw new Error(j?.error || "No se ha podido cargar la tienda");
         setProductos(j.data.productos ?? []);
+        setMarca(j.data.marca ?? null);
       })
       .catch((e) => vivo && setErrorCarga(e.message));
     return () => {
@@ -158,7 +162,10 @@ export default function TiendaPage() {
   if (!productos.length) return <Centro>Todavía no hay nada a la venta.</Centro>;
 
   return (
-    <div className="min-h-screen">
+    <div
+      className="min-h-screen"
+      style={marca ? { "--brand-primary": marca.principal, "--brand-accent": marca.acento } : undefined}
+    >
       <header className="flex items-center justify-between border-b border-[var(--widget-border)] bg-[var(--widget-card)] px-5 py-4 lg:px-10">
         <span className="text-lg tracking-tight text-[var(--widget-text)]">Tienda</span>
         <button
@@ -242,7 +249,7 @@ function Ficha({ producto, onVolver, onAnadir }) {
                       key={v.id}
                       className={`cursor-pointer rounded-lg border px-3 py-1.5 text-sm ${
                         activa
-                          ? "border-[var(--brand-primary)] text-[var(--widget-text)]"
+                          ? "border-[var(--brand-accent)] text-[var(--widget-text)]"
                           : "border-[var(--widget-border)] text-[var(--widget-text-muted)]"
                       }`}
                     >
@@ -265,7 +272,7 @@ function Ficha({ producto, onVolver, onAnadir }) {
             type="button"
             onClick={() => onAnadir(producto, variante)}
             className={`${BOTON} mt-6 w-full`}
-            style={{ backgroundColor: "var(--brand-primary)" }}
+            style={{ backgroundColor: "var(--brand-accent)" }}
           >
             Añadir al carrito
           </button>
@@ -336,7 +343,7 @@ function Carrito({ carrito, total, comprador, setComprador, envio, setEnvio, cam
         onClick={onPagar}
         disabled={!listo || enviando}
         className={`${BOTON} mt-6 w-full py-3`}
-        style={{ backgroundColor: "var(--brand-primary)" }}
+        style={{ backgroundColor: "var(--brand-accent)" }}
       >
         {enviando ? "Abriendo el pago…" : `Pagar ${eur(total)}`}
       </button>

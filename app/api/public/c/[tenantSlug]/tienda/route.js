@@ -13,7 +13,7 @@ import { esVendible, paraLaTienda } from "../../../../../../lib/tienda/catalogo.
  */
 export const GET = withPublicTenant(async (request, _ctxRuta, ctx) => {
   try {
-    const { tenantModels, hasModule } = ctx;
+    const { tenant, tenantModels, hasModule } = ctx;
     if (!hasModule("tienda")) return notFound("Aquí no hay tienda");
 
     const { Product, ProductVariant } = tenantModels;
@@ -42,10 +42,22 @@ export const GET = withPublicTenant(async (request, _ctxRuta, ctx) => {
 
     if (slug) {
       if (!productos.length) return notFound("Producto no encontrado");
-      return ok({ producto: productos[0] });
+      return ok({ producto: productos[0], marca: marcaDe(tenant) });
     }
-    return ok({ productos, total: productos.length });
+    return ok({ productos, total: productos.length, marca: marcaDe(tenant) });
   } catch (err) {
     return serverError(err);
   }
 });
+
+/**
+ * Los colores que la tienda pinta. `accentColor` es opcional y manda sobre el
+ * primario en los botones: nació con laura_ubeda (26/08/2026), cuyo primario
+ * es el negro del sidebar del CRM y sus botones de tienda van en rosa. Sin
+ * él, el acento ES el primario, como en cualquier otro tenant.
+ */
+function marcaDe(tenant) {
+  const brand = tenant?.settings?.brand ?? {};
+  const principal = brand.primaryColor || "#111111";
+  return { principal, acento: brand.accentColor || principal };
+}
