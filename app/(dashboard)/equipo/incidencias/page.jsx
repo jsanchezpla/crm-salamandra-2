@@ -46,6 +46,15 @@ export default function IncidenciasPage() {
    * de un hueco. Elegir «Cualquier responsable» pone "" y quita el filtro.
    */
   const [responsableId, setResponsableId] = useState(null);
+  // Buscador por texto (02/09/2026, AV-0011): asunto, descripción o nombre del
+  // paciente. Se manda al servidor con 300 ms de calma para no consultar a
+  // cada tecla.
+  const [q, setQ] = useState("");
+  const [qBuscada, setQBuscada] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setQBuscada(q.trim()), 300);
+    return () => clearTimeout(t);
+  }, [q]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [modal, setModal] = useState(null); // { mode, incidencia }
   const [errorMsg, setErrorMsg] = useState(null);
@@ -70,6 +79,7 @@ export default function IncidenciasPage() {
     // también a quien es segundo responsable (ver el GET del endpoint).
     if (responsableId === null) params.set("mine", "1");
     else if (responsableId) params.set("assignedToId", responsableId);
+    if (qBuscada) params.set("q", qBuscada);
     fetch(`/api/clinica/incidencias?${params}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => { if (j.ok) setData(j.data); else setErrorMsg(j.error); })
@@ -77,7 +87,7 @@ export default function IncidenciasPage() {
       .finally(() => setLoading(false));
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { load(); }, [statusTab, category, registroId, responsableId]);
+  useEffect(() => { load(); }, [statusTab, category, registroId, responsableId, qBuscada]);
 
   // Deep-link desde la campana (02/09/2026): `?incidencia=<id>` abre ESA ficha
   // fresca del servidor, no la copia del listado. Se lee de window.location y
@@ -104,7 +114,7 @@ export default function IncidenciasPage() {
       window.removeEventListener("focus", alVolver);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusTab, category, registroId, responsableId]);
+  }, [statusTab, category, registroId, responsableId, qBuscada]);
 
   const rows = data?.incidencias ?? [];
   // ¿Se está filtrando por responsable? Con `null` («las mías») solo si el
@@ -170,6 +180,14 @@ export default function IncidenciasPage() {
             dos desplegables era ruido. Cuál es cuál lo dice la opción neutra
             de cada uno, que es la que se ve mientras no hay filtro puesto. */}
         <div className="sm:ml-auto flex flex-wrap gap-2">
+          <input
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Buscar por asunto, paciente o palabra…"
+            aria-label="Buscar incidencias por asunto, paciente o palabra"
+            className="text-xs border border-neutral-200 rounded-lg px-3 py-2 bg-white hover:border-neutral-300 focus:outline-none focus:border-neutral-400 w-56"
+          />
           {/* Los dos filtros por persona solo tienen sentido para quien ve las
               de todo el equipo: a una terapeuta el servidor ya le da las suyas. */}
           {!soloLasMias && (
@@ -193,7 +211,7 @@ export default function IncidenciasPage() {
         {loading ? (
           <p className="px-4 py-10 text-center text-neutral-400 text-sm">Cargando…</p>
         ) : rows.length === 0 ? (
-          <p className="px-4 py-10 text-center text-neutral-400 text-sm">No hay incidencias{statusTab || category || registroId || filtrandoPorResponsable ? " con estos filtros" : ""}.</p>
+          <p className="px-4 py-10 text-center text-neutral-400 text-sm">No hay incidencias{statusTab || category || registroId || filtrandoPorResponsable || qBuscada ? " con estos filtros" : ""}.</p>
         ) : (
           <ul className="divide-y divide-neutral-100">
             {rows.map((r) => (

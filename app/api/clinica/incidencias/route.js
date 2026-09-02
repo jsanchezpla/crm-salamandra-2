@@ -1,4 +1,5 @@
 import { Op, fn, col } from "sequelize";
+import { filtroPorNombre } from "../../../../lib/utils/busquedaDb.js";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden } from "../../../../lib/utils/apiResponse.js";
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
@@ -57,6 +58,30 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   const patientId = sp.get("patientId");
   if (patientId && UUID_RE.test(patientId)) where.patientId = patientId;
 
+  /*
+   * BUSCAR POR TEXTO (02/09/2026, AV-0011 de Aumenta): «encontrar una por
+   * asunto, paciente o cualquier palabra, sin leerlas todas». 34 incidencias
+   * en dos días, y las faltas automáticas la hacen crecer sola.
+   *
+   * La misma regla que el buscador de Clientes y el de facturas —todas las
+   * palabras, cada una en cualquier campo, sin importar tildes—, sobre el
+   * asunto y la descripción, O el nombre del paciente (por su tabla, como
+   * hacen las facturas). Entra como AND para no pisar los demás filtros.
+   */
+  const q = (sp.get("q") || "").trim();
+  if (q) {
+    const porTexto = await filtroPorNombre(Incidencia.sequelize, q, ["Incidencia.title", "Incidencia.description"]);
+    const alternativas = porTexto ? [porTexto] : [];
+    if (M.Patient) {
+      const porPaciente = await filtroPorNombre(M.Patient.sequelize, q, ["Patient.first_name", "Patient.last_name"]);
+      if (porPaciente) {
+        const pacientes = await M.Patient.findAll({ where: porPaciente, attributes: ["id"], limit: 300, raw: true });
+        if (pacientes.length) alternativas.push({ patientId: { [Op.in]: pacientes.map((p) => p.id) } });
+      }
+    }
+    if (alternativas.length) (where[Op.and] ||= []).push(alternativas.length === 1 ? alternativas[0] : { [Op.or]: alternativas });
+  }
+
   // Quién la registró (31/08/2026, Rodrigo): la pareja del filtro de
   // responsable — «las que he mandado yo u otra persona a una persona
   // concreta» son los dos filtros combinados. Este es columna directa: a
@@ -78,7 +103,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   // pisar el `where.id` que ponen los filtros de abajo. Para quien no es
   // dirección, `mine=1` sobra: su alcance YA es «las mías».
   const esAdmin = veTodasLasIncidencias(ctx);
-  if (!esAdmin) where[Op.and] = [await whereIncidenciasVisibles(M, yoSoy)];
+  if (!esAdmin) (where[Op.and] ||= []).push(await whereIncidenciasVisibles(M, yoSoy));
 
   let assignedToId = sp.get("assignedToId");
   if (sp.get("mine") === "1" && esAdmin) {
