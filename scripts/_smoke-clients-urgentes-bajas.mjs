@@ -64,6 +64,11 @@ function fakeSequelize({ filas = [], cuenta = 0 } = {}) {
 const DE_PACIENTE = CARPETAS.filter((c) => c.entidad === "patient").map((c) => c.key);
 const DE_FAMILIA = CARPETAS.filter((c) => c.entidad === "client").map((c) => c.key);
 const TODAS = CARPETAS.map((c) => c.key);
+// Las listas de revisión que enseñan también a las archivadas (03/09/2026):
+// no excluyen bajas y por eso no entran en las pruebas de la exclusión.
+const CON_BAJAS = CARPETAS.filter((c) => c.incluyeBajas).map((c) => c.key);
+const EXCLUYEN = TODAS.filter((k) => !CON_BAJAS.includes(k));
+const DE_FAMILIA_EXCLUYEN = DE_FAMILIA.filter((k) => !CON_BAJAS.includes(k));
 
 /**
  * Lo que va detrás del WHERE de VERDAD, en una línea.
@@ -87,8 +92,18 @@ function whereDe(sql) {
 }
 
 describe("por defecto, las fichas archivadas no salen", () => {
-  it("todas las carpetas excluyen a las bajas", async () => {
-    for (const key of TODAS) {
+  it("una lista de revisión (reservas de plaza) enseña a las archivadas, con su chip", async () => {
+    for (const key of CON_BAJAS) {
+      const s = fakeSequelize();
+      await filasDe(s, ESQUEMA, key);
+      const where = whereDe(s.sqls[0]);
+      assert.doesNotMatch(where, /NOT\s*\(?\s*(p\.status|coalesce\(c\.status)/, `${key}: esconde a las archivadas`);
+      assert.match(s.sqls[0], /AS de_baja/, `${key}: la fila no dice si está de baja`);
+    }
+  });
+
+  it("todas las carpetas de huecos excluyen a las bajas", async () => {
+    for (const key of EXCLUYEN) {
       const s = fakeSequelize();
       await filasDe(s, ESQUEMA, key);
       const where = whereDe(s.sqls[0]);
@@ -147,7 +162,7 @@ describe("por defecto, las fichas archivadas no salen", () => {
 
 describe("la excepción: de baja pero con hora cogida sí sale", () => {
   it("la exclusión lleva siempre su «o tiene cita futura»", async () => {
-    for (const key of TODAS) {
+    for (const key of EXCLUYEN) {
       const s = fakeSequelize();
       await filasDe(s, ESQUEMA, key);
       const where = whereDe(s.sqls[0]);
@@ -184,7 +199,7 @@ describe("la excepción: de baja pero con hora cogida sí sale", () => {
       await filasDe(s, ESQUEMA, key);
       assert.match(s.sqls[0], /OR EXISTS \(SELECT 1 FROM crm_x\.bookings b\s+WHERE b\.patient_id = p\.id/, key);
     }
-    for (const key of DE_FAMILIA) {
+    for (const key of DE_FAMILIA_EXCLUYEN) {
       const s = fakeSequelize();
       await filasDe(s, ESQUEMA, key);
       assert.match(s.sqls[0], /OR EXISTS \(SELECT 1 FROM crm_x\.bookings b\s+WHERE b\.client_id = c\.id/, key);
