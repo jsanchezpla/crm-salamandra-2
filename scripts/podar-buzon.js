@@ -42,17 +42,20 @@ async function main() {
   }
   const s = new Sequelize(process.env.DATABASE_URL, { logging: false });
 
-  process.stdout.write(`\n▶ Buzón · resueltos hace más de ${DIAS} días${CONFIRM ? "" : "  (SIMULACRO)"}\n`);
+  process.stdout.write(`\n▶ Buzón · enviados al Registro hace más de ${DIAS} días${CONFIRM ? "" : "  (SIMULACRO)"}\n`);
 
   let candidatos;
   try {
     const [filas] = await s.query(`
-      SELECT id, numero, tenant_slug, resuelto_at
+      -- Cerrado = enviado al Registro (02/09/2026). La fecha: cuándo se envió;
+      -- en lo anterior al botón, cuándo se resolvió; y si no hay ninguna de
+      -- las dos (lo que marcó /mailbox a mano), la última vez que se tocó.
+      SELECT id, numero, tenant_slug,
+             COALESCE(registro_enviado_at, resuelto_at, updated_at) AS cerrado_at
         FROM master.buzon_avisos
-       WHERE estado = 'resuelto'
-         AND resuelto_at IS NOT NULL
-         AND resuelto_at < now() - interval '${DIAS} days'
-       ORDER BY resuelto_at ASC
+       WHERE estado = 'enviado'
+         AND COALESCE(registro_enviado_at, resuelto_at, updated_at) < now() - interval '${DIAS} days'
+       ORDER BY cerrado_at ASC
     `);
     candidatos = filas;
   } catch (err) {
@@ -77,7 +80,7 @@ async function main() {
 
   log(`${candidatos.length} aviso(s) y ${adjuntos} captura(s).`);
   for (const c of candidatos.slice(0, 10)) {
-    log(`  · AV-${String(c.numero).padStart(4, "0")} (${c.tenant_slug}) resuelto el ${new Date(c.resuelto_at).toISOString().slice(0, 10)}`);
+    log(`  · AV-${String(c.numero).padStart(4, "0")} (${c.tenant_slug}) cerrado el ${new Date(c.cerrado_at).toISOString().slice(0, 10)}`);
   }
   if (candidatos.length > 10) log(`  · … y ${candidatos.length - 10} más`);
 

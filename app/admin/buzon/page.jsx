@@ -29,13 +29,13 @@ const NIVEL = {
   green: { fondo: "#D1FAE5", texto: "#065F46" },
 };
 
-// Los tres estados del 02/09/2026 (`lib/buzon/buzon.js`): nuevo → enviado al
-// Registro → resuelto. «Enviado» lo pone el botón, no la mano.
+// Dos estados (`lib/buzon/buzon.js`, Rodrigo 02/09/2026): nuevo → enviado al
+// Registro, y ahí se acaba el Buzón: lo enviado cuenta como cerrado aquí y
+// sigue vivo en el tablero. «Enviado» lo pone el botón, no la mano.
 const PESTANAS = [
   { key: "activos", label: "Activos" },
-  { key: "nuevo", label: "Nuevos" },
   { key: "enviado", label: "En el Registro" },
-  { key: "resuelto", label: "Resueltos" },
+  { key: "todos", label: "Todos" },
 ];
 
 function fechaHora(v) {
@@ -326,7 +326,12 @@ export default function BuzonPage() {
 
       <div className="mt-8 flex items-center gap-1.5 flex-wrap">
         {PESTANAS.map((p) => {
-          const n = datos.recuento?.[p.key] ?? 0;
+          const n =
+            p.key === "todos"
+              ? Object.entries(datos.recuento ?? {})
+                  .filter(([k]) => k !== "activos")
+                  .reduce((suma, [, v]) => suma + (Number(v) || 0), 0)
+              : (datos.recuento?.[p.key] ?? 0);
           const activa = tab === p.key;
           return (
             <button
@@ -579,7 +584,7 @@ function Detalle({ avisoId, asignables, estados, prioridades, onCerrar }) {
                   <b>En el Registro</b>
                   {aviso.registroEnviadoAt
                     ? ` desde el ${fechaHora(aviso.registroEnviadoAt)}`
-                    : " (apuntado a mano, antes de que existiera el botón)"}
+                    : " (sin ficha enlazada: es anterior al botón)"}
                   {aviso.registroFicha ? ` · ficha ${aviso.registroFicha}` : ""} ·{" "}
                   <a href="/admin/tablero" className="underline">
                     abrir el Registro

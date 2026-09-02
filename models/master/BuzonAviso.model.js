@@ -85,10 +85,10 @@ export function defineBuzonAviso(sequelize) {
 
       // ── Lo que ponemos nosotros ───────────────────────────────────────────
       /**
-       * "nuevo" | "enviado" | "resuelto" (desde el 02/09/2026). Antes hubo
-       * también "en_curso" y "esperando": se leen como enviado y nuevo
-       * (`estadoActual` en `lib/buzon/buzon.js`) y los reescribe
-       * `scripts/migrate-buzon-estados.js`.
+       * "nuevo" | "enviado" (desde el 02/09/2026: el Buzón acaba en el
+       * Registro). Antes hubo también "en_curso", "esperando" y "resuelto":
+       * se leen como enviado, nuevo y enviado (`estadoActual` en
+       * `lib/buzon/buzon.js`) y los reescribe `scripts/migrate-buzon-estados.js`.
        */
       estado: { type: DataTypes.STRING(20), allowNull: false, defaultValue: "nuevo" },
       /** "baja" | "normal" | "alta" */
@@ -130,6 +130,11 @@ export function defineBuzonAviso(sequelize) {
        */
       vistoClienteAt: { type: DataTypes.DATE, allowNull: true },
       respondidoAt: { type: DataTypes.DATE, allowNull: true },
+      /**
+       * Ya no se escribe (02/09/2026: no hay «resuelto» en el Buzón). Queda en
+       * las filas anteriores a ese día y `podar-buzon.js` la lee como fecha de
+       * cierre cuando no hay `registroEnviadoAt`.
+       */
       resueltoAt: { type: DataTypes.DATE, allowNull: true },
       /**
        * La tarea del Registro que salió de este aviso (02/09/2026): la FICHA

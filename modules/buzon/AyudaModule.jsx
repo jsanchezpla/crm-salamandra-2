@@ -60,12 +60,11 @@ async function leerRespuesta(res) {
  *    está escribiendo, que es el único momento en que sirve de algo.
  */
 
-// Los tres estados del 02/09/2026 (`lib/buzon/buzon.js`); el servidor ya
+// Los dos estados del 02/09/2026 (`lib/buzon/buzon.js`); el servidor ya
 // traduce los nombres viejos, aquí no hace falta conocerlos.
 const ESTADO_COLOR = {
   nuevo: "bg-amber-50 text-amber-700 border-amber-200",
   enviado: "bg-blue-50 text-blue-700 border-blue-200",
-  resuelto: "bg-emerald-50 text-emerald-700 border-emerald-200",
 };
 
 function fecha(v) {
@@ -442,7 +441,7 @@ export default function AyudaModule({ esDemo = false }) {
                         {/* ⚠️ ARRIBA DEL ESTADO, NO EN VEZ DE ÉL. Son dos cosas
                             distintas: «Nueva respuesta» es lo que tiene que
                             hacer él, y el estado es por dónde va el asunto. Con
-                            un aviso resuelto y contestado a la vez, quedarse
+                            un aviso enviado al Registro y contestado a la vez, quedarse
                             solo con uno de los dos esconde el otro. */}
                         {a.sinLeer && (
                           <span className="text-[11px] px-2 py-0.5 rounded-full border border-emerald-300 bg-emerald-50 text-emerald-700 font-medium whitespace-nowrap">

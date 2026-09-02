@@ -6,6 +6,9 @@
  *   en_curso  → enviado   (era lo que marcaba /mailbox al apuntar la tarea)
  *   esperando → nuevo     (habíamos contestado; en qué tejado está la pelota
  *                          ya lo dicen las fechas, no el estado)
+ *   resuelto  → enviado   (esa misma noche: «el Resuelto no tiene sentido en
+ *                          el Buzón»; lo enviado cuenta como cerrado aquí y
+ *                          sigue en el Registro)
  *
  * Ensayo por defecto: cuenta y dice qué haría. Con `--confirm` escribe.
  * Es DATOS, no estructura, por eso no va dentro de `migrate-buzon.js`: aquel
@@ -24,6 +27,7 @@ import { Sequelize, QueryTypes } from "sequelize";
 const CAMBIOS = [
   { de: "en_curso", a: "enviado" },
   { de: "esperando", a: "nuevo" },
+  { de: "resuelto", a: "enviado" },
 ];
 
 async function main() {

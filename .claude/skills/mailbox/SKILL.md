@@ -45,7 +45,7 @@ Lo que hay que mirar de cada uno:
 | `capturas` | **No puedes verlas.** Si el aviso no se entiende sin ella, eso es lo que se escribe, no lo que te imaginas. |
 | `leBloquea` | Lo marca el cliente y no es una opinión: manda en la prioridad. |
 | `slug` | De quién es. El mismo fallo contado por tres clientes es otra cosa que contado por uno. |
-| `estado` | Un aviso ya `resuelto` normalmente no genera tarea. |
+| `estado` | Un aviso ya `enviado` al Registro tiene (o tuvo) su tarea: no se apunta otra vez salvo que el cliente diga que sigue pasando. Desde el 02/09/2026 no hay «resuelto» en el Buzón: acaba en «enviado». |
 
 ⚠️ **Un aviso de `salamandra_solutions` somos NOSOTROS probando.** Hoy los que hay
 son pruebas manuales de Jorge con texto de relleno. No se apuntan: dilos al final

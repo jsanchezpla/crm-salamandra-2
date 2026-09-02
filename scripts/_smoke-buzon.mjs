@@ -137,18 +137,14 @@ process.stdout.write("\n▶ Lo que cambiamos NOSOTROS\n");
 process.stdout.write("\n▶ El estado dice si está en el Registro, no de quién es la pelota (02/09/2026)\n");
 comprobar("contestar nosotros no mueve un nuevo", estadoTrasMensaje("nuevo", "salamandra") === "nuevo");
 comprobar("contestar nosotros no saca nada del Registro", estadoTrasMensaje("enviado", "salamandra") === "enviado");
-comprobar(
-  "SIGUE PASANDO reabre un aviso resuelto",
-  estadoTrasMensaje("resuelto", "cliente") === "nuevo",
-  estadoTrasMensaje("resuelto", "cliente")
-);
 comprobar("añadir datos a uno nuevo no lo mueve", estadoTrasMensaje("nuevo", "cliente") === "nuevo");
 comprobar("escribir él sobre uno enviado lo deja enviado (la campana ya avisa)", estadoTrasMensaje("enviado", "cliente") === "enviado");
-comprobar("un resuelto no se reabre solo por nosotros", estadoTrasMensaje("resuelto", "salamandra") === "resuelto");
+comprobar("un estado que no existe vuelve al principio", estadoTrasMensaje("archivado", "cliente") === "nuevo");
 comprobar(
-  "los dos nombres viejos se leen con el de hoy",
-  estadoActual("en_curso") === "enviado" && estadoActual("esperando") === "nuevo" && estadoActual("nuevo") === "nuevo"
+  "los tres nombres viejos se leen con el de hoy",
+  estadoActual("en_curso") === "enviado" && estadoActual("esperando") === "nuevo" && estadoActual("resuelto") === "enviado"
 );
+comprobar("«resuelto» ya no se puede escribir: el Buzón acaba en el Registro", !validarCambio({ estado: "resuelto" }).ok);
 
 process.stdout.write("\n▶ «Te hemos contestado y no lo has abierto»\n");
 {

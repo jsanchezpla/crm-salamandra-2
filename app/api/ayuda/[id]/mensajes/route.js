@@ -22,10 +22,11 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 /**
  * POST /api/ayuda/[id]/mensajes — el cliente sigue el hilo.
  *
- * El estado NO viene del body: lo decide `estadoTrasMensaje` en el store a
- * partir de quién escribe. Escribir el cliente devuelve el aviso a nuestro
- * tejado, y si estaba resuelto lo REABRE — «sigue pasando» es lo más importante
- * que nos pueden decir y no puede quedarse enterrado en un hilo cerrado.
+ * El estado NO viene del body, y desde el 02/09/2026 un mensaje tampoco lo
+ * mueve (`estadoTrasMensaje` en el store solo traduce nombres viejos): que el
+ * cliente ha vuelto a escribir lo dice `clienteEscribioAt`, que enciende la
+ * campana del panel aunque el aviso ya esté enviado al Registro — «sigue
+ * pasando» es lo más importante que nos pueden decir y llega igual.
  *
  * Un mensaje del cliente nunca puede ser `interno`: esa marca es nuestra y se
  * ignora aquí a propósito, no se valida ni se rechaza.

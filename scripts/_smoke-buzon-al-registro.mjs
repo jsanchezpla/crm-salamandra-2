@@ -10,7 +10,7 @@
  * el prefijo por tipo, sección «Sin comprobar», el slug como cliente, lo que
  * cuenta el cliente sin nada que parta la tarea, y que el bloque entra por la
  * misma puerta que el tablero (`crearTarea`) y se vuelve a encontrar por su
- * ficha. Y los tres estados del Buzón, con la lectura de los dos nombres viejos.
+ * ficha. Y los dos estados del Buzón, con la lectura de los tres nombres viejos.
  */
 
 import { describe, it } from "node:test";
@@ -148,22 +148,25 @@ describe("yaEstaEnElRegistro", () => {
   });
 });
 
-describe("los tres estados del Buzón (02/09/2026)", () => {
-  it("nuevo → enviado → resuelto, y los dos nombres viejos se leen como hoy", () => {
+describe("los dos estados del Buzón (02/09/2026)", () => {
+  it("nuevo → enviado, y los tres nombres viejos se leen como hoy", () => {
     assert.deepEqual(
       ESTADOS.map((e) => e.key),
-      ["nuevo", "enviado", "resuelto"]
+      ["nuevo", "enviado"]
     );
-    assert.deepEqual(ESTADOS_ANTIGUOS, { en_curso: "enviado", esperando: "nuevo" });
+    assert.deepEqual(ESTADOS_ANTIGUOS, { en_curso: "enviado", esperando: "nuevo", resuelto: "enviado" });
     assert.equal(estadoActual("en_curso"), "enviado");
     assert.equal(estadoActual("esperando"), "nuevo");
-    assert.equal(estadoActual("resuelto"), "resuelto");
+    assert.equal(estadoActual("resuelto"), "enviado");
+    assert.equal(estadoActual("nuevo"), "nuevo");
   });
 
-  it("los viejos ya no se pueden ESCRIBIR desde el panel", () => {
+  it("los viejos ya no se pueden ESCRIBIR desde el panel; «resuelto» tampoco, el Buzón acaba en el Registro", () => {
     assert.equal(validarCambio({ estado: "en_curso" }).ok, false);
     assert.equal(validarCambio({ estado: "esperando" }).ok, false);
+    assert.equal(validarCambio({ estado: "resuelto" }).ok, false);
     assert.equal(validarCambio({ estado: "enviado" }).ok, true);
+    assert.equal(validarCambio({ estado: "nuevo" }).ok, true);
   });
 
   it("una fila vieja sale serializada con el nombre de hoy, y la ficha del Registro solo la vemos nosotros", () => {
@@ -186,7 +189,7 @@ describe("los tres estados del Buzón (02/09/2026)", () => {
     assert.equal("registroFicha" in suyo, false);
   });
 
-  it("contestar no mueve nada; escribir el cliente solo reabre un resuelto", () => {
+  it("un mensaje no mueve nada: el estado solo dice si está en el Registro", () => {
     const tabla = {};
     for (const estado of ["nuevo", "enviado", "resuelto", "en_curso", "esperando", "archivado"]) {
       tabla[estado] = {
@@ -197,7 +200,7 @@ describe("los tres estados del Buzón (02/09/2026)", () => {
     assert.deepEqual(tabla, {
       nuevo: { salamandra: "nuevo", cliente: "nuevo" },
       enviado: { salamandra: "enviado", cliente: "enviado" },
-      resuelto: { salamandra: "resuelto", cliente: "nuevo" },
+      resuelto: { salamandra: "enviado", cliente: "enviado" },
       en_curso: { salamandra: "enviado", cliente: "enviado" },
       esperando: { salamandra: "nuevo", cliente: "nuevo" },
       archivado: { salamandra: "nuevo", cliente: "nuevo" },

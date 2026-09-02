@@ -454,7 +454,7 @@ describe("serializeCategory / serializeTemplate / serializeSettings: los ajustes
 /* ── El Buzón: vocabulario cerrado, adjuntos y estados ──────────────────────── */
 
 describe("el vocabulario cerrado del Buzón, fijado como dato", () => {
-  it("tres tipos, tres estados con su etiqueta y su color (02/09/2026), tres prioridades", () => {
+  it("tres tipos, dos estados con su etiqueta y su color (02/09/2026), tres prioridades", () => {
     assert.deepEqual(
       TIPOS.map((t) => t.key),
       ["error", "duda", "mejora"]
@@ -462,7 +462,6 @@ describe("el vocabulario cerrado del Buzón, fijado como dato", () => {
     assert.deepEqual(ESTADOS, [
       { key: "nuevo", label: "Nuevo", nivel: "amber" },
       { key: "enviado", label: "Enviado al registro", nivel: "blue" },
-      { key: "resuelto", label: "Resuelto", nivel: "green" },
     ]);
     assert.deepEqual(
       PRIORIDADES.map((p) => p.key),
@@ -584,11 +583,11 @@ describe("serializarMensaje: una línea del hilo, con su forma exacta", () => {
 
 describe("estadoTrasMensaje: el estado dice si está en el Registro, la tabla ENTERA (02/09/2026)", () => {
   // _smoke-buzon.mjs fija los casos con historia; aquí va la tabla completa
-  // (3 estados × 2 autores, más los dos nombres viejos) para que un estado
+  // (2 estados × 2 autores, más los tres nombres viejos) para que un estado
   // nuevo o un if torcido se vea.
-  it("las celdas: contestar nosotros no mueve nada; escribir el cliente solo reabre un resuelto (a nuevo)", () => {
+  it("las celdas: un mensaje, de quien sea, no mueve nada; lo viejo sale traducido", () => {
     const tabla = {};
-    for (const estado of ["nuevo", "enviado", "resuelto", "en_curso", "esperando"]) {
+    for (const estado of ["nuevo", "enviado", "en_curso", "esperando", "resuelto"]) {
       tabla[estado] = {
         salamandra: estadoTrasMensaje(estado, "salamandra"),
         cliente: estadoTrasMensaje(estado, "cliente"),
@@ -597,19 +596,20 @@ describe("estadoTrasMensaje: el estado dice si está en el Registro, la tabla EN
     assert.deepEqual(tabla, {
       nuevo: { salamandra: "nuevo", cliente: "nuevo" },
       enviado: { salamandra: "enviado", cliente: "enviado" },
-      resuelto: { salamandra: "resuelto", cliente: "nuevo" },
-      // Los viejos salen ya traducidos: nada vuelve a escribir `en_curso`.
+      // Los viejos salen ya traducidos: nada vuelve a escribir `en_curso` ni
+      // `resuelto` (el Buzón acaba en el Registro; Rodrigo, 02/09/2026).
       en_curso: { salamandra: "enviado", cliente: "enviado" },
       esperando: { salamandra: "nuevo", cliente: "nuevo" },
+      resuelto: { salamandra: "enviado", cliente: "enviado" },
     });
   });
 
   it("quien no es salamandra cuenta como cliente, y un estado desconocido vuelve al principio", () => {
-    assert.equal(estadoTrasMensaje("resuelto", undefined), "nuevo");
-    assert.equal(estadoTrasMensaje("resuelto", "portal"), "nuevo");
+    assert.equal(estadoTrasMensaje("enviado", undefined), "enviado");
+    assert.equal(estadoTrasMensaje("enviado", "portal"), "enviado");
     assert.equal(estadoTrasMensaje("archivado", "cliente"), "nuevo");
     assert.equal(estadoTrasMensaje("archivado", "salamandra"), "nuevo");
-    assert.equal(estadoActual("en_curso"), "enviado");
+    assert.equal(estadoActual("resuelto"), "enviado");
   });
 });
 
