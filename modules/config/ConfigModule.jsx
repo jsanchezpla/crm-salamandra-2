@@ -30,6 +30,7 @@ import {
 } from "./tarjetas/Conexiones.jsx";
 import {
   AgendaCompartidaCard,
+  SemanaLaboralCard,
   IncidenciaPorFaltaCard,
   AvisosWhatsappCard,
   CategoriasBloqueoCard,
@@ -771,6 +772,17 @@ export default function ConfigModule({ modulos = null }) {
               />
             ) 
 
+          )}
+
+          {enZona(
+            "semanaLaboral",
+             isAdmin && (
+              <SemanaLaboralCard
+                activo={cfg.semanaLaboral === "lv"}
+                readOnly={!!cfg.readOnly}
+                onChange={(v) => patchTenant({ semanaLaboral: v ? "lv" : "completa" }, v ? "La agenda enseñará de lunes a viernes" : "La agenda volverá a enseñar la semana entera")}
+              />
+            )
           )}
 
           {enZona(

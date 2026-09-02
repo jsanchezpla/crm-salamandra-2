@@ -132,6 +132,37 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
   const [teamMembers, setTeamMembers] = useState([]);
   const [viewerIsAdmin, setViewerIsAdmin] = useState(false);
   /*
+   * CÓMO SE PINTA LA AGENDA DE ESTE CENTRO (02/09/2026, AV-0020 y AV-0012 de
+   * Aumenta): qué días esconde la semana y entre qué horas va la rejilla. Lo
+   * dice el servidor (`/api/citas/vista`, lib/citas/vistaAgenda.js) a partir
+   * de la semana laboral del centro y de su horario de apertura. Hasta que
+   * contesta —o si no contesta— se pinta la rejilla de siempre.
+   */
+  const [vista, setVista] = useState({ hiddenDays: [], slotMinTime: "07:00:00", slotMaxTime: "22:00:00" });
+  useEffect(() => {
+    let vivo = true;
+    fetch("/api/citas/vista", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (vivo && j?.ok && j.data) setVista(j.data); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, []);
+  /*
+   * VISTA COMPACTA (02/09/2026, AV-0012): «ver el horario entero de un vistazo
+   * sin subir y bajar», pedido desde un iPad de 685 px de alto. Con el botón
+   * «Ajustar» las franjas se encogen hasta que la jornada entera cabe en la
+   * pantalla (`expandRows` reparte el alto que haya); el texto de las citas
+   * cortas se acorta, pero se ve el día completo, que es lo que se pedía. Se
+   * queda como se dejó (localStorage), como la columna de meses.
+   */
+  const [compacta, setCompacta] = useState(false);
+  useEffect(() => {
+    try { setCompacta(localStorage.getItem("citas.compacta") === "1"); } catch { /* sin memoria, arranca normal */ }
+  }, []);
+  useEffect(() => {
+    calendarRef.current?.getApi()?.updateSize();
+  }, [compacta]);
+  /*
    * ¿Ve la agenda de TODO el centro? (26/08/2026)
    *
    * NO es lo mismo que ser dirección, y confundirlo es lo que dejó a las
@@ -1003,7 +1034,7 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
         no puede desbordar.
       */}
       {tab === "calendar" && (
-        <div className={`flex-1 min-h-0 flex flex-col px-6 lg:px-10 pt-3 pb-4 ${mesesAbiertos ? "meses-abiertos" : ""}`}>
+        <div className={`flex-1 min-h-0 flex flex-col px-6 lg:px-10 pt-3 pb-4 ${mesesAbiertos ? "meses-abiertos" : ""} ${compacta ? "agenda-compacta" : ""}`}>
           <p className="text-[11px] text-neutral-400 mb-2 lg:hidden shrink-0">
             Toca una cita para ver su ficha. Para crear o mover citas, mejor desde el ordenador.
           </p>
@@ -1059,8 +1090,8 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
             }}
             headerToolbar={
               esMovil
-                ? { left: "prev,next", center: "title", right: "listWeek,timeGridTresDias,timeGridDay" }
-                : { left: "meses prev,next today", center: "title", right: "dayGridMonth,timeGridWeek,timeGridTresDias,timeGridDay,listWeek" }
+                ? { left: "compacta prev,next", center: "title", right: "listWeek,timeGridTresDias,timeGridDay" }
+                : { left: "meses compacta prev,next today", center: "title", right: "dayGridMonth,timeGridWeek,timeGridTresDias,timeGridDay,listWeek" }
             }
             /*
              * El botón que abre y cierra la columna de meses. Va DENTRO de la
@@ -1069,6 +1100,16 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
              * aparece: la columna no cabe y no se pinta.
              */
             customButtons={{
+              compacta: {
+                text: compacta ? "Ajustar: sí" : "Ajustar",
+                hint: "Encoger las franjas para que la jornada entera quepa en la pantalla sin desplazarse",
+                click: () => {
+                  setCompacta((v) => {
+                    try { localStorage.setItem("citas.compacta", v ? "0" : "1"); } catch { /* sin memoria, solo esta visita */ }
+                    return !v;
+                  });
+                },
+              },
               meses: {
                 text: "Meses",
                 hint: "Enseñar u ocultar los meses para saltar a un día",
@@ -1096,8 +1137,18 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
             }}
             locale="es"
             firstDay={1}
-            slotMinTime="07:00:00"
-            slotMaxTime="22:00:00"
+            /*
+             * Días y horas DEL CENTRO (02/09/2026): sin sábado ni domingo si
+             * el centro lo ha pedido en Configuración → Agenda, y la rejilla
+             * entre su hora de abrir y su hora de cerrar (con media hora de
+             * margen), en vez de 07:00–22:00 para todo el mundo.
+             */
+            hiddenDays={vista.hiddenDays}
+            slotMinTime={vista.slotMinTime}
+            slotMaxTime={vista.slotMaxTime}
+            // Si sobra alto, las franjas se reparten lo que haya; con «Ajustar»
+            // puesto (arriba) es lo que hace que la jornada quepa sin barra.
+            expandRows={true}
             /*
              * Solo la hora de INICIO en la caja (30/08/2026, Rodrigo): el
              * «12:00 - 12:30» de antes se comía el ancho y el nombre salía

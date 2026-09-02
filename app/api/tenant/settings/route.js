@@ -28,6 +28,7 @@ import {
   limpiarResponsables,
 } from "../../../../lib/citas/incidenciaPorFalta.js";
 import { coordinadorasDe } from "../../../../lib/clinica/coordinadoras.js";
+import { semanaLaboralDe, esSemanaValida } from "../../../../lib/citas/vistaAgenda.js";
 import {
   listarCuentas,
   listarRemitentes,
@@ -246,6 +247,7 @@ function diffConfiguracion(antes, despues, nombreAntes, nombreDespues) {
   anota("citas.meetModo", antes?.citas?.meetModo, despues?.citas?.meetModo);
   anota("citas.recordatorios", antes?.citas?.recordatorios, despues?.citas?.recordatorios);
   anota("citas.agendaCompartida", antes?.citas?.agendaCompartida, despues?.citas?.agendaCompartida);
+  anota("citas.semanaLaboral", antes?.citas?.semanaLaboral, despues?.citas?.semanaLaboral);
   anota("citas.portalBloqueoImpago", antes?.citas?.portalBloqueoImpago, despues?.citas?.portalBloqueoImpago);
   anota("citas.cancelacionBloqueada", antes?.citas?.cancelacionBloqueada, despues?.citas?.cancelacionBloqueada);
   anota("citas.reservaOnlineCerrada", antes?.citas?.reservaOnlineCerrada, despues?.citas?.reservaOnlineCerrada);
@@ -373,6 +375,9 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
     // encenderlo empieza a mandar correos a pacientes reales.
     recordatoriosCitas: t.settings?.citas?.recordatorios === true,
     agendaCompartida: t.settings?.citas?.agendaCompartida === true,
+    // Qué días enseña la vista semanal: «lv» o «completa» (02/09/2026,
+    // AV-0020; lib/citas/vistaAgenda.js).
+    semanaLaboral: semanaLaboralDe(t),
     // Bloqueo del área privada mes a mes hasta que consta el cobro de ese mes.
     portalBloqueoImpago: t.settings?.citas?.portalBloqueoImpago === true,
     // ¿El centro impide que la familia anule sus citas? (lib/citas/cancelacion.js)
@@ -751,6 +756,11 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   if (typeof body.agendaCompartida === "boolean") {
     settings.citas = { ...(settings.citas ?? {}), agendaCompartida: body.agendaCompartida };
   }
+  // Semana laboral (02/09/2026, AV-0020): POR CENTRO, porque hay centros que
+  // abren los sábados. Solo los dos valores conocidos.
+  if (esSemanaValida(body.semanaLaboral)) {
+    settings.citas = { ...(settings.citas ?? {}), semanaLaboral: String(body.semanaLaboral).trim().toLowerCase() };
+  }
   // Bloqueo por impago del área privada (sprint Aumenta 2026-07, punto 2.3).
   // APAGADO por defecto: encenderlo en un centro que no registra los cobros por
   // mes esconde de golpe la documentación de todas las familias.
@@ -951,6 +961,7 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
     meetModo: settings.citas?.meetModo === "automatico" ? "automatico" : "manual",
     recordatoriosCitas: settings.citas?.recordatorios === true,
     agendaCompartida: settings.citas?.agendaCompartida === true,
+    semanaLaboral: semanaLaboralDe({ settings }),
     portalBloqueoImpago: settings.citas?.portalBloqueoImpago === true,
     cancelacionBloqueada: settings.citas?.cancelacionBloqueada === true,
     reservaOnlineCerrada: settings.citas?.reservaOnlineCerrada === true,

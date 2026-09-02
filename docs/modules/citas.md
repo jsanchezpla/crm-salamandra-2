@@ -1666,6 +1666,25 @@ cuatro de fábrica (gestión documental, valoraciones, libre de pacientes,
 descanso) **no cuentan como internas**, igual que antes: meterlas movería cifras
 que Aumenta lleva meses mirando, y eso lo decide dirección, no el código.
 
+## Semana laboral, horas de apertura y vista compacta (02/09/2026)
+
+Dos peticiones de Aumenta del Buzón (AV-0020 y AV-0012), decididas por
+Rodrigo el mismo día:
+
+- **Semana de lunes a viernes**: ajuste POR CENTRO (`settings.citas.semanaLaboral`,
+  `lv` o `completa`; tarjeta «Semana de lunes a viernes» en Configuración →
+  Agenda). Por centro y no global porque hay centros que abren los sábados.
+- **Las horas de la rejilla** salen del horario de apertura de Citas →
+  Disponibilidad (todas las franjas de `availability`): de la más temprana a
+  la más tardía con media hora de margen redondeada a la media hora; sin
+  horario, 07:00–22:00 como siempre.
+- Las dos cosas las cuenta `GET /api/citas/vista` (`vistaDe()` en
+  `lib/citas/vistaAgenda.js`, prueba `_smoke-vista-agenda.mjs`) y el
+  calendario las aplica como `hiddenDays`, `slotMinTime` y `slotMaxTime`.
+- **«Ajustar»** (botón de la botonera): encoge las franjas (`.agenda-compacta`
+  en `app/globals.css`) y con `expandRows` la jornada entera cabe en la
+  pantalla sin desplazarse; se recuerda en `localStorage`.
+
 ## Migraciones
 
 Las del módulo están registradas en `MODULES.citas` de

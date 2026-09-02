@@ -572,3 +572,45 @@ export function IncidenciaPorFaltaCard({ responsables = [], readOnly, onGuardar 
     </div>
   );
 }
+
+/**
+ * SemanaLaboralCard — la vista semanal sin sábado ni domingo (02/09/2026,
+ * AV-0020 de Aumenta; opción (a) elegida por Rodrigo). POR CENTRO y no
+ * global a propósito: hay centros que sí abren los sábados. Con el
+ * interruptor puesto, «Semana» y «3 días» saltan el fin de semana y cada día
+ * gana un 40 % de ancho. La regla: lib/citas/vistaAgenda.js.
+ */
+export function SemanaLaboralCard({ activo, readOnly, onChange }) {
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl p-5" data-testid="semana-laboral">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-neutral-800">Semana de lunes a viernes</div>
+          <p className="text-xs text-neutral-400 mt-0.5 max-w-lg">
+            Que la vista semanal de la agenda no enseñe sábado ni domingo. Para un centro que no
+            abre fines de semana, cinco columnas en vez de siete: cada día se ve más ancho. Si el
+            centro abre algún sábado, déjalo apagado.
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={readOnly}
+          onClick={() => onChange(!activo)}
+          className={`shrink-0 relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-40 ${activo ? "bg-[var(--color-primary,#1B3A2D)]" : "bg-neutral-300"}`}
+          aria-label={activo ? "Volver a enseñar la semana entera" : "Enseñar solo de lunes a viernes"}
+        >
+          <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${activo ? "translate-x-6" : "translate-x-1"}`} />
+        </button>
+      </div>
+      <div className="mt-1 text-[11px] font-medium">
+        {activo
+          ? <span className="text-emerald-700">Activa: la agenda enseña de lunes a viernes.</span>
+          : <span className="text-neutral-400">Apagada: la agenda enseña la semana entera.</span>}
+      </div>
+      <p className="text-[10px] text-neutral-400 mt-2">
+        Las horas de la rejilla salen solas del horario de apertura de Citas → Disponibilidad:
+        de la franja más temprana a la más tardía, con media hora de margen.
+      </p>
+    </div>
+  );
+}

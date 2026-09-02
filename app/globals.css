@@ -363,6 +363,12 @@ body {
    no pisa a nadie. La otra mitad del arreglo (eventMinHeight bajado y
    slotEventOverlap apagado) va en las opciones del calendario de CitasModule. */
 .fc .fc-timegrid-slot { height: 2em; }
+/* Vista compacta («Ajustar», 02/09/2026, AV-0012 de Aumenta): las franjas
+   bajan a un mínimo pequeño y `expandRows` las estira hasta llenar el alto que
+   haya, así que la jornada entera cabe sin desplazarse. El texto de una cita
+   corta se corta antes; se pidió ver el día completo y eso es lo que gana. */
+.agenda-compacta .fc .fc-timegrid-slot { height: 0.6em; }
+.agenda-compacta .fc .fc-timegrid-event .fc-event-main { padding-top: 0; padding-bottom: 0; line-height: 1.1; }
 /* El resaltado de una selección, igual: lo pinta la librería leyendo
    `--fc-highlight-color`, por el mismo motivo que el día de hoy. */
 .fc .fc-daygrid-event-dot { border-color: currentColor; }
