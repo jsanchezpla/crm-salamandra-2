@@ -60,10 +60,11 @@ async function leerRespuesta(res) {
  *    está escribiendo, que es el único momento en que sirve de algo.
  */
 
+// Los tres estados del 02/09/2026 (`lib/buzon/buzon.js`); el servidor ya
+// traduce los nombres viejos, aquí no hace falta conocerlos.
 const ESTADO_COLOR = {
   nuevo: "bg-amber-50 text-amber-700 border-amber-200",
-  en_curso: "bg-blue-50 text-blue-700 border-blue-200",
-  esperando: "bg-gray-100 text-gray-600 border-gray-200",
+  enviado: "bg-blue-50 text-blue-700 border-blue-200",
   resuelto: "bg-emerald-50 text-emerald-700 border-emerald-200",
 };
 

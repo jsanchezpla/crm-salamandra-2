@@ -13,14 +13,14 @@
 | **moduleKey** | sin moduleKey: lo tienen todos (`/ayuda` y `/api/ayuda` van con `withTenant` y sin `hasModule`); el lado nuestro se abre por host (`ADMIN_HOST`) con `candadoBuzon` |
 | **Reina** | — · no es de ningún cliente: es nuestra bandeja |
 | **Pantallas** | cliente: `/ayuda` → `app/(dashboard)/ayuda/page.jsx` (monta `modules/buzon/AyudaModule.jsx`; resuelve `esDemo` en servidor con `esSlugDemo`) · nosotros: `/admin/buzon` → `app/admin/buzon/page.jsx` (la bandeja; `?aviso=<id>` abre ese hilo) y la campana de la barra en `app/admin/layout.jsx` (`components/admin/CampanaBuzon.jsx`) · el punto del menú lo pinta `components/layout/Sidebar.jsx` (`EVENTO_SIN_VER`) y la portada `app/(dashboard)/page.jsx` (`sinVerDeUsuario`) |
-| **Endpoints** | cliente: `app/api/ayuda/**` — 4 `route.js` (`route.js` GET/POST, `[id]`, `[id]/mensajes`, `adjuntos/[adjuntoId]`) · nosotros: `app/api/admin/buzon/**` — 5 `route.js` (`route.js`, `pendientes`, `[id]`, `[id]/mensajes`, `adjuntos/[adjuntoId]`) · Públicos: ninguno (para escribir hay que estar dentro del CRM) |
+| **Endpoints** | cliente: `app/api/ayuda/**` — 4 `route.js` (`route.js` GET/POST, `[id]`, `[id]/mensajes`, `adjuntos/[adjuntoId]`) · nosotros: `app/api/admin/buzon/**` — 6 `route.js` (`route.js`, `pendientes`, `[id]`, `[id]/mensajes`, `[id]/registro` —POST, 02/09/2026: «Enviar al registro», ver «Estados»—, `adjuntos/[adjuntoId]`) · Públicos: ninguno (para escribir hay que estar dentro del CRM) |
 | **Lógica** | `lib/buzon/`: `buzon.js` (qué es un aviso válido, estados, `serializarAviso`, `LIMITES`, `tipoParaVerEnPantalla`, los dos eventos) · `buzonStore.js` (el único que toca las tablas; `whereSinVer` / `wherePendienteNuestro`) · `buzonStorage.js` (las capturas en disco) · `quienEscribe.js` (la foto de quién escribe) · `candadoBackoffice.js` (`candadoBuzon`: comprueba el host a mano) · `avisarPorCorreo.js` (el correo a nosotros, con el Resend de `salamandra_solutions`) · `avisarEnSuCrm.js` (la campana en el schema del cliente: el único sitio del back-office que lo abre) · guard de demo: `lib/demo/isDemo.js`; rate limit: `lib/utils/rateLimit.js` |
 | **UI** | `modules/buzon/AyudaModule.jsx` (formulario, lista e hilo del cliente; `leerRespuesta()` traduce el 413) · `components/admin/CampanaBuzon.jsx` (la campana del panel) · la bandeja vive en la propia página `app/admin/buzon/page.jsx` |
 | **Modelos** | en `models/master/`: `BuzonAviso` (`buzon_avisos`; `numero` sale de `master.buzon_numero_seq`), `BuzonMensaje` (`buzon_mensajes`), `BuzonAdjunto` (`buzon_adjuntos`); sin FK a `tenants` ni a `users` (UUID sueltos + foto de texto) · registrados en `lib/db/masterDb.js` |
 | **Interruptores y parámetros** | ninguno que lea el código; lo que gatea es el host (`ADMIN_HOST`) + `candadoBuzon`, el guard de la demo y el rate limit por persona; los topes viven en `LIMITES` de `lib/buzon/buzon.js` |
 | **Pantallas propias** | ninguna |
-| **Scripts** | sin `enable-module.js` (no hay módulo) · `scripts/migrate-buzon.js` (`npm run db:migrate:buzon`; master, idempotente, a mano en cada despliegue que traiga columna nueva; en el VPS `docker exec crm-salamandra-app-1 node scripts/migrate-buzon.js`) · `scripts/podar-buzon.js` (retención: resueltos con más de dos años; simula sin `--confirm`; sin cron) · `scripts/buzon-triaje.mjs` (la herramienta de la skill `incidencias-buzon`: lista, marca o contesta por tubería dentro del contenedor) |
-| **Pruebas** | en `npm test`: `scripts/_smoke-buzon.mjs` (`// @prueba ligera`; estados, recorte de notas internas, las dos parejas de fechas) · `scripts/_smoke-support-serialize-buzon.mjs` (`node:test`, 20/08/2026, en `npm test`) en su mitad del buzón: `lib/buzon/buzon.js` —las referencias `AV-000X` (`referencia`); la tabla ENTERA de `estadoTrasMensaje` (4 estados × 2 autores): contestar nosotros deja «esperando» salvo en resuelto, y si escribe el cliente un aviso resuelto se REABRE a «en curso», la pelota vuelve a nuestro tejado; la lista blanca de `tipoParaVerEnPantalla` (el SVG no se enseña en línea: puede llevar script y una de las pantallas es el back-office); `serializarAdjunto` decide el botón «Ver» por la extensión GUARDADA y no expone la ruta del disco; `serializarAviso(..., { para: "cliente" })` le manda al cliente EXACTAMENTE sus campos, ni uno más, fijado con `deepEqual`; y los vocabularios cerrados (tipos, estados con su color, asignables, topes)— · el correo de aviso hacia NOSOTROS (`buzon/avisoNuevo`, incluida la referencia `AV-####` calculada del número cuando la fila no la trae, y los interrogantes en vez de «undefined» cuando no hay número) se prueba en `scripts/_smoke-plantillas-resto-layout.mjs` (`node:test`, 21/08/2026, en `npm test`) · con base de datos: `scripts/_smoke-ayuda-a-salamandra.mjs` (el camino `/ayuda` → master → correo; por defecto no manda nada) |
+| **Scripts** | sin `enable-module.js` (no hay módulo) · `scripts/migrate-buzon.js` (`npm run db:migrate:buzon`; master, idempotente, a mano en cada despliegue que traiga columna nueva; en el VPS `docker exec crm-salamandra-app-1 node scripts/migrate-buzon.js`) · `scripts/migrate-buzon-estados.js` (02/09/2026: los estados viejos `en_curso`/`esperando` al vocabulario de hoy; ensayo por defecto, `--confirm` para escribir) · `scripts/podar-buzon.js` (retención: resueltos con más de dos años; simula sin `--confirm`; sin cron) · `scripts/buzon-triaje.mjs` (la herramienta de la skill `incidencias-buzon`: lista, marca o contesta por tubería dentro del contenedor) |
+| **Pruebas** | en `npm test`: `scripts/_smoke-buzon.mjs` (`// @prueba ligera`; estados, recorte de notas internas, las dos parejas de fechas) · `scripts/_smoke-support-serialize-buzon.mjs` (`node:test`, 20/08/2026, en `npm test`) en su mitad del buzón: `lib/buzon/buzon.js` —las referencias `AV-000X` (`referencia`); la tabla ENTERA de `estadoTrasMensaje` (3 estados × 2 autores, más los dos nombres viejos): contestar nosotros no mueve nada, y si escribe el cliente un aviso resuelto se REABRE a «nuevo»; la lista blanca de `tipoParaVerEnPantalla` (el SVG no se enseña en línea: puede llevar script y una de las pantallas es el back-office); `serializarAdjunto` decide el botón «Ver» por la extensión GUARDADA y no expone la ruta del disco; `serializarAviso(..., { para: "cliente" })` le manda al cliente EXACTAMENTE sus campos, ni uno más, fijado con `deepEqual`; y los vocabularios cerrados (tipos, estados con su color, asignables, topes)— · el correo de aviso hacia NOSOTROS (`buzon/avisoNuevo`, incluida la referencia `AV-####` calculada del número cuando la fila no la trae, y los interrogantes en vez de «undefined» cuando no hay número) se prueba en `scripts/_smoke-plantillas-resto-layout.mjs` (`node:test`, 21/08/2026, en `npm test`) · con base de datos: `scripts/_smoke-ayuda-a-salamandra.mjs` (el camino `/ayuda` → master → correo; por defecto no manda nada) · `scripts/_smoke-buzon-al-registro.mjs` (`node:test`, 02/09/2026, en `npm test`): la tarea que sale de un aviso (título con prefijo por tipo, sección «Sin comprobar», cliente = slug, el texto del cliente sin «#» ni fichas que partan la tarea, el bloque entra por `crearTarea` y se vuelve a encontrar por su ficha), el freno de «ya está en el Registro» y los tres estados con la lectura de los viejos |
 | **Decisiones** | `../decisions/2026-07-28-repaso-de-seguridad.md` (guard de la demo, auditoría con resumen) · `../decisions/2026-08-12-bajas-abarcaia-quality-healim.md` (por qué vive en `master`: sobrevive a la baja) |
 | **En este doc** | Las cuatro cosas que suenan parecido · Por qué vive en `master` · Tablas (`master`) · Estados · Quién ve qué · Endpoints · Adjuntos · Cuando le contestamos se entera DENTRO de su CRM |
 
@@ -155,14 +155,37 @@ no puede impedir que nos avise.
 
 ## Estados
 
-`nuevo ⇄ en_curso` → contestamos ⇒ `esperando` → contesta él ⇒ `en_curso`.
-`resuelto` cierra, y **si el cliente vuelve a escribir se reabre**: «sigue
-pasando» es lo más importante que nos pueden decir y no puede quedarse enterrado
-en un hilo cerrado.
+Tres, y el del medio es una acción (Rodrigo, 02/09/2026): `nuevo` → **Enviar
+al registro** ⇒ `enviado` → `resuelto`. Un aviso existe para acabar en el
+Registro, que es donde se arregla; «enviado» no se pone a mano: lo pone el
+botón de `/admin/buzon` (`POST /api/admin/buzon/[id]/registro`), que apunta la
+tarea de verdad en «Sin comprobar» del `backlog` —título `Buzón - Fallo|Duda|
+Mejora: <asunto>`, cliente = slug, cuerpo con lo que cuenta el cliente, la
+referencia, la pantalla y las tres líneas de rigor (`lib/buzon/alRegistro.js`,
+`tareaDesdeAviso`)— por la MISMA puerta que el tablero (`crearTarea` +
+`prepararPublicacion` + `publicarVersion`: misma versión, mismo historial) y
+enlaza el aviso con la tarea por su ficha (`registro_ficha`,
+`registro_enviado_at`; se publica primero y se marca después, para que un
+fallo al publicar no deje un «enviado» sin tarea). Se niega a apuntar dos
+veces: si el aviso ya tiene ficha, o si el `backlog` ya cita su `AV-####`
+(las tareas que /mailbox escribió a mano), contesta 409. La chip «Enviado al
+registro» de la ficha hace lo mismo que el botón cuando el aviso aún no tiene
+tarea; con tarea, solo cambia el estado.
 
-Lo decide `estadoTrasMensaje()` en `lib/buzon/buzon.js` a partir de quién
-escribe, nunca el body de la petición: así no hay forma de contestar y dejarlo,
-por descuido, como si siguiera esperándonos.
+`resuelto` cierra, y **si el cliente vuelve a escribir se reabre a `nuevo`**:
+«sigue pasando» es lo más importante que nos pueden decir y no puede quedarse
+enterrado en un hilo cerrado. Contestar nosotros ya no mueve nada: en qué
+tejado está la pelota lo dicen las parejas de fechas (`tienePendienteNuestro`,
+`tieneRespuestaSinVer`), no el estado. Lo decide `estadoTrasMensaje()` en
+`lib/buzon/buzon.js` a partir de quién escribe, nunca el body de la petición.
+
+Hasta el 02/09/2026 hubo cuatro estados (`nuevo`, `en_curso`, `esperando`,
+`resuelto`). Las filas con los dos viejos se LEEN con el nombre de hoy
+(`estadoActual()`: `en_curso` → enviado, `esperando` → nuevo; el filtro y el
+recuento de la bandeja los suman, y `serializarAviso` ya los traduce, así que
+las pantallas no los conocen) y `scripts/migrate-buzon-estados.js` las
+reescribe (ensayo por defecto, `--confirm` para escribir; datos, no
+estructura, por eso no va dentro de `migrate-buzon.js`).
 
 ## Quién ve qué
 

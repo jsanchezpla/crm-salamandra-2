@@ -134,6 +134,15 @@ async function main() {
       ADD COLUMN IF NOT EXISTS cliente_escribio_at TIMESTAMPTZ
   `);
 
+  // `registro_ficha` y `registro_enviado_at` (02/09/2026): la tarea del
+  // Registro que salió del aviso, enlazada por su ficha (botón «Enviar al
+  // registro»). Mismo caso: la tabla ya existía en producción.
+  await s.query(`
+    ALTER TABLE master.buzon_avisos
+      ADD COLUMN IF NOT EXISTS registro_ficha VARCHAR(16),
+      ADD COLUMN IF NOT EXISTS registro_enviado_at TIMESTAMPTZ
+  `);
+
   // ── El hilo ───────────────────────────────────────────────────────────────
   //
   // Tabla propia y no una columna JSONB: hace falta saber quién escribió cada

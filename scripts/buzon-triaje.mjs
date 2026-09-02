@@ -37,7 +37,8 @@
  * ── VARIABLES ───────────────────────────────────────────────────────────────
  *   TRIAJE_ACCION      listar (por defecto) | marcar | responder
  *   TRIAJE_REF         «AV-0007» o el UUID del aviso
- *   TRIAJE_ESTADO      para `marcar`; por defecto `en_curso`
+ *   TRIAJE_ESTADO      para `marcar`; por defecto `enviado` (al Registro; desde
+ *                      el 02/09/2026 el botón de /admin/buzon lo hace solo)
  *   TRIAJE_TEXTO       para `responder`; el mensaje tal cual lo verá el cliente
  *   TRIAJE_AUTOR       quién firma la respuesta; por defecto «Salamandra»
  *   TRIAJE_CONFIRMAR   «1» para escribir de verdad
@@ -175,7 +176,7 @@ if (ACCION === "marcar") {
   const aviso = await buscar(REF);
   if (!aviso) await salir(1);
 
-  const estado = process.env.TRIAJE_ESTADO || "en_curso";
+  const estado = process.env.TRIAJE_ESTADO || "enviado";
   const antes = { estado: aviso.estado, prioridad: aviso.prioridad, asignadoA: aviso.asignadoA };
 
   if (!CONFIRMAR) {

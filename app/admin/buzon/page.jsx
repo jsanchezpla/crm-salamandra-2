@@ -29,11 +29,12 @@ const NIVEL = {
   green: { fondo: "#D1FAE5", texto: "#065F46" },
 };
 
+// Los tres estados del 02/09/2026 (`lib/buzon/buzon.js`): nuevo → enviado al
+// Registro → resuelto. «Enviado» lo pone el botón, no la mano.
 const PESTANAS = [
   { key: "activos", label: "Activos" },
   { key: "nuevo", label: "Nuevos" },
-  { key: "en_curso", label: "En curso" },
-  { key: "esperando", label: "Esperando" },
+  { key: "enviado", label: "En el Registro" },
   { key: "resuelto", label: "Resueltos" },
 ];
 
@@ -426,6 +427,7 @@ function Detalle({ avisoId, asignables, estados, prioridades, onCerrar }) {
   const [enviando, setEnviando] = useState(false);
   const [fallo, setFallo] = useState(null);
   const [viendo, setViendo] = useState(null);
+  const [alRegistro, setAlRegistro] = useState(false);
 
   const cargar = useCallback(async () => {
     try {
@@ -464,6 +466,28 @@ function Detalle({ avisoId, asignables, estados, prioridades, onCerrar }) {
       setFallo(null);
     } catch (e) {
       setFallo(e.message);
+    }
+  }
+
+  /**
+   * «Enviar al registro» (02/09/2026): apunta la tarea de verdad en «Sin
+   * comprobar» del backlog y deja el aviso en «enviado», enlazado por la ficha.
+   * Sin confirmación: publicar una versión es reversible desde el tablero, y
+   * el servidor se niega a apuntar el mismo aviso dos veces.
+   */
+  async function enviarAlRegistro() {
+    if (alRegistro) return;
+    setAlRegistro(true);
+    try {
+      const res = await fetch(`/api/admin/buzon/${avisoId}/registro`, { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "No se pudo enviar al Registro");
+      setAviso(json.data.aviso);
+      setFallo(null);
+    } catch (e) {
+      setFallo(e.message);
+    } finally {
+      setAlRegistro(false);
     }
   }
 
@@ -527,8 +551,15 @@ function Detalle({ avisoId, asignables, estados, prioridades, onCerrar }) {
                 {estados.map((e) => (
                   <button
                     key={e.key}
-                    onClick={() => cambiar("estado", e.key)}
-                    className="text-[11px] px-2 py-1 rounded cursor-pointer"
+                    // «Enviado al registro» no es una etiqueta: si el aviso aún no
+                    // tiene su tarea, pulsarlo la apunta de verdad.
+                    onClick={() =>
+                      e.key === "enviado" && !aviso.registroFicha
+                        ? enviarAlRegistro()
+                        : cambiar("estado", e.key)
+                    }
+                    disabled={alRegistro}
+                    className="text-[11px] px-2 py-1 rounded cursor-pointer disabled:opacity-50"
                     style={{
                       background: aviso.estado === e.key ? "var(--ok)" : "transparent",
                       color: aviso.estado === e.key ? "#fff" : "var(--dim)",
@@ -539,6 +570,36 @@ function Detalle({ avisoId, asignables, estados, prioridades, onCerrar }) {
                   </button>
                 ))}
               </div>
+
+              {aviso.registroFicha || aviso.estado === "enviado" ? (
+                <div
+                  className="rounded px-3 py-2 text-[11px]"
+                  style={{ background: "var(--panel-alto)", color: "var(--dim)" }}
+                >
+                  <b>En el Registro</b>
+                  {aviso.registroEnviadoAt
+                    ? ` desde el ${fechaHora(aviso.registroEnviadoAt)}`
+                    : " (apuntado a mano, antes de que existiera el botón)"}
+                  {aviso.registroFicha ? ` · ficha ${aviso.registroFicha}` : ""} ·{" "}
+                  <a href="/admin/tablero" className="underline">
+                    abrir el Registro
+                  </a>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={enviarAlRegistro}
+                    disabled={alRegistro}
+                    className="text-[12px] px-3 py-1.5 rounded cursor-pointer font-medium disabled:opacity-50"
+                    style={{ background: "var(--ok)", color: "#fff" }}
+                  >
+                    {alRegistro ? "Apuntando…" : "Enviar al registro →"}
+                  </button>
+                  <span className="text-[11px]" style={{ color: "var(--tenue)" }}>
+                    Apunta la tarea en «Sin comprobar» del backlog, con lo que cuenta el cliente.
+                  </span>
+                </div>
+              )}
 
               <div className="flex flex-wrap gap-1.5 items-center">
                 <span className="text-[11px]" style={{ color: "var(--tenue)" }}>Prioridad</span>

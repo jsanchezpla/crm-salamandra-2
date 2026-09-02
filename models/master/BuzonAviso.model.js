@@ -84,7 +84,12 @@ export function defineBuzonAviso(sequelize) {
       bloquea: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
 
       // ── Lo que ponemos nosotros ───────────────────────────────────────────
-      /** "nuevo" | "en_curso" | "esperando" | "resuelto" */
+      /**
+       * "nuevo" | "enviado" | "resuelto" (desde el 02/09/2026). Antes hubo
+       * también "en_curso" y "esperando": se leen como enviado y nuevo
+       * (`estadoActual` en `lib/buzon/buzon.js`) y los reescribe
+       * `scripts/migrate-buzon-estados.js`.
+       */
       estado: { type: DataTypes.STRING(20), allowNull: false, defaultValue: "nuevo" },
       /** "baja" | "normal" | "alta" */
       prioridad: { type: DataTypes.STRING(10), allowNull: false, defaultValue: "normal" },
@@ -126,6 +131,15 @@ export function defineBuzonAviso(sequelize) {
       vistoClienteAt: { type: DataTypes.DATE, allowNull: true },
       respondidoAt: { type: DataTypes.DATE, allowNull: true },
       resueltoAt: { type: DataTypes.DATE, allowNull: true },
+      /**
+       * La tarea del Registro que salió de este aviso (02/09/2026): la FICHA
+       * `<!--id:…-->` escrita dentro del texto del backlog —no el título, que
+       * se reescribe—. La pone el botón «Enviar al registro»; un aviso
+       * «enviado» sin ficha es de los que /mailbox marcó a mano antes de esa
+       * fecha. Columnas en `scripts/migrate-buzon.js`.
+       */
+      registroFicha: { type: DataTypes.STRING(16), allowNull: true },
+      registroEnviadoAt: { type: DataTypes.DATE, allowNull: true },
       /** Ordena nuestra bandeja: lo que se ha movido hace menos, arriba. */
       ultimoMensajeAt: { type: DataTypes.DATE, allowNull: true },
     },

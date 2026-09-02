@@ -178,7 +178,10 @@ fiarse de la palabra de alguien.
 
 ## Paso 5 — Marcar el aviso
 
-Para que en la bandeja se vea que está cogido:
+Para que en la bandeja se vea que está en el Registro (desde el 02/09/2026 lo
+deja en «Enviado al registro», que es lo mismo que hace solo el botón «Enviar
+al registro» de `/admin/buzon`; la skill sigue valiendo para lo que se apunta
+a mano, con más criterio que el botón):
 
 ```bash
 ssh crm-vps 'docker exec -i -e TRIAJE_ACCION=marcar -e TRIAJE_REF=AV-0007 -e TRIAJE_CONFIRMAR=1 crm-salamandra-app-1 node --input-type=module' < scripts/buzon-triaje.mjs

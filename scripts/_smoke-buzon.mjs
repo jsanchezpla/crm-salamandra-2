@@ -20,6 +20,7 @@ import {
   validarAvisoNuevo,
   validarMensaje,
   validarCambio,
+  estadoActual,
   estadoTrasMensaje,
   serializarAviso,
   tieneRespuestaSinVer,
@@ -126,23 +127,28 @@ process.stdout.write("\n▶ Lo que cambiamos NOSOTROS\n");
   const nada = validarCambio({});
   comprobar("un PATCH vacío se rechaza", !nada.ok, nada.error);
 
-  const parcial = validarCambio({ estado: "en_curso" });
+  const parcial = validarCambio({ estado: "enviado" });
   comprobar(
     "un PATCH parcial no pisa lo que no menciona",
     parcial.ok && parcial.limpio.prioridad === undefined && parcial.limpio.asignadoA === undefined
   );
 }
 
-process.stdout.write("\n▶ La pelota cambia de tejado\n");
-comprobar("contestamos → espera al cliente", estadoTrasMensaje("nuevo", "salamandra") === "esperando");
-comprobar("escribe él → vuelve a ser cosa nuestra", estadoTrasMensaje("esperando", "cliente") === "en_curso");
+process.stdout.write("\n▶ El estado dice si está en el Registro, no de quién es la pelota (02/09/2026)\n");
+comprobar("contestar nosotros no mueve un nuevo", estadoTrasMensaje("nuevo", "salamandra") === "nuevo");
+comprobar("contestar nosotros no saca nada del Registro", estadoTrasMensaje("enviado", "salamandra") === "enviado");
 comprobar(
   "SIGUE PASANDO reabre un aviso resuelto",
-  estadoTrasMensaje("resuelto", "cliente") === "en_curso",
+  estadoTrasMensaje("resuelto", "cliente") === "nuevo",
   estadoTrasMensaje("resuelto", "cliente")
 );
 comprobar("añadir datos a uno nuevo no lo mueve", estadoTrasMensaje("nuevo", "cliente") === "nuevo");
+comprobar("escribir él sobre uno enviado lo deja enviado (la campana ya avisa)", estadoTrasMensaje("enviado", "cliente") === "enviado");
 comprobar("un resuelto no se reabre solo por nosotros", estadoTrasMensaje("resuelto", "salamandra") === "resuelto");
+comprobar(
+  "los dos nombres viejos se leen con el de hoy",
+  estadoActual("en_curso") === "enviado" && estadoActual("esperando") === "nuevo" && estadoActual("nuevo") === "nuevo"
+);
 
 process.stdout.write("\n▶ «Te hemos contestado y no lo has abierto»\n");
 {
@@ -243,7 +249,7 @@ process.stdout.write("\n▶ Lo que el CLIENTE no puede ver\n");
     tipo: "error",
     asunto: "No va",
     cuerpo: "eso",
-    estado: "en_curso",
+    estado: "enviado",
     prioridad: "baja",
     asignadoA: "rodrigo",
     tenantSlug: "aumenta",
@@ -265,7 +271,7 @@ process.stdout.write("\n▶ Lo que el CLIENTE no puede ver\n");
   comprobar("no ve la prioridad", suyo.prioridad === undefined);
   comprobar("no ve a quién está asignado", suyo.asignadoA === undefined);
   comprobar("no ve el correo del remitente", suyo.usuarioEmail === undefined);
-  comprobar("sí ve su referencia y su estado", suyo.ref === "AV-0007" && suyo.estadoLabel === "En curso");
+  comprobar("sí ve su referencia y su estado", suyo.ref === "AV-0007" && suyo.estadoLabel === "Enviado al registro");
 
   const nuestro = serializarAviso(fila, { para: "salamandra" });
   comprobar("nosotros sí vemos las dos líneas", nuestro.mensajes.length === 2);

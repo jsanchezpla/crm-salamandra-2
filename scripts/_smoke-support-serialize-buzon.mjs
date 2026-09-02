@@ -42,6 +42,7 @@ import {
   serializeSettings,
 } from "../lib/support/serialize.js";
 import {
+  estadoActual,
   TIPOS,
   ESTADOS,
   PRIORIDADES,
@@ -453,15 +454,14 @@ describe("serializeCategory / serializeTemplate / serializeSettings: los ajustes
 /* ── El Buzón: vocabulario cerrado, adjuntos y estados ──────────────────────── */
 
 describe("el vocabulario cerrado del Buzón, fijado como dato", () => {
-  it("tres tipos, cuatro estados con su etiqueta y su color, tres prioridades", () => {
+  it("tres tipos, tres estados con su etiqueta y su color (02/09/2026), tres prioridades", () => {
     assert.deepEqual(
       TIPOS.map((t) => t.key),
       ["error", "duda", "mejora"]
     );
     assert.deepEqual(ESTADOS, [
       { key: "nuevo", label: "Nuevo", nivel: "amber" },
-      { key: "en_curso", label: "En curso", nivel: "blue" },
-      { key: "esperando", label: "Esperando al cliente", nivel: "grey" },
+      { key: "enviado", label: "Enviado al registro", nivel: "blue" },
       { key: "resuelto", label: "Resuelto", nivel: "green" },
     ]);
     assert.deepEqual(
@@ -582,29 +582,34 @@ describe("serializarMensaje: una línea del hilo, con su forma exacta", () => {
   });
 });
 
-describe("estadoTrasMensaje: la pelota cambia de tejado, la tabla ENTERA", () => {
-  // _smoke-buzon.mjs fija los cinco casos con historia; aquí va la tabla completa
-  // (4 estados × 2 autores) para que un estado nuevo o un if torcido se vea.
-  it("las ocho celdas: contestar deja esperando (salvo resuelto), escribir el cliente lo devuelve a nuestro tejado", () => {
+describe("estadoTrasMensaje: el estado dice si está en el Registro, la tabla ENTERA (02/09/2026)", () => {
+  // _smoke-buzon.mjs fija los casos con historia; aquí va la tabla completa
+  // (3 estados × 2 autores, más los dos nombres viejos) para que un estado
+  // nuevo o un if torcido se vea.
+  it("las celdas: contestar nosotros no mueve nada; escribir el cliente solo reabre un resuelto (a nuevo)", () => {
     const tabla = {};
-    for (const estado of ["nuevo", "en_curso", "esperando", "resuelto"]) {
+    for (const estado of ["nuevo", "enviado", "resuelto", "en_curso", "esperando"]) {
       tabla[estado] = {
         salamandra: estadoTrasMensaje(estado, "salamandra"),
         cliente: estadoTrasMensaje(estado, "cliente"),
       };
     }
     assert.deepEqual(tabla, {
-      nuevo: { salamandra: "esperando", cliente: "nuevo" },
-      en_curso: { salamandra: "esperando", cliente: "en_curso" },
-      esperando: { salamandra: "esperando", cliente: "en_curso" },
-      resuelto: { salamandra: "resuelto", cliente: "en_curso" },
+      nuevo: { salamandra: "nuevo", cliente: "nuevo" },
+      enviado: { salamandra: "enviado", cliente: "enviado" },
+      resuelto: { salamandra: "resuelto", cliente: "nuevo" },
+      // Los viejos salen ya traducidos: nada vuelve a escribir `en_curso`.
+      en_curso: { salamandra: "enviado", cliente: "enviado" },
+      esperando: { salamandra: "nuevo", cliente: "nuevo" },
     });
   });
 
-  it("quien no es salamandra cuenta como cliente, y con un estado desconocido su mensaje lo pone en curso", () => {
-    assert.equal(estadoTrasMensaje("esperando", undefined), "en_curso");
-    assert.equal(estadoTrasMensaje("esperando", "portal"), "en_curso");
-    assert.equal(estadoTrasMensaje("archivado", "cliente"), "en_curso");
+  it("quien no es salamandra cuenta como cliente, y un estado desconocido vuelve al principio", () => {
+    assert.equal(estadoTrasMensaje("resuelto", undefined), "nuevo");
+    assert.equal(estadoTrasMensaje("resuelto", "portal"), "nuevo");
+    assert.equal(estadoTrasMensaje("archivado", "cliente"), "nuevo");
+    assert.equal(estadoTrasMensaje("archivado", "salamandra"), "nuevo");
+    assert.equal(estadoActual("en_curso"), "enviado");
   });
 });
 
@@ -618,7 +623,7 @@ function avisoCompleto() {
     asunto: "No carga la lista",
     cuerpo: "Al entrar en Clientes la lista se queda en blanco.",
     bloquea: 1,
-    estado: "esperando",
+    estado: "enviado",
     prioridad: "alta",
     asignadoA: "jorge",
     tenantSlug: "aumenta",
@@ -696,9 +701,9 @@ describe("serializarAviso: al cliente le llega EXACTAMENTE esto, ni un campo má
       asunto: "No carga la lista",
       cuerpo: "Al entrar en Clientes la lista se queda en blanco.",
       bloquea: true,
-      estado: "esperando",
-      estadoLabel: "Esperando al cliente",
-      estadoNivel: "grey",
+      estado: "enviado",
+      estadoLabel: "Enviado al registro",
+      estadoNivel: "blue",
       createdAt: "2026-08-13T09:00:00.000Z",
       ultimoMensajeAt: "2026-08-14T10:00:00.000Z",
       sinLeer: true,
