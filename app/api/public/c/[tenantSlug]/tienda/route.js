@@ -51,13 +51,17 @@ export const GET = withPublicTenant(async (request, _ctxRuta, ctx) => {
 });
 
 /**
- * Los colores que la tienda pinta. `accentColor` es opcional y manda sobre el
+ * Los colores que la tienda pinta. `tiendaColor` es opcional y manda sobre el
  * primario en los botones: nació con laura_ubeda (26/08/2026), cuyo primario
  * es el negro del sidebar del CRM y sus botones de tienda van en rosa. Sin
  * él, el acento ES el primario, como en cualquier otro tenant.
+ *
+ * OJO: NO se llama accentColor. Esa clave ya existe en la marca y es el FONDO
+ * del CRM (beige #EDE8DE por defecto): el 02/09/2026 se usó por error para la
+ * tienda y el panel de Laura amaneció rosa de arriba abajo.
  */
 function marcaDe(tenant) {
   const brand = tenant?.settings?.brand ?? {};
   const principal = brand.primaryColor || "#111111";
-  return { principal, acento: brand.accentColor || principal };
+  return { principal, acento: brand.tiendaColor || principal };
 }
