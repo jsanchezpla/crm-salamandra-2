@@ -109,10 +109,14 @@ function ResponsablesDropdown({ therapists, assigneeIds, onToggle, inputCls }) {
 export default function IncidenciaModal({ mode = "create", incidencia = null, therapists = [], patients = [], isAdmin = false, yoSoy = null, onClose, onSaved }) {
   const [inc, setInc] = useState(incidencia); // se refresca tras cada PATCH
   const isNew = mode === "create" && !inc;
-  // Borrar (02/09/2026, Aumenta AV-0013): dirección cualquiera; el resto solo
-  // la que registró ella misma —la abierta por error—. Misma regla que el
+  // Borrar (02/09/2026, Aumenta AV-0013; 03/09/2026, AV-0039): dirección
+  // cualquiera; el resto, la que registró o de la que es responsable —las que
+  // abre sola una falta se le asignan a administración—. Misma regla que el
   // DELETE del endpoint (`lib/clinica/alcanceIncidencias.js`).
-  const puedeBorrar = !isNew && (isAdmin || (Boolean(yoSoy) && inc?.reportedById === yoSoy));
+  const soyResponsable =
+    Boolean(yoSoy) &&
+    (inc?.assignedToId === yoSoy || (Array.isArray(inc?.assignees) && inc.assignees.some((a) => a?.id === yoSoy)));
+  const puedeBorrar = !isNew && (isAdmin || (Boolean(yoSoy) && (inc?.reportedById === yoSoy || soyResponsable)));
 
   const [title, setTitle] = useState(inc?.title ?? "");
   const [category, setCategory] = useState(inc?.category ?? "terapeutica");

@@ -82,9 +82,14 @@ describe("borrar", () => {
   it("dirección borra cualquiera", () => {
     assert.equal(puedeBorrarIncidencia({ esAdmin: true, row: { reportedById: "otra" }, teamMemberId: null }), true);
   });
-  it("el resto solo la que registró — ser responsable no basta", () => {
+  it("el resto, la que registró o de la que es responsable (03/09/2026, AV-0039)", () => {
     assert.equal(puedeBorrarIncidencia({ esAdmin: false, row: { reportedById: "yo" }, teamMemberId: "yo" }), true);
-    assert.equal(puedeBorrarIncidencia({ esAdmin: false, row: { reportedById: "otra", assignedToId: "yo" }, teamMemberId: "yo" }), false);
+    // Responsable por el espejo `assignedToId` (la que abre sola una falta).
+    assert.equal(puedeBorrarIncidencia({ esAdmin: false, row: { reportedById: "otra", assignedToId: "yo" }, teamMemberId: "yo" }), true);
+    // Responsable por la pivote: lo calcula quien llama y lo pasa.
+    assert.equal(puedeBorrarIncidencia({ esAdmin: false, row: { reportedById: "otra", assignedToId: "otra" }, teamMemberId: "yo", esResponsable: true }), true);
+    // Ni registró ni es responsable: no.
+    assert.equal(puedeBorrarIncidencia({ esAdmin: false, row: { reportedById: "otra", assignedToId: "otra" }, teamMemberId: "yo" }), false);
     assert.equal(puedeBorrarIncidencia({ esAdmin: false, row: { reportedById: null }, teamMemberId: "yo" }), false);
     assert.equal(puedeBorrarIncidencia({ esAdmin: false, row: { reportedById: "yo" }, teamMemberId: null }), false);
   });

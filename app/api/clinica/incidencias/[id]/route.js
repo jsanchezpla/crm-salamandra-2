@@ -2,7 +2,7 @@ import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound } from "../../../../../lib/utils/apiResponse.js";
 import { resolveCurrentTeamMemberId } from "../../../../../lib/team/currentTeamMember.js";
 import { avisarComentarioIncidencia } from "../../../../../lib/clinica/avisoComentarioIncidencia.js";
-import { incidenciaFueraDeAlcance, puedeBorrarIncidencia } from "../../../../../lib/clinica/alcanceIncidencias.js";
+import { incidenciaFueraDeAlcance, puedeBorrarIncidencia, puedeVerIncidencia } from "../../../../../lib/clinica/alcanceIncidencias.js";
 import { logClinicaAudit, auditSummary } from "../../../../../lib/clinica/audit.js";
 import {
   serializeIncidencia,
@@ -209,8 +209,11 @@ export const DELETE = withTenant(async (request, rc, ctx) => {
   if (!row) return notFound("Incidencia no encontrada");
   const esAdmin = ADMIN_ROLES.has(ctx.user?.role);
   const yoSoy = esAdmin ? null : await resolveCurrentTeamMemberId(request, M);
-  if (!puedeBorrarIncidencia({ esAdmin, row, teamMemberId: yoSoy })) {
-    return forbidden("Solo dirección, o quien la registró, puede eliminar una incidencia");
+  // Responsable por la pivote (03/09/2026, AV-0039): la misma lectura que
+  // decide si la ve; `puedeBorrarIncidencia` ya mira el espejo `assignedToId`.
+  const esResponsable = !esAdmin && !!yoSoy && (await puedeVerIncidencia(M, row, yoSoy));
+  if (!puedeBorrarIncidencia({ esAdmin, row, teamMemberId: yoSoy, esResponsable })) {
+    return forbidden("Solo dirección, quien la registró o quien es responsable puede eliminar una incidencia");
   }
   const before = auditSummary(row);
   await row.destroy();
