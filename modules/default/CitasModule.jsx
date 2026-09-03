@@ -26,6 +26,7 @@ import { CitaMenuContextual } from "./citas/CitaMenuContextual.jsx";
 import { BloqueoModal } from "./citas/BloqueoModal.jsx";
 import { destinoDePegado, sePuedeMover } from "@/lib/citas/pegarCita.js";
 import { fichaDeLaCita } from "@/lib/citas/fichaDeLaCita.js";
+import { mesDeLaCita, urlCobrarMes } from "@/lib/citas/cobrarMes.js";
 import { NuevaCitaDrawer } from "./citas/NuevaCitaDrawer.jsx";
 import { Waitlist } from "./citas/Waitlist.jsx";
 import MiniMeses from "./citas/MiniMeses.jsx";
@@ -140,6 +141,12 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
   const [creacion, setCreacion] = useState(null);
   const [teamMembers, setTeamMembers] = useState([]);
   const [viewerIsAdmin, setViewerIsAdmin] = useState(false);
+  // ¿Quien mira tiene el módulo de Facturación? (03/09/2026). Es lo que
+  // enciende «Cobrar mes» en la ficha de la cita y «Cobrar» en el menú
+  // contextual. Sale de /api/auth/me (`enabledModules`), que ya cruza los
+  // módulos del centro con el acceso de la persona: en Aumenta lo tienen Olga
+  // y Rosa (rol `user`, con `billing` en su acceso), no solo dirección.
+  const [conFacturacion, setConFacturacion] = useState(false);
   /*
    * CÓMO SE PINTA LA AGENDA DE ESTE CENTRO (02/09/2026, AV-0020 y AV-0012 de
    * Aumenta): qué días esconde la semana y entre qué horas va la rejilla. Lo
@@ -289,6 +296,7 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
       .then((j) => {
         setViewerIsAdmin(["admin", "superadmin"].includes(j?.data?.role));
         setViewerUserId(j?.data?.id ?? null);
+        setConFacturacion(Array.isArray(j?.data?.enabledModules) && j.data.enabledModules.includes("billing"));
         setVeTodaLaAgenda(j?.data?.veTodaLaAgenda === true);
       })
       .catch(() => {});
@@ -647,15 +655,22 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
         deshabilitada: false,
         onClick: () => { cerrar(); setPortapapeles({ modo: "copiar", cita }); },
       },
+      // Desde el 03/09/2026 lleva también el paciente y el MES de la cita
+      // (el mismo enlace que «Cobrar mes» en la ficha: lib/citas/cobrarMes.js),
+      // y solo se activa con módulo de Facturación: sin él, Cobros da 403.
       {
         id: "cobrar",
         icono: "💶",
-        rotulo: "Cobrar",
-        deshabilitada: !cita.props?.clientId,
-        motivo: "Sin ficha enlazada no se sabe a quién cobrar",
+        rotulo: "Cobrar mes",
+        deshabilitada: !cita.props?.clientId || !conFacturacion,
+        motivo: !conFacturacion ? "Hace falta el módulo de Facturación" : "Sin ficha enlazada no se sabe a quién cobrar",
         onClick: () => {
           cerrar();
-          router.push(`/facturacion/cobros?abrir=cuota&cliente=${cita.props.clientId}`);
+          router.push(urlCobrarMes({
+            clientId: cita.props.clientId,
+            patientId: cita.props.patientId ?? null,
+            mes: mesDeLaCita(cita.startStr),
+          }));
         },
       },
     ];
@@ -1321,6 +1336,7 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
           key={openBooking.id}
           booking={openBooking}
           conClientes={conClientes}
+          conFacturacion={conFacturacion}
           vocabulario={vocabulario}
           eventTypes={eventTypes}
           teamMembers={teamMembers}

@@ -22,6 +22,7 @@ import { esRecuperable, rotuloFalta, citasQuePuedenRecuperar } from "../../../li
 import { esPresunta, estadoEfectivo } from "../../../lib/citas/asistencia.js";
 import { cuerpoDelResultado, resultadoPorClave } from "../../../lib/citas/resultadoCita.js";
 import { tiposParaCambiar } from "../../../lib/citas/cambioDeTipo.js";
+import { botonCobrarMes, mesDeLaCita } from "../../../lib/citas/cobrarMes.js";
 import {
   ModalityChip,
   PagoChip,
@@ -68,6 +69,9 @@ import {
 export function CitaDetalleModal({
   booking: openBooking,
   conClientes = false,
+  // ¿Quien mira tiene el módulo de Facturación? Solo entonces sale «Cobrar
+  // mes» (03/09/2026). Lo resuelve el padre con /api/auth/me.
+  conFacturacion = false,
   vocabulario = undefined,
   eventTypes = [],
   teamMembers,
@@ -131,6 +135,40 @@ export function CitaDetalleModal({
    * `{ grupo, sesionId }` o null.
    */
   const [tallerSesion, setTallerSesion] = useState(null);
+  /*
+   * ── «COBRAR MES» (03/09/2026, Aumenta por Rodrigo) ─────────────────────
+   * Los cobros COMPLETADOS de la familia con `periodMonth` del mes de la
+   * cita. `null` mientras no se sabe: el botón no se enseña hasta tener la
+   * respuesta, porque enseñarlo y quitarlo medio segundo después es peor.
+   * Con cualquier cobro del mes (de la familia, o del paciente de la cita)
+   * el botón desaparece; vuelve solo con la primera cita del mes siguiente,
+   * que pregunta por OTRO mes. La regla, en lib/citas/cobrarMes.js.
+   *
+   * Se vuelve a preguntar al volver a esta pestaña: el botón abre Cobros en
+   * otra, y al regresar tiene que decir la verdad sin cerrar y abrir la cita.
+   */
+  const [cobrosDelMes, setCobrosDelMes] = useState(null);
+  const mesDeEstaCita = mesDeLaCita(openBooking.scheduledAt);
+  useEffect(() => {
+    if (!conFacturacion || !openBooking.clientId || !mesDeEstaCita) return;
+    let vivo = true;
+    const preguntar = () => {
+      fetch(`/api/billing/payments/mes?clientId=${encodeURIComponent(openBooking.clientId)}&mes=${mesDeEstaCita}`, { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => { if (vivo && Array.isArray(j?.data?.cobros)) setCobrosDelMes(j.data.cobros); })
+        .catch(() => {});
+    };
+    preguntar();
+    const alVolver = () => { if (document.visibilityState === "visible") preguntar(); };
+    document.addEventListener("visibilitychange", alVolver);
+    window.addEventListener("focus", preguntar);
+    return () => {
+      vivo = false;
+      document.removeEventListener("visibilitychange", alVolver);
+      window.removeEventListener("focus", preguntar);
+    };
+  }, [conFacturacion, openBooking.clientId, mesDeEstaCita]);
+  const cobrarMes = botonCobrarMes({ booking: openBooking, conFacturacion, cobros: cobrosDelMes });
 
   useEffect(() => {
     if (!openBooking.patientId) return;
@@ -508,6 +546,25 @@ export function CitaDetalleModal({
                     >
                       Ver ficha
                     </a>
+                    {/*
+                      COBRAR MES (03/09/2026, Aumenta). Lleva a Cobros con el
+                      «Registrar cobro» ya relleno —familia, paciente y el mes
+                      de ESTA cita— en pestaña nueva, como «Ver ficha». Solo
+                      sale con módulo de Facturación y mientras la familia no
+                      tenga cobrado ese mes; el cobro apuntado a mano desde
+                      Cobros lo apaga igual (se mira en cobros, no en facturas).
+                    */}
+                    {cobrarMes && (
+                      <a
+                        href={cobrarMes.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={cobrarMes.titulo}
+                        className="ml-2 text-[12px] px-2 py-1 rounded-md border border-emerald-200 bg-emerald-50 text-emerald-800 font-medium hover:border-emerald-400 transition-colors"
+                      >
+                        💶 {cobrarMes.rotulo}
+                      </a>
+                    )}
                   </div>
                 )}
                 {/* Un taller no tiene UN contacto: tiene ocho, y cada uno

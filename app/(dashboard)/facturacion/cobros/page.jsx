@@ -236,15 +236,26 @@ export default function CobrosPage() {
     return () => clearTimeout(id);
   }, [searchInput]);
 
-  // «Cobrar» desde el menú contextual de la agenda (31/08/2026): llega como
-  // /facturacion/cobros?abrir=cuota&cliente=<id> y el drawer se abre solo en
-  // modo cuota con el cliente puesto. window.location y no useSearchParams:
-  // se lee UNA vez al montar y no obliga a suspender la página.
+  // «Cobrar» desde el menú contextual de la agenda (31/08/2026) y «Cobrar mes»
+  // desde la ficha de la cita (03/09/2026): llega como
+  // /facturacion/cobros?abrir=cuota&cliente=<id>[&paciente=<id>][&mes=AAAA-MM]
+  // y el drawer se abre solo en modo cuota con la familia, el paciente y el
+  // MES DE LA CITA puestos (el enlace lo arma lib/citas/cobrarMes.js). Sin
+  // `mes` se queda el vigente, que es lo de siempre. window.location y no
+  // useSearchParams: se lee UNA vez al montar y no obliga a suspender la página.
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
     if (sp.get("abrir") !== "cuota") return;
     const clientId = sp.get("cliente") || "";
-    setForm((f) => ({ ...f, modo: "cuota", clientId: clientId || f.clientId }));
+    const patientId = sp.get("paciente") || "";
+    const mes = sp.get("mes") || "";
+    setForm((f) => ({
+      ...f,
+      modo: "cuota",
+      clientId: clientId || f.clientId,
+      patientId: clientId ? patientId : f.patientId,
+      periodMonth: /^\d{4}-(0[1-9]|1[0-2])$/.test(mes) ? mes : f.periodMonth,
+    }));
     setShowForm(true);
   }, []);
 
