@@ -35,6 +35,26 @@ import { coincidePorNombre } from "../../lib/utils/busqueda.js";
  * Quien los use NO debería hablar con la API a mano: para fichas de cliente ya
  * está `components/clients/SelectorCliente.jsx`, que es quien sabe la regla.
  */
+/**
+ * Hasta dónde puede extenderse el panel sin que lo corten: los bordes (con un
+ * margen) del primer antepasado con overflow que recorta; si no hay ninguno,
+ * la ventana. Un `overflow-y: auto` recorta también en horizontal, y hacia la
+ * izquierda no hay scroll que valga: lo que se sale, desaparece.
+ */
+function limitesDelRecorte(nodo) {
+  const MARGEN = 12;
+  let el = nodo?.parentElement;
+  while (el && el !== document.body) {
+    const cs = getComputedStyle(el);
+    if (/(auto|scroll|hidden|clip)/.test(`${cs.overflowX} ${cs.overflowY}`)) {
+      const r = el.getBoundingClientRect();
+      return { left: r.left + MARGEN, right: r.right - MARGEN };
+    }
+    el = el.parentElement;
+  }
+  return { left: MARGEN + 4, right: window.innerWidth - MARGEN - 4 };
+}
+
 export default function Select({
   value,
   onChange,
@@ -53,10 +73,15 @@ export default function Select({
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const [query, setQuery] = useState("");
-  // Por qué lado se despliega el panel. Desde que puede ser MÁS ANCHO que el
-  // botón (para no cortar los nombres), uno pegado al borde derecho se saldría
-  // de la pantalla: ahí se ancla a la derecha y crece hacia dentro.
+  // Por qué lado se despliega el panel y cuánto puede crecer. Desde que puede
+  // ser MÁS ANCHO que el botón (para no cortar los nombres), uno pegado al
+  // borde derecho se saldría de la pantalla: ahí se ancla a la derecha y crece
+  // hacia dentro. Y el tope de ancho no es la pantalla sino lo que le deje el
+  // primer antepasado que recorta (un cajón lateral con scroll, un modal):
+  // dentro del cajón de «Nueva cita» (03/09/2026) el panel de «Tipo de cita»
+  // crecía hacia la izquierda más allá del cajón y salía cortado.
   const [aLaDerecha, setALaDerecha] = useState(false);
+  const [anchoMax, setAnchoMax] = useState(null);
   const rootRef = useRef(null);
   const listRef = useRef(null);
   const searchRef = useRef(null);
@@ -105,7 +130,17 @@ export default function Select({
       // ANCHO_MAX es el mismo tope que la clase max-w del panel (30rem).
       const ANCHO_MAX = 480;
       const caja = rootRef.current?.getBoundingClientRect();
-      if (caja) setALaDerecha(caja.left + Math.max(ANCHO_MAX, caja.width) > window.innerWidth - 16);
+      if (caja) {
+        const limite = limitesDelRecorte(rootRef.current);
+        const haciaDerecha = limite.right - caja.left;
+        const haciaIzquierda = caja.right - limite.left;
+        // Cabe entero hacia la derecha: como siempre. Si no, por el lado con
+        // más sitio, y con el ancho capado a ese sitio (nunca menos que el
+        // botón, que ya cabe por definición).
+        const derecha = haciaDerecha < ANCHO_MAX && haciaIzquierda > haciaDerecha;
+        setALaDerecha(derecha);
+        setAnchoMax(Math.max(caja.width, Math.min(ANCHO_MAX, derecha ? haciaIzquierda : haciaDerecha)));
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -205,7 +240,10 @@ export default function Select({
       {open && (
         // El panel arranca en el ancho del botón y CRECE con el contenido
         // hasta un tope, en vez de estrangular las opciones largas.
-        <div className={`absolute z-50 ${aLaDerecha ? "right-0" : "left-0"} min-w-full w-max max-w-[min(30rem,calc(100vw-2rem))] mt-1 rounded-md border border-neutral-200 bg-white shadow-lg overflow-hidden`}>
+        <div
+          className={`absolute z-50 ${aLaDerecha ? "right-0" : "left-0"} min-w-full w-max max-w-[min(30rem,calc(100vw-2rem))] mt-1 rounded-md border border-neutral-200 bg-white shadow-lg overflow-hidden`}
+          style={anchoMax ? { maxWidth: `${anchoMax}px` } : undefined}
+        >
           {searchable && (
             <div className="p-1.5 border-b border-neutral-100">
               <input
