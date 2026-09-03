@@ -40,6 +40,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import ApartadosEditor from "./ApartadosEditor.jsx";
 import PropuestaIA from "./PropuestaIA.jsx";
 import useZonaSoltar, { useEvitarSoltarFuera } from "@/components/ui/useZonaSoltar.js";
+import useGrabadora, { fmtSegundos } from "@/components/clinica/useGrabadora.js";
 import {
   PLANTILLA_BASE,
   aFormulario,
@@ -252,6 +253,10 @@ export default function SesionTallerDrawer({
     setUsarAudio(true);
     setErr(null);
   }
+
+  // Grabar desde el propio CRM (03/09/2026, AV-0037): en iPhone el selector
+  // de archivo no ofrece la grabadora. Lo grabado entra por `ponerAudio`.
+  const grabadora = useGrabadora({ onAudio: ponerAudio, onError: setErr });
 
   // Quitar el audio NO borra las notas escritas: son dos fuentes distintas.
   function quitarAudio() {
@@ -501,7 +506,18 @@ export default function SesionTallerDrawer({
                     )}
                   </div>
                   <div className="flex gap-2 shrink-0">
-                    {!file && !transcripcionAudio && (
+                    {!file && !transcripcionAudio && grabadora.soportado && (
+                      <button
+                        type="button"
+                        onClick={grabadora.grabando ? grabadora.parar : grabadora.empezar}
+                        disabled={procesando || guardando}
+                        className={`text-xs font-medium px-3 py-2 rounded-lg border disabled:opacity-50 ${grabadora.grabando ? "border-rose-300 bg-rose-50 text-rose-700" : "border-neutral-200 bg-white hover:border-neutral-400 text-neutral-700"}`}
+                        title={grabadora.grabando ? "Parar y usar la grabación" : "Grabar con el micrófono del dispositivo"}
+                      >
+                        {grabadora.grabando ? `■ Parar · ${fmtSegundos(grabadora.segundos)}` : "● Grabar"}
+                      </button>
+                    )}
+                    {!file && !transcripcionAudio && !grabadora.grabando && (
                       <button
                         type="button"
                         onClick={() => fileRef.current?.click()}

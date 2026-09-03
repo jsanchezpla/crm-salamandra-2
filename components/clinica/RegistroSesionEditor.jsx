@@ -97,6 +97,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import useZonaSoltar, { useEvitarSoltarFuera } from "@/components/ui/useZonaSoltar.js";
+import useGrabadora, { fmtSegundos } from "@/components/clinica/useGrabadora.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 import {
   fechaDePreparacion,
@@ -722,6 +723,11 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
     setErrorMsg(null);
   }
 
+  // Grabar desde el propio CRM (03/09/2026, AV-0037): en iPhone el selector
+  // de archivo no ofrece la grabadora. Lo grabado entra por `ponerAudio`,
+  // como si se hubiera elegido un archivo.
+  const grabadora = useGrabadora({ onAudio: ponerAudio, onError: setErrorMsg });
+
   /** Lo elegido en el panel entra en el formulario. Guardar sigue siendo suyo. */
   function aplicarPropuesta(cambios) {
     const cuantos = Object.keys(cambios).length;
@@ -1195,7 +1201,17 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
                 )}
               </div>
               <div className="flex gap-2 shrink-0">
-                {!file && (
+                {!file && grabadora.soportado && (
+                  <button
+                    type="button"
+                    onClick={grabadora.grabando ? grabadora.parar : grabadora.empezar}
+                    className={`text-xs font-medium px-3 py-2 rounded-lg border ${grabadora.grabando ? "border-rose-300 bg-rose-50 text-rose-700" : "border-neutral-200 bg-white hover:border-neutral-400 text-neutral-700"}`}
+                    title={grabadora.grabando ? "Parar y usar la grabación" : "Grabar con el micrófono del dispositivo"}
+                  >
+                    {grabadora.grabando ? `■ Parar · ${fmtSegundos(grabadora.segundos)}` : "● Grabar"}
+                  </button>
+                )}
+                {!file && !grabadora.grabando && (
                   <button type="button" onClick={() => fileRef.current?.click()} className="text-xs font-medium px-3 py-2 rounded-lg border border-neutral-200 bg-white hover:border-neutral-400 text-neutral-700">
                     Añadir audio
                   </button>

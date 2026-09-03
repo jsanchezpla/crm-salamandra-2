@@ -599,6 +599,23 @@ registro.
 - Su PDF lleva portada, con «Entrevista inicial» de título (ver «El registro,
   con portada como el informe»).
 
+### Grabar desde el propio CRM (03/09/2026, AV-0037 de Aumenta)
+
+«Añadir audio» abre un `<input type="file" accept="audio/*">`. Android ofrece la
+grabadora en ese selector; Safari en iPhone y iPad no la ofrece nunca (solo
+Archivos y Fotos), así que allí había que grabar en Notas de voz, guardar y
+volver. Ahora, al lado de «Añadir audio», hay un botón **«● Grabar»** —solo
+donde el navegador sabe grabar— que usa `MediaRecorder`
+(`components/clinica/useGrabadora.js`): pide el micrófono, graba a 64 kb/s en
+el formato que el navegador sepa (`audio/mp4` en Safari, `audio/webm` en
+Chrome), enseña el tiempo y con «■ Parar» deja el audio puesto como si se
+hubiera elegido un archivo (`ponerAudio`), así que transcribir, la IA y
+guardar no cambian. Se corta a los 50 minutos para no pasar del tope de
+25 MB del transcriptor. Está en el registro de sesión
+(`RegistroSesionEditor`) y en el de taller (`SesionTallerDrawer`). Sin
+permiso de micrófono o sin micrófono, avisa y deja «Añadir audio» como
+siempre.
+
 ### Arrastrar y soltar ficheros (28/08/2026, Lau de Aumenta)
 
 El audio de la sesión le llega por WhatsApp: lo descarga y le queda a la vista
