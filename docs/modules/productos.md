@@ -11,7 +11,7 @@ el básico nada; el avanzado, el básico.
 | --- | --- |
 | Pantalla (`/productos`): lista, alta, edición, precio, retirada; con el avanzado, el bloque de ventas y los accesos a los tres | `app/(dashboard)/productos/page.jsx` (server: mira los módulos del tenant y hace `notFound()` sin el básico) → `modules/productos/ProductosModule.jsx` (props `avanzado`, `conInventario`, `conPedidos`, `conTienda`) |
 | Endpoints del catálogo (los de siempre, con otra puerta) | `app/api/inventory/products/route.js` (GET/POST) y `products/[id]/route.js` (GET/PUT/DELETE): **gateados por `productos`** desde el 03/09/2026 (antes `inventory`). La ruta no se movió: Inventario y Tienda la siguen llamando. |
-| Estadísticas de venta (solo dirección) | `app/api/productos/estadisticas/route.js` → `lib/productos/estadisticas.js` (`gateEstadisticasProductos`, `calcularEstadisticasProductos`) → `lib/productos/ventas.js` (`agregarVentas`, pura, con prueba); gateado por `productos_avanzado` + rol admin |
+| Estadísticas de venta (solo dirección) | `app/api/productos/estadisticas/route.js` → `lib/productos/estadisticas.js` (`gateEstadisticasProductos`, `calcularEstadisticasProductos`, que lee pedidos, fichas y —con `inventory`— entradas de almacén) → `lib/productos/ventas.js` (`agregarVentas` y `costesUnitarios`, puras, con prueba); gateado por `productos_avanzado` + rol admin |
 | El periodo «desde / hasta» | `lib/utils/rangoFechas.js` (`rangoPedido`) sobre `lib/utils/fechaLocal.js` (`fechaISO`, `rangoDe`, puros), compartidos con `lib/clinica/estadisticas.js` |
 | Claves | `lib/tenant/moduleKeys.js` (`PRODUCTOS`, `PRODUCTOS_AVANZADO`, `INVENTORY`, `ORDERS`, `TIENDA`) |
 | Menú | `components/layout/Sidebar.jsx`, sección «Operaciones»: `productos` con hijos Inventario / Pedidos / Tienda (`requiresAll: ["productos_avanzado", "<clave>"]`) |
@@ -75,6 +75,18 @@ centro en Clínica: son cifras de dinero de todo el equipo.
   `tienda`) y `sinVentas` (productos activos que no vendieron nada).
 - Si el cliente tiene el avanzado pero no las tablas de Pedidos, responde
   `disponible: false` y la pantalla lo explica; no un 500.
+- **El margen** (03/09/2026): `margen` (`importe`, `pct`, `sobreImporte`,
+  `sinCoste`, `fuente`) y, en cada fila de `porProducto`, `coste` y `margen`.
+  Es lo cobrado por cada línea menos `coste unitario × cantidad`. El coste lo
+  arma `costesUnitarios`: con Inventario, la media ponderada de las entradas
+  con coste de ese producto (`StockEntry.unitCost`, lo que se pagó de verdad);
+  si no hay, el precio de compra de la ficha (`Product.purchasePrice`, el POR
+  DEFECTO), y `fuente` dice cuál ha mandado. Un producto sin coste conocido
+  sale `null` —no se sabe, que no es cero— y `pct` va solo sobre lo que sí
+  tiene coste (`sobreImporte`), con `sinCoste` al lado para que el porcentaje
+  no se lea como el de todo. El precio de compra no sale de este endpoint
+  hacia ningún sitio público (es de dirección; `paraLaTienda` lo tapa en la
+  tienda).
 
 ## Activar
 
@@ -94,5 +106,3 @@ centro en Clínica: son cifras de dinero de todo el equipo.
 - Excel o PDF de las ventas: el cálculo está preparado para compartirse
   (`agregarVentas` es pura), pero solo hay pantalla.
 - Ventas por variante (talla): el ranking va por producto.
-- Margen (venta − compra): el precio de compra está en la ficha, pero el bloque
-  de ventas no lo cruza. Se apuntará cuando duela.

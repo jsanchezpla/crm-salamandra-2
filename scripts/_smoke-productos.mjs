@@ -25,7 +25,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-import { agregarVentas, ESTADOS_VENTA } from "../lib/productos/ventas.js";
+import { agregarVentas, costesUnitarios, ESTADOS_VENTA } from "../lib/productos/ventas.js";
 import { CATALOGO, moduloPorClave } from "../lib/provisioning/catalogo.js";
 import { MODULE_KEYS } from "../lib/tenant/moduleKeys.js";
 import { MODULES, ONE_OFF } from "./_module-migrations.js";
@@ -62,6 +62,7 @@ describe("agregarVentas: qué cuenta como venta y cómo se agrupa", () => {
   it("sin pedidos, todo a cero y sin filas; los activos salen todos como «sin vender»", () => {
     assert.deepEqual(agregarVentas([], { activos: ACTIVOS }), {
       totales: { pedidos: 0, importe: 0, unidades: 0, ticketMedio: 0, cancelados: 0, borradores: 0 },
+      margen: { importe: 0, pct: null, sobreImporte: 0, sinCoste: 0, fuente: "ficha" },
       porProducto: [],
       porMes: [],
       porOrigen: [],
@@ -131,6 +132,84 @@ describe("agregarVentas: qué cuenta como venta y cómo se agrupa", () => {
     const copia = JSON.parse(JSON.stringify(PEDIDOS));
     agregarVentas(PEDIDOS, { activos: ACTIVOS });
     assert.deepEqual(JSON.parse(JSON.stringify(PEDIDOS)), copia);
+  });
+});
+
+/* ── El margen (03/09/2026) ─────────────────────────────────────────────── */
+
+describe("el margen: lo cobrado menos lo que costó, y «no se sabe» no es cero", () => {
+  // Camiseta cuesta 8 y se vende a 20 (3 unidades en ventas → 60 − 24 = 36);
+  // Taza cuesta 5 y se vende a 12 (1 unidad → 12 − 5 = 7); el envío urgente
+  // es texto libre sin producto: sin margen.
+  const COSTES = { [P1]: 8, [P2]: 5 };
+
+  it("sin costes no hay margen: todo null, y se dice cuántos productos se han quedado fuera", () => {
+    const r = agregarVentas(PEDIDOS, { activos: ACTIVOS });
+    assert.deepEqual(r.margen, { importe: 0, pct: null, sobreImporte: 0, sinCoste: 3, fuente: "ficha" });
+    assert.ok(r.porProducto.every((f) => f.margen === null && f.coste === null));
+  });
+
+  it("con costes, el margen por producto y el total salen de las líneas vendidas (ni borradores ni cancelados)", () => {
+    const r = agregarVentas(PEDIDOS, { activos: ACTIVOS, costes: COSTES, fuenteCoste: "entradas" });
+    assert.deepEqual(
+      r.porProducto.map((f) => [f.nombre, f.coste, f.margen]),
+      [
+        ["Camiseta", 8, 36],
+        ["Taza", 5, 7],
+        ["Envío urgente", null, null],
+      ]
+    );
+    // 43 de margen sobre los 72 con coste (60 + 12): el envío (6) no entra en
+    // el porcentaje, que si no bajaría sin que nada fuera peor.
+    assert.deepEqual(r.margen, { importe: 43, pct: 59.72, sobreImporte: 72, sinCoste: 1, fuente: "entradas" });
+  });
+
+  it("un producto con coste pero sin margen positivo sale en negativo, no en null", () => {
+    const r = agregarVentas(PEDIDOS, { costes: { [P2]: 20 } });
+    const taza = r.porProducto.find((f) => f.productId === P2);
+    assert.equal(taza.margen, -8);
+    assert.equal(r.margen.importe, -8);
+    assert.equal(r.margen.pct, -66.67);
+  });
+
+  it("un coste roto o vacío en la lista cuenta como desconocido", () => {
+    const r = agregarVentas(PEDIDOS, { costes: { [P1]: "no", [P2]: null } });
+    assert.ok(r.porProducto.every((f) => f.margen === null));
+    assert.equal(r.margen.sinCoste, 3);
+  });
+});
+
+describe("costesUnitarios: la ficha por defecto, las entradas de almacén cuando las hay", () => {
+  const FICHAS = [
+    { id: P1, purchasePrice: "8.00" },
+    { id: P2, purchasePrice: null },
+    { id: P3, purchasePrice: "4.50" },
+  ];
+
+  it("sin entradas, el coste es el precio de compra de la ficha, y quien no lo tiene se queda fuera", () => {
+    assert.deepEqual(costesUnitarios({ productos: FICHAS }), { costes: { [P1]: 8, [P3]: 4.5 }, fuente: "ficha" });
+  });
+
+  it("con entradas, manda la media ponderada por cantidad de ESE producto; los demás siguen con la ficha", () => {
+    const { costes, fuente } = costesUnitarios({
+      productos: FICHAS,
+      entradas: [
+        { productId: P1, quantity: "10", unitCost: "6.00" },
+        { productId: P1, quantity: "30", unitCost: "10.00" },
+        { productId: P2, quantity: "2", unitCost: "3.25" },
+        // Sin coste, cantidad cero o sin producto: no cuentan.
+        { productId: P3, quantity: "5", unitCost: null },
+        { productId: P3, quantity: "0", unitCost: "1.00" },
+        { productId: null, quantity: "5", unitCost: "1.00" },
+      ],
+    });
+    // (10·6 + 30·10) / 40 = 9
+    assert.deepEqual(costes, { [P1]: 9, [P2]: 3.25, [P3]: 4.5 });
+    assert.equal(fuente, "entradas");
+  });
+
+  it("sin nada, nada", () => {
+    assert.deepEqual(costesUnitarios(), { costes: {}, fuente: "ficha" });
   });
 });
 

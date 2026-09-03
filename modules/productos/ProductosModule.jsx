@@ -84,13 +84,18 @@ function Kpi({ label, value, sub }) {
   );
 }
 
-/** Barras horizontales sin librería: son pocas filas, no hace falta un motor. */
-function Barras({ datos, etiqueta, valor, formatea = fmtMoney }) {
+/**
+ * Barras horizontales sin librería: son pocas filas, no hace falta un motor.
+ * `extra`, si se da, pinta una segunda cifra a la derecha (el margen en «Lo
+ * más vendido»); `null` sale como «—», que es «no se sabe», no cero.
+ */
+function Barras({ datos, etiqueta, valor, formatea = fmtMoney, extra = null }) {
   const max = Math.max(1, ...datos.map((d) => Number(valor(d)) || 0));
   return (
     <div className="space-y-1.5">
       {datos.map((d, i) => {
         const v = Number(valor(d)) || 0;
+        const e = extra ? extra(d) : undefined;
         return (
           <div key={i} className="flex items-center gap-2 text-[12px]">
             <div className="w-28 shrink-0 truncate text-neutral-600" title={etiqueta(d)}>{etiqueta(d)}</div>
@@ -98,6 +103,11 @@ function Barras({ datos, etiqueta, valor, formatea = fmtMoney }) {
               <div className="h-full rounded bg-[var(--color-primary,#1B3A2D)]/70" style={{ width: `${(v / max) * 100}%` }} />
             </div>
             <div className="w-20 shrink-0 text-right tabular-nums text-neutral-700">{formatea(v)}</div>
+            {extra && (
+              <div className={`w-20 shrink-0 text-right tabular-nums ${e === null || e === undefined ? "text-neutral-300" : Number(e) < 0 ? "text-red-600" : "text-neutral-500"}`}>
+                {e === null || e === undefined ? "—" : formatea(e)}
+              </div>
+            )}
           </div>
         );
       })}
@@ -180,10 +190,22 @@ function Estadisticas({ conPedidos }) {
 
       {datos?.disponible && (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             <Kpi label="Vendido" value={fmtMoney(datos.totales.importe)} sub={`${datos.totales.pedidos} pedido${datos.totales.pedidos === 1 ? "" : "s"}`} />
             <Kpi label="Unidades" value={fmtNum(datos.totales.unidades)} sub="sumando todas las líneas" />
             <Kpi label="Ticket medio" value={fmtMoney(datos.totales.ticketMedio)} sub="por pedido" />
+            {/* Lo vendido menos lo que costó (03/09/2026). El porcentaje va sobre
+                lo que TIENE coste; lo que no lo tiene se dice al lado, no se
+                cuenta como cero. */}
+            <Kpi
+              label="Margen"
+              value={datos.margen?.pct === null || datos.margen?.pct === undefined ? "—" : fmtMoney(datos.margen.importe)}
+              sub={
+                datos.margen?.pct === null || datos.margen?.pct === undefined
+                  ? "sin precio de compra en las fichas"
+                  : `${fmtNum(datos.margen.pct)} % sobre ${fmtMoney(datos.margen.sobreImporte)}${datos.margen.sinCoste ? ` · ${datos.margen.sinCoste} sin coste` : ""}`
+              }
+            />
             <Kpi
               label="Sin vender"
               value={datos.sinVentas}
@@ -196,8 +218,27 @@ function Estadisticas({ conPedidos }) {
           ) : (
             <div className="grid lg:grid-cols-2 gap-4">
               <div className="bg-white border border-neutral-100 rounded-xl p-3">
-                <div className="text-[11px] uppercase tracking-wider text-neutral-400 mb-2">Lo más vendido</div>
-                <Barras datos={datos.porProducto.slice(0, 8)} etiqueta={(d) => d.nombre} valor={(d) => d.importe} />
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-[11px] uppercase tracking-wider text-neutral-400">Lo más vendido</div>
+                  <div className="text-[10px] text-neutral-400 flex items-center">
+                    <span className="w-20 text-right">vendido</span>
+                    <span className="w-20 text-right">
+                      margen
+                      <HelpTooltip title="Cómo se calcula el margen" placement="top" className="ml-1">
+                        Lo cobrado por cada línea menos su coste por unidad multiplicado por las unidades.
+                        El coste es {datos.margen?.fuente === "entradas" ? "el medio de las entradas de Inventario (o el precio de compra de la ficha si el producto no tiene entradas)" : "el precio de compra de la ficha de cada producto"}.
+                        Un producto sin precio de compra sale con «—»: no se sabe, que no es lo mismo que cero.
+                        El precio de compra nunca sale hacia la tienda.
+                      </HelpTooltip>
+                    </span>
+                  </div>
+                </div>
+                <Barras
+                  datos={datos.porProducto.slice(0, 8)}
+                  etiqueta={(d) => d.nombre}
+                  valor={(d) => d.importe}
+                  extra={(d) => d.margen}
+                />
                 {datos.porProducto.length > 8 && (
                   <p className="text-[11px] text-neutral-400 mt-2">y {datos.porProducto.length - 8} más</p>
                 )}

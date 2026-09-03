@@ -20,7 +20,9 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     const { veto: vetoRango, rango } = rangoPedido(request);
     if (vetoRango) return vetoRango;
 
-    return ok(await calcularEstadisticasProductos(ctx.tenantModels, rango));
+    return ok(
+      await calcularEstadisticasProductos(ctx.tenantModels, rango, { conInventario: ctx.hasModule("inventory") })
+    );
   } catch (err) {
     return serverError(err);
   }
