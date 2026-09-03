@@ -62,10 +62,30 @@ test("todo find sobre backups/ se queda en la raíz: dentro está el espejo", ()
   }
 });
 
+/*
+ * Desde el 03/09/2026 la rotación local ya no borra con `find -delete` por
+ * edad: hace una LISTA (`find … -printf '%f
+'`) de cada clase de copia, se
+ * queda con las que caben en $DIAS_EN_SERVIDOR y borra el resto con `rm -f`
+ * una a una. El invariante es el mismo —lo que decide qué se borra no puede
+ * bajar de la raíz de backups/— pero ahora vive en esa lista, y un
+ * `find -delete` sobre backups/ que vuelva a aparecer sería justo la
+ * regresión que había que evitar.
+ */
 test("la rotación que BORRA no puede bajar del primer nivel", () => {
-  const borra = ordenes.filter((l) => l.includes("-delete"));
-  assert.equal(borra.length, 1, "se esperaba un único find con -delete");
-  assert.ok(borra[0].includes("-maxdepth 1"), "el find que borra no lleva -maxdepth 1");
+  const listas = ordenes.filter((l) => l.startsWith("lista=$(find \"$DIR_BACKUPS\""));
+  assert.equal(listas.length, 1, "se esperaba UNA lista de copias a rotar (`lista=$(find \"$DIR_BACKUPS\" …)`)");
+  assert.ok(listas[0].includes("-maxdepth 1"), "la lista que alimenta el borrado no lleva -maxdepth 1");
+  assert.ok(listas[0].includes("-type f"), "la lista tiene que ser de ficheros: un directorio con nombre de copia no se rota");
+  assert.ok(
+    ordenes.some((l) => l.includes('rm -f "$DIR_BACKUPS/$fichero"')),
+    "el borrado tiene que ser por nombre de fichero de esa lista, en la raíz de backups/"
+  );
+  assert.equal(
+    ordenes.filter((l) => l.includes('find "$DIR_BACKUPS"') && l.includes("-delete")).length,
+    0,
+    "no puede haber un `find -delete` sobre backups/: dentro está el espejo de los clientes"
+  );
 });
 
 test("el espejo aparta lo que pisa: rclone sync SIEMPRE con --backup-dir", () => {
