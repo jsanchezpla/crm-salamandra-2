@@ -30,6 +30,10 @@ describe("edadDe: la fecha manda, la edad escrita es el respaldo", () => {
     assert.equal(edadDe({ age: "x" }, HOY), null);
     assert.equal(edadDe({}, HOY), null);
     assert.equal(edadDe(null, HOY), null);
+    // `Number(null)` es 0: sin edad escrita no son cero años (03/09/2026).
+    assert.equal(edadDe({ birthDate: null, age: null }, HOY), null);
+    assert.equal(edadDe({ age: "" }, HOY), null);
+    assert.equal(edadDe({ age: 0 }, HOY), 0);
   });
   it("objetivosIa.js sigue dando la MISMA función (nada de dos edades)", () => {
     assert.equal(edadDeIa, edadDe);

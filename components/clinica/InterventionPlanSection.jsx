@@ -13,7 +13,8 @@
  * que puedan decir una cosa distinta de lo que hay en la ficha.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import useGrabadora, { fmtSegundos } from "@/components/clinica/useGrabadora.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -76,6 +77,35 @@ function ObjetivosConIa({ patientId, plan, onAnadir }) {
   const [fallo, setFallo] = useState(null);
   const [propuesta, setPropuesta] = useState(null); // [{ texto, marcado }]
   const [esEnsayo, setEsEnsayo] = useState(false);
+
+  /*
+   * Dictar las ideas clave (03/09/2026, vuelta de AV-0019): un audio —grabado
+   * aquí o elegido— pasa por Whisper (`plan/transcribir`) y el texto cae en la
+   * caja de ideas; proponer los objetivos sigue siendo el botón de siempre.
+   */
+  const [transcribiendo, setTranscribiendo] = useState(false);
+  const fileRef = useRef(null);
+  async function dictar(file) {
+    if (!file) return;
+    setTranscribiendo(true);
+    setFallo(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file, file.name || "audio");
+      const res = await fetch(`/api/pacientes/${patientId}/plan/transcribir`, { method: "POST", body: fd });
+      const j = await res.json();
+      if (!j.ok) throw new Error(j.error || "No se ha podido transcribir el audio");
+      const texto = String(j.data?.texto ?? "").trim();
+      setIdeas((prev) => (prev.trim() ? `${prev.trim()}\n${texto}` : texto).slice(0, 2000));
+      if (j.data?.fake) setEsEnsayo(true);
+    } catch (e) {
+      setFallo(e.message);
+    } finally {
+      setTranscribiendo(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+  const grabadora = useGrabadora({ onAudio: dictar, onError: setFallo });
 
   async function proponer() {
     setPidiendo(true);
@@ -146,16 +176,46 @@ function ObjetivosConIa({ patientId, plan, onAnadir }) {
         placeholder="Ej.: respetar turnos de palabra, frases de tres elementos, tolerar la frustración en juegos de reglas"
         className={inputCls}
       />
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={proponer}
-          disabled={pidiendo || ideas.trim().length < 3}
+          disabled={pidiendo || transcribiendo || ideas.trim().length < 3}
           className="px-3 py-1.5 rounded-lg text-[11px] font-medium text-white disabled:opacity-40"
           style={{ background: "var(--color-primary, #1B3A2D)" }}
         >
           {pidiendo ? "Redactando…" : propuesta ? "Volver a proponer" : "Proponer objetivos"}
         </button>
+        {/* Dictar en vez de teclear: graba aquí o elige un audio; el texto
+            entra en la caja de arriba y se puede retocar antes de proponer. */}
+        {grabadora.soportado && (
+          <button
+            type="button"
+            onClick={grabadora.grabando ? grabadora.parar : grabadora.empezar}
+            disabled={pidiendo || transcribiendo}
+            className={`px-3 py-1.5 rounded-lg text-[11px] font-medium border disabled:opacity-40 ${grabadora.grabando ? "border-rose-300 bg-rose-50 text-rose-700" : "border-neutral-200 bg-white text-neutral-700 hover:border-neutral-400"}`}
+            title={grabadora.grabando ? "Parar y transcribir" : "Dictar las ideas clave con el micrófono"}
+          >
+            {grabadora.grabando ? `■ Parar · ${fmtSegundos(grabadora.segundos)}` : "● Dictar"}
+          </button>
+        )}
+        {!grabadora.grabando && (
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={pidiendo || transcribiendo}
+            className="px-3 py-1.5 rounded-lg text-[11px] font-medium border border-neutral-200 bg-white text-neutral-700 hover:border-neutral-400 disabled:opacity-40"
+          >
+            {transcribiendo ? "Transcribiendo…" : "Añadir audio"}
+          </button>
+        )}
+        <input
+          ref={fileRef}
+          type="file"
+          accept="audio/*,.m4a,.mp3,.wav,.ogg,.webm,.mp4"
+          className="hidden"
+          onChange={(e) => dictar(e.target.files?.[0])}
+        />
         {fallo && <span className="text-[11px] text-red-700">{fallo}</span>}
       </div>
 
