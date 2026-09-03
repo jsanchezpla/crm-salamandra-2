@@ -30,12 +30,20 @@ import { NuevaCitaDrawer } from "./citas/NuevaCitaDrawer.jsx";
 import { Waitlist } from "./citas/Waitlist.jsx";
 import MiniMeses from "./citas/MiniMeses.jsx";
 import AgendaPorTerapeuta from "./citas/AgendaPorTerapeuta.jsx";
+import { VOCABULARIO_MIEMBRO } from "@/lib/team/vocabulario.js";
 
 /**
  * `conClientes` y `vocabulario` los resuelve la página (servidor): son para el
  * botón que lleva de una cita a la ficha. Ver `lib/citas/fichaDeLaCita.js`.
  */
-export default function CitasModule({ conClientes = false, vocabulario = undefined }) {
+/*
+ * `vocabularioEquipo` (03/09/2026): cómo se llama a la gente del equipo en
+ * este centro —«terapeuta» en una clínica, «miembro» en el resto y en las
+ * demos generales—. Lo resuelve la página igual que `vocabulario`; ver
+ * lib/team/vocabulario.js. Las frases de aquí abajo que nombran a alguien
+ * del equipo salen de él, no se escriben a mano.
+ */
+export default function CitasModule({ conClientes = false, vocabulario = undefined, vocabularioEquipo = VOCABULARIO_MIEMBRO }) {
   const calendarRef = useRef(null);
   const router = useRouter();
   // Menú contextual de una cita (clic derecho sobre la caja): { x, y, titulo,
@@ -1009,7 +1017,7 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
       {tab === "requests" && viewerIsAdmin && (
         <div className="flex-1 overflow-auto min-h-0 px-6 lg:px-10 py-4">
           <p className="text-xs text-neutral-400 mb-4">
-            Propuestas de cambio de cita que te mandan las terapeutas. Nada cambia hasta que apruebas.
+            Propuestas de cambio de cita que te manda el equipo. Nada cambia hasta que apruebas.
           </p>
           {changeReqLoading ? (
             <p className="text-sm text-neutral-400">Cargando…</p>
@@ -1020,7 +1028,7 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
               {changeRequests.map((req) => (
                 <li key={req.id} className="bg-white border border-neutral-200 rounded-xl p-4">
                   <div className="flex items-center gap-2 text-[11px] text-neutral-400 mb-1.5">
-                    <span className="font-medium text-neutral-600">{req.requestedByName || "Una terapeuta"}</span>
+                    <span className="font-medium text-neutral-600">{req.requestedByName || vocabularioEquipo.un.charAt(0).toUpperCase() + vocabularioEquipo.un.slice(1)}</span>
                     <span>propone mover:</span>
                   </div>
                   <div className="text-[14px] font-medium text-neutral-900">
@@ -1098,6 +1106,7 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
               onEventClick={handleEventClick}
               avisar={avisar}
               onVolver={cerrarPorTerapeuta}
+              vocabularioEquipo={vocabularioEquipo}
               version={versionColumnas}
             />
           ) : (
@@ -1158,8 +1167,8 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
              */
             customButtons={{
               porTerapeuta: {
-                text: "Por terapeuta",
-                hint: "Un día con una columna por terapeuta; arrastra una cita a otra columna para pasársela",
+                text: vocabularioEquipo.porRotulo,
+                hint: `Una columna por ${vocabularioEquipo.singular}, cada una en el día que quieras; arrastra una cita a otra columna para pasársela`,
                 click: abrirPorTerapeuta,
               },
               compacta: {

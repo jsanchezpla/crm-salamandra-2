@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import CitasModule from "../../../modules/default/CitasModule.jsx";
 import { getMasterModels } from "../../../lib/db/masterDb.js";
 import { vocabularioCliente } from "../../../lib/clients/vocabulario.js";
+import { VOCABULARIO_MIEMBRO, vocabularioEquipo } from "../../../lib/team/vocabulario.js";
 
 /**
  * Página de Citas.
@@ -24,6 +25,16 @@ const UI_OVERRIDES = {};
 const TENANT_TITLE_OVERRIDES = {
   nutri_laura: "Agenda",
 };
+
+/**
+ * Cuentas GENERALES: la demo de todo y el sandbox tienen todos los módulos
+ * encendidos, Clínica incluida, y por módulo saldrían hablando de
+ * «terapeutas» (`lib/team/vocabulario.js`). No son una clínica: son el
+ * escaparate, y Rodrigo (03/09/2026) quiere ahí el nombre neutro, «miembro».
+ * Las demos de UN sector (demo_clinica, demo_nutricion…) no van aquí: en la
+ * de clínica, «terapeuta» es justo lo que el prospecto espera oír.
+ */
+const CUENTAS_GENERALES = new Set(["demo", "sandbox"]);
 
 /**
  * Qué módulos tiene el centro, resuelto AQUÍ (27/08/2026).
@@ -67,11 +78,14 @@ export default async function CitasPage() {
   // `null` = no se pudo averiguar. Se trata como «no lo tiene»: ver arriba.
   const conClientes = activos?.has("clients") === true;
   const vocabulario = vocabularioCliente((k) => activos?.has(k) === true);
+  const vocabularioEquipoDelCentro = CUENTAS_GENERALES.has(tenantSlug)
+    ? VOCABULARIO_MIEMBRO
+    : vocabularioEquipo((k) => activos?.has(k) === true);
 
   // Falso positivo de react-hooks/static-components: es el override de UI por
   // tenant (CLAUDE.md). El componente sale de un mapa de MÓDULO, así que su
   // identidad es estable, y además esto es un componente de SERVIDOR: se
   // renderiza una vez por petición, no hay remontaje posible.
   // eslint-disable-next-line react-hooks/static-components
-  return <Component conClientes={conClientes} vocabulario={vocabulario} />;
+  return <Component conClientes={conClientes} vocabulario={vocabulario} vocabularioEquipo={vocabularioEquipoDelCentro} />;
 }
