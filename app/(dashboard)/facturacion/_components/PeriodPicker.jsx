@@ -21,7 +21,14 @@ const PRESETS = [
   { key: "custom", label: "Personalizado" },
 ];
 
-function fmt(d) { return d.toISOString().slice(0, 10); }
+// La fecha en LOCAL, no en UTC (03/09/2026). `toISOString()` pasa a UTC y en
+// España (UTC+1/+2) la medianoche del día 1 se convierte en el día anterior:
+// «Mes» abría del 31/08 al 29/09 y «Año» del 31/12/2025 al 30/12/2026, o sea,
+// que cada periodo perdía su último día y ganaba el último del anterior. Es
+// el mismo fallo que ya arreglaron el calendario y el panel del servidor.
+function fmt(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 function startOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
 function endOfMonth(d) { return new Date(d.getFullYear(), d.getMonth() + 1, 0); }
 function startOfQuarter(d) {
@@ -54,7 +61,12 @@ function detectActivePeriod(from, to, ref = new Date()) {
   return "custom";
 }
 
-export default function PeriodPicker() {
+/**
+ * `periodoPorDefecto`: con qué preset arranca la página cuando llega sin
+ * from/to (03/09/2026, Rodrigo: el Panel operativo tiene que abrir en el MES,
+ * que es el día a día; las analíticas siguen en el año).
+ */
+export default function PeriodPicker({ periodoPorDefecto = "year" } = {}) {
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
@@ -62,16 +74,16 @@ export default function PeriodPicker() {
   const to = sp.get("to") || "";
   const periodParam = sp.get("period");
 
-  // Si faltan from/to, sembrar desde el periodo declarado (o "year" por defecto)
-  // y normalizar la URL en una sola navegación.
+  // Si faltan from/to, sembrar desde el periodo declarado (o el de la página
+  // por defecto) y normalizar la URL en una sola navegación.
   useEffect(() => {
     if (!from || !to) {
-      const seed = periodParam || "year";
-      const range = computeRange(seed === "custom" ? "year" : seed);
+      const seed = periodParam || periodoPorDefecto;
+      const range = computeRange(seed === "custom" ? periodoPorDefecto : seed);
       const params = new URLSearchParams(sp.toString());
       params.set("from", range.from);
       params.set("to", range.to);
-      params.set("period", seed === "custom" ? "year" : seed);
+      params.set("period", seed === "custom" ? periodoPorDefecto : seed);
       router.replace(`${pathname}?${params.toString()}`);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -79,7 +91,7 @@ export default function PeriodPicker() {
 
   // El preset activo SE DERIVA de from/to, no del query param. Esto cura los
   // estados intermedios donde el usuario alterna preset y custom.
-  const activePeriod = from && to ? detectActivePeriod(from, to) : (periodParam || "year");
+  const activePeriod = from && to ? detectActivePeriod(from, to) : (periodParam || periodoPorDefecto);
 
   // Si el query param `period` no coincide con el preset detectado, lo
   // sincronizamos sin recargar. Mantiene la URL coherente con la realidad

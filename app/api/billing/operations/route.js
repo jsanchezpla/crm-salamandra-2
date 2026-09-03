@@ -20,18 +20,41 @@ function isMissingRelation(err) {
  * y lista de "acción requerida" (facturas vencidas, presupuestos que caducan,
  * aceptados sin facturar). Facturado/Cobrado se acotan al periodo; el pipeline
  * de presupuestos es estado actual (no acotado a periodo).
+ *
+ * ── COBRADO SON LOS COBROS, NO LAS FACTURAS (03/09/2026, Rodrigo) ──────────
+ * Hasta hoy «Cobrado» era el `paid_amount` de las facturas EMITIDAS en el
+ * periodo (los KPIs de `billingSummary.js`). En Aumenta eso daba 0 € en
+ * septiembre con casi 10.000 € cobrados: allí se cobra la cuota primero y se
+ * factura al cierre del mes («Facturar el mes»), así que en el mes vivo no hay
+ * facturas y el panel decía que no había entrado nada. «Lo cobrado no depende
+ * de lo facturado»: se suman los cobros COMPLETADOS con `paidAt` en el
+ * periodo, tengan factura o no. Facturado sigue en base imponible; Cobrado es
+ * lo que entró (con IVA donde lo haya, que en Aumenta es cero).
  */
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
-    const { Invoice, Quote } = tenantModels;
+    const { Invoice, Quote, Payment } = tenantModels;
     const { searchParams } = new URL(request.url);
     const from = searchParams.get("from");
     const to = searchParams.get("to");
     if (!from || !to) return error("from/to requeridos");
 
-    // Facturado / Cobrado del periodo (base imponible, reutiliza los KPIs)
+    // Facturado del periodo (base imponible, reutiliza los KPIs)
     const kpis = await getKpisForPeriod({ tenantModels, from, to });
+
+    // Cobrado del periodo: los cobros completados por fecha de cobro (ver
+    // cabecera). Mismo corte de fechas que el listado de Cobros.
+    const cobrosRows = await Payment.findAll({
+      where: {
+        status: "completed",
+        paidAt: { [Op.gte]: `${from} 00:00:00`, [Op.lte]: `${to} 23:59:59` },
+      },
+      attributes: [[fn("COUNT", col("id")), "n"], [fn("SUM", col("amount")), "sum"]],
+      raw: true,
+    });
+    const cobradoCount = Number(cobrosRows[0]?.n || 0);
+    const cobradoSum = round2(Number(cobrosRows[0]?.sum || 0));
 
     // El día se lee en MADRID, no en UTC (21/08/2026). `toISOString()` da el día
     // UTC corra el proceso donde corra, así que entre las 00:00 y las 02:00 de
@@ -107,7 +130,13 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
         presupuestos: { amount: round2(openSum), count: openCount },
         aceptados: { amount: round2(accSum), count: accCount },
         facturado: { amount: kpis.income.billedBase, count: kpis.income.invoiceCount },
-        cobrado: { amount: kpis.income.collectedBase, pct: kpis.income.collectedPct },
+        cobrado: {
+          amount: cobradoSum,
+          count: cobradoCount,
+          // % sobre lo facturado en el periodo: orientativo, puede pasar de 100
+          // (cobro primero, factura después). Se conserva por compatibilidad.
+          pct: kpis.income.billedBase > 0 ? round2((cobradoSum / kpis.income.billedBase) * 100) : 0,
+        },
       },
       actions: {
         overdue: { count: overdueCount, amount: overdueSum },

@@ -1192,7 +1192,7 @@ Las acciones `issue`, `send`, `cancel`, `rectify` registran en
 | Método y ruta | Propósito | Restricciones |
 | --- | --- | --- |
 | `GET /morosidad?mes=AAAA-MM` | Quién no ha pagado el mes: familias con al menos un paciente activo SIN cobro `completed` con ese `periodMonth`, y cuántos meses seguidos llevan. Mismo criterio que el bloqueo del portal. Lo pinta `/facturacion/cobros`. | `422` si el mes no es `AAAA-MM`. |
-| `GET /operations?from=&to=` | Datos del Panel operativo: embudo presupuestos → aceptados → facturado → cobrado y lista de «acción requerida» (vencidas, presupuestos que caducan, aceptados sin facturar). Facturado/Cobrado se acotan al periodo; el pipeline es foto de hoy. | — |
+| `GET /operations?from=&to=` | Datos del Panel operativo: embudo presupuestos → aceptados → facturado → cobrado y lista de «acción requerida» (vencidas, presupuestos que caducan, aceptados sin facturar). Facturado/Cobrado se acotan al periodo; el pipeline es foto de hoy. **Desde el 03/09/2026 Cobrado son los COBROS completados por `paidAt` en el periodo, con o sin factura** (`cobrado.amount`, `cobrado.count`); antes era el `paid_amount` de las facturas emitidas en el periodo y en Aumenta daba 0 € en el mes vivo con ~10.000 € cobrados (cobran primero, facturan al cierre). | — |
 | `GET /analytics/partners?from=&to=` | Reparto por socio (`TenantBillingSettings.partners`): facturado, IVA repercutido, IRPF retenido, gastos deducibles y neto, más el conjunto. | — |
 
 ### Exports (Excel)
@@ -1316,7 +1316,7 @@ el `ExportButtons.jsx` (Excel + ZIP de PDF) que llevan varias de ellas.
 
 | Ruta | Qué muestra / permite |
 | --- | --- |
-| `/facturacion` | **Panel operativo** (`GET /operations`): embudo presupuestos → aceptados → facturado → cobrado, y la lista de «acción requerida» (vencidas, presupuestos que caducan, aceptados sin facturar). Las fechas solo mueven Facturado y Cobrado. |
+| `/facturacion` | **Panel operativo** (`GET /operations`): embudo presupuestos → aceptados → facturado → cobrado, y la lista de «acción requerida» (vencidas, presupuestos que caducan, aceptados sin facturar). Las fechas solo mueven Facturado y Cobrado. **Abre en el MES** (03/09/2026, Rodrigo; `PeriodPicker periodoPorDefecto="month"`, el resto de pantallas de Facturación siguen en el año) y Cobrado es lo que ha entrado por Cobros, no lo cobrado de las facturas. |
 | `/facturacion/presupuestos` (+ `/[id]`) | Listado de presupuestos con filtros y Excel; ficha con líneas, línea de tiempo (enviado / visto / aceptado / rechazado), «Aceptar» y «Convertir en factura». |
 | `/facturacion/facturas` | Listado paginado, filtro por estado y búsqueda libre. Drawer con detalle, edición de borrador (con desplegable de producto del almacén si hay Inventario), acciones (Emitir, **Enviar** por email con el PDF, Cancelar, Eliminar, Rectificar) y descarga del PDF. |
 | `/facturacion/cobros` | Listado de cobros con filtros (método, estado) y Excel. Drawer para registrar cobro nuevo (selector de facturas pendientes, calcula automáticamente el importe restante; también cobro sin factura con `periodMonth`). Incluye el bloque de **Morosidad** del mes (`GET /morosidad`). |

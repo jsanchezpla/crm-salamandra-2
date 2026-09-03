@@ -34,7 +34,9 @@ function FunnelStep({ i, label, value, caption }) {
 
 export default function PanelOperativo() {
   const sp = useSearchParams();
-  const period = sp.get("period") || "quarter";
+  // El panel abre en el MES (03/09/2026, Rodrigo): es el día a día, y en un
+  // centro de cuotas mensuales el año diluye lo que importa hoy.
+  const period = sp.get("period") || "month";
   let from = sp.get("from");
   let to = sp.get("to");
   if (!from || !to) {
@@ -85,14 +87,17 @@ export default function PanelOperativo() {
             <HelpTooltip title="Panel operativo" placement="bottom">
               Las fechas de la derecha solo mueven los dos últimos escalones del embudo,{" "}
               <strong className="text-white">Facturado y Cobrado</strong>. Presupuestos, Aceptados
-              y Acción requerida son la foto de HOY: no cambian elijas el periodo que elijas. Y el
-              embudo mezcla presupuestos con IVA y facturas sin IVA, así que ese escalón baja sin
-              haberse perdido un euro.
+              y Acción requerida son la foto de HOY: no cambian elijas el periodo que elijas.{" "}
+              <strong className="text-white">Cobrado es lo que ha entrado</strong>: los cobros
+              registrados en esas fechas, tengan factura o no; por eso puede ir por delante de
+              Facturado si se cobra primero y se factura al cierre. Y el embudo mezcla
+              presupuestos con IVA y facturas sin IVA, así que ese escalón baja sin haberse
+              perdido un euro.
             </HelpTooltip>
           </h1>
           <p className="text-xs text-neutral-400 mt-1">El día a día del ciclo comercial y de cobro.</p>
         </div>
-        <PeriodPicker />
+        <PeriodPicker periodoPorDefecto="month" />
       </div>
 
       {errorMsg && (
@@ -112,7 +117,16 @@ export default function PanelOperativo() {
             value={fmtMoney(f.facturado.amount)}
             caption={`${f.facturado.count} factura${f.facturado.count === 1 ? "" : "s"}`}
           />
-          <FunnelStep i={3} label="Cobrado" value={fmtMoney(f.cobrado.amount)} caption={`${f.cobrado.pct}%`} />
+          {/* Cobrado = cobros registrados en el periodo, con o sin factura
+              (03/09/2026, Rodrigo: «lo cobrado no depende de lo facturado»).
+              El pie dice cuántos cobros son, no un % sobre lo facturado: con
+              cobro primero y factura al cierre ese % pasaba de 100 o daba 0. */}
+          <FunnelStep
+            i={3}
+            label="Cobrado"
+            value={fmtMoney(f.cobrado.amount)}
+            caption={`${f.cobrado.count ?? 0} cobro${f.cobrado.count === 1 ? "" : "s"}`}
+          />
         </div>
       ) : null}
 
