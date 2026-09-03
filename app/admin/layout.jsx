@@ -62,6 +62,9 @@ const SECCIONES = [
   // no es más que un atajo para marcar casillas ahí.
   { href: "/admin/paquetes", texto: "Paquetes" },
   { href: "/admin/clientes", texto: "Alta de clientes" },
+  // Quién ve qué desde calendar.salamandrasolutions.com (03/09/2026). Va al
+  // final porque se toca una vez por cuenta, no cada día.
+  { href: "/admin/calendario", texto: "Calendario global" },
 ];
 
 export default function AdminLayout({ children }) {

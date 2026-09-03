@@ -116,6 +116,12 @@ PostgreSQL DB: salamandra
 - Marca por tenant en `tenant.settings.brand` (`primaryColor`,
   `secondaryColor`, `logoUrl`) → `var(--color-primary)` / `--color-secondary`
   en el layout. El login de Salamandra usa paleta fija (`#FAFAF8` + `#1B3A2D`).
+- **Tres hosts, una app** (03/09/2026): `crm.` (clientes), `admin.` (back-office,
+  `ADMIN_HOST`) y `calendar.` (calendario global, `CALENDAR_HOST`): cada uno con
+  lista BLANCA de rutas en `middleware.js` y sus slugs reservados. El global lee
+  varios tenants por `master.calendario_global_vinculos` (la fila ES la
+  autorización) y salta al CRM con un pase de un solo uso (`/api/auth/saltar`,
+  `CRM_PUBLIC_URL`). Ver `docs/decisions/2026-09-03-el-calendario-global.md`.
 
 **Carpetas**: `app/` (rutas: `/api`, `(auth)`, `(dashboard)`, `admin/`,
 `portal/`, `widget/`), `components/`, `lib/` (33 carpetas: db, tenant, auth,

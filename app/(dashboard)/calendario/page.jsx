@@ -236,6 +236,11 @@ function buildPreviewEvents(weekEvents, moves) {
 
 export default function CalendarioPage() {
   const calendarRef = useRef(null);
+  // Llegar con `?evento=<id>&fecha=YYYY-MM-DD` abre la ficha de ese evento
+  // nada más cargar (03/09/2026): es donde aterriza el salto desde el
+  // calendario global. Se guarda en un ref porque quien lo lee es
+  // `fetchEvents`, que vive en un useCallback([]).
+  const abrirAlCargarRef = useRef(null);
   const [modal, setModal] = useState(null);
   // Ficha de un evento del calendario, en modo LECTURA (30/08/2026, Rodrigo):
   // pulsar un evento abría directamente el formulario de edición, que ni se
@@ -312,6 +317,15 @@ export default function CalendarioPage() {
     // La vuelta del OAuth llega con ?google=conectado|error en la URL. Se lee,
     // se cuenta y se limpia la dirección para que un F5 no repita el cartel.
     const params = new URLSearchParams(window.location.search);
+    // El salto desde el calendario global: primero a la fecha del evento (si
+    // no, el evento no está en la vista y no hay ficha que abrir), y la ficha
+    // se abre en `fetchEvents` cuando los eventos de esa semana ya están.
+    const eventoPedido = params.get("evento");
+    const fechaPedida = params.get("fecha");
+    if (eventoPedido) abrirAlCargarRef.current = eventoPedido;
+    if (fechaPedida && /^\d{4}-\d{2}-\d{2}$/.test(fechaPedida)) {
+      calendarRef.current?.getApi().gotoDate(fechaPedida);
+    }
     const resultado = params.get("google");
     if (resultado) {
       setGoogleAviso(
@@ -369,6 +383,23 @@ export default function CalendarioPage() {
       if (!res.ok) throw new Error("Error cargando eventos");
       const json = await res.json();
       successCallback((json.data ?? []).map(pintar));
+      // El evento que se pidió por URL (salto desde el calendario global). Se
+      // busca DESPUÉS de que FullCalendar haya montado los eventos de esta
+      // carga —de ahí el setTimeout— y una sola vez: si no está en esta
+      // semana, se queda esperando a la siguiente carga.
+      const pedido = abrirAlCargarRef.current;
+      if (pedido) {
+        setTimeout(() => {
+          const ev = calendarRef.current?.getApi().getEventById(pedido);
+          if (!ev) return;
+          abrirAlCargarRef.current = null;
+          handleEventClick({ event: ev });
+          const url = new URL(window.location.href);
+          url.searchParams.delete("evento");
+          url.searchParams.delete("fecha");
+          window.history.replaceState(null, "", url);
+        }, 0);
+      }
     } catch (err) {
       failureCallback(err);
     }

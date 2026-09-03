@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { jwtVerify } from "jose";
-import { esPeticionDeBackoffice } from "./lib/auth/backoffice.js";
+import { esPeticionDeBackoffice, esPeticionDeCalendario } from "./lib/auth/backoffice.js";
 
 const ACCESS_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
 
@@ -12,6 +12,11 @@ const PUBLIC_API_PATHS = [
   "/api/auth/demo", // demo pública: el visitante aún no tiene cookie
   "/api/auth/refresh",
   "/api/auth/recuperar", // quien la necesita es justo quien no puede entrar; lleva su propio cerrojo
+  // El canje del pase del calendario global (03/09/2026): llega SIN cookie,
+  // porque justo viene a abrirla. Solo existe en el host del CRM (ver el
+  // reparto por host de más abajo) y comprueba por su cuenta firma, caducidad
+  // y un solo uso (lib/calendario-global/salto.js).
+  "/api/auth/saltar",
 
   "/api/public/",
   "/api/cursos-empresas/",
@@ -91,6 +96,33 @@ const SOLO_ESTO_EN_BACKOFFICE = [
 // sea que se podía llamar desde el host del CRM — la pantalla vive en el
 // back-office, pero la puerta estaba en los dos sitios.
 const SOLO_BACKOFFICE = ["/admin", "/api/admin", "/api/provisioning"];
+
+// ─── El tercer host: el calendario global (03/09/2026, Rodrigo) ──────────────
+//
+// `CALENDAR_HOST` (p. ej. "calendar.salamandrasolutions.com"; en local
+// "calendar.localhost:3000") sirve UNA pantalla: los calendarios de varios
+// clientes a la vez, para quien tenga vínculos en
+// `master.calendario_global_vinculos`. Misma app, mismo contenedor, mismo
+// planteamiento que el back-office: lista BLANCA de lo que existe aquí, y
+// esas mismas rutas no existen en ningún otro host.
+//
+// Aquí entran las cuentas NORMALES del CRM (no hay sello `bo`): la sesión que
+// se abre en este host es una sesión del CRM de siempre, solo que en un host
+// donde lo único que hay es el calendario global. Qué calendarios ve, lo dice
+// la tabla de vínculos, no el host.
+const SOLO_ESTO_EN_CALENDARIO = [
+  "/calendario-global",
+  "/api/calendario-global",
+  "/login",
+  "/recuperar",
+  "/api/auth/login",
+  "/api/auth/logout",
+  "/api/auth/refresh",
+  "/api/auth/password",
+  "/api/auth/recuperar",
+  "/_next/",
+];
+const SOLO_CALENDARIO = ["/calendario-global", "/api/calendario-global"];
 
 function coincide(pathname, prefijos) {
   return prefijos.some((p) => pathname === p || pathname.startsWith(p.endsWith("/") ? p : p + "/"));
@@ -197,6 +229,23 @@ export async function middleware(request) {
     // Falla en cerrado: una variable ausente nunca debe abrir una puerta.
     return new NextResponse(null, { status: 404 });
   }
+
+  // El calendario global, con la misma lógica que el back-office: en su host
+  // solo existe él (y lo justo para entrar); fuera de su host no existe. Y
+  // sin `CALENDAR_HOST`, en ningún sitio.
+  if (esPeticionDeCalendario(request)) {
+    if (pathname === "/") {
+      return NextResponse.redirect(new URL("/calendario-global", request.url));
+    }
+    if (!coincide(pathname, SOLO_ESTO_EN_CALENDARIO)) {
+      return new NextResponse(null, { status: 404 });
+    }
+  } else if (coincide(pathname, SOLO_CALENDARIO)) {
+    return new NextResponse(null, { status: 404 });
+  }
+  // (El canje del pase, /api/auth/saltar, solo existe en el host del CRM: las
+  // dos listas blancas de arriba ya lo dejan fuera del back-office y del
+  // propio calendario.)
 
   // Dejar pasar todos los preflights CORS — los Route Handlers añaden sus propios headers
   if (request.method === "OPTIONS") {
