@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Select from "@/components/ui/Select.jsx";
 import SelectorPaciente from "@/components/citas/SelectorPaciente.jsx";
+import TextareaCrece from "@/components/ui/TextareaCrece.jsx";
 import { INCIDENCIA_CATEGORIES, INCIDENCIA_PRIORITY, INCIDENCIA_VERIFICATIONS, exigeSubcategoria } from "@/lib/clinica/incidencias.js";
 
 /**
@@ -488,7 +489,9 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
             {/* La columna existía desde el principio; el formulario no la
                 enseñaba, así que no había forma de escribirla (04/08/2026). */}
             <label className="text-[10px] uppercase tracking-wider text-neutral-400">Acción realizada</label>
-            <textarea value={resolution} onChange={(e) => setResolution(e.target.value)} rows={2} className={`mt-1 ${inputCls} resize-none`} placeholder="Qué se ha hecho para resolverla…" />
+            {/* Crece con el texto (03/09/2026, AV-0036): quien la RECIBE leía
+                doce líneas por una ranura de dos. */}
+            <TextareaCrece value={resolution} onChange={(e) => setResolution(e.target.value)} rows={2} className={`mt-1 ${inputCls}`} placeholder="Qué se ha hecho para resolverla…" />
           </div>
 
           {/* Verificación: en las existentes se guarda al pulsar (es lo que se
@@ -517,7 +520,7 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
 
           <div>
             <label className="text-[10px] uppercase tracking-wider text-neutral-400">Observaciones</label>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className={`mt-1 ${inputCls} resize-none`} placeholder="Contexto, detalle, lo que haga falta recordar…" />
+            <TextareaCrece value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className={`mt-1 ${inputCls}`} placeholder="Contexto, detalle, lo que haga falta recordar…" />
           </div>
 
           {/* Documentos adjuntos (26/08/2026, Aumenta): justificantes, fotos,
