@@ -36,23 +36,28 @@ import { coincidePorNombre } from "../../lib/utils/busqueda.js";
  * está `components/clients/SelectorCliente.jsx`, que es quien sabe la regla.
  */
 /**
- * Hasta dónde puede extenderse el panel sin que lo corten: los bordes (con un
- * margen) del primer antepasado con overflow que recorta; si no hay ninguno,
- * la ventana. Un `overflow-y: auto` recorta también en horizontal, y hacia la
- * izquierda no hay scroll que valga: lo que se sale, desaparece.
+ * Hasta dónde puede extenderse el panel sin que lo corten: el área de
+ * contenido (sin barra de scroll ni relleno) del primer antepasado con
+ * overflow que recorta; si no hay ninguno, la ventana con un margen. Un
+ * `overflow-y: auto` recorta también en horizontal, y hacia la izquierda no
+ * hay scroll que valga: lo que se sale, desaparece. Y hacia la derecha pasa
+ * lo contrario: un píxel de más sobre la barra o el relleno y el cajón entero
+ * gana scroll horizontal y se corre (03/09/2026, Aumenta lo vio).
  */
 function limitesDelRecorte(nodo) {
-  const MARGEN = 12;
   let el = nodo?.parentElement;
   while (el && el !== document.body) {
     const cs = getComputedStyle(el);
     if (/(auto|scroll|hidden|clip)/.test(`${cs.overflowX} ${cs.overflowY}`)) {
       const r = el.getBoundingClientRect();
-      return { left: r.left + MARGEN, right: r.right - MARGEN };
+      const left = r.left + el.clientLeft + parseFloat(cs.paddingLeft || 0);
+      const right = r.left + el.clientLeft + el.clientWidth - parseFloat(cs.paddingRight || 0);
+      return { left, right };
     }
     el = el.parentElement;
   }
-  return { left: MARGEN + 4, right: window.innerWidth - MARGEN - 4 };
+  const MARGEN = 16;
+  return { left: MARGEN, right: window.innerWidth - MARGEN };
 }
 
 export default function Select({
