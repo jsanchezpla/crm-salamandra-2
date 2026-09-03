@@ -13,6 +13,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 
 const inputCls =
@@ -38,9 +39,8 @@ function Cantidad({ valor, unidad, className = "" }) {
   );
 }
 
-function nuevoProducto() {
-  return { name: "", sku: "", category: "", unit: "ud", purchasePrice: "", salePrice: "", minStock: "", notes: "" };
-}
+// El alta y la edición del producto (nombre, unidad, precios) se fueron a
+// Productos el 03/09/2026: esta pantalla es el almacén, no el catálogo.
 function nuevaEntrada() {
   return { productId: "", supplierId: "", entryDate: new Date().toISOString().slice(0, 10),
     quantity: "", unitCost: "", lot: "", expiryDate: "", notes: "" };
@@ -60,11 +60,9 @@ export default function InventarioPage() {
   const [soloAviso, setSoloAviso] = useState(false);
   const [verInactivos, setVerInactivos] = useState(false);
 
-  const [panel, setPanel] = useState(null); // 'producto' | 'entrada' | 'ajuste'
-  const [form, setForm] = useState(nuevoProducto);
+  const [panel, setPanel] = useState(null); // 'entrada' | 'ajuste'
   const [entrada, setEntrada] = useState(nuevaEntrada);
   const [ajuste, setAjuste] = useState({ productId: "", quantity: "", reason: "" });
-  const [editandoId, setEditandoId] = useState(null);
   const [guardando, setGuardando] = useState(false);
   const [formError, setFormError] = useState(null);
 
@@ -125,17 +123,6 @@ export default function InventarioPage() {
     } catch { /* la ficha se abre igual, sin histórico */ }
   }, []);
 
-  function abrirProducto(p = null) {
-    setEditandoId(p?.id ?? null);
-    setForm(p ? {
-      name: p.name ?? "", sku: p.sku ?? "", category: p.category ?? "", unit: p.unit ?? "ud",
-      purchasePrice: p.purchasePrice ?? "", salePrice: p.salePrice ?? "",
-      minStock: p.minStock ?? "", notes: p.notes ?? "",
-    } : nuevoProducto());
-    setFormError(null);
-    setPanel("producto");
-  }
-
   async function enviar(url, body, metodo = "POST") {
     setGuardando(true);
     setFormError(null);
@@ -176,20 +163,21 @@ export default function InventarioPage() {
           <h1 className="text-lg font-semibold text-neutral-800">Inventario</h1>
           <p className="text-[12.5px] text-neutral-500 mt-0.5">
             Lo que hay en el almacén. El stock se calcula sumando entradas, salidas y ajustes.
+            Los productos y su precio se dan de alta en <Link href="/productos" className="underline">Productos</Link>.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => { setEntrada(nuevaEntrada()); setFormError(null); setPanel("entrada"); }}
+          <Link
+            href="/productos"
             className="text-[12.5px] px-3 py-1.5 rounded-lg border border-neutral-200 text-neutral-600 hover:bg-neutral-50 transition"
           >
-            Registrar entrada
-          </button>
+            Productos y precios
+          </Link>
           <button
-            onClick={() => abrirProducto()}
+            onClick={() => { setEntrada(nuevaEntrada()); setFormError(null); setPanel("entrada"); }}
             className="text-[12.5px] px-3 py-1.5 rounded-lg bg-[var(--color-primary,#1B3A2D)] text-white font-medium hover:opacity-90 transition"
           >
-            Nuevo producto
+            Registrar entrada
           </button>
         </div>
       </div>
@@ -255,7 +243,7 @@ export default function InventarioPage() {
               {cargando && <tr><td colSpan={7} className="px-3 py-6 text-center text-neutral-400">Cargando…</td></tr>}
               {!cargando && productos.length === 0 && (
                 <tr><td colSpan={7} className="px-3 py-8 text-center text-neutral-400">
-                  {busqueda || categoria || soloAviso ? "Ningún producto coincide con el filtro." : "Todavía no hay productos en el almacén."}
+                  {busqueda || categoria || soloAviso ? "Ningún producto coincide con el filtro." : "Todavía no hay productos. Se dan de alta en Productos."}
                 </td></tr>
               )}
               {!cargando && productos.map((p) => (
@@ -278,8 +266,7 @@ export default function InventarioPage() {
                   <td className="px-3 py-2 text-right text-neutral-500">{fmtMoney(p.salePrice)}</td>
                   <td className="px-3 py-2 text-right whitespace-nowrap">
                     <button onClick={() => { setAjuste({ productId: p.id, quantity: "", reason: "" }); setFormError(null); setPanel("ajuste"); }}
-                      className="text-neutral-400 hover:text-neutral-800 px-2">Ajustar</button>
-                    <button onClick={() => abrirProducto(p)} className="text-neutral-500 hover:text-neutral-800 px-2">Editar</button>
+                      className="text-neutral-500 hover:text-neutral-800 px-2">Ajustar</button>
                   </td>
                 </tr>
               ))}
@@ -341,50 +328,12 @@ export default function InventarioPage() {
           <div className="fixed right-0 top-14 lg:top-0 bottom-0 w-full max-w-md bg-white z-50 shadow-xl overflow-y-auto p-5 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-semibold text-neutral-800">
-                {panel === "producto" ? (editandoId ? "Editar producto" : "Nuevo producto")
-                  : panel === "entrada" ? "Registrar entrada" : "Ajustar stock"}
+                {panel === "entrada" ? "Registrar entrada" : "Ajustar stock"}
               </h2>
               <button onClick={() => setPanel(null)} className="text-neutral-400 hover:text-neutral-700 text-[12.5px]">Cerrar</button>
             </div>
 
             {formError && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-700">{formError}</div>}
-
-            {panel === "producto" && (
-              <>
-                <label className="block"><span className="text-[12px] text-neutral-500">Nombre *</span>
-                  <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputCls} autoFocus /></label>
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="block"><span className="text-[12px] text-neutral-500">Referencia</span>
-                    <input value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} className={inputCls} /></label>
-                  <label className="block"><span className="text-[12px] text-neutral-500">Categoría</span>
-                    <input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className={inputCls} placeholder="Material fungible…" /></label>
-                </div>
-                <label className="block">
-                  <span className="text-[12px] text-neutral-500">¿En qué se cuenta? *</span>
-                  <select value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} className={inputCls}>
-                    {UNIDADES.map((u) => <option key={u.v} value={u.v}>{u.l}</option>)}
-                  </select>
-                  <span className="block text-[11px] text-neutral-400 mt-1">
-                    Folios y guantes van en unidades; el gel, en litros.
-                  </span>
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="block"><span className="text-[12px] text-neutral-500">Precio de compra</span>
-                    <input type="number" step="0.01" value={form.purchasePrice} onChange={(e) => setForm({ ...form, purchasePrice: e.target.value })} className={inputCls} /></label>
-                  <label className="block"><span className="text-[12px] text-neutral-500">Precio de venta</span>
-                    <input type="number" step="0.01" value={form.salePrice} onChange={(e) => setForm({ ...form, salePrice: e.target.value })} className={inputCls} /></label>
-                </div>
-                <label className="block"><span className="text-[12px] text-neutral-500">Avisar por debajo de</span>
-                  <input type="number" step="0.001" value={form.minStock} onChange={(e) => setForm({ ...form, minStock: e.target.value })} className={inputCls} placeholder="Sin aviso" /></label>
-                <label className="block"><span className="text-[12px] text-neutral-500">Notas</span>
-                  <textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className={inputCls} /></label>
-                <button
-                  onClick={() => enviar(editandoId ? `/api/inventory/products/${editandoId}` : "/api/inventory/products", form, editandoId ? "PUT" : "POST")}
-                  disabled={guardando}
-                  className="w-full rounded-lg bg-[var(--color-primary,#1B3A2D)] text-white text-sm font-medium py-2 hover:opacity-90 transition disabled:opacity-50"
-                >{guardando ? "Guardando…" : editandoId ? "Guardar cambios" : "Crear producto"}</button>
-              </>
-            )}
 
             {panel === "entrada" && (
               <>

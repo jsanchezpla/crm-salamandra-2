@@ -57,6 +57,7 @@ export const ONE_OFF = {
   "migrate-documents-avanzado": "MASTER, no toca schemas de tenant: reparte el módulo Documentos en básico/avanzado y da el avanzado a quien ya tenía Documentos, para que nadie pierda el archivo por el cambio de nomenclatura. Se corre a mano una vez, idempotente",
   "migrate-audit-logs-index": "índice en el schema MASTER (audit_logs), no por-tenant; idempotente, se corre a mano una vez",
   "migrate-clients-avanzado": "MASTER, no toca schemas de tenant: saca la lista de espera de admisión de `clients` a `clients_avanzado` y se la da solo a quien admite por cola (aumenta, demo). Se corre a mano una vez, idempotente",
+  "migrate-productos": "MASTER, no toca schemas de tenant: da `productos` y `productos_avanzado` a todo cliente que tuviera `inventory`, `orders` o `tienda`, para que nadie pierda el menú el día que los tres pasaron a colgar de Productos (03/09/2026); y añade las dos claves al `module_access` de los usuarios que llevaran alguna de las tres en su lista. VA ANTES del despliegue (o justo después: la caché caduca en 60 s). Se corre a mano una vez, idempotente",
   "migrate-users-recuperacion": "MASTER, no toca schemas de tenant: añade `reset_token_hash` y `reset_token_expira` a `master.users` para el enlace de «¿Olvidaste tu contraseña?». Aditiva (nacen NULL) e idempotente; NO escribe ni una fila. VA ANTES del despliegue: el modelo pide esas columnas por nombre en cada SELECT",
   "migrate-users-email-contacto": "MASTER, no toca schemas de tenant: añade `email_contacto` a `master.users` —a dónde se le escribe a esa cuenta, y su segundo identificador para entrar— con su índice único. Aditiva (nace NULL en todas las filas) e idempotente; NO escribe ni una fila, rellenar las que se pueda es `backfill-correo-cuenta.js`. VA ANTES del despliegue: el modelo pide esa columna por nombre en cada SELECT",
   "migrate-usuario-backoffice": "MASTER, no toca schemas de tenant: añade `solo_backoffice` a `master.users` para separar las cuentas del panel interno de las del CRM. Se corre a mano con `npm run db:migrate:backoffice`; aditiva, con default false, idempotente",
@@ -610,6 +611,29 @@ export const MODULES = {
     "migrate-training-archive",
     "migrate-course-registrations",
   ],
+
+  /**
+   * PRODUCTOS (03/09/2026): el catálogo con su valor. Sus tablas son las del
+   * rework de Inventario —`products` es la MISMA tabla, y `stock_entries` y
+   * `stock_movements` nacen con ella porque la lista calcula el stock sumando
+   * movimientos (cero, si nadie mueve nada)—, así que comparte migración con
+   * `inventory` igual que `documents_avanzado` comparte con `documents`. Un
+   * cliente que estrene el básico sin haber tenido Inventario nace con la tabla.
+   */
+  productos: ["migrate-inventario-rework"],
+  // El avanzado no tiene tablas SUYAS: sus estadísticas leen `orders` y
+  // `order_lines`, que llegan con Pedidos. Se declara con la del básico para
+  // que `enable-module.js` conozca la clave y no nazca sin `products`.
+  productos_avanzado: ["migrate-inventario-rework"],
+
+  /**
+   * PEDIDOS. No estaba en el mapa hasta el 03/09/2026: sus tres tablas solo las
+   * creaba `scripts/_hechos/add-orders-module-spain-enzymes.js`, con el slug
+   * escrito dentro, así que activar `orders` en un cliente nuevo dejaba el menú
+   * puesto y ningún sitio donde caer un pedido. `migrate-orders` es la misma
+   * estructura generalizada (por módulo, sin ENUM de Postgres).
+   */
+  orders: ["migrate-orders"],
 
   inventory: [
     // Rework completo del 02/08/2026: Product/StockEntry sustituyen a

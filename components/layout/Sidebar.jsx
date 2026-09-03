@@ -481,35 +481,35 @@ const navigation = [
   {
     label: "Operaciones",
     items: [
+      /*
+       * PRODUCTOS (03/09/2026, Rodrigo): Inventario, Pedidos y Tienda dejan de
+       * ser tres entradas sueltas y pasan a colgar de un módulo grande,
+       * «Productos», que es donde vive el catálogo de lo que se vende y su
+       * valor. Dos niveles, con la convención de la casa:
+       *
+       *   · `productos`           → básico: la pantalla general (la lista de
+       *                             productos y su precio).
+       *   · `productos_avanzado`  → estadísticas de venta en esa misma pantalla
+       *                             y la puerta al trío de abajo.
+       *
+       * Los tres hijos exigen `requiresAll` (avanzado + el módulo que aporta la
+       * pantalla), como los submenús de Equipo avanzado: un cliente con el
+       * básico ve «Productos» y nada debajo, aunque conserve las filas de
+       * `inventory` u `orders` apagadas en `tenant_modules`.
+       */
       {
-        key: "orders",
-        label: "Pedidos",
-        href: "/pedidos",
+        key: "productos",
+        label: "Productos",
+        href: "/productos",
+        children: [
+          { key: "productos-inventario", label: "Inventario", href: "/inventario", requiresAll: ["productos_avanzado", "inventory"] },
+          { key: "productos-pedidos", label: "Pedidos", href: "/pedidos", requiresAll: ["productos_avanzado", "orders"] },
+          { key: "productos-tienda", label: "Tienda", href: "/tienda", requiresAll: ["productos_avanzado", "tienda"] },
+        ],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-          </svg>
-        ),
-      },
-      // La TIENDA va antes que Inventario: quien la tiene entra aquí a diario a
-      // ver qué se vende, y al almacén solo cuando hay que reponer.
-      {
-        key: "tienda",
-        label: "Tienda",
-        href: "/tienda",
-        icon: (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
-          </svg>
-        ),
-      },
-      {
-        key: "inventory",
-        label: "Inventario",
-        href: "/inventario",
-        icon: (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 2.625c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" />
           </svg>
         ),
       },

@@ -52,6 +52,15 @@ export const EXTRA_EDGES = [
     after: "migrate-tienda",
     why: "migrate-tienda altera `products` y `stock_movements`, que crea el rework de Inventario. Su SQL usa un marcador de schema y el analizador no puede leerlo.",
   },
+  // ── Pedidos va ANTES de la tienda (03/09/2026) ────────────────────────────
+  // `migrate-tienda` también altera `orders` y `order_lines`, que desde hoy
+  // crea `migrate-orders` (hasta ahora solo existían por un script de _hechos).
+  // Mismo motivo que la arista de arriba: el marcador `{S}` de la tienda.
+  {
+    before: "migrate-orders",
+    after: "migrate-tienda",
+    why: "migrate-tienda añade columnas a `orders` y `order_lines`, que crea migrate-orders. Su SQL usa un marcador de schema y el analizador no puede leerlo.",
+  },
   // ── Rework de Inventario / Arqueo / Proveedores (02/08/2026) ──────────────
   // Las tres deciden por EXISTENCIA de tabla (`if (!tableExists(costs)) return`),
   // así que el analizador no ve un SQL que las ate a nada y las colocaba al

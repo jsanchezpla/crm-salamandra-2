@@ -46,6 +46,8 @@ const MODULES = [
   // pantalla de Formación y viaja con `training`.
   "clients", "leads", "projects", "billing", "team", "inventory", "training",
   "calendar", "citas", "orders",
+  // 2026-09-03: Inventario y Pedidos cuelgan de Productos (básico + avanzado).
+  "productos", "productos_avanzado",
   "pacientes", "clinica", "nutricion", "outreach",
   // 2026-08-12: fuera "referidos" — el módulo se retiró entero.
   "formularios", "documents",

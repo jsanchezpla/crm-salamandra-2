@@ -94,6 +94,13 @@ const NO_SE_VENDEN_SOLOS = [
   // Tienda (25/08/2026): exige el trío entero —Inventario, Pedidos y Clientes—
   // porque no tiene catálogo propio, vende el de Inventario.
   "tienda",
+  // Productos (03/09/2026): Inventario, Pedidos y Tienda pasan a colgar de
+  // `productos_avanzado`, que a su vez es una capa sobre `productos`. Con eso
+  // Inventario deja de venderse solo (su lista de productos es el endpoint
+  // del catálogo y su entrada de menú exige el avanzado) y el avanzado exige
+  // el básico.
+  "productos_avanzado",
+  "inventory",
   "documents",
 ];
 
@@ -103,13 +110,13 @@ const PIERDEN_ALGO = [
   "projects",
   "support",
   "outreach",
-  "inventory",
+  // `inventory` estuvo aquí hasta el 03/09/2026 (ver NO_SE_VENDEN_SOLOS).
   "calendar",
   "analytics",
 ];
 
 /** Lo que funciona solo al 100 %. */
-const INDEPENDIENTES = ["clients", "leads", "team", "training"];
+const INDEPENDIENTES = ["clients", "leads", "team", "productos", "training"];
 
 /* ── La matriz: lo que dice de sí misma ──────────────────────────────────── */
 
@@ -179,14 +186,44 @@ describe("la matriz DEPENDENCIAS: coherente con el catálogo y consigo misma", (
 /* ── dependenciasDe / seVendeSolo ────────────────────────────────────────── */
 
 describe("dependenciasDe / seVendeSolo: ¿se puede vender suelto?", () => {
-  it("Pedidos necesita tres cosas: Clientes y Facturación (obligatorias) e Inventario (parcial)", () => {
+  it("Pedidos necesita cuatro cosas: Clientes, Facturación y Productos avanzado (obligatorias) e Inventario (parcial)", () => {
     assert.deepEqual(
       dependenciasDe("orders").map((d) => [d.claves, d.nivel]),
       [
         [["clients"], "obligatorio"],
         [["billing"], "obligatorio"],
+        [["productos_avanzado"], "obligatorio"],
         [["inventory"], "parcial"],
       ]
+    );
+  });
+
+  // El 03/09/2026 Inventario, Pedidos y Tienda pasaron a colgar de Productos:
+  // el básico es el catálogo (se vende solo) y el avanzado la puerta a los tres.
+  it("Productos básico no necesita nada; el avanzado exige el básico y pierde las cifras sin Pedidos; Inventario exige los dos niveles", () => {
+    assert.deepEqual(dependenciasDe("productos"), []);
+    assert.equal(seVendeSolo("productos"), true);
+    assert.deepEqual(
+      dependenciasDe("productos_avanzado").map((d) => [d.claves, d.nivel]),
+      [
+        [["productos"], "obligatorio"],
+        [["orders"], "parcial"],
+      ]
+    );
+    assert.deepEqual(
+      dependenciasDe("inventory").map((d) => [d.claves, d.nivel]),
+      [
+        [["productos", "productos_avanzado"], "obligatorio"],
+        [["team"], "parcial"],
+        [["orders"], "parcial"],
+      ]
+    );
+    assert.equal(seVendeSolo("inventory"), false);
+    assert.equal(textoNecesita("inventory"), "productos + productos_avanzado");
+    // La tienda suma los dos niveles a su trío de siempre.
+    assert.deepEqual(
+      exigenciasDe("tienda").map((d) => d.claves),
+      [["inventory", "orders", "clients"], ["productos", "productos_avanzado"]]
     );
   });
 
@@ -240,8 +277,8 @@ describe("dependenciasDe / seVendeSolo: ¿se puede vender suelto?", () => {
 /* ── textoNecesita ───────────────────────────────────────────────────────── */
 
 describe("textoNecesita: la columna «Necesita» de la tabla", () => {
-  it("con obligatorias, solo ESAS y unidas con «+»: Pedidos = clients + billing (Inventario, parcial, no sale)", () => {
-    assert.equal(textoNecesita("orders"), "clients + billing");
+  it("con obligatorias, solo ESAS y unidas con «+»: Pedidos = clients + billing + productos_avanzado (Inventario, parcial, no sale)", () => {
+    assert.equal(textoNecesita("orders"), "clients + billing + productos_avanzado");
   });
 
   // El ejemplo era Documentos (citas + clients) hasta el 24/08/2026, cuando
@@ -276,7 +313,7 @@ describe("textoNecesita: la columna «Necesita» de la tabla", () => {
   });
 
   it("nombreDe traduce las claves a nombres de venta sin tocar los separadores", () => {
-    assert.equal(textoNecesita("orders", nombreDe), "Clientes + Facturación");
+    assert.equal(textoNecesita("orders", nombreDe), "Clientes + Facturación + Productos avanzado");
     assert.equal(textoNecesita("team_avanzado", nombreDe), "Equipo básico + (Clínica o Citas)");
     assert.equal(
       textoNecesita("citas", nombreDe),
@@ -333,12 +370,14 @@ describe("exigenciasDe: lo que el alta exige de verdad (matriz + catálogo)", ()
     assert.equal(ex.length, 1);
     assert.deepEqual(ex[0].claves, ["clients", "leads"]);
     assert.equal("delCatalogo" in ex[0], false);
-    // Pedidos igual: el catálogo dice clients y billing, la matriz ya los tiene.
+    // Pedidos igual: el catálogo dice clients, billing y productos_avanzado,
+    // la matriz ya los tiene.
     assert.deepEqual(
       exigenciasDe("orders").map((d) => [d.claves, "delCatalogo" in d]),
       [
         [["clients"], false],
         [["billing"], false],
+        [["productos_avanzado"], false],
       ]
     );
   });
@@ -447,12 +486,13 @@ describe("validarSeleccion: la puerta — dice qué falta y NO lo arregla", () =
     );
   });
 
-  it("un módulo con dos requisitos sin cubrir da dos problemas, en el orden de la matriz: Pedidos → clients y luego billing", () => {
+  it("un módulo con tres requisitos sin cubrir da tres problemas, en el orden de la matriz: Pedidos → clients, billing y productos_avanzado", () => {
     assert.deepEqual(
       validarSeleccion(["orders"]).problemas.map((p) => [p.modulo, p.faltan]),
       [
         ["orders", ["clients"]],
         ["orders", ["billing"]],
+        ["orders", ["productos_avanzado"]],
       ]
     );
   });
@@ -530,7 +570,7 @@ describe("validarSeleccion: la puerta — dice qué falta y NO lo arregla", () =
 
   it("cada problema lleva exactamente: modulo, claves, faltan, cualquiera, porque (también los que nacen del catálogo, sin delCatalogo)", () => {
     const problemas = validarSeleccion(["orders", "team_avanzado", "fichaje"]).problemas;
-    assert.equal(problemas.length, 5);
+    assert.equal(problemas.length, 6);
     for (const p of problemas) {
       assert.deepEqual(Object.keys(p).sort(), [
         "claves",
@@ -560,10 +600,10 @@ describe("completarSeleccion: el botón «añadir también …» (completa caden
     });
   });
 
-  it("Pedidos → añade Clientes y Facturación", () => {
+  it("Pedidos → añade Clientes, Facturación y los dos niveles de Productos (transitivo: el avanzado arrastra el básico)", () => {
     assert.deepEqual(completarSeleccion(["orders"]), {
-      modulos: ["clients", "billing", "orders"],
-      anadidos: ["clients", "billing"],
+      modulos: ["clients", "billing", "productos", "productos_avanzado", "orders"],
+      anadidos: ["clients", "billing", "productos", "productos_avanzado"],
       sinResolver: [],
     });
   });
@@ -732,6 +772,7 @@ describe("fraseDeExigencia: la frase que lee quien vende", () => {
     assert.deepEqual(frases, [
       "Para activar Pedidos hace falta también Clientes.",
       "Para activar Pedidos hace falta también Facturación.",
+      "Para activar Pedidos hace falta también Productos avanzado.",
     ]);
   });
 
@@ -842,9 +883,10 @@ describe("matrizCompleta / sinEstudiar: la tabla del back-office, lo más roto a
         pesos.filter((p) => p === 1).length,
         pesos.filter((p) => p === 2).length,
       ],
-      // 14 rojos desde el 29/08/2026: entró `banco` (exige Facturación) sobre
-      // los 13 que dejó `tienda`. Ámbar y verdes no se mueven.
-      [14, 7, 4]
+      // 16 rojos desde el 03/09/2026: `productos_avanzado` (exige el básico)
+      // e `inventory` (que sube de ámbar al colgar de Productos) sobre los 14
+      // del 29/08. Un ámbar menos por eso, y un verde más: `productos`.
+      [16, 6, 5]
     );
   });
 
@@ -852,7 +894,8 @@ describe("matrizCompleta / sinEstudiar: la tabla del back-office, lo más roto a
     const [orders] = matrizCompleta();
     assert.deepEqual(orders, {
       modulo: "orders",
-      grupo: "Dinero",
+      // «Dinero» hasta el 03/09/2026; ahora se vende dentro de Productos.
+      grupo: "Productos",
       necesita: DEPENDENCIAS[0].necesita,
       paraFuncionar: "Sí, total",
       resumen:

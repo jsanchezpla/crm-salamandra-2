@@ -14,7 +14,7 @@ import { camposEscaparateDe, estorbaParaPublicar } from "../../../../lib/tienda/
  * unidades o kilos, que es el fallo del módulo viejo.
  */
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
-  if (!hasModule("inventory")) return forbidden();
+  if (!hasModule("productos")) return forbidden();
 
   const { Product } = tenantModels;
   const { searchParams } = new URL(request.url);
@@ -55,7 +55,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
 });
 
 export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
-  if (!hasModule("inventory")) return forbidden();
+  if (!hasModule("productos")) return forbidden();
 
   const { Product } = tenantModels;
   const body = await request.json();

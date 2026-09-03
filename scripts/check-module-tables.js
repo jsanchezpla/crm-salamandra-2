@@ -163,6 +163,12 @@ const MODULOS = {
     nucleo: ["invoices", "payments", "costs", "rates", "invoice_series"],
     extras: ["recurring_invoices", "quotes", "tenant_billing_settings", "suppliers", "cash_points", "cash_closes"],
   },
+  // ── Productos (03/09/2026) ────────────────────────────────────────────────
+  // El básico es la tabla `products` del rework de Inventario (la MISMA); el
+  // avanzado no tiene tablas suyas: sus estadísticas leen las de Pedidos, que
+  // van como extras porque sin ellas el bloque avisa en vez de romper.
+  productos: { nucleo: ["products"], extras: ["stock_movements"] },
+  productos_avanzado: { nucleo: ["products"], extras: ["orders", "order_lines"] },
   orders: { nucleo: ["orders", "order_lines"], extras: ["order_settings"] },
   inventory: {
     // Las tres del rework del 02/08/2026. `assets` (equipos internos) es

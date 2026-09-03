@@ -12,6 +12,12 @@
  * Los productos son LOS MISMOS: esta pantalla no crea nada nuevo, escribe sobre
  * `products`. Lo que hace es enseñar solo lo que decide si algo está a la
  * venta, y dejarlo publicar de un clic.
+ *
+ * Desde el 03/09/2026 el PRECIO no se toca aquí: el producto y su valor son
+ * del módulo Productos (`/productos`), del que la Tienda cuelga. Aquí se
+ * enseña, y se avisa de dónde se cambia. Lo que sí es de la tienda: la
+ * descripción, las fotos, el IVA, la dirección y las tallas (que pueden tener
+ * un precio PROPIO distinto del base — es una excepción, no una copia).
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -70,8 +76,8 @@ export default function TiendaModule() {
           </span>
         </h1>
         <p className="text-gray-500 text-sm mt-1">
-          Lo que aquí esté publicado se ve en tu tienda. Los productos y su stock son los de
-          Inventario: esto solo decide qué sale al escaparate y con qué foto.
+          Lo que aquí esté publicado se ve en tu tienda. Los productos y su precio son los de
+          Productos, y el stock el de Inventario: esto solo decide qué sale al escaparate y con qué foto.
         </p>
       </header>
 
@@ -85,8 +91,8 @@ export default function TiendaModule() {
 
       {!cargando && !productos.length && (
         <p className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-500">
-          Todavía no hay productos. Créalos en <a className="underline" href="/inventario">Inventario</a> y
-          vuelve aquí para ponerlos a la venta.
+          Todavía no hay productos. Créalos en <a className="underline" href="/productos">Productos</a>, con su
+          precio, y vuelve aquí para ponerlos a la venta.
         </p>
       )}
 
@@ -173,11 +179,13 @@ export default function TiendaModule() {
  * añade la XL, corrige el precio de la XXL y quita la XS en el mismo gesto.
  */
 function Editor({ producto, onCerrar, onGuardado }) {
+  // Sin `salePrice` desde el 03/09/2026: el precio es del módulo Productos y
+  // aquí solo se enseña. Tenerlo editable en dos sitios era la redundancia que
+  // Rodrigo pidió quitar («los productos con su valor pertenecen a Productos»).
   const [ficha, setFicha] = useState({
     description: producto.description ?? "",
     slug: producto.slug ?? "",
     taxRate: producto.taxRate ?? "",
-    salePrice: producto.salePrice ?? "",
     images: (producto.images ?? []).map((i) => i.url).join("\n"),
   });
   const [variantes, setVariantes] = useState([]);
@@ -202,7 +210,6 @@ function Editor({ producto, onCerrar, onGuardado }) {
           description: ficha.description,
           slug: ficha.slug,
           taxRate: ficha.taxRate,
-          salePrice: ficha.salePrice,
           // Una URL por línea: es la forma más rápida de pegar cuatro fotos
           // que ya están subidas, sin montar un gestor de ficheros.
           images: ficha.images.split("\n").map((u) => u.trim()).filter(Boolean),
@@ -250,14 +257,15 @@ function Editor({ producto, onCerrar, onGuardado }) {
               placeholder="Lo que se lee en la ficha de la tienda."
             />
           </label>
-          <label>
-            <span className="mb-1 block text-xs font-medium text-gray-500">Precio de venta (€)</span>
-            <input
-              className={campo}
-              value={ficha.salePrice}
-              onChange={(e) => setFicha((f) => ({ ...f, salePrice: e.target.value }))}
-            />
-          </label>
+          <div>
+            <span className="mb-1 block text-xs font-medium text-gray-500">Precio de venta</span>
+            <div className={`${campo} bg-gray-50 text-gray-700 tabular-nums`}>
+              {producto.salePrice ? eur(producto.salePrice) : <span className="text-amber-700">sin precio</span>}
+            </div>
+            <span className="mt-1 block text-[11px] text-gray-400">
+              Se cambia en <a className="underline" href="/productos">Productos</a>.
+            </span>
+          </div>
           <label>
             <span className="mb-1 block text-xs font-medium text-gray-500">IVA (%)</span>
             <input

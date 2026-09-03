@@ -28,14 +28,15 @@ actualiza el doc.
 | `projects.md` | `projects` | `clinica.md` | `clinica` |
 | `billing.md`, `pagos.md` | `billing` | `nutricion.md` | `nutricion` |
 | `team.md` | `team`, `team_avanzado` | `outreach.md` | `outreach` |
-| `inventory.md` | `inventory` | `support.md` | `support` |
+| `inventory.md` | `inventory` (cuelga de `productos_avanzado`) | `support.md` | `support` |
+| `productos.md` | `productos`, `productos_avanzado`, `orders` | | |
 | `documents.md` | `documents`, `documents_avanzado` | `analytics.md` | `analytics` |
 | `booking.md` | `booking` | `tienda.md` | `tienda` |
 | `fichaje.md` | `fichaje` | `configuracion.md` | — (siempre visible) |
 | `emails.md` | — (infra transversal) | `buzon.md` | — (todos, `/ayuda`) |
 | `banco.md` | `billing_banco` | | |
 
-Sin doc dedicado: `calendar`, `orders`, `provisioning` (`lib/provisioning/`).
+Sin doc dedicado: `calendar`, `provisioning` (`lib/provisioning/`).
 `docs/base/` es una foto técnica del 07/08/2026 (léela con su aviso);
 `docs/refactor-base-override/` está **superado** (18/08). **Registro** (backlog
 y resuelto): desde el 19/08/2026 vive en `master.tablero_documentos`, NO en el
@@ -220,11 +221,13 @@ comercial es `leads`), `referidos` (12/08), `cuestionarios` (10/08: pantalla de
 | `billing_banco` | Submódulo de Facturación: extracto real del banco (PSD2, solo lectura, GoCardless) y conciliación con cobros y gastos; del cobro se salta al movimiento | Requiere `billing` (clave con prefijo del padre, como los `_avanzado`; Rodrigo, 29/08/2026). Credenciales BYOK en Configuración → Conexiones; pantalla `/facturacion/banco`. |
 | `team` / `team_avanzado` | Plantilla, usuarios, roles / Desempeño, Dirección, Productividad, Incidencias, Bandeja, Ocupación, Actividad | Los submenús del avanzado exigen `requiresAll` (avanzado + el módulo que aporta el contenido). |
 | `documents` / `documents_avanzado` | Solo el contrato del centro / archivo completo (carpetas, buscador, cuota) | **Ya NO exige `citas`** (24/08/2026, Rodrigo): era una regla de venta, no del código. Sin Citas se sube, se ve y se descarga, pero no hay área privada donde firmarlo. Sigue exigiendo `clients`. |
-| `inventory` | Productos, entradas, movimientos; `Supplier` compartido con Gastos | — |
+| `productos` / `productos_avanzado` | **El módulo grande del que cuelgan Inventario, Pedidos y Tienda** (Rodrigo, 03/09/2026). Básico: el catálogo con su valor (`/productos`, alta/edición/precio). Avanzado: estadísticas de venta encima (`/api/productos/estadisticas`, solo dirección) y la puerta del menú a los tres | Una sola tabla `products` (la del rework de Inventario). Los endpoints `/api/inventory/products*` **exigen `productos`**; los tres hijos del menú exigen `requiresAll` (avanzado + su clave). **El producto y su precio son de Productos**: Inventario ya no los da de alta ni los edita, la Tienda enseña el precio y no lo toca. Reparto a quien tenía el trío: `scripts/migrate-productos.js`. |
+| `inventory` | El almacén del catálogo: entradas, ajustes, movimientos, mínimos; `Supplier` compartido con Gastos | Requiere `productos` + `productos_avanzado`. Sin alta de productos desde el 03/09/2026. |
 | `training` | Cursos, alumnos, matrículas, empresas, cuestionarios; TutorLMS por webhooks HMAC | Interruptor `formacionAbierta` (`lib/training/formacionAbierta.js`) esconde Empresas y Cuestionarios. |
 | `citas` | Reservas, portal SSO, widget público | Interruptor `autoConfirmPublicBookings`. |
-| `calendar`, `orders` | Calendario; pedidos | Sin doc. |
-| `tienda` | Ecommerce encima de Inventario: escaparate público (widget + shortcode `[crm_tienda]`), carrito y pago con Stripe | Requiere `inventory`+`orders`+`clients`. Los productos SON los de Inventario (solo añade campos de escaparate y variantes); el pedido nace en `draft` y **solo el webhook** confirma y descuenta stock. Pantalla `/tienda`. Reina: `laura_ubeda`. |
+| `calendar` | Calendario | Sin doc. |
+| `orders` | Pedidos de cliente con líneas y estados; sus líneas son productos del catálogo | Requiere `clients` + `billing` + `productos_avanzado`. Desde el 03/09/2026 sus tablas las crea `migrate-orders` (antes solo un script de `_hechos/`). Doc en `productos.md`. |
+| `tienda` | Ecommerce encima del catálogo: escaparate público (widget + shortcode `[crm_tienda]`), carrito y pago con Stripe | Requiere `inventory`+`orders`+`clients`+`productos`+`productos_avanzado`. Los productos SON los del catálogo (solo añade campos de escaparate y variantes; **el precio se cambia en Productos**); el pedido nace en `draft` y **solo el webhook** confirma y descuenta stock. Pantalla `/tienda`. Reina: `laura_ubeda`. |
 | `pacientes` / `clinica` | Fichas de paciente / sesiones (audio→Whisper→Claude), informes, coordinaciones (`/clinica/coordinaciones`), estadísticas del centro (`/clinica/estadisticas`, solo dirección) | El cliente es la familia que paga; el paciente, el hijo. Alta con pacientes en la misma transacción. |
 | `nutricion` | Recetario, alimentos, plantillas, Pautas (`/nutricion/asignados`) | Componentes en `modules/nutricion/`; `enable-module.js` siembra 497 alimentos. Interruptor `autoAsignarEnAlta`. |
 | `outreach` | Captación: empresas + scoring con IA | — |

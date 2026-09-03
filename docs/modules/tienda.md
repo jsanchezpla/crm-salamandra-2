@@ -2,18 +2,20 @@
 
 **moduleKey:** `tienda` · **Estado:** implementado el 25/08/2026 ·
 **Cliente de referencia:** `laura_ubeda` (merch de Laura Úbeda) · **Requiere:**
-`inventory` + `orders` + `clients`
+`inventory` + `orders` + `clients` y, desde el 03/09/2026, `productos` +
+`productos_avanzado` (cuelga de Productos en el menú; el producto y su precio
+son de ese módulo — `docs/modules/productos.md`)
 
 ## Mapa
 
 | Qué | Dónde |
 | --- | --- |
-| Pantalla del CRM (publicar, ficha, tallas) | `modules/tienda/TiendaModule.jsx` → `/tienda` |
+| Pantalla del CRM (publicar, ficha, tallas; **el precio se enseña, no se edita**: es de `/productos`) | `modules/tienda/TiendaModule.jsx` → `/tienda` |
 | Tienda pública (catálogo, ficha, carrito) | `app/widget/c/[tenantSlug]/tienda/page.jsx` (+ `gracias/`) |
 | API pública del catálogo | `app/api/public/c/[tenantSlug]/tienda/route.js` (`?slug=` para uno) |
 | API pública del pedido | `app/api/public/c/[tenantSlug]/tienda/pedido/route.js` |
 | Variantes (tallas/opciones) | `app/api/inventory/products/[id]/variantes/route.js` (GET/PUT) — **gateado por `inventory`, no por `tienda`** |
-| Campos de escaparate en el producto | `PUT /api/inventory/products/[id]` (parcial) vía `lib/tienda/camposEscaparate.js` |
+| Campos de escaparate en el producto | `PUT /api/inventory/products/[id]` (parcial) vía `lib/tienda/camposEscaparate.js` — gateado por `productos` desde el 03/09/2026 |
 | Qué se vende y a qué precio | `lib/tienda/catalogo.js` (`esVendible`, `precioDe`, `paraLaTienda`) |
 | Carrito → Pedido → Stripe | `lib/tienda/pedidoDesdeTienda.js` + `lib/payments/checkout.js` (`entityType: "order"`) |
 | Pago confirmado → stock | `lib/payments/entityHooks.js` (`pedidoPagado`) |
@@ -29,9 +31,11 @@ Frase de Rodrigo (24/08/2026): «que los productos cuando se pidan vayan a
 Pedidos y que estén alojados en Inventario, es el trío perfecto». El módulo no
 inventa un catálogo aparte:
 
-- Los productos **son los de Inventario** (`products`). La tienda solo añade
-  campos de escaparate encima: `slug`, `description`, `images`, `publicado`,
-  `tax_rate`, `sort_order`.
+- Los productos **son los del catálogo** (`products`; hasta el 03/09/2026 se
+  decía «los de Inventario», y desde entonces el catálogo y su precio son del
+  módulo Productos, del que Inventario y esta tienda cuelgan). La tienda solo
+  añade campos de escaparate encima: `slug`, `description`, `images`,
+  `publicado`, `tax_rate`, `sort_order`. **El precio no se toca aquí.**
 - Una compra crea un **pedido normal** (`orders`, origen `tienda`) con sus
   líneas. Se ve en `/pedidos` como cualquier otro.
 - El stock **es la suma de movimientos**, como desde el rework del 02/08/2026:

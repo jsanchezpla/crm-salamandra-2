@@ -6,7 +6,7 @@ import { camposEscaparateDe, estorbaParaPublicar } from "../../../../../lib/tien
 import { auditar, datosPeticion, resumen } from "../../../../../lib/utils/auditoria.js";
 
 export const GET = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
-  if (!hasModule("inventory")) return forbidden();
+  if (!hasModule("productos")) return forbidden();
 
   const { Product, StockEntry, Supplier } = tenantModels;
   const { id } = await params;
@@ -26,7 +26,7 @@ export const GET = withTenant(async (request, { params }, { tenantModels, hasMod
 });
 
 export const PUT = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
-  if (!hasModule("inventory")) return forbidden();
+  if (!hasModule("productos")) return forbidden();
 
   const { Product } = tenantModels;
   const { id } = await params;
@@ -93,7 +93,7 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
  * apunta aquí y borrarlo lo dejaría sin nombre.
  */
 export const DELETE = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
-  if (!hasModule("inventory")) return forbidden();
+  if (!hasModule("productos")) return forbidden();
 
   const { Product, StockMovement } = tenantModels;
   const { id } = await params;
