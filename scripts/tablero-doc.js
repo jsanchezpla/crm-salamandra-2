@@ -30,6 +30,14 @@
  *                                       [--base N] [--forzar] [--confirm]
  *   node scripts/tablero-doc.js historial <doc> [--ultimas 20]
  *   node scripts/tablero-doc.js restaurar <doc> <version> [--nota "…"] [--por quien] [--confirm]
+ *   node scripts/tablero-doc.js capturas [ficha] [--json]                 → qué capturas cuelgan de esa tarea (o de todas)
+ *   node scripts/tablero-doc.js captura <id>                              → los BYTES de una captura por stdout
+ *
+ * `capturas` y `captura` son del 03/09/2026 y existen para que el Claude que
+ * resuelve una tarea pueda VER la captura que le colgaron (desde local las
+ * envuelve `registro.mjs capturas <ficha>`, que las deja en una carpeta fuera
+ * de git). Hasta entonces, las capturas solo se veían en /admin/tablero con
+ * sesión, y una tarea copiada al chat llegaba sin ellas.
  *
  * Sin `--fichero`, `comprobar` y `publicar` leen el texto por stdin.
  * Códigos de salida: 0 bien (también el ensayo sin --confirm); 2 no se publica
@@ -43,7 +51,8 @@
 
 import { readFileSync } from "node:fs";
 import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
-import { DOCUMENTOS, comprobar } from "../lib/tablero/parser.js";
+import { DOCUMENTOS, ES_FICHA, comprobar, trocearTodo } from "../lib/tablero/parser.js";
+import { abrirFichero } from "../lib/tablero/tableroStorage.js";
 import {
   ultimaVersion,
   versionConcreta,
@@ -296,6 +305,96 @@ async function restaurar(models, nombre, version, opciones) {
   );
 }
 
+/* ── Capturas (03/09/2026) ───────────────────────────────────────────────── */
+
+/** ficha → título, mirando la última versión de los dos documentos. */
+async function titulosPorFicha(models) {
+  const mapa = new Map();
+  for (const nombre of DOCUMENTOS) {
+    const fila = await ultimaVersion(models, nombre);
+    if (!fila) continue;
+    for (const s of trocearTodo(fila.contenido).secciones) {
+      for (const t of s.tareas) if (t.id) mapa.set(t.id, { titulo: t.titulo, documento: nombre });
+    }
+  }
+  return mapa;
+}
+
+/**
+ * Qué capturas cuelgan de una tarea (o de todas las que tienen alguna).
+ *
+ * La RUTA en disco no se imprime ni con `--json`: para bajar una está
+ * `captura <id>`, que la busca por su id. Es la misma regla que en la API.
+ */
+async function capturasOrden(models, ficha, opciones) {
+  if (ficha && !ES_FICHA.test(ficha)) {
+    err(`«${ficha}» no tiene pinta de ficha (minúsculas y números, de 4 a 32).`);
+    process.exit(1);
+  }
+  const { TableroAdjunto } = getMasterModels();
+  const filas = await TableroAdjunto.findAll({
+    where: ficha ? { ficha } : {},
+    attributes: ["id", "ficha", "nombre", "bytes", "subidoPor", "createdAt"],
+    order: [
+      ["ficha", "ASC"],
+      ["createdAt", "ASC"],
+    ],
+  });
+  const titulos = await titulosPorFicha(models);
+  const lista = filas.map((f) => ({
+    id: f.id,
+    ficha: f.ficha,
+    nombre: f.nombre,
+    bytes: f.bytes,
+    subidoPor: f.subidoPor,
+    creadaEn: f.createdAt,
+    titulo: titulos.get(f.ficha)?.titulo ?? null,
+    documento: titulos.get(f.ficha)?.documento ?? null,
+  }));
+  if (opciones.json) {
+    out(JSON.stringify(lista));
+    return;
+  }
+  if (!lista.length) {
+    out(ficha ? `La tarea ${ficha} no tiene capturas.` : "Ninguna tarea tiene capturas.");
+    return;
+  }
+  let ultima = null;
+  for (const c of lista) {
+    if (c.ficha !== ultima) {
+      out(`${c.ficha} · ${c.titulo ?? "(tarea que ya no está en el Registro)"}${c.documento ? ` · ${c.documento}` : ""}`);
+      ultima = c.ficha;
+    }
+    out(`    ${c.id}  ${c.nombre}  ${Math.round(c.bytes / 1024)} KB  ${fecha(c.creadaEn)}${c.subidoPor ? `  ${c.subidoPor}` : ""}`);
+  }
+}
+
+/** Los bytes de una captura por stdout, tal cual. Nada más se imprime por ahí. */
+async function capturaOrden(id) {
+  if (!/^[0-9a-f-]{36}$/i.test(String(id ?? ""))) {
+    err("Falta el id de la captura: captura <id> (sale de `capturas <ficha>`).");
+    process.exit(1);
+  }
+  const { TableroAdjunto } = getMasterModels();
+  const fila = await TableroAdjunto.findByPk(id);
+  if (!fila) {
+    err(`No hay ninguna captura con id ${id}.`);
+    process.exit(1);
+  }
+  let abierto;
+  try {
+    abierto = await abrirFichero(fila.ruta);
+  } catch (e) {
+    err(e.code === "ENOENT" ? `La captura ${id} ya no está en disco.` : e.message);
+    process.exit(1);
+  }
+  await new Promise((resolver, rechazar) => {
+    abierto.stream.on("error", rechazar);
+    abierto.stream.on("end", resolver);
+    abierto.stream.pipe(process.stdout, { end: false });
+  });
+}
+
 /* ── Main ────────────────────────────────────────────────────────────────── */
 
 async function main() {
@@ -334,9 +433,15 @@ async function main() {
       case "restaurar":
         await restaurar(models, nombre, tercero, opciones);
         break;
+      case "capturas":
+        await capturasOrden(models, nombre, opciones);
+        break;
+      case "captura":
+        await capturaOrden(nombre);
+        break;
       default:
         err(
-          "Órdenes: estado | leer <doc> | comprobar <doc> | publicar <doc> | historial <doc> | restaurar <doc> <version>"
+          "Órdenes: estado | leer <doc> | comprobar <doc> | publicar <doc> | historial <doc> | restaurar <doc> <version> | capturas [ficha] | captura <id>"
         );
         process.exit(1);
     }

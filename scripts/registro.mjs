@@ -14,6 +14,17 @@
  *   node scripts/registro.mjs historial backlog          → las últimas 20 versiones, con quién y por qué
  *   node scripts/registro.mjs restaurar backlog 12 --confirm
  *                                                        → la v12 vuelve a ser la actual (como versión nueva)
+ *   node scripts/registro.mjs capturas                   → qué tareas tienen capturas colgadas
+ *   node scripts/registro.mjs capturas k7m2p9            → baja las de esa tarea a docs/registro/capturas/k7m2p9/
+ *
+ * ── LAS CAPTURAS (03/09/2026) ─────────────────────────────────────────────
+ * Una tarea del Registro puede llevar hasta 3 capturas colgadas de su ficha
+ * (y desde hoy las del Buzón viajan con la tarea al enviarla). El botón
+ * «Copiar» del tablero no puede meterlas en el portapapeles: lo que mete es
+ * la orden de arriba, y esta orden las baja a una carpeta que está fuera de
+ * git (`docs/registro/` entera lo está) para abrirlas como cualquier imagen.
+ * ⚠️ Pueden llevar datos de un paciente: se miran y se borran, no se pegan en
+ * ningún chat ni se suben a ningún sitio (§4.7 de como-apuntar-en-el-tablero).
  *
  *   --local     contra la base de local (node --env-file=.env.local), no contra producción
  *   --forzar    levanta los dos frenos que no son de formato (base vieja, encogimiento)
@@ -49,7 +60,7 @@ import { userInfo } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { DOCUMENTOS, comprobar } from "../lib/tablero/parser.js";
+import { DOCUMENTOS, ES_FICHA, comprobar } from "../lib/tablero/parser.js";
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CARPETA = path.join(RAIZ, "docs", "registro");
@@ -251,6 +262,56 @@ function reenviar(args) {
   process.exit(volcar(ejecutar(args)));
 }
 
+/** Un nombre de fichero que no se salga de la carpeta ni pise a otro. */
+function nombreSeguro(indice, nombre) {
+  const limpio = String(nombre ?? "captura")
+    .replace(/[\\/:*?"<>|\x00-\x1f]/g, "_")
+    .replace(/\.{2,}/g, ".")
+    .trim()
+    .slice(0, 120);
+  return `${indice}-${limpio || "captura"}`;
+}
+
+/**
+ * Sin ficha: la lista. Con ficha: baja cada captura por su id (bytes tal cual
+ * por stdout de `tablero-doc.js captura`) y la deja en
+ * `docs/registro/capturas/<ficha>/<n>-<nombre>`.
+ */
+function capturas() {
+  if (!nombre) {
+    reenviar(["capturas"]);
+    return;
+  }
+  if (!ES_FICHA.test(nombre)) {
+    err(`«${nombre}» no es una ficha (minúsculas y números, de 4 a 32). Está en el texto que copia el tablero.`);
+    process.exit(1);
+  }
+  const r = ejecutar(["capturas", nombre, "--json"]);
+  if (r.codigo !== 0) {
+    volcar(r);
+    process.exit(r.codigo);
+  }
+  const lista = JSON.parse(r.stdout.toString("utf8"));
+  if (!lista.length) {
+    out(`La tarea ${nombre} no tiene capturas en ${local ? "local" : "producción"}.`);
+    return;
+  }
+  const carpeta = path.join(CARPETA, "capturas", nombre);
+  mkdirSync(carpeta, { recursive: true });
+  out(`${nombre} · ${lista[0].titulo ?? "(tarea que ya no está en el Registro)"}`);
+  lista.forEach((c, i) => {
+    const bytes = ejecutar(["captura", c.id]);
+    if (bytes.codigo !== 0) {
+      volcar(bytes);
+      process.exit(bytes.codigo);
+    }
+    const destino = path.join(carpeta, nombreSeguro(i + 1, c.nombre));
+    writeFileSync(destino, bytes.stdout);
+    out(`  ${path.relative(RAIZ, destino)}  (${Math.round(bytes.stdout.length / 1024)} KB)`);
+  });
+  out("Están fuera de git. Míralas y bórralas; no se pegan en ningún chat.");
+}
+
 switch (orden) {
   case "bajar":
     bajar();
@@ -279,9 +340,12 @@ switch (orden) {
     if (codigo === 0 && opciones.confirm) apuntarVersiones(estadoRemoto());
     process.exit(codigo);
   }
+  case "capturas":
+    capturas();
+    break;
   default:
     err(
-      'Órdenes: bajar [doc] | subir <doc> --nota "…" [--confirm] [--forzar] | estado | historial <doc> | restaurar <doc> <version> [--confirm]   (añade --local para la base de local)'
+      'Órdenes: bajar [doc] | subir <doc> --nota "…" [--confirm] [--forzar] | estado | historial <doc> | restaurar <doc> <version> [--confirm] | capturas [ficha]   (añade --local para la base de local)'
     );
     process.exit(1);
 }

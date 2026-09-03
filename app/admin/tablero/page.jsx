@@ -58,6 +58,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { anchoPanel } from "@/components/admin/anchoPanel.js";
 import { seccionDeHoy } from "@/lib/tablero/parser.js";
 import { ordenarTareas } from "@/lib/tablero/estado.js";
+import { tareaComoTexto } from "@/lib/tablero/copiar.js";
 import { tonoDe } from "@/components/admin/tableroTonos.js";
 import {
   Capturas,
@@ -554,27 +555,13 @@ export default function TableroPage() {
   }
 
   /**
-   * La tarea entera en texto, lista para pegar.
-   *
-   * Sale de aquí y no de la pantalla porque la pantalla la parte en trozos —el
-   * título arriba, el cliente en una etiqueta, el cuerpo dentro del desplegable,
-   * la solución más abajo— y seleccionarlos a mano es justo lo que este botón
-   * viene a evitar. El orden es el de siempre: qué pasa, de quién es, el detalle,
-   * y lo que ya hemos pensado.
-   *
-   * Sin markdown: se pega en un chat, no en un fichero.
+   * La tarea entera en texto, lista para pegar: `tareaComoTexto` en
+   * `lib/tablero/copiar.js` (desde el 03/09/2026 dice también qué capturas
+   * lleva y cómo se bajan, y por eso vive en /lib con su prueba).
    */
-  function comoTexto(t) {
-    const trozos = [t.titulo];
-    if (t.quien) trozos.push(`Cliente: ${t.quien}`);
-    if (t.cuerpo?.trim()) trozos.push("", t.cuerpo.trim());
-    if (t.solucion?.trim()) trozos.push("", "Solución propuesta:", t.solucion.trim());
-    return trozos.join("\n");
-  }
-
   async function copiar(t) {
     try {
-      await navigator.clipboard.writeText(comoTexto(t));
+      await navigator.clipboard.writeText(tareaComoTexto(t));
       setCopiada(t.clave);
       setFallo(null);
       // Se apaga sola: un «copiado» que se queda fijo deja de significar nada

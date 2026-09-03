@@ -380,6 +380,28 @@ prueba de lo que falla. Las tres consecuencias, que no son negociables:
   gracia, por si la tarea se restaura de una versión anterior);
 - no se pegan en un chat ni se sacan por pantalla en un volcado de un script.
 
+**Las del Buzón viajan con la tarea (03/09/2026).** «Enviar al registro» copia
+las capturas del aviso —las del alta y las del hilo, por orden de llegada, hasta
+las 3 que admite una tarea— a `tablero_adjuntos`, colgadas de la ficha nueva, y
+el cuerpo lo dice en una línea `**Capturas.**` con sus nombres. Se COPIAN, no se
+enlazan: cada lado tiene su carpeta y su poda con su reloj. Si sobran, la línea
+dice cuántas se quedaron en `/admin/buzon`.
+
+**Cómo las ve Claude.** El botón «Copiar» de la tarjeta no puede meterlas en el
+portapapeles, así que mete el indicador: cuántas son, cómo se llaman y la orden
+que las baja por la ficha:
+
+```bash
+node scripts/registro.mjs capturas k7m2p9
+```
+
+Las deja en `docs/registro/capturas/k7m2p9/` (toda `docs/registro/` está fuera
+de git) y desde ahí se abren como cualquier imagen. Sin ficha, `capturas` a
+secas lista qué tareas tienen alguna. Por dentro es `tablero-doc.js capturas`
+(la lista, sin rutas de disco) y `tablero-doc.js captura <id>` (los bytes), por
+el mismo ssh de siempre. **Se miran y se borran**: la regla de arriba sigue
+valiendo, bajarlas al portátil no es pegarlas en un chat.
+
 ---
 
 ## 5. Dónde va cada cosa en `resuelto`

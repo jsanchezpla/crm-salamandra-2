@@ -42,7 +42,7 @@ Lo que hay que mirar de cada uno:
 | --- | --- |
 | `pantalla` | La ruta desde la que escribió. La mitad de las veces dice por qué fichero empezar. |
 | `hilo` | Puede que ya se le contestara. Si el hilo dice que se arregló, no lo apuntes: compruébalo y, si es cierto, ya está cerrado. |
-| `capturas` | **No puedes verlas.** Si el aviso no se entiende sin ella, eso es lo que se escribe, no lo que te imaginas. |
+| `capturas` | **Desde aquí no las ves**: el triaje lista nombres, no bytes. Si el aviso no se entiende sin ella, eso es lo que se escribe, no lo que te imaginas. Desde el 03/09/2026 el botón «Enviar al registro» de `/admin/buzon` las copia a la tarea, y ya en el Registro se bajan con `node scripts/registro.mjs capturas <ficha>` (`/resolve` lo hace). Si apuntas la tarea a mano desde aquí, dilo en el cuerpo: «captura en el Buzón, AV-####». |
 | `leBloquea` | Lo marca el cliente y no es una opinión: manda en la prioridad. |
 | `slug` | De quién es. El mismo fallo contado por tres clientes es otra cosa que contado por uno. |
 | `estado` | Un aviso ya `enviado` al Registro tiene (o tuvo) su tarea: no se apunta otra vez salvo que el cliente diga que sigue pasando. Desde el 02/09/2026 no hay «resuelto» en el Buzón: acaba en «enviado». |

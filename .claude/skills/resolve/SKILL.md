@@ -138,6 +138,22 @@ El cuerpo entero, y sobre todo `*Se comprueba*` (cómo se sabe si sigue pasando)
 `*Dónde*` (por dónde empezar). Lee el `## Mapa` del doc del módulo que toca
 (`docs/modules/`), que es la regla de `CLAUDE.md`.
 
+**Si la tarea lleva capturas, míralas ANTES de decidir nada.** Lo dice el
+propio texto: una línea `**Capturas.**` en el cuerpo (las que vinieron del
+Buzón) o, si te la han pegado desde el botón «Copiar» del tablero, una cola
+«Esta tarea lleva N capturas de pantalla en el Registro». Se bajan por la ficha
+—la `<!--id:…-->` del bloque, o la que trae el texto pegado—:
+
+```bash
+node scripts/registro.mjs capturas k7m2p9
+```
+
+Quedan en `docs/registro/capturas/k7m2p9/`, fuera de git; ábrelas con `Read`
+como cualquier imagen. Media captura explica más que el texto entero, y una
+tarea resuelta sin mirarla es la forma más rápida de arreglar otra cosa. ⚠️
+Pueden llevar datos de un paciente: se miran y se borran, no se pegan en el
+chat ni se describen con nombres.
+
 ### 2. Reproducirlo EN PRODUCCIÓN
 `docs/como-apuntar-en-el-tablero.md` §6: local y el VPS divergen mucho. Ejecuta
 lo que diga `*Se comprueba*` contra producción, en **solo lectura**:

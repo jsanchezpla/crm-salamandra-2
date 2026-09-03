@@ -488,7 +488,11 @@ function Detalle({ avisoId, asignables, estados, prioridades, onCerrar }) {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "No se pudo enviar al Registro");
       setAviso(json.data.aviso);
-      setFallo(null);
+      // La tarea ya está publicada; lo único que puede haber salido a medias es
+      // la copia de las capturas (03/09/2026), y eso se dice en el mismo sitio
+      // que un fallo, porque hay que hacer algo: colgarlas a mano.
+      const avisos = Array.isArray(json.data.avisos) ? json.data.avisos : [];
+      setFallo(avisos.length ? avisos.join(" · ") : null);
     } catch (e) {
       setFallo(e.message);
     } finally {

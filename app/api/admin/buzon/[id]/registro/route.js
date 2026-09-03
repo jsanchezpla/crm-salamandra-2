@@ -13,6 +13,13 @@
  * Orden a propósito: PRIMERO se publica la versión y DESPUÉS se marca el
  * aviso. Si la publicación falla, el aviso se queda como estaba y el botón se
  * puede volver a pulsar; al revés quedaría un «enviado» sin tarea.
+ *
+ * Desde el 03/09/2026 las CAPTURAS del aviso viajan con la tarea: entre
+ * publicar y marcar se copian a `tablero_adjuntos` colgadas de la ficha nueva
+ * (`lib/buzon/capturasAlRegistro.js`). Si esa copia falla, la tarea ya está
+ * publicada y el aviso se marca igual: se contesta `ok` con el fallo en
+ * `avisos`, porque una tarea sin su captura se arregla colgándola a mano y un
+ * botón que rebota con la tarea ya publicada se vuelve a pulsar y da 409.
  */
 import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { ok, error, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
@@ -27,6 +34,7 @@ import {
 } from "../../../../../../lib/buzon/buzonStore.js";
 import { candadoBuzon } from "../../../../../../lib/buzon/candadoBackoffice.js";
 import { tareaDesdeAviso, yaEstaEnElRegistro } from "../../../../../../lib/buzon/alRegistro.js";
+import { copiarCapturasAlRegistro } from "../../../../../../lib/buzon/capturasAlRegistro.js";
 import {
   prepararPublicacion,
   publicarVersion,
@@ -83,14 +91,17 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     const plan = prepararPublicacion({ nombre: "backlog", contenido: texto, actual, base: actual.version });
     if (plan.errores.length) return error(plan.errores.join(" · "), 422);
 
+    const por = await quienPublica(ctx);
     const { fila } = await publicarVersion(models, {
       nombre: "backlog",
       contenido: plan.contenido,
       nota: `${ref} enviado desde el Buzón`,
-      por: await quienPublica(ctx),
+      por,
       version: plan.versionNueva,
       tareas: plan.tareasDespues,
     });
+
+    const capturas = await copiarCapturasAlRegistro({ aviso, ficha, documento: "backlog", subidoPor: por });
 
     const antes = { estado: aviso.estado };
     await marcarEnviadoAlRegistro(aviso, { ficha });
@@ -103,7 +114,16 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       entity: "BuzonAviso",
       entityId: aviso.id,
       before: antes,
-      after: { estado: "enviado", ref, tenantSlug: aviso.tenantSlug, ficha, version: fila.version },
+      after: {
+        estado: "enviado",
+        ref,
+        tenantSlug: aviso.tenantSlug,
+        ficha,
+        version: fila.version,
+        capturasCopiadas: capturas.copiadas.length,
+        capturasEnElBuzon: capturas.quedan,
+        capturasFallo: Boolean(capturas.error),
+      },
       ip,
     });
 
@@ -112,7 +132,8 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       version: fila.version,
       seccion: tarea.seccion,
       titulo: tarea.titulo,
-      avisos: plan.avisos ?? [],
+      capturas: { copiadas: capturas.copiadas, quedan: capturas.quedan },
+      avisos: [...(plan.avisos ?? []), ...(capturas.error ? [capturas.error] : [])],
       aviso: serializarAviso(aviso, { para: "salamandra" }),
     });
   } catch (err) {

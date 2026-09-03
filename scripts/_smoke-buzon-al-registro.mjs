@@ -22,6 +22,8 @@ import {
   tituloDeAviso,
   tareaDesdeAviso,
   yaEstaEnElRegistro,
+  capturasQueViajan,
+  lineaDeCapturas,
 } from "../lib/buzon/alRegistro.js";
 import {
   ESTADOS,
@@ -135,6 +137,57 @@ describe("tareaDesdeAviso", () => {
     assert.equal(troceado.secciones.flatMap((s) => s.tareas).length, 1);
     assert.equal(troceado.secciones.length, SECCIONES_BACKLOG.length);
     assert.equal(troceado.huerfanas.length, 0);
+  });
+});
+
+describe("las capturas viajan con la tarea (03/09/2026)", () => {
+  const adj = (nombre, createdAt, extra = {}) => ({
+    id: `id-${nombre}`,
+    nombre,
+    ruta: `buzon/aumenta/av-1/${nombre}`,
+    bytes: 1000,
+    createdAt,
+    ...extra,
+  });
+
+  it("sin capturas no se escribe ninguna línea de capturas", () => {
+    assert.deepEqual(capturasQueViajan(aviso()), { viajan: [], quedan: 0 });
+    assert.equal(lineaDeCapturas({ viajan: [], quedan: 0 }), null);
+    assert.doesNotMatch(tareaDesdeAviso(aviso(), { hoy: HOY }).cuerpo, /Capturas/);
+  });
+
+  it("van por orden de llegada, también las del hilo, y como mucho tres; el resto se dice", () => {
+    const a = aviso({
+      adjuntos: [
+        adj("tres.png", "2026-09-02T09:20:00.000Z", { mensajeId: "m1" }),
+        adj("uno.png", "2026-09-02T09:15:00.000Z"),
+        adj("cuatro.jpg", "2026-09-02T10:00:00.000Z", { mensajeId: "m2" }),
+        adj("dos.png", "2026-09-02T09:16:00.000Z"),
+        { id: "rota", nombre: "sin-ruta.png", ruta: null, createdAt: "2026-09-01T00:00:00.000Z" },
+      ],
+    });
+    const { viajan, quedan } = capturasQueViajan(a);
+    assert.deepEqual(
+      viajan.map((x) => x.nombre),
+      ["uno.png", "dos.png", "tres.png"]
+    );
+    assert.equal(quedan, 1);
+    const t = tareaDesdeAviso(a, { hoy: HOY });
+    assert.match(t.cuerpo, /\n\*\*Capturas\.\*\* Lleva 3 capturas del Buzón \(«uno\.png», «dos\.png», «tres\.png»\), colgadas de esta tarea en el Registro/);
+    assert.match(t.cuerpo, /registro\.mjs capturas <ficha>/);
+    assert.match(t.cuerpo, /Otra captura se queda en el Buzón porque una tarea admite 3: se ven en \/admin\/buzon\./);
+    // La línea va entre «De dónde sale» y las tres de rigor, y el bloque sigue
+    // siendo UNA tarea para el troceador.
+    assert.ok(t.cuerpo.indexOf("**De dónde sale.**") < t.cuerpo.indexOf("**Capturas.**"));
+    assert.ok(t.cuerpo.indexOf("**Capturas.**") < t.cuerpo.indexOf("*Se comprueba*"));
+    const { texto } = crearTarea(BACKLOG, t);
+    assert.equal(trocearTodo(texto).secciones.flatMap((s) => s.tareas).length, 1);
+  });
+
+  it("con una sola lo dice en singular, y un nombre con salto de línea se aplana", () => {
+    const t = tareaDesdeAviso(aviso({ adjuntos: [adj("foto\ndel móvil.jpg", "2026-09-02T09:15:00.000Z")] }), { hoy: HOY });
+    assert.match(t.cuerpo, /\*\*Capturas\.\*\* Lleva 1 captura del Buzón \(«foto del móvil\.jpg»\)/);
+    assert.doesNotMatch(t.cuerpo, /se queda/);
   });
 });
 
