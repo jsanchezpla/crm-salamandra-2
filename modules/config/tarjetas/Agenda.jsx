@@ -607,12 +607,12 @@ export function IncidenciaPorFaltaCard({ responsables = [], readOnly, onGuardar 
 
   return (
     <div className="bg-white border border-neutral-200 rounded-xl p-5">
-      <div className="text-sm font-semibold text-neutral-800">Incidencia automática por falta</div>
+      <div className="text-sm font-semibold text-neutral-800">Las faltas, a la pestaña Faltas de Incidencias</div>
       <p className="text-xs text-neutral-400 mt-0.5 max-w-lg">
-        Cuando alguien marca una falta en la agenda —justificada o no— se abre una incidencia
-        (Administrativa · Citas) y se le manda a estas personas. Las dos faltas dejan trabajo
-        pendiente: una hay que recuperarla y la otra, reclamarla. Sin nadie elegido no se abre
-        ninguna.
+        Cuando alguien marca una falta en la agenda —justificada o no— se abre sola una falta en
+        Equipo → Incidencias, en su pestaña «Faltas» (aparte de las incidencias de siempre), y se
+        le manda a estas personas para que ofrezcan huecos a la familia y apunten si acepta o
+        rechaza. Sin nadie elegido no se abre ninguna.
       </p>
 
       {elegidos.length > 0 && (

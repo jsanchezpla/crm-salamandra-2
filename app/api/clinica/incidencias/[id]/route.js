@@ -4,6 +4,7 @@ import { resolveCurrentTeamMemberId } from "../../../../../lib/team/currentTeamM
 import { avisarComentarioIncidencia } from "../../../../../lib/clinica/avisoComentarioIncidencia.js";
 import { incidenciaFueraDeAlcance, puedeBorrarIncidencia, puedeVerIncidencia } from "../../../../../lib/clinica/alcanceIncidencias.js";
 import { logClinicaAudit, auditSummary } from "../../../../../lib/clinica/audit.js";
+import { fundirFalta, cierrePorRespuesta } from "../../../../../lib/clinica/faltas.js";
 import {
   serializeIncidencia,
   isValidCategory,
@@ -108,6 +109,28 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
   // cerrar: se apunta cuando se hace, que es cuando se recuerda.
   if (body.resolution !== undefined) {
     changes.resolution = body.resolution ? String(body.resolution).slice(0, 5000) : null;
+  }
+
+  /*
+   * LA FALTA (03/09/2026, AV-0038): huecos ofrecidos, respuesta de la familia
+   * y fecha de recuperación. Aceptar o rechazar la CIERRA («y se elimine esa
+   * falta pendiente»); volver a «sin respuesta» la reabre. Solo se toca si
+   * viene, y solo en una incidencia que sea falta (`fundirFalta` lo exige).
+   */
+  if (body.falta !== undefined) {
+    const r = fundirFalta(row.falta, body.falta);
+    if (!r.ok) return error(r.error);
+    changes.falta = r.falta;
+    const cierre = cierrePorRespuesta(r.falta);
+    if (cierre) {
+      changes.status = cierre.status;
+      changes.verification = cierre.verification;
+      changes.resolvedAt = new Date();
+    } else if (row.status === "resolved") {
+      changes.status = "pending";
+      changes.verification = null;
+      changes.resolvedAt = null;
+    }
   }
 
   // VERIFICACIÓN → arrastra el estado. Es el control que ve el usuario.

@@ -53,6 +53,16 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   const where = {};
   const status = sp.get("status");
   if (status && isValidStatus(status)) where.status = status;
+  /*
+   * ── LA PESTAÑA «FALTAS» (03/09/2026, AV-0038 de Aumenta) ─────────────────
+   * Las incidencias que abre sola la agenda al marcar una falta llevan
+   * `falta` (lib/clinica/faltas.js) y viven en su pestaña: `?faltas=1` las
+   * devuelve SOLO a ellas, y sin el parámetro las de siempre las excluyen.
+   * Dos listas, no una con etiqueta: es lo que pidió Olga («un apartado
+   * distinto de incidencias por las faltas»).
+   */
+  const soloFaltas = sp.get("faltas") === "1";
+  where.falta = soloFaltas ? { [Op.ne]: null } : null;
   const category = sp.get("category");
   if (category && isValidCategory(category)) where.category = category;
   const patientId = sp.get("patientId");
@@ -145,12 +155,21 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     limit: 500,
   });
 
-  // Conteo por estado (para las pestañas), sin filtro de estado.
+  // Conteo por estado (para las pestañas), sin filtro de estado ni de pestaña:
+  // las de siempre se cuentan por estado y las faltas aparte (las abiertas,
+  // que son las que hay que gestionar).
   const baseWhere = { ...where };
   delete baseWhere.status;
-  const all = await Incidencia.findAll({ where: baseWhere, attributes: ["status"], raw: true });
-  const counts = { pending: 0, in_progress: 0, resolved: 0 };
-  for (const r of all) counts[r.status] = (counts[r.status] ?? 0) + 1;
+  delete baseWhere.falta;
+  const all = await Incidencia.findAll({ where: baseWhere, attributes: ["status", "falta"], raw: true });
+  const counts = { pending: 0, in_progress: 0, resolved: 0, faltas: 0 };
+  for (const r of all) {
+    if (r.falta) {
+      if (r.status !== "resolved") counts.faltas += 1;
+    } else {
+      counts[r.status] = (counts[r.status] ?? 0) + 1;
+    }
+  }
 
   // Opciones para los selectores del formulario (una sola llamada).
   const therapists = (

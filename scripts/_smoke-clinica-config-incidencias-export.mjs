@@ -486,6 +486,9 @@ describe("serializeIncidencia: la forma exacta que consume el frontend", () => {
       verificationLabel: "Parcial",
       verificationLevel: "amber",
       resolvedAt: null,
+      // La falta (03/09/2026, AV-0038): null en las incidencias de siempre.
+      falta: null,
+      faltaResumen: "",
       createdAt: "2026-08-04T09:00:00.000Z",
       updatedAt: "2026-08-04T10:30:00.000Z",
     });

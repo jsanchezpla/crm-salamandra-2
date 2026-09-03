@@ -104,6 +104,13 @@ export function defineIncidencia(sequelize) {
         type: DataTypes.DATE,
         allowNull: true,
       },
+      // La FALTA dentro de la incidencia (03/09/2026, AV-0038). NULL = una
+      // incidencia de las de siempre; con objeto, es una falta y vive en la
+      // pestaña «Faltas». Forma y reglas en lib/clinica/faltas.js.
+      falta: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+      },
     },
     {
       tableName: "incidencias",

@@ -297,6 +297,13 @@ export const CORE = [
   // Decide por existencia de `calendar_tasks`; los responsables, además, por
   // `team_members`. Trae el backfill del responsable único que ya había.
   "migrate-calendar-categorias",
+
+  // La falta dentro de la incidencia (03/09/2026, AV-0038): `incidencias.falta`
+  // JSONB. CORE por el mismo criterio: el modelo Incidencia declara la columna
+  // para TODOS los tenants y Sequelize la pide en cada SELECT. Decide por
+  // existencia de `incidencias` (fotos doradas incluidas); reconoce como faltas
+  // las automáticas de antes por su título. Idempotente y aditiva.
+  "migrate-incidencias-faltas",
 ];
 
 export const MODULES = {

@@ -5,6 +5,7 @@ import Select from "@/components/ui/Select.jsx";
 import SelectorPaciente from "@/components/citas/SelectorPaciente.jsx";
 import TextareaCrece from "@/components/ui/TextareaCrece.jsx";
 import { INCIDENCIA_CATEGORIES, INCIDENCIA_PRIORITY, INCIDENCIA_VERIFICATIONS, exigeSubcategoria } from "@/lib/clinica/incidencias.js";
+import { RESPUESTAS_FALTA } from "@/lib/clinica/faltas.js";
 
 /**
  * Un solo control para el resultado: la VERIFICACIÓN, que arrastra el estado
@@ -139,6 +140,9 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
   const [resolution, setResolution] = useState(inc?.resolution ?? "");
   const [verification, setVerification] = useState(inc?.verification ?? "");
   const [reportedById, setReportedById] = useState(inc?.reportedById ?? "");
+  // La FALTA (03/09/2026, AV-0038): solo la llevan las incidencias que abre
+  // sola la agenda. `null` = incidencia de las de siempre, sin ese bloque.
+  const [falta, setFalta] = useState(inc?.falta ?? null);
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
@@ -160,6 +164,7 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
     setResolution(d.resolution ?? "");
     setVerification(d.verification ?? "");
     setReportedById(d.reportedById ?? "");
+    setFalta(d.falta ?? null);
   };
   useEffect(() => {
     if (!inc?.id) return;
@@ -488,6 +493,91 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
                 className={`mt-1 ${inputCls} bg-white`} />
             </div>
           </div>
+
+          {/* ── La FALTA (03/09/2026, AV-0038 de Aumenta) ──────────────────
+              Solo en las incidencias que abre sola la agenda. Aquí se lleva su
+              ciclo: qué huecos se le ofrecieron a la familia, qué contestó y
+              cuándo recupera. Aceptar o rechazar cierra la incidencia. */}
+          {!isNew && falta && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-3 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-[10px] uppercase tracking-wider text-amber-800">
+                  Falta {falta.justificada ? "justificada" : "sin justificar"}
+                </div>
+                <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
+                  falta.respuesta === "aceptada" ? "bg-emerald-50 text-emerald-700" : falta.respuesta === "rechazada" ? "bg-neutral-100 text-neutral-500" : "bg-amber-100 text-amber-800"
+                }`}>
+                  {RESPUESTAS_FALTA[falta.respuesta]?.label ?? RESPUESTAS_FALTA.pendiente.label}
+                </span>
+              </div>
+              <div>
+                <label className="text-[10px] uppercase tracking-wider text-neutral-400">Huecos ofrecidos a la familia</label>
+                <TextareaCrece
+                  value={falta.huecosOfrecidos ?? ""}
+                  onChange={(e) => setFalta({ ...falta, huecosOfrecidos: e.target.value })}
+                  rows={2}
+                  className={`mt-1 ${inputCls}`}
+                  placeholder="Ej.: lunes 8 a las 17:00, miércoles 10 a las 18:00, viernes 12 a las 16:30"
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] uppercase tracking-wider text-neutral-400">Respuesta de la familia</label>
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    {Object.entries(RESPUESTAS_FALTA).map(([k, v]) => (
+                      <button
+                        key={k}
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setFalta({ ...falta, respuesta: k })}
+                        className={`text-[11px] font-medium px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 ${
+                          falta.respuesta === k
+                            ? k === "aceptada" ? "bg-emerald-500 text-white" : k === "rechazada" ? "bg-neutral-500 text-white" : "bg-amber-500 text-white"
+                            : "bg-white border border-neutral-200 text-neutral-600 hover:border-neutral-300"
+                        }`}
+                      >
+                        {v.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase tracking-wider text-neutral-400">Cita de recuperación</label>
+                  <input
+                    type="date"
+                    value={falta.fechaRecuperacion ?? ""}
+                    onChange={(e) => setFalta({ ...falta, fechaRecuperacion: e.target.value || null })}
+                    className={`mt-1 ${inputCls}`}
+                    disabled={falta.respuesta === "rechazada"}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] uppercase tracking-wider text-neutral-400">Nota</label>
+                <TextareaCrece
+                  value={falta.nota ?? ""}
+                  onChange={(e) => setFalta({ ...falta, nota: e.target.value })}
+                  rows={2}
+                  className={`mt-1 ${inputCls}`}
+                  placeholder="Lo que haya que recordar de esta falta…"
+                />
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] text-neutral-400">
+                  Aceptada o rechazada cierran la falta; «Sin respuesta» la deja pendiente.
+                </p>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => patch({ falta: { huecosOfrecidos: falta.huecosOfrecidos ?? "", respuesta: falta.respuesta, fechaRecuperacion: falta.fechaRecuperacion ?? null, nota: falta.nota ?? "" } })}
+                  className="text-xs font-medium px-3 py-1.5 rounded-lg text-white disabled:opacity-50"
+                  style={{ background: "var(--color-primary, #1B3A2D)" }}
+                >
+                  Guardar falta
+                </button>
+              </div>
+            </div>
+          )}
 
           <div>
             {/* La columna existía desde el principio; el formulario no la

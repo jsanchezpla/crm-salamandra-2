@@ -13,6 +13,10 @@ const STATUS_TABS = [
   { key: "pending", label: "Pendientes" },
   { key: "in_progress", label: "En proceso" },
   { key: "resolved", label: "Resueltas" },
+  // Las faltas van aparte (03/09/2026, AV-0038 de Aumenta): las que abre sola
+  // la agenda al marcar una falta, con su ciclo (huecos, respuesta, recuperación).
+  // El número es el de las que siguen sin cerrar.
+  { key: "faltas", label: "Faltas" },
 ];
 const STATUS_PILL = {
   amber: "bg-amber-50 text-amber-700",
@@ -72,7 +76,8 @@ export default function IncidenciasPage() {
     if (!silencioso) setLoading(true);
     setErrorMsg(null);
     const params = new URLSearchParams();
-    if (statusTab) params.set("status", statusTab);
+    if (statusTab === "faltas") params.set("faltas", "1");
+    else if (statusTab) params.set("status", statusTab);
     if (category) params.set("category", category);
     if (registroId) params.set("reportedById", registroId);
     // `assignedToId` filtra por la tabla de responsables, así que encuentra
@@ -126,7 +131,8 @@ export default function IncidenciasPage() {
   const filtrandoPorResponsable = soloLasMias
     ? false
     : responsableId === null ? Boolean(data?.yoSoy) : Boolean(responsableId);
-  const counts = data?.counts ?? { pending: 0, in_progress: 0, resolved: 0 };
+  const counts = data?.counts ?? { pending: 0, in_progress: 0, resolved: 0, faltas: 0 };
+  // Las faltas no suman en «Todas»: son otra lista (ver STATUS_TABS).
   const totalCount = counts.pending + counts.in_progress + counts.resolved;
   const tabCount = (k) => (k === "" ? totalCount : counts[k] ?? 0);
 
@@ -221,7 +227,13 @@ export default function IncidenciasPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-sm text-[var(--ink-900)] font-medium truncate">{r.title}</span>
-                      <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-neutral-100 text-neutral-500">{r.categoryLabel}{r.subcategory ? ` · ${r.subcategory}` : ""}</span>
+                      {r.falta ? (
+                        <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded ${r.falta.respuesta === "aceptada" ? "bg-emerald-50 text-emerald-700" : r.falta.respuesta === "rechazada" ? "bg-neutral-100 text-neutral-500" : "bg-amber-50 text-amber-800"}`}>
+                          {r.faltaResumen}
+                        </span>
+                      ) : (
+                        <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-neutral-100 text-neutral-500">{r.categoryLabel}{r.subcategory ? ` · ${r.subcategory}` : ""}</span>
+                      )}
                     </div>
                     <div className="text-[11px] text-neutral-400 mt-0.5 truncate">
                       {fmt(r.date)}

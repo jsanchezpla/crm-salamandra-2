@@ -599,6 +599,33 @@ registro.
 - Su PDF lleva portada, con «Entrevista inicial» de título (ver «El registro,
   con portada como el informe»).
 
+### La pestaña «Faltas» de Incidencias (03/09/2026, AV-0038 de Aumenta)
+
+Al marcar una falta en la agenda se abre sola una incidencia
+(`lib/citas/incidenciaPorFalta.js`). Desde hoy nace con `incidencias.falta`
+(JSONB, `lib/clinica/faltas.js`: `{ justificada, bookingId, huecosOfrecidos,
+respuesta, fechaRecuperacion, nota }`) y eso la manda a la pestaña **Faltas**
+de Equipo → Incidencias, aparte de las de siempre: el GET con `?faltas=1`
+devuelve solo faltas y sin el parámetro las excluye; `counts.faltas` cuenta
+las que siguen sin cerrar. En la ficha, administración apunta los huecos
+ofrecidos a la familia, la respuesta (`pendiente` / `aceptada` con fecha de
+recuperación / `rechazada`) y una nota; **aceptar o rechazar cierra la
+incidencia** (resolved + resuelta) y volver a «sin respuesta» la reabre. El
+PATCH acepta `falta` y lo funde con `fundirFalta`; `justificada` y `bookingId`
+no se editan desde la pantalla. La tarjeta de Configuración → Agenda lo dice
+con esas palabras. Migración `migrate-incidencias-faltas` (CORE, por
+existencia de tabla, fotos doradas incluidas; reconoce las automáticas de
+antes por su título). Prueba `scripts/_smoke-faltas.mjs`.
+
+### Dictar las ideas clave del Plan (03/09/2026, vuelta de AV-0019)
+
+En Ficha del paciente → Plan → «Redactar objetivos con IA», los botones
+**«● Dictar»** (micrófono, `useGrabadora`) y **«Añadir audio»** mandan el audio
+a `POST /api/pacientes/[id]/plan/transcribir` ⚡ **Whisper** (clave del tenant,
+`vetoAi`, la demo simulada), que devuelve solo el texto: cae en la caja de
+ideas clave y proponer los objetivos sigue siendo el botón de siempre. No
+guarda nada.
+
 ### Grabar desde el propio CRM (03/09/2026, AV-0037 de Aumenta)
 
 «Añadir audio» abre un `<input type="file" accept="audio/*">`. Android ofrece la
