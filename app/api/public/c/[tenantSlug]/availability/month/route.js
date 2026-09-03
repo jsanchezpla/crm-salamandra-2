@@ -13,6 +13,7 @@ import { ocupaHuecoWhere } from "../../../../../../../lib/citas/booking.js";
 import { cargarFestivos } from "../../../../../../../lib/citas/festivos.js";
 import { cargarAusencias, restarAusencias } from "../../../../../../../lib/citas/ausencias.js";
 import { profesionalDeQuienPregunta, recortarSiTieneProfesional } from "../../../../../../../lib/citas/quienPregunta.js";
+import { conHorarioPropio } from "../../../../../../../lib/citas/horarioPropio.js";
 
 /**
  * GET /api/public/c/[tenantSlug]/availability/month?eventTypeId=X&year=2026&month=5
@@ -22,7 +23,7 @@ import { profesionalDeQuienPregunta, recortarSiTieneProfesional } from "../../..
  *
  * Respuesta: { year, month, availableDays: [2, 3, 5, ...] }
  */
-export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenantModels, hasModule }) => {
+export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenantModels, hasModule, hasFeatureFlag }) => {
   try {
     if (!hasModule("citas")) return notFound("Módulo no disponible");
     // El centro puede no dar cita por internet (08/08/2026). Va JUSTO debajo
@@ -85,6 +86,7 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
      * Se resuelve UNA vez para el mes entero, no día a día: son 28-31 vueltas.
      */
     const suya = await profesionalDeQuienPregunta(tenantModels, request, slug);
+    const horarioPropio = conHorarioPropio(hasFeatureFlag);
 
     // Las «Vacaciones» que pisan este mes, de una sola consulta para los 31
     // días. La ventana se abre un día por cada lado para no perder el bloqueo
@@ -107,7 +109,8 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
           tenantModels,
           pickAvailabilitiesForEventType(allAvailabilitiesJson, eventType.id, dayOfWeek),
           suya,
-          dayOfWeek
+          dayOfWeek,
+          { horarioPropio }
         ),
         bloqueos,
         { year, month, day }

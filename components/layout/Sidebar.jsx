@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { vocabularioCliente } from "../../lib/clients/vocabulario.js";
 import { EVENTO_SIN_VER } from "../../lib/buzon/buzon.js";
 import { esFormacionAbierta, HIJOS_OCULTOS_FORMACION_ABIERTA } from "../../lib/training/formacionAbierta.js";
+import { conHorarioPropio, HIJOS_OCULTOS_SIN_HORARIO_PROPIO } from "../../lib/citas/horarioPropio.js";
 import { esSlugDemo } from "../../lib/demo/demos.js";
 
 const navigation = [
@@ -553,6 +554,16 @@ function hijosOcultosSegunModulos(modules) {
   const ocultos = [];
   const training = modules.find((m) => m.moduleKey === "training" && m.enabled);
   if (esFormacionAbierta(training?.featureFlags)) ocultos.push(...HIJOS_OCULTOS_FORMACION_ABIERTA);
+
+  /*
+   * «Mi horario» (03/09/2026, Rodrigo, para Aumenta): a un equipo al que las
+   * citas se las coloca administración, sin hora fija de entrada ni salida,
+   * esa pantalla no le dice nada. Mismo interruptor que leen la ficha de
+   * Equipo y `/api/team`: `featureFlags.sinHorarioPropio` del módulo `citas`
+   * (`lib/citas/horarioPropio.js`).
+   */
+  const citas = modules.find((m) => m.moduleKey === "citas" && m.enabled);
+  if (citas && !conHorarioPropio(citas.featureFlags)) ocultos.push(...HIJOS_OCULTOS_SIN_HORARIO_PROPIO);
 
   /*
    * «Para leer» (01/09/2026): pedirle a alguien que lea un documento es

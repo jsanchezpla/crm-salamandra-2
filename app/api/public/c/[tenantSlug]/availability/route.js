@@ -15,6 +15,7 @@ import {
 import { cargarFestivos } from "../../../../../../lib/citas/festivos.js";
 import { cargarAusencias, restarAusencias } from "../../../../../../lib/citas/ausencias.js";
 import { profesionalDeQuienPregunta, recortarSiTieneProfesional } from "../../../../../../lib/citas/quienPregunta.js";
+import { conHorarioPropio } from "../../../../../../lib/citas/horarioPropio.js";
 
 /**
  * GET /api/public/c/[tenantSlug]/availability?eventTypeId=X&date=YYYY-MM-DD
@@ -25,7 +26,7 @@ import { profesionalDeQuienPregunta, recortarSiTieneProfesional } from "../../..
  *   { slots: [{ time: "09:00", datetime: "2026-05-30T09:00:00+02:00" }, ...] }
  *   { slots: [], reason: "past" | "too_far" | "no_availability" }
  */
-export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenantModels, hasModule }) => {
+export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenantModels, hasModule, hasFeatureFlag }) => {
   try {
     if (!hasModule("citas")) return notFound("Módulo no disponible");
     // El centro puede no dar cita por internet (08/08/2026). Va JUSTO debajo
@@ -93,7 +94,8 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
      * algún hueco de más y se lo reajustan por teléfono.
      */
     const suya = await profesionalDeQuienPregunta(tenantModels, request, slug);
-    applicable = await recortarSiTieneProfesional(tenantModels, applicable, suya, dayOfWeek);
+    const horarioPropio = conHorarioPropio(hasFeatureFlag);
+    applicable = await recortarSiTieneProfesional(tenantModels, applicable, suya, dayOfWeek, { horarioPropio });
 
     /*
      * «Vacaciones» (06/08/2026): los tramos en que su profesional no está —o en

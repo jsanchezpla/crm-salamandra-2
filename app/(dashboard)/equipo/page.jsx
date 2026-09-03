@@ -106,6 +106,10 @@ export default function EquipoPage() {
   // de `members` porque cuenta TODO el cliente, no solo la página que se ve:
   // paginar no puede cambiar cuántas faltan.
   const [cuentasSinCorreo, setCuentasSinCorreo] = useState(0);
+  // ¿Este centro trabaja con horario propio por persona? Lo dice `/api/team`
+  // (interruptor `sinHorarioPropio` de Citas, 03/09/2026, Aumenta). Si no, el
+  // bloque «Horario de trabajo» de la ficha no se pinta: nadie lo rellenaría.
+  const [horarioPropio, setHorarioPropio] = useState(true);
   const [availableRoles, setAvailableRoles] = useState([]);
   const [viewerIsAdmin, setViewerIsAdmin] = useState(false);
   // Cuantos casan con el filtro actual, segun el propio endpoint (`total` de
@@ -162,6 +166,7 @@ export default function EquipoPage() {
       setAvailableRoles(json.data?.availableRoles ?? []);
       setViewerIsAdmin(!!json.data?.viewerIsAdmin);
       setCuentasSinCorreo(json.data?.cuentasSinCorreo ?? 0);
+      setHorarioPropio(json.data?.horarioPropio !== false);
     } catch (e) {
       setErrorMsg(e.message);
     } finally {
@@ -654,13 +659,15 @@ export default function EquipoPage() {
                     />
                   )}
 
-                  <div className="pt-2">
-                    <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-2">Horario de trabajo</div>
-                    <TeamHoursEditor
-                      memberId={openMember.id}
-                      canEdit={viewerIsAdmin || !!(me?.id && openMember?.userId && me.id === openMember.userId)}
-                    />
-                  </div>
+                  {horarioPropio && (
+                    <div className="pt-2">
+                      <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-2">Horario de trabajo</div>
+                      <TeamHoursEditor
+                        memberId={openMember.id}
+                        canEdit={viewerIsAdmin || !!(me?.id && openMember?.userId && me.id === openMember.userId)}
+                      />
+                    </div>
+                  )}
 
                   {viewerIsAdmin && (
                     <div className="flex flex-wrap gap-2 pt-4 border-t border-neutral-100">

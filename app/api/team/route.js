@@ -9,6 +9,7 @@ import { normalizeSpecialties } from "../../../lib/clinica/specialties.js";
 import { correoDeCuenta } from "../../../lib/auth/correoCuenta.js";
 import { limpiaColorBloqueo } from "../../../lib/citas/coloresBloqueo.js";
 import { isValidHexColor } from "../../../lib/citas/validation.js";
+import { conHorarioPropio } from "../../../lib/citas/horarioPropio.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const VALID_STATUS = new Set(["active", "inactive", "on_leave"]);
@@ -106,7 +107,7 @@ async function logAudit({ tenantId, userId, action, entityId, before, after, ip 
  * Escribir (POST/PATCH/DELETE) NO se toca: sigue pidiendo el módulo y rol de
  * dirección.
  */
-export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule, tenantHasModule }) => {
+export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule, tenantHasModule, hasFeatureFlag }) => {
   try {
     if (!tenantHasModule("team")) return forbidden("Módulo team no activo");
 
@@ -180,15 +181,23 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
      * cuando la paciente llame diciendo que no le sale nada.
      *
      * Best-effort: si la tabla no está o falla, sale la lista sin la marca.
+     *
+     * Sin horario propio (03/09/2026, Aumenta: `lib/citas/horarioPropio.js`)
+     * la marca no se calcula y va `null`: ahí nadie va a rellenar un horario,
+     * y avisar de que falta sería ruido. `horarioPropio` viaja aparte para
+     * que la ficha de Equipo sepa si pintar el editor.
      */
+    const horarioPropio = conHorarioPropio(hasFeatureFlag);
     const conHorario = new Set();
-    try {
-      const { TeamMemberHours } = tenantModels;
-      if (TeamMemberHours) {
-        const filas = await TeamMemberHours.findAll({ attributes: ["teamMemberId"] });
-        for (const f of filas) conHorario.add(String(f.teamMemberId));
-      }
-    } catch { /* la lista se sirve igual, sin la marca */ }
+    if (horarioPropio) {
+      try {
+        const { TeamMemberHours } = tenantModels;
+        if (TeamMemberHours) {
+          const filas = await TeamMemberHours.findAll({ attributes: ["teamMemberId"] });
+          for (const f of filas) conHorario.add(String(f.teamMemberId));
+        }
+      } catch { /* la lista se sirve igual, sin la marca */ }
+    }
 
     /*
      * ¿Quién tiene cuenta del CRM pero SIN correo? (26/08/2026, Jorge: «un aviso
@@ -235,12 +244,13 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
     return ok({
       members: rows.map((m) => ({
         ...(listaReducida ? serializeProfesional(m) : serializeTeamMember(m, { isAdmin })),
-        tieneHorario: conHorario.has(String(m.id)),
+        tieneHorario: horarioPropio ? conHorario.has(String(m.id)) : null,
         // `true` solo si TIENE cuenta y esa cuenta no tiene a dónde escribir.
         cuentaSinCorreo: cuentaSinCorreo.has(String(m.id)),
       })),
       // Para el rótulo de arriba: cuántas de TODO el cliente, no de esta página.
       cuentasSinCorreo: cuentaSinCorreo.size,
+      horarioPropio,
       fichasConLogin,
       total: count,
       limit,
