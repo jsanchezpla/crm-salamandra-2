@@ -19,6 +19,20 @@ test("todas las palabras, cada una en cualquiera de los campos", () => {
   }
 });
 
+test("con paciente, cada palabra busca también en su nombre y apellidos (03/09/2026)", () => {
+  const con = whereDeBusquedaCobros("maria garcia", { conPaciente: true });
+  for (const g of con[Op.and]) {
+    const campos = g[Op.or];
+    assert.ok(campos.some((c) => "$patient.first_name$" in c));
+    assert.ok(campos.some((c) => "$patient.last_name$" in c));
+  }
+  // Sin la tabla de pacientes (el resto de tenants) no se toca el JOIN.
+  const sin = whereDeBusquedaCobros("maria garcia");
+  for (const g of sin[Op.and]) {
+    assert.equal(g[Op.or].some((c) => "$patient.first_name$" in c), false);
+  }
+});
+
 test("las tildes no se exigen: garcia casa García y nunez casa Núñez", () => {
   assert.match("García", new RegExp(patronDePalabra("garcia"), "i"));
   assert.match("Núñez", new RegExp(patronDePalabra("nunez"), "i"));

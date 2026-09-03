@@ -12,7 +12,7 @@ import ExportButtons from "@/components/billing/ExportButtons.jsx";
 import FacturarMesDrawer from "../_components/FacturarMesDrawer.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 import { useDialogo } from "@/components/ui/Dialogo.jsx";
-import { partesConProrrateo } from "../../../../lib/billing/prorrateo.js";
+import { partesConProrrateo, fraseDeSesiones } from "../../../../lib/billing/prorrateo.js";
 import { cuotasQueEntran, conceptosDeCuotas, importePactado } from "../../../../lib/billing/cuotaParaRellenar.js";
 
 const inputCls =
@@ -536,7 +536,7 @@ export default function CobrosPage() {
         <input
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
-          placeholder="Buscar por cliente, nº factura, método, notas..."
+          placeholder="Buscar por cliente, paciente, nº factura, método, notas..."
           className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition w-full sm:w-72"
         />
         <Select value={filterMethod} onChange={(v) => setFilterMethod(v)}
@@ -643,7 +643,10 @@ export default function CobrosPage() {
               )}
               {filtered.map((p) => (
                 <tr key={p.id} className="border-b border-neutral-50 hover:bg-neutral-50/70 transition-colors">
-                  <td className="px-4 py-3 text-neutral-800 text-xs">{p.clientName ?? "—"}</td>
+                  <td className="px-4 py-3 text-neutral-800 text-xs">
+                    {p.clientName ?? "—"}
+                    {p.patientName && <div className="text-[11px] text-neutral-400 mt-0.5">{p.patientName}</div>}
+                  </td>
                   {/* Enlace a la factura: el flujo real es cobro → factura, y
                       desde el cobro hay que poder saltar a la suya. Un cobro
                       registrado antes de facturar todavía no tiene ninguna. */}
@@ -814,7 +817,7 @@ export default function CobrosPage() {
                                   className="flex-1 rounded-md border border-neutral-200 bg-white px-1.5 py-0.5 text-[11px] text-neutral-600 focus:outline-none focus:border-neutral-400" />
                                 {parte.prorrateo && (
                                   <span className="text-[10px] text-neutral-400 shrink-0">
-                                    {parte.prorrateo.diasCobrados}/{parte.prorrateo.diasDelMes} días (de {fmtMoney(parte.importeCompleto)})
+                                    {fraseDeSesiones(parte.prorrateo)} (de {fmtMoney(parte.importeCompleto)})
                                   </span>
                                 )}
                               </div>
@@ -833,7 +836,8 @@ export default function CobrosPage() {
                         {conceptosElegidos.length > 0 && (
                           <p className="text-[10px] text-neutral-400">
                             La fecha «Empezó el» solo hace falta si ese servicio empezó a mitad de mes:
-                            su parte se prorratea sola.
+                            su parte se prorratea sola por sesiones, contando el día de la semana de esa
+                            fecha (empezó un martes 15: se cobran 3 de los 5 martes del mes).
                           </p>
                         )}
                       </div>

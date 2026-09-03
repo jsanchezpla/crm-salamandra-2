@@ -7,6 +7,7 @@ import { parseSortOrder } from "../../../../lib/billing/parseSort.js";
 import { getTenantStripeConfig } from "../../../../lib/payments/stripeConfig.js";
 import { urlPanelStripe } from "../../../../lib/billing/cobroDesdeStripe.js";
 import { whereDeBusquedaCobros } from "../../../../lib/billing/busquedaCobros.js";
+import { billingHasPatients } from "../../../../lib/billing/patientLink.js";
 
 export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule }) => {
   try {
@@ -24,7 +25,11 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
     if (searchParams.get("method")) where.method = searchParams.get("method");
     // Búsqueda en el SERVIDOR (31/08/2026): el filtro del navegador solo veía
     // los 100 cargados. La regla, en lib/billing/busquedaCobros.js.
-    const busqueda = whereDeBusquedaCobros(searchParams.get("q"));
+    // El paciente del cobro solo se une donde hay tabla de pacientes (Aumenta):
+    // en el resto de tenants ni existe la columna en el JOIN ni hace falta.
+    const { Patient } = tenantModels;
+    const conPaciente = Boolean(Patient) && billingHasPatients(hasModule);
+    const busqueda = whereDeBusquedaCobros(searchParams.get("q"), { conPaciente });
     if (busqueda) Object.assign(where, busqueda);
 
     if (searchParams.get("from") || searchParams.get("to")) {
@@ -60,6 +65,9 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
       },
     ];
     if (Client) include.push({ model: Client, as: "client", attributes: ["id", "name"] });
+    if (conPaciente) {
+      include.push({ model: Patient, as: "patient", attributes: ["id", "firstName", "lastName"], required: false });
+    }
 
     const { count, rows } = await Payment.findAndCountAll({
       where,
@@ -87,6 +95,11 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
         ...fila,
         clientId: cliente?.id ?? fila.clientId ?? null,
         clientName: cliente?.name ?? null,
+        // De qué paciente es el cobro, plano, para que la tabla enseñe por
+        // qué ha salido una fila al buscar por el nombre del niño.
+        patientName: fila.patient
+          ? [fila.patient.firstName, fila.patient.lastName].filter(Boolean).join(" ") || null
+          : null,
         stripeUrl: urlPanelStripe(liveMode, fila.stripePaymentIntentId),
       };
     });
