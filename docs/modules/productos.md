@@ -12,6 +12,7 @@ el básico nada; el avanzado, el básico.
 | Pantalla (`/productos`): lista, alta, edición, precio, retirada; con el avanzado, el bloque de ventas y los accesos a los tres | `app/(dashboard)/productos/page.jsx` (server: mira los módulos del tenant y hace `notFound()` sin el básico) → `modules/productos/ProductosModule.jsx` (props `avanzado`, `conInventario`, `conPedidos`, `conTienda`) |
 | Endpoints del catálogo (los de siempre, con otra puerta) | `app/api/inventory/products/route.js` (GET/POST) y `products/[id]/route.js` (GET/PUT/DELETE): **gateados por `productos`** desde el 03/09/2026 (antes `inventory`). La ruta no se movió: Inventario y Tienda la siguen llamando. |
 | Estadísticas de venta (solo dirección) | `app/api/productos/estadisticas/route.js` → `lib/productos/estadisticas.js` (`gateEstadisticasProductos`, `calcularEstadisticasProductos`, que lee pedidos, fichas y —con `inventory`— entradas de almacén) → `lib/productos/ventas.js` (`agregarVentas` y `costesUnitarios`, puras, con prueba); gateado por `productos_avanzado` + rol admin |
+| Excel y PDF de las ventas (solo dirección) | `app/api/productos/estadisticas/export/route.js` (`?formato=xlsx|pdf&desde=&hasta=`) → `lib/productos/ventasExport.js` (`buildVentasXlsx`, `buildVentasPdf`, `nombreDeFichero`), sobre el MISMO objeto que la pantalla; misma puerta que el endpoint de estadísticas. Enlaces «⬇ Excel» / «⬇ PDF» en el bloque «Ventas» |
 | El periodo «desde / hasta» | `lib/utils/rangoFechas.js` (`rangoPedido`) sobre `lib/utils/fechaLocal.js` (`fechaISO`, `rangoDe`, puros), compartidos con `lib/clinica/estadisticas.js` |
 | Claves | `lib/tenant/moduleKeys.js` (`PRODUCTOS`, `PRODUCTOS_AVANZADO`, `INVENTORY`, `ORDERS`, `TIENDA`) |
 | Menú | `components/layout/Sidebar.jsx`, sección «Operaciones»: `productos` con hijos Inventario / Pedidos / Tienda (`requiresAll: ["productos_avanzado", "<clave>"]`) |
@@ -19,7 +20,7 @@ el básico nada; el avanzado, el básico.
 | Migraciones | `productos` y `productos_avanzado` → `migrate-inventario-rework` (comparten `products` con Inventario); `orders` → `migrate-orders` (nueva: las tres tablas de Pedidos, sin ENUM). Mapa en `scripts/_module-migrations.js`; arista `migrate-orders` → `migrate-tienda` en `scripts/_migration-order.js` |
 | Reparto a quien ya tenía el trío (MASTER, una vez) | `scripts/migrate-productos.js` (idempotente; `ONE_OFF` del mapa) |
 | Tablas por módulo | `scripts/check-module-tables.js` (`productos`: `products`; `productos_avanzado`: `products` + `orders`/`order_lines` como extras) |
-| Pruebas | `scripts/_smoke-productos.mjs` (el cálculo de ventas y las puertas) · `scripts/_smoke-provisioning-dependencias.mjs` (la matriz) |
+| Pruebas | `scripts/_smoke-productos.mjs` (el cálculo de ventas, el margen, los costes y las puertas) · `scripts/_smoke-productos-export.mjs` (el Excel se lee de vuelta con ExcelJS y dice lo mismo que el cálculo; el PDF es un PDF) · `scripts/_smoke-provisioning-dependencias.mjs` (la matriz) |
 | Demos | `lib/demo/demos.js` (`demo_agencia` lleva los dos niveles con `orders`) · `scripts/rebuild-demo-showcase.js` (la general) |
 
 ---
@@ -87,6 +88,13 @@ centro en Clínica: son cifras de dinero de todo el equipo.
   no se lea como el de todo. El precio de compra no sale de este endpoint
   hacia ningún sitio público (es de dirección; `paraLaTienda` lo tapa en la
   tienda).
+- **Llevárselo** (03/09/2026): `GET /api/productos/estadisticas/export?formato=xlsx|pdf`
+  con el mismo `desde`/`hasta`. El Excel lleva cuatro hojas —Resumen, Por
+  producto (unidades, pedidos, vendido, coste unitario, margen), Por mes, Por
+  origen— con las cifras como números; el PDF, lo vendido, lo ganado, lo más
+  vendido (20 filas), por mes y por dónde entra. Los dos salen de
+  `calcularEstadisticasProductos`, así que no pueden contradecir la pantalla.
+  Sin Pedidos montado responde 409 en vez de un fichero vacío.
 
 ## Activar
 
@@ -103,6 +111,4 @@ centro en Clínica: son cifras de dinero de todo el equipo.
 
 ## Lo que NO hace (todavía)
 
-- Excel o PDF de las ventas: el cálculo está preparado para compartirse
-  (`agregarVentas` es pura), pero solo hay pantalla.
 - Ventas por variante (talla): el ranking va por producto.

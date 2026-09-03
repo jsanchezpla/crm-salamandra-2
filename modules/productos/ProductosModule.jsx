@@ -175,6 +175,28 @@ function Estadisticas({ conPedidos }) {
           <input type="date" value={rango.desde} max={rango.hasta} onChange={(e) => setRango({ ...rango, desde: e.target.value })} className={`${inputCls} !w-auto !py-1 !text-[12px]`} />
           <span className="text-neutral-400 text-[12px]">→</span>
           <input type="date" value={rango.hasta} min={rango.desde} onChange={(e) => setRango({ ...rango, hasta: e.target.value })} className={`${inputCls} !w-auto !py-1 !text-[12px]`} />
+          {/* Llevárselo (03/09/2026): el Excel para hacer cuentas, el PDF para
+              la reunión. Son enlaces al endpoint, como en Clínica: el navegador
+              descarga y el mismo periodo viaja en la URL. Solo cuando hay
+              cifras que llevarse. */}
+          {datos?.disponible && (
+            <>
+              <a
+                href={`/api/productos/estadisticas/export?formato=xlsx&desde=${rango.desde}&hasta=${rango.hasta}`}
+                className={`${btn(false)} inline-flex items-center gap-1`}
+                title="Descargar el periodo en Excel"
+              >
+                ⬇ Excel
+              </a>
+              <a
+                href={`/api/productos/estadisticas/export?formato=pdf&desde=${rango.desde}&hasta=${rango.hasta}`}
+                className={`${btn(false)} inline-flex items-center gap-1`}
+                title="Descargar el periodo en PDF"
+              >
+                ⬇ PDF
+              </a>
+            </>
+          )}
         </div>
       </div>
 
@@ -201,9 +223,11 @@ function Estadisticas({ conPedidos }) {
               label="Margen"
               value={datos.margen?.pct === null || datos.margen?.pct === undefined ? "—" : fmtMoney(datos.margen.importe)}
               sub={
-                datos.margen?.pct === null || datos.margen?.pct === undefined
-                  ? "sin precio de compra en las fichas"
-                  : `${fmtNum(datos.margen.pct)} % sobre ${fmtMoney(datos.margen.sobreImporte)}${datos.margen.sinCoste ? ` · ${datos.margen.sinCoste} sin coste` : ""}`
+                datos.totales.pedidos === 0
+                  ? "sin ventas en el periodo"
+                  : datos.margen?.pct === null || datos.margen?.pct === undefined
+                    ? "sin precio de compra en las fichas"
+                    : `${fmtNum(datos.margen.pct)} % sobre ${fmtMoney(datos.margen.sobreImporte)}${datos.margen.sinCoste ? ` · ${datos.margen.sinCoste} sin coste` : ""}`
               }
             />
             <Kpi
