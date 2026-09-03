@@ -8,6 +8,7 @@ import HelpTooltip from "../../../components/ui/HelpTooltip.jsx";
 import PacientesDelAlta, { PACIENTE_VACIO } from "../../../components/clients/PacientesDelAlta.jsx";
 import ProgenitoresDelAlta, { PROGENITOR_VACIO } from "../../../components/clients/ProgenitoresDelAlta.jsx";
 import FacturacionDelAlta from "../../../components/clients/FacturacionDelAlta.jsx";
+import ClientPatientsSection from "../../../components/clients/ClientPatientsSection.jsx";
 import { CAMPOS_FISCALES } from "../../../lib/clients/camposFiscales.js";
 import { camposCliente, PERFIL_COMERCIAL } from "../../../lib/clients/formularioAlta.js";
 import { VOCABULARIO_CLIENTE } from "../../../lib/clients/vocabulario.js";
@@ -849,6 +850,27 @@ export default function ClientesClient({
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+              {/*
+                Los pacientes de la familia, aquí mismo (03/09/2026, AV-0032 de
+                Aumenta). Una admin dio de alta a una adulta sin rellenar el
+                bloque de paciente («no puse nada en paciente porque es el
+                mismo»), la agenda no le dejó darle hora —solo da hora a
+                pacientes— y volvió a este panel a «meter paciente»: no había
+                por dónde. La sección es la MISMA de la ficha completa
+                (`components/clients/ClientPatientsSection.jsx`): lista los que
+                hay y crea uno nuevo, con la casilla de «es el propio cliente».
+                Solo se monta donde hay módulo `pacientes`; en el resto de
+                centros el panel sigue igual.
+              */}
+              {conPacientes && (
+                <div className="pt-3 border-t border-gray-100">
+                  <p className="text-[11px] text-gray-400">
+                    Quién viene a consulta. La agenda solo da hora a pacientes: si es la propia
+                    persona de esta ficha, créala aquí como paciente.
+                  </p>
+                  <ClientPatientsSection clientId={selected.id} />
                 </div>
               )}
               <div className="text-xs text-gray-400 pt-2 border-t border-gray-100">

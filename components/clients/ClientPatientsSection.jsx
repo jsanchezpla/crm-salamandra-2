@@ -13,12 +13,20 @@
  *
  * Autocontenido: recibe `clientId`. Habla con /api/pacientes y, para el flag
  * "padres separados" (dato del cliente/tutor), con /api/clients/[id].
+ *
+ * Se monta en DOS sitios desde el 03/09/2026: la pestaña «Servicio» de la ficha
+ * completa y el panel «Editar ficha» del listado (AV-0032 de Aumenta: una
+ * adulta dada de alta sin paciente, y desde el listado no había por dónde
+ * crearlo). Y la casilla «el paciente es el propio cliente» es la misma del
+ * alta (`PacientesDelAlta.jsx`): copia el nombre de la ficha a los campos con
+ * `partirNombre` y deja el parentesco puesto. Los parentescos son los de
+ * `formularioAlta.js`, para que la ficha y el mostrador digan lo mismo.
  */
 
 import { useCallback, useEffect, useState } from "react";
 import SpecialtyPicker from "../clinica/SpecialtyPicker.jsx";
+import { PARENTESCOS, PARENTESCO_ES_EL_CLIENTE, partirNombre } from "../../lib/clients/formularioAlta.js";
 
-const RELATIONSHIPS = ["hijo/a", "tutor legal", "cónyuge", "el propio cliente", "hermano/a", "Otro"];
 const STATUS_LABEL = { active: "Activo", paused: "En pausa", discharged: "Alta" };
 
 // Sin contrato: desde el sprint 2026-07 (punto 1.1) el contrato es de la
@@ -36,6 +44,7 @@ export default function ClientPatientsSection({ clientId }) {
   const [available, setAvailable] = useState(true);
   const [loading, setLoading] = useState(true);
   const [separated, setSeparated] = useState(null);
+  const [clienteNombre, setClienteNombre] = useState("");
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [busy, setBusy] = useState(false);
@@ -54,6 +63,7 @@ export default function ClientPatientsSection({ clientId }) {
         if (!d.ok) throw new Error(d.error || "Error cargando pacientes");
         setPatients(d.data.patients || []);
         setSeparated(clientRes?.data?.separated ?? null);
+        setClienteNombre(clientRes?.data?.name ?? "");
         setError(null);
       })
       .catch((e) => alive && setError(e.message))
@@ -64,6 +74,13 @@ export default function ClientPatientsSection({ clientId }) {
   useEffect(() => load(), [load]);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const esElCliente = form.relationship === PARENTESCO_ES_EL_CLIENTE;
+  const marcarEsElCliente = (marcado) =>
+    setForm((f) =>
+      marcado
+        ? { ...f, ...partirNombre(clienteNombre), relationship: PARENTESCO_ES_EL_CLIENTE }
+        : { ...f, relationship: "" }
+    );
 
   async function toggleSeparated(next) {
     const prev = separated; // preserva el tri-estado (null si desconocido)
@@ -190,6 +207,18 @@ export default function ClientPatientsSection({ clientId }) {
               <div className="sm:col-span-2">
                 <SpecialtyPicker value={form.specialties} onChange={(v) => set("specialties", v)} />
               </div>
+              {/* Donde el paciente ES el cliente (una adulta que viene a
+                  consulta), basta marcar: se copia el nombre de la ficha y
+                  queda editable. Igual que en el alta del mostrador. */}
+              <label className="sm:col-span-2 flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={esElCliente}
+                  onChange={(e) => marcarEsElCliente(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300 accent-[var(--color-primary)]"
+                />
+                <span className="text-xs text-gray-600">El paciente es el propio cliente</span>
+              </label>
               <div>
                 <label className={labelCls}>Nombre *</label>
                 <input className={inputCls} value={form.firstName} onChange={(e) => set("firstName", e.target.value)} />
@@ -214,7 +243,7 @@ export default function ClientPatientsSection({ clientId }) {
                 <label className={labelCls}>Parentesco con el cliente</label>
                 <select className={inputCls} value={form.relationship} onChange={(e) => set("relationship", e.target.value)}>
                   <option value="">—</option>
-                  {RELATIONSHIPS.map((r) => <option key={r} value={r}>{r}</option>)}
+                  {PARENTESCOS.map((r) => <option key={r} value={r}>{r}</option>)}
                 </select>
               </div>
               <div>
