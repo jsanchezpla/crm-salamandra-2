@@ -117,6 +117,16 @@ export const EXTRA_EDGES = [
     after: "migrate-fichaje-module",
     why: "fichajes.team_member_id apunta a `team_members`, y la migración se SALTA el schema que no la tenga en vez de fallar. Sin esta arista, un tenant que estrene Equipo y Fichaje a la vez podría quedarse sin las tablas del fichaje y nadie se enteraría hasta que alguien abriera la pantalla.",
   },
+  // ── Fichaje: el valor 'extra' del tipo de fichaje (31/08/2026) ────────────
+  // Mismo caso que el informe de beca de aquí abajo: `tipo-extra` solo hace
+  // ALTER TYPE, así que el analizador no le lee nada y flotaba libre. Sin la
+  // arista, en un tenant nuevo podía salir ANTES de que `fichaje-module`
+  // creara la tabla —y con ella el enum— y saltarse el schema en silencio.
+  {
+    before: "migrate-fichaje-module",
+    after: "migrate-fichaje-tipo-extra",
+    why: "tipo-extra hace ALTER TYPE sobre enum_fichajes_tipo, que nace con la tabla fichajes de fichaje-module. El analizador solo lee ALTER TABLE, no ALTER TYPE, así que este fichero le resulta ilegible entero.",
+  },
   // ── Clínica: el enum del informe de beca (26/08/2026) ─────────────────────
   {
     before: "migrate-clinica-module",
