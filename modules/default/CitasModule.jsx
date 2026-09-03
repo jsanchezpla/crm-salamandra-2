@@ -1313,6 +1313,7 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
           booking={openBooking}
           conClientes={conClientes}
           vocabulario={vocabulario}
+          eventTypes={eventTypes}
           teamMembers={teamMembers}
           patients={patients}
           viewerIsAdmin={viewerIsAdmin}

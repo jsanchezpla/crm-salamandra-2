@@ -25,6 +25,7 @@ import { reembolsarCitaSiProcede } from "../../../../../lib/citas/reembolsoCita.
 import { tieneRetencionPendiente } from "../../../../../lib/citas/cobroCita.js";
 import { abrirIncidenciaPorFalta } from "../../../../../lib/citas/incidenciaPorFalta.js";
 import { retirarBorradoresDeLaCita } from "../../../../../lib/clinica/borradorDeCita.js";
+import { puedeCambiarTipo } from "../../../../../lib/citas/cambioDeTipo.js";
 
 /*
  * Aquí vivía una segunda copia del «tu cita ha sido cancelada», y era la que se
@@ -218,6 +219,21 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
     }
     if ("notes" in body) {
       updates.notes = body.notes != null ? String(body.notes) : null;
+    }
+
+    /*
+     * EL TIPO DE LA CITA (03/09/2026, Aumenta por Rodrigo). Solo dirección, y
+     * nunca desde o hacia un taller ni sobre la sesión de un bono: la regla y
+     * el porqué en lib/citas/cambioDeTipo.js. La duración NO cambia con el
+     * tipo —es de la cita—, así que aquí no hay solape nuevo que comprobar.
+     */
+    if ("eventTypeId" in body) {
+      const nuevoId = normId(body.eventTypeId);
+      if (!nuevoId || !UUID_RE.test(nuevoId)) return error("eventTypeId inválido");
+      const tipoNuevo = await EventType.findByPk(nuevoId);
+      const cambio = puedeCambiarTipo({ role: userRole, booking: row, tipoNuevo });
+      if (!cambio.ok) return error(cambio.motivo, cambio.status);
+      if (!cambio.sinCambio) updates.eventTypeId = nuevoId;
     }
 
     // Profesional (team member) asignado — SOLO si el tenant tiene módulo team

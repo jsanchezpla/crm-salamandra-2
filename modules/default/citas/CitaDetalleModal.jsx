@@ -21,6 +21,7 @@ import { fichaDeLaCita } from "../../../lib/citas/fichaDeLaCita.js";
 import { esRecuperable, rotuloFalta, citasQuePuedenRecuperar } from "../../../lib/citas/recuperacionFalta.js";
 import { esPresunta, estadoEfectivo } from "../../../lib/citas/asistencia.js";
 import { cuerpoDelResultado, resultadoPorClave } from "../../../lib/citas/resultadoCita.js";
+import { tiposParaCambiar } from "../../../lib/citas/cambioDeTipo.js";
 import {
   ModalityChip,
   PagoChip,
@@ -68,6 +69,7 @@ export function CitaDetalleModal({
   booking: openBooking,
   conClientes = false,
   vocabulario = undefined,
+  eventTypes = [],
   teamMembers,
   patients,
   viewerIsAdmin,
@@ -98,6 +100,9 @@ export function CitaDetalleModal({
   const [avisoHora, setAvisoHora] = useState(null);
   const [detailFecha, setDetailFecha] = useState(() => fechaMadrid(openBooking.scheduledAt));
   const [detailHora, setDetailHora] = useState(() => horaMadrid(openBooking.scheduledAt));
+  // Los tipos a los que dirección puede pasar esta cita (sin talleres, y con
+  // el actual aunque ya esté retirado del catálogo): lib/citas/cambioDeTipo.js.
+  const tiposDelDesplegable = tiposParaCambiar(eventTypes, openBooking);
   const [detailMeet, setDetailMeet] = useState(openBooking.meetUrl ?? "");
   // Aviso efímero tras "Guardar y enviar" (enviado / solo guardado).
   const [meetAviso, setMeetAviso] = useState(null);
@@ -357,6 +362,7 @@ export function CitaDetalleModal({
   }
 
   async function assignTeamMember(v) { await patchBooking({ teamMemberId: v || null }); }
+  async function cambiarTipo(v) { if (v) await patchBooking({ eventTypeId: v }); }
   async function assignPatient(v) { await patchBooking({ patientId: v || null }); }
   /**
    * Borrar la cita DE VERDAD (13/08/2026, Rodrigo: «se quedan canceladas pero
@@ -626,6 +632,26 @@ export function CitaDetalleModal({
                   <div className="flex">
                     <span className="w-24 text-neutral-400">Teléfono</span>
                     <span className="text-neutral-800">{openBooking.eventType.phoneNumber}</span>
+                  </div>
+                )}
+                {/* EL TIPO se cambia desde aquí, solo dirección (03/09/2026,
+                    Rodrigo): una entrevista inicial apuntada como «Logopedia
+                    45» se corrige sin borrar la cita. Sin talleres en la lista
+                    y sin tocar la duración: lib/citas/cambioDeTipo.js. */}
+                {viewerIsAdmin && !openBooking.tallerGrupoId && tiposDelDesplegable.length > 0 && (
+                  <div className="flex items-center">
+                    <span className="w-24 text-neutral-400">Tipo</span>
+                    <select
+                      value={openBooking.eventTypeId ?? ""}
+                      onChange={(e) => cambiarTipo(e.target.value)}
+                      disabled={saving || Boolean(openBooking.packId)}
+                      title={openBooking.packId ? "Es una sesión de un bono: el bono es de su tipo de cita" : undefined}
+                      className="flex-1 text-[13px] px-2 py-1 border border-neutral-200 rounded-md bg-white text-neutral-800 disabled:opacity-50"
+                    >
+                      {tiposDelDesplegable.map((t) => (
+                        <option key={t.id} value={t.id}>{t.name}{t.inactivo ? " (retirado)" : ""}</option>
+                      ))}
+                    </select>
                   </div>
                 )}
                 {teamMembers.length > 0 && (
