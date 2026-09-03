@@ -16,6 +16,7 @@ import InterventionPlanSection from "@/components/clinica/InterventionPlanSectio
 import PreviewBanner from "../../clinica/_components/PreviewBanner.jsx";
 import PropuestaIA from "@/components/clinica/PropuestaIA.jsx";
 import { REPORT_TYPES_NUEVOS, REPORT_TYPE_LABEL } from "@/lib/clinica/serialize.js";
+import { fechaNacimientoCorta as fmtFechaNacimiento } from "@/lib/clinica/edad.js";
 import {
   aFormulario,
   apartadosConPlantillas,
@@ -724,6 +725,9 @@ export default function PacienteFichaPage() {
   const openEdit = () => {
     setEditForm({
       firstName: patient.firstName ?? "", lastName: patient.lastName ?? "", age: patient.age ?? "",
+      // La fecha de nacimiento (03/09/2026, AV-0034): existía en la tabla y
+      // la trajo Organízate, pero la ficha solo enseñaba la edad suelta.
+      birthDate: patient.birthDate ?? "",
       educationCenter: patient.educationCenter ?? "", educationLevel: patient.educationLevel ?? "",
       attendanceFrequency: patient.attendanceFrequency ?? "", referralReason: patient.referralReason ?? "",
       referredBy: patient.referredBy ?? "", objectives: (patient.objectives ?? []).join(", "), status: patient.status ?? "active",
@@ -748,6 +752,7 @@ export default function PacienteFichaPage() {
       const payload = {
         ...editForm,
         age: editForm.age === "" ? null : Number(editForm.age),
+        birthDate: editForm.birthDate || null,
         objectives: editForm.objectives.split(",").map((s) => s.trim()).filter(Boolean),
         // Las filas a medio rellenar (persona sin elegir) no se mandan. El
         // primero de la lista es el de referencia y el servidor pone con él
@@ -847,7 +852,13 @@ export default function PacienteFichaPage() {
               <h1 className="font-display text-2xl lg:text-3xl text-[var(--ink-900)] tracking-tight">{patient.firstName} {patient.lastName}</h1>
               <span className={`inline-flex items-center gap-1.5 ${s.bg} ${s.text} text-[11px] font-medium px-2.5 py-0.5 rounded-full`}><span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />{patient.statusLabel}</span>
             </div>
-            <p className="text-xs text-neutral-500 mt-0.5">{patient.age != null ? `${patient.age} años` : "—"} · {patient.educationLevel ?? "—"}</p>
+            {/* `edad` la calcula el servidor desde la fecha de nacimiento (o
+                la guardada a mano si no hay fecha): lib/clinica/edad.js. */}
+            <p className="text-xs text-neutral-500 mt-0.5">
+              {patient.edad != null ? `${patient.edad} años` : "—"}
+              {patient.birthDate ? ` · nac. ${fmtFechaNacimiento(patient.birthDate)}` : ""}
+              {" · "}{patient.educationLevel ?? "—"}
+            </p>
             <div className="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-3">
               <Field label="Centro escolar" value={patient.educationCenter} />
               {/*
@@ -1250,7 +1261,16 @@ export default function PacienteFichaPage() {
                 <input className={inputCls} placeholder="Apellidos *" value={editForm.lastName} onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })} />
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <input className={inputCls} type="number" min={0} max={120} placeholder="Edad" value={editForm.age} onChange={(e) => setEditForm({ ...editForm, age: e.target.value })} />
+                <label className="block">
+                  <span className="text-[10px] uppercase tracking-wider text-neutral-400">Fecha de nacimiento</span>
+                  <input className={`${inputCls} mt-0.5`} type="date" value={editForm.birthDate} onChange={(e) => setEditForm({ ...editForm, birthDate: e.target.value })} />
+                </label>
+                <label className="block">
+                  <span className="text-[10px] uppercase tracking-wider text-neutral-400">Edad (si no se sabe la fecha)</span>
+                  <input className={`${inputCls} mt-0.5`} type="number" min={0} max={120} placeholder="Edad" value={editForm.age} onChange={(e) => setEditForm({ ...editForm, age: e.target.value })} />
+                </label>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
                 <input className={inputCls} placeholder="Curso" value={editForm.educationLevel} onChange={(e) => setEditForm({ ...editForm, educationLevel: e.target.value })} />
               </div>
               <input className={inputCls} placeholder="Centro escolar" value={editForm.educationCenter} onChange={(e) => setEditForm({ ...editForm, educationCenter: e.target.value })} />

@@ -17,7 +17,7 @@ const STATUS_STYLES = {
 const statusStyle = (s) => STATUS_STYLES[s] ?? STATUS_STYLES.discharged;
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" }) : "—");
 
-const EMPTY_FORM = { firstName: "", lastName: "", age: "", educationCenter: "", educationLevel: "", referralReason: "", mainTherapistId: "", status: "active", specialties: [] };
+const EMPTY_FORM = { firstName: "", lastName: "", age: "", birthDate: "", educationCenter: "", educationLevel: "", referralReason: "", mainTherapistId: "", status: "active", specialties: [] };
 
 export default function PacientesPage() {
   const [patients, setPatients] = useState([]);
@@ -119,7 +119,7 @@ export default function PacientesPage() {
     setSaving(true);
     setFormError(null);
     try {
-      const payload = { ...form, age: form.age ? Number(form.age) : null, mainTherapistId: form.mainTherapistId || null };
+      const payload = { ...form, age: form.age ? Number(form.age) : null, birthDate: form.birthDate || null, mainTherapistId: form.mainTherapistId || null };
       const r = await fetch("/api/pacientes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "No se pudo crear");
@@ -255,7 +255,7 @@ export default function PacientesPage() {
                           </div>
                           <div className="min-w-0">
                             <div className="text-[var(--ink-900)] font-medium leading-tight group-hover:underline">{p.firstName} {p.lastName}</div>
-                            <div className="text-[10px] text-neutral-400">{p.age != null ? `${p.age} años` : "—"}</div>
+                            <div className="text-[10px] text-neutral-400">{(p.edad ?? p.age) != null ? `${p.edad ?? p.age} años` : "—"}</div>
                           </div>
                         </Link>
                       </td>
@@ -336,7 +336,16 @@ export default function PacientesPage() {
                 <input className={inputCls} placeholder="Apellidos *" value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} maxLength={120} />
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <input className={inputCls} type="number" min={0} max={120} placeholder="Edad" value={form.age} onChange={(e) => setForm({ ...form, age: e.target.value })} />
+                <label className="block">
+                  <span className="text-[10px] uppercase tracking-wider text-neutral-400">Fecha de nacimiento</span>
+                  <input className={`${inputCls} mt-0.5`} type="date" value={form.birthDate} onChange={(e) => setForm({ ...form, birthDate: e.target.value })} />
+                </label>
+                <label className="block">
+                  <span className="text-[10px] uppercase tracking-wider text-neutral-400">Edad (si no se sabe la fecha)</span>
+                  <input className={`${inputCls} mt-0.5`} type="number" min={0} max={120} placeholder="Edad" value={form.age} onChange={(e) => setForm({ ...form, age: e.target.value })} />
+                </label>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
                 <input className={inputCls} placeholder="Curso (ej. 3º Primaria)" value={form.educationLevel} onChange={(e) => setForm({ ...form, educationLevel: e.target.value })} />
               </div>
               <input className={inputCls} placeholder="Centro escolar" value={form.educationCenter} onChange={(e) => setForm({ ...form, educationCenter: e.target.value })} />

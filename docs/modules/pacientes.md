@@ -240,7 +240,7 @@ Fichero: `models/tenant/Patient.model.js`. Tabla: `patients`.
 | `firstName` | VARCHAR(120) NOT NULL | Nombre del paciente. |
 | `lastName` | VARCHAR(120) NOT NULL | Apellidos. |
 | `birthDate` | DATEONLY nullable | Fecha de nacimiento. |
-| `age` | INTEGER nullable | Edad (0-120). Guardada; en flujo real debería calcularse. |
+| `age` | INTEGER nullable | Edad escrita a mano (0-120). Desde el 03/09/2026 (AV-0034) es el RESPALDO: la ficha, el listado y los informes enseñan `edad`, que el serializador calcula desde `birthDate` con `lib/clinica/edad.js` y solo cae a `age` si no hay fecha. Los dos formularios (alta y editar) piden la fecha; la casilla «Edad» queda para quien no la sabe. |
 | `educationCenter` | VARCHAR(200) nullable | Centro escolar (ej. "CEIP Las Acacias"). |
 | `educationLevel` | VARCHAR(80) nullable | Curso académico (ej. "3º Primaria"). |
 | `referralReason` | TEXT nullable | Motivo de derivación. |

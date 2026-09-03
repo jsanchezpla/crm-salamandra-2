@@ -434,7 +434,7 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
           <div className="min-w-0">
             <div className="eyebrow">Informe {String(report.typeLabel ?? "").toLowerCase()}</div>
             <h2 className="font-display text-xl text-[var(--ink-900)] mt-1 leading-tight">
-              {patient.name} <span className="text-neutral-400 font-normal">· {patient.age ?? "—"} años</span>
+              {patient.name} <span className="text-neutral-400 font-normal">· {patient.edad ?? patient.age ?? "—"} años</span>
             </h2>
             <p className="text-[11px] text-neutral-500 mt-1">{therapist.name} · {fmtDate(report.reportDate)}</p>
           </div>
