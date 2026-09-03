@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { colorTextoSobre } from "@/lib/citas/coloresBloqueo.js";
 
 /**
@@ -114,10 +114,18 @@ export default function PanelVacaciones() {
   /** `null` = el formulario crea; un id = está corrigiendo esa ausencia. */
   const [editando, setEditando] = useState(null);
 
+  // El motivo arranca VACÍO (03/09/2026, Aumenta): «que no se ponga vacaciones
+  // automáticamente». Un motivo que pone el CRM y no quien bloquea es un dato
+  // inventado; la categoría ya dice qué es.
   const [form, setForm] = useState({
-    teamMemberId: "", label: "Vacaciones", categoryKey: "", tallerId: "",
+    teamMemberId: "", label: "", categoryKey: "", tallerId: "",
     fechaIni: "", horaIni: "00:00", fechaFin: "", horaFin: "23:59",
   });
+  // El formulario, para llevarlo a la vista al pulsar «Editar» en una fila de
+  // abajo: con la lista larga, el formulario se abría fuera de la pantalla y
+  // parecía que el botón no hacía nada (03/09/2026, Aumenta: «no funciona el
+  // botón de editar bloqueo bien»).
+  const formRef = useRef(null);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -167,7 +175,7 @@ export default function PanelVacaciones() {
     const fin = partirEnMadrid(b.endAt);
     setForm({
       teamMemberId: b.teamMemberId || "",
-      label: b.label || "Vacaciones",
+      label: b.label || "",
       // La clave tal cual está guardada, aunque su categoría ya no exista: así,
       // corregirle la fecha a un bloqueo viejo no le quita de paso la categoría.
       categoryKey: b.categoryKey || "",
@@ -179,6 +187,8 @@ export default function PanelVacaciones() {
     setAbierto(true);
     setFallo(null);
     setAviso(null);
+    // Tras el render que abre el formulario, que se vea.
+    setTimeout(() => formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
   }
 
   /** Cierra el formulario y lo deja como estaba para crear. */
@@ -189,7 +199,7 @@ export default function PanelVacaciones() {
     setForm((f) => ({
       ...f,
       teamMemberId: yo?.teamMemberId ?? "",
-      label: "Vacaciones",
+      label: "",
       categoryKey: "",
       fechaIni: "", horaIni: "00:00", fechaFin: "", horaFin: "23:59",
     }));
@@ -208,7 +218,7 @@ export default function PanelVacaciones() {
     setGuardando(true);
     try {
       const cuerpo = {
-        label: form.label || "Vacaciones",
+        label: form.label.trim(),
         startDate: form.fechaIni,
         startTime: form.horaIni || "00:00",
         endDate: fechaFin,
@@ -283,7 +293,7 @@ export default function PanelVacaciones() {
       </header>
 
       {abierto && (
-        <div className="px-4 lg:px-5 py-4 border-b border-[var(--ink-200)] bg-white">
+        <div ref={formRef} className="px-4 lg:px-5 py-4 border-b border-[var(--ink-200)] bg-white scroll-mt-20">
           {/* Una columna más cuando el centro usa categorías, para que «Hasta»
               no se quede solo en su fila. */}
           <div className={`grid gap-3 sm:grid-cols-2 ${categorias.length || talleres.length ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
@@ -347,11 +357,11 @@ export default function PanelVacaciones() {
               </label>
             )}
             <label className="text-xs">
-              <span className="block text-neutral-500 mb-1">Motivo</span>
+              <span className="block text-neutral-500 mb-1">Motivo (opcional)</span>
               <input
                 value={form.label}
                 onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}
-                placeholder="Vacaciones"
+                placeholder="Sin motivo"
                 className="w-full border border-neutral-200 rounded-md px-2 py-1.5 text-sm"
               />
             </label>
@@ -430,9 +440,11 @@ export default function PanelVacaciones() {
                   {/* El taller, cuando el tramo es uno: es lo que hace que deje
                       de ser «una hora tachada y ya». */}
                   {b.tallerName && <span className="text-neutral-700">{b.tallerName}{" · "}</span>}
+                  {/* Sin motivo (opcional desde el 03/09/2026) no se pinta
+                      un «·» huérfano: se pasa directamente a de quién es. */}
                   {b.label}
                   <span className="font-normal text-neutral-500">
-                    {" · "}{b.teamMemberName || "Todo el centro"}
+                    {b.label ? " · " : ""}{b.teamMemberName || "Todo el centro"}
                   </span>
                 </span>
               </p>

@@ -80,7 +80,9 @@ export function BloqueoModal({ bloqueo, categorias = [], equipo = [], administra
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          label: label.trim() || "Vacaciones",
+          // Vacío se queda vacío (03/09/2026, Aumenta): el motivo es opcional
+          // y el CRM no lo rellena por su cuenta con «Vacaciones».
+          label: label.trim(),
           // Vacía = quitarle la categoría. El servidor descarta la que no esté
           // dada de alta, así que aquí no hace falta validar nada.
           categoryKey: categoryKey || null,
@@ -184,7 +186,12 @@ export function BloqueoModal({ bloqueo, categorias = [], equipo = [], administra
         <div className="bg-white rounded-xl shadow-pop w-full max-w-md pointer-events-auto mb-10">
           <div className="px-5 pt-4 pb-3 border-b border-neutral-100">
             <div className="eyebrow">Bloqueo</div>
+            {/* En la agenda el bloqueo solo dice su categoría (03/09/2026,
+                Aumenta); el motivo y de quién es se leen AQUÍ, en el modal. */}
             <h3 className="font-display text-lg text-neutral-900 mt-0.5 truncate">{bloqueo.titulo}</h3>
+            {bloqueo.subtitulo && (
+              <p className="text-[11.5px] text-neutral-500 mt-0.5 truncate">{bloqueo.subtitulo}</p>
+            )}
           </div>
           <div className="px-5 py-4 space-y-3">
             {categorias.length > 0 && (
@@ -226,8 +233,8 @@ export function BloqueoModal({ bloqueo, categorias = [], equipo = [], administra
               </div>
             )}
             <div>
-              <label className="block text-[11px] font-medium text-neutral-500 mb-1">Concepto</label>
-              <input value={label} onChange={(e) => setLabel(e.target.value)} className={inputCls} placeholder="Vacaciones" />
+              <label className="block text-[11px] font-medium text-neutral-500 mb-1">Motivo (opcional)</label>
+              <input value={label} onChange={(e) => setLabel(e.target.value)} className={inputCls} placeholder="Sin motivo" />
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>

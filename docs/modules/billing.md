@@ -1585,3 +1585,14 @@ solo como historial de decisiones:
   de la factura (solo el del cobro). Si más adelante se muestra,
   ampliar el include con `dueDate`, `paidAmount` y mapear con
   `withEffectiveStatus`.
+
+## El paciente primero (03/09/2026, Aumenta)
+
+«En todo lo relativo a facturación que aparezca siempre primero el paciente.»
+Cuotas: columna Paciente delante de Familia. Cobros: en la tabla el paciente
+arriba y el pagador debajo; el campo del alta se llama «Paciente o cliente».
+Facturas: en la tabla el paciente delante del pagador, y en el alta el
+buscador de paciente va PRIMERO y al elegirlo pone su familia como pagador si
+aún no hay ninguno (`PacientePicker` devuelve la ficha entera). El buscador
+compartido (`SelectorCliente` con `fuente="billing"`) ya rotulaba «paciente —
+pagador» desde el 01/09.

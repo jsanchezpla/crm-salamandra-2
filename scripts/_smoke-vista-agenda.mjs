@@ -55,8 +55,8 @@ describe("horasDeApertura", () => {
     assert.deepEqual(h, { slotMinTime: "09:00:00", slotMaxTime: "13:30:00", desdeHorario: true });
   });
   it("sin horario puesto, la rejilla de siempre", () => {
-    assert.deepEqual(horasDeApertura([]), { slotMinTime: "07:00:00", slotMaxTime: "22:00:00", desdeHorario: false });
-    assert.deepEqual(horasDeApertura(null), { slotMinTime: "07:00:00", slotMaxTime: "22:00:00", desdeHorario: false });
+    assert.deepEqual(horasDeApertura([]), { slotMinTime: "07:00:00", slotMaxTime: "21:00:00", desdeHorario: false });
+    assert.deepEqual(horasDeApertura(null), { slotMinTime: "07:00:00", slotMaxTime: "21:00:00", desdeHorario: false });
   });
   it("nunca se sale del día: ni antes de las 00:00 ni después de las 24:00", () => {
     const h = horasDeApertura([{ startTime: "00:15", endTime: "23:45" }]);

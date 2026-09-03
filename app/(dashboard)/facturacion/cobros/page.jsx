@@ -547,7 +547,7 @@ export default function CobrosPage() {
         <input
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
-          placeholder="Buscar por cliente, paciente, nº factura, método, notas..."
+          placeholder="Buscar por paciente, cliente, nº factura, método, notas..."
           className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition w-full sm:w-72"
         />
         <Select value={filterMethod} onChange={(v) => setFilterMethod(v)}
@@ -629,7 +629,7 @@ export default function CobrosPage() {
                     SortableTh). El cliente llega por dos caminos —enlace
                     directo del cobro o su factura— y un solo ORDER BY no puede
                     con los dos: antes que una flecha que ordena mal, ninguna. */}
-                <SortableTh k="clientName" label="Cliente" />
+                <SortableTh k="clientName" label="Paciente / cliente" />
                 <SortableTh k="invoice.number" label="Factura" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
                 <SortableTh k="method" label="Método" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
                 <SortableTh k="paidAt" label="Fecha" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
@@ -654,9 +654,19 @@ export default function CobrosPage() {
               )}
               {filtered.map((p) => (
                 <tr key={p.id} className="border-b border-neutral-50 hover:bg-neutral-50/70 transition-colors">
+                  {/* El paciente ARRIBA y el pagador debajo (03/09/2026,
+                      Aumenta: «que aparezca siempre primero el paciente»).
+                      Sin paciente —un cobro de la familia entera— queda el
+                      cliente solo, como siempre. */}
                   <td className="px-4 py-3 text-neutral-800 text-xs">
-                    {p.clientName ?? "—"}
-                    {p.patientName && <div className="text-[11px] text-neutral-400 mt-0.5">{p.patientName}</div>}
+                    {p.patientName ? (
+                      <>
+                        {p.patientName}
+                        <div className="text-[11px] text-neutral-400 mt-0.5">{p.clientName ?? "—"}</div>
+                      </>
+                    ) : (
+                      p.clientName ?? "—"
+                    )}
                   </td>
                   {/* Enlace a la factura: el flujo real es cobro → factura, y
                       desde el cobro hay que poder saltar a la suya. Un cobro
@@ -760,7 +770,7 @@ export default function CobrosPage() {
 
               {form.modo === "cuota" && (
                 <>
-                  <FormRow label="Cliente o paciente *">
+                  <FormRow label="Paciente o cliente *">
                     {/* fuente billing: Rosa y Olga cobran sin el módulo de
                         fichas — /api/billing/fichas abre con `billing` y
                         busca también por el nombre del NIÑO (31/08/2026). */}

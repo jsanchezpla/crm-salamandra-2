@@ -385,16 +385,22 @@ body {
    anchura. Con 2em el cuarto de hora mide 16 px: le cabe una línea de texto y
    no pisa a nadie. La otra mitad del arreglo (eventMinHeight bajado y
    slotEventOverlap apagado) va en las opciones del calendario de CitasModule. */
-.fc .fc-timegrid-slot { height: 2em; }
+/* Franjas de CUARTO de hora desde el 03/09/2026 (Aumenta: «calendario de 15
+   en 15 minutos y un poco más de zoom»). Cada franja de la rejilla es ahora
+   un cuarto de hora (`slotDuration` en CitasModule), así que la altura de
+   aquí es POR CUARTO: con 1.25em la hora mide 5em, un 25 % más que los 4em
+   de antes (el zoom pedido), y un cuarto de hora mide 20 px, holgado para su
+   línea de texto. */
+.fc .fc-timegrid-slot { height: 1.25em; }
 /* Vista compacta («Ajustar», 02/09/2026, AV-0012 de Aumenta): las franjas
    bajan a un mínimo pequeño y `expandRows` las estira hasta llenar el alto que
    haya, así que la jornada entera cabe sin desplazarse. El texto de una cita
    corta se corta antes; se pidió ver el día completo y eso es lo que gana. */
-.agenda-compacta .fc .fc-timegrid-slot { height: 0.6em; }
+.agenda-compacta .fc .fc-timegrid-slot { height: 0.35em; }
 /* Columnas por terapeuta (02/09/2026, AV-0016): cada columna es un calendario
    de día; franjas algo más bajas para que quepan varias agendas a la vez, y
    sin la cabecera del día, que ya la pone la columna con el nombre. */
-.agenda-columna .fc .fc-timegrid-slot { height: 1.5em; }
+.agenda-columna .fc .fc-timegrid-slot { height: 0.75em; }
 .agenda-columna .fc .fc-col-header { display: none; }
 .agenda-columna .fc .fc-timegrid-axis { width: 42px; }
 .agenda-compacta .fc .fc-timegrid-event .fc-event-main { padding-top: 0; padding-bottom: 0; line-height: 1.1; }

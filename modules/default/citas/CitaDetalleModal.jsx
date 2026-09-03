@@ -56,6 +56,8 @@ import {
   function mensajeDelAviso(aviso) {
     if (!aviso) return null;
     if (aviso.enviado) return { tono: "ok", texto: "Hora cambiada y avisada por correo." };
+    // Se movió SIN pedir el correo (03/09/2026): no es un fallo, es lo elegido.
+    if (aviso.motivo === "sin_avisar") return { tono: "ok", texto: "Hora cambiada. No se ha avisado al paciente por correo." };
     const porQue = {
       sin_email: "no tiene correo en su ficha",
       sin_consentimiento: "ha pedido no recibir correos",
@@ -219,7 +221,7 @@ export function CitaDetalleModal({
      */
     const motivo = await pedirTexto({
       titulo: "Cambiar la hora de la cita",
-      texto: "¿Por qué se cambia? Se lo contamos en el correo. Déjalo vacío si no quieres explicar nada.",
+      texto: "¿Por qué se cambia? Si avisas por correo, se lo contamos ahí. Déjalo vacío si no quieres explicar nada.",
       etiqueta: "Motivo (opcional)",
       confirmar: "Cambiar la hora",
       multilinea: true,
@@ -233,13 +235,37 @@ export function CitaDetalleModal({
     const enUtc = new Date(tanteo.toLocaleString("en-US", { timeZone: "UTC" }));
     const offsetMin = Math.round((enMadrid - enUtc) / 60000);
     const instante = new Date(tanteo.getTime() - offsetMin * 60000);
+    // ¿Se le manda el correo? Se pregunta (03/09/2026); sin el sí, la hora
+    // cambia en silencio y el servidor lo dice en `avisoCambioHora`.
+    const avisarPaciente = await preguntarSiAvisar(instante);
     const res = await patchBooking({
       scheduledAt: instante.toISOString(),
+      avisarPaciente,
       ...(motivo && motivo.trim() ? { motivoCambio: motivo.trim() } : {}),
     });
     // Si salió el correo se dice, y si no, POR QUÉ. Callarse es lo que hace que
     // alguien dé por avisado a un paciente que no lo está.
     setAvisoHora(mensajeDelAviso(res?.avisoCambioHora));
+  }
+
+  /*
+   * ── AVISAR AL PACIENTE SE CONFIRMA (03/09/2026, Aumenta) ─────────────────
+   * «Que no se envíe automáticamente por correo lo de las citas al paciente,
+   * sino que haya que confirmar.» El servidor solo manda el correo del cambio
+   * de hora con `avisarPaciente: true`; aquí se pregunta antes de guardar.
+   * Sin correo en la cita, en un taller o moviéndola al pasado no hay a
+   * quién avisar y no se pregunta.
+   */
+  async function preguntarSiAvisar(inicio) {
+    if (!openBooking.clientEmail || openBooking.tallerGrupoId) return false;
+    const d = inicio ? new Date(inicio) : null;
+    if (d && !Number.isNaN(d.getTime()) && d.getTime() <= Date.now()) return false;
+    return confirmar({
+      titulo: "¿Avisar al paciente por correo?",
+      texto: `Se le mandaría un correo a ${openBooking.clientEmail} con la nueva fecha y hora. Si no, la cita cambia sin avisar.`,
+      confirmar: "Sí, avisar",
+      cancelar: "Cambiar sin avisar",
+    });
   }
 
   async function patchBooking(payload) {
@@ -285,7 +311,7 @@ export function CitaDetalleModal({
     }
   }
   async function applySuggestion(s) {
-    const payload = { scheduledAt: s.datetime };
+    const payload = { scheduledAt: s.datetime, avisarPaciente: await preguntarSiAvisar(s.datetime) };
     if (s.teamMemberId) payload.teamMemberId = s.teamMemberId;
     const okp = await patchBooking(payload);
     if (okp) { setSuggestOpen(false); setSuggestions([]); }

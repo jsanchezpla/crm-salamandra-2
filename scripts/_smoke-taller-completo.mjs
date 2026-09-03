@@ -136,7 +136,7 @@ describe("el prompt", () => {
     const m = mensajeDeTaller({ transcription: "Hoy hemos jugado.", escrito: { clima: "Bien", [claveDeNota(LEO)]: "Atento" }, bloques: b });
     assert.match(m, /TRANSCRIPCIÓN DE LA NOTA DE VOZ DEL TALLER/);
     assert.match(m, /- Cómo ha ido el grupo: Bien/);
-    assert.match(m, /- Nota individual · Leo Prueba: Atento/);
+    assert.match(m, /- Observaciones · Leo Prueba: Atento/);
     assert.doesNotMatch(mensajeDeTaller({ transcription: "x", bloques: b }), /YA HABÍA ESCRITO/);
   });
 });

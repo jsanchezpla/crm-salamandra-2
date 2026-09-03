@@ -628,7 +628,7 @@ export default function FacturasPage() {
         <input
           value={searchInput}
           onChange={(e) => { setSearchInput(e.target.value); setPage(1); }}
-          placeholder="Buscar por número, cliente o paciente..."
+          placeholder="Buscar por número, paciente o cliente..."
           className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition w-full sm:w-72"
         />
         <Select
@@ -698,7 +698,11 @@ export default function FacturasPage() {
           >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <div className="font-medium text-neutral-800 truncate">{fila.inv.client?.name ?? "—"}{fila.inv.aNombreDe ? <span className="text-neutral-400 font-normal"> · a nombre de {fila.inv.aNombreDe}</span> : null}</div>
+                <div className="font-medium text-neutral-800 truncate">
+                  {fila.inv.patient ? `${fila.inv.patient.firstName ?? ""} ${fila.inv.patient.lastName ?? ""}`.trim() : (fila.inv.client?.name ?? "—")}
+                  {fila.inv.patient ? <span className="text-neutral-400 font-normal"> · {fila.inv.client?.name ?? "—"}</span> : null}
+                  {fila.inv.aNombreDe ? <span className="text-neutral-400 font-normal"> · a nombre de {fila.inv.aNombreDe}</span> : null}
+                </div>
                 <div className="text-[11px] text-neutral-400 font-mono">
                   {fila.inv.status === "draft" ? <span className="italic">borrador</span> : fila.inv.number} · {fmtDate(fila.inv.issueDate)}
                 </div>
@@ -722,7 +726,7 @@ export default function FacturasPage() {
             <thead>
               <tr className="border-b border-neutral-100">
                 <SortableTh k="number" label="Nº" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
-                <SortableTh k="client.name" label="Cliente" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
+                <SortableTh k="client.name" label="Paciente / cliente" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
                 <SortableTh k="employee.displayName" label="Empleado" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
                 <SortableTh k="issueDate" label="Fecha" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
                 <SortableTh k="status" label="Estado" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
@@ -748,7 +752,17 @@ export default function FacturasPage() {
               ) : (
                 <tr key={fila.inv.id} onClick={() => openDetail(fila.inv)} className="border-b border-neutral-50 hover:bg-neutral-50/70 transition-colors cursor-pointer">
                   <td className="px-4 py-3 font-mono text-xs text-neutral-500">{fila.inv.status === "draft" ? <span className="italic text-neutral-400">borrador</span> : fila.inv.number}</td>
-                  <td className="px-4 py-3 text-neutral-800">{fila.inv.client?.name ?? "—"}{fila.inv.aNombreDe ? <span className="text-neutral-400 text-xs"> · a nombre de {fila.inv.aNombreDe}</span> : null}</td>
+                  {/* El paciente delante del pagador (03/09/2026, Aumenta). */}
+                  <td className="px-4 py-3 text-neutral-800">
+                    {fila.inv.patient ? (
+                      <>
+                        {`${fila.inv.patient.firstName ?? ""} ${fila.inv.patient.lastName ?? ""}`.trim() || "—"}
+                        <div className="text-[11px] text-neutral-400 mt-0.5">{fila.inv.client?.name ?? "—"}{fila.inv.aNombreDe ? ` · a nombre de ${fila.inv.aNombreDe}` : ""}</div>
+                      </>
+                    ) : (
+                      <>{fila.inv.client?.name ?? "—"}{fila.inv.aNombreDe ? <span className="text-neutral-400 text-xs"> · a nombre de {fila.inv.aNombreDe}</span> : null}</>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-neutral-500 text-xs">{fila.inv.employee?.displayName ?? "—"}</td>
                   <td className="px-4 py-3 text-neutral-500 text-xs">{fmtDate(fila.inv.issueDate)}</td>
                   <td className="px-4 py-3"><StatusBadge status={fila.inv.status} /></td>
@@ -886,13 +900,18 @@ export default function FacturasPage() {
                     </FormRow>
     {/* El paciente ya se ELIGE (31/08/2026): una factura a una fundación
         o a un tutor dice de qué niño es. El pagador sigue siendo el
-        cliente de arriba. Sin módulo de pacientes, el buscador se esconde
-        solo (el endpoint responde 403). */}
+        cliente de al lado. Sin módulo de pacientes, el buscador se esconde
+        solo (el endpoint responde 403).
+
+        Y va PRIMERO (03/09/2026, Aumenta: «en todo lo relativo a
+        facturación que aparezca siempre primero el paciente»): se elige al
+        niño y, si la factura aún no tiene pagador, se pone su familia sola. */}
+                    <div className="order-first">
                     <FormRow label="Paciente (beneficiario)">
                       <PacientePicker
                         elegido={openInvoice?.patient ?? null}
                         value={form.patientId ?? ""}
-                        onChange={(id) => setForm((f) => ({ ...f, patientId: id }))}
+                        onChange={(id, p) => setForm((f) => ({ ...f, patientId: id, clientId: f.clientId || p?.clientId || "" }))}
                       />
                       {/* Repartir entre pagadores (31/08/2026): 50/50, por
                           porcentajes o por importes — una factura por pagador. */}
@@ -906,6 +925,7 @@ export default function FacturasPage() {
                         </button>
                       ) : null}
                     </FormRow>
+                    </div>
                     <FormRow label="Empleado">
                       <Select
                         value={form.employeeId}
@@ -1296,7 +1316,9 @@ function PacientePicker({ elegido, value, onChange }) {
               key={p.id}
               type="button"
               onClick={() => {
-                onChange(p.id);
+                // La ficha entera además del id: quien lo usa puede querer
+                // su familia pagadora (03/09/2026).
+                onChange(p.id, p);
                 setEtiqueta(`${p.firstName || ""} ${p.lastName || ""}`.trim());
                 setResultados([]);
                 setTexto("");
@@ -1309,7 +1331,7 @@ function PacientePicker({ elegido, value, onChange }) {
         </div>
       )}
       <span className="block text-[10px] text-neutral-400 mt-1">
-        Opcional: de qué paciente es la factura. El pagador es el cliente de arriba.
+        Opcional: de qué paciente es la factura. Al elegirlo se pone su familia como pagador si no hay otro.
       </span>
     </div>
   );

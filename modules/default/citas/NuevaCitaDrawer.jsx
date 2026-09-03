@@ -45,12 +45,34 @@ export function NuevaCitaDrawer({
   avisar,
   onClose,
   onCreated,
+  // Para «Bloqueo» en lo alto del drawer (03/09/2026, Aumenta: «que en el
+  // calendario de citas al pulsar pueda elegir cambiar a bloqueo aparte de
+  // una cita»): las categorías del centro, si quien mira es dirección y su
+  // propia ficha de equipo. Ver `BloqueoRapido`, abajo.
+  categoriasBloqueo = [],
+  viewerIsAdmin = false,
+  miFichaDeEquipo = null,
 }) {
   const [createForm, setCreateForm] = useState({
     ...EMPTY_BOOKING_FORM,
     date: inicial.date,
     time: inicial.time,
   });
+  /*
+   * ── CITA O BLOQUEO (03/09/2026) ──────────────────────────────────────────
+   * El mismo hueco pulsado sirve para las dos cosas. Arriba del drawer se
+   * elige; con «Bloqueo» se cambia el formulario entero por el del tramo
+   * bloqueado (mismas fechas), que guarda en /api/citas/bloqueos.
+   */
+  const [modo, setModo] = useState("cita");
+  /*
+   * ── EL CORREO AL PACIENTE SE PIDE, NO SALE SOLO (03/09/2026, Aumenta) ────
+   * «Revisar que no se envíe automáticamente por correo lo de las citas al
+   * paciente, sino que haya que confirmar.» Desde el 07/08 la cita manual
+   * mandaba el correo de confirmación siempre; ahora hay una casilla, APAGADA
+   * de entrada, y sin marcarla la cita nace callada (`omitirCorreo`).
+   */
+  const [avisarCorreo, setAvisarCorreo] = useState(false);
   // El bono de quien se acaba de elegir en el alta manual: `{ tono, texto,
   // eventTypeId }`. Ver `buscarBono`.
   const [bonoAviso, setBonoAviso] = useState(null);
@@ -360,6 +382,8 @@ export function NuevaCitaDrawer({
           body: JSON.stringify({
             ...cuerpoCita,
             scheduledAt,
+            // Sin la casilla marcada, sin correo (03/09/2026).
+            ...(avisarCorreo ? {} : { omitirCorreo: true }),
             /*
              * Las DOS puertas que avisan pero no imponen: el festivo del centro
              * y el tramo de vacaciones (07/08/2026). Antes solo se reenviaba
@@ -403,7 +427,8 @@ export function NuevaCitaDrawer({
        * El servidor lo dice con `emailMotivo: "taller"`; enseñar aquí «no le
        * ha llegado el correo» sería inventarse un problema.
        */
-      if (j.data && j.data.emailEnviado === false && j.data.emailMotivo !== "taller") {
+      // …y tampoco si no se pidió el correo (03/09/2026): callada a propósito.
+      if (avisarCorreo && j.data && j.data.emailEnviado === false && j.data.emailMotivo !== "taller") {
         const porQue = {
           sin_email: "no tiene correo en su ficha",
           sin_consentimiento: "ha pedido no recibir correos",
@@ -465,6 +490,22 @@ export function NuevaCitaDrawer({
     }
   }
 
+  if (modo === "bloqueo") {
+    return (
+      <BloqueoRapido
+        inicial={inicial}
+        categorias={categoriasBloqueo}
+        esAdmin={viewerIsAdmin}
+        miFicha={miFichaDeEquipo}
+        teamMembers={teamMembers}
+        avisar={avisar}
+        onModo={setModo}
+        onClose={onClose}
+        onCreated={onCreated}
+      />
+    );
+  }
+
   return (
         <div
           className="fixed inset-0 z-50"
@@ -473,7 +514,7 @@ export function NuevaCitaDrawer({
           <div className="absolute inset-0 bg-black/40" />
           <aside className="absolute right-0 top-14 lg:top-0 bottom-0 w-full max-w-md bg-white shadow-2xl flex flex-col">
             <div className="px-5 py-4 border-b border-neutral-100 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-neutral-900">Nueva cita manual</h2>
+              <SelectorModo modo="cita" onModo={setModo} />
               <button
                 onClick={onClose}
                 className="text-neutral-400 hover:text-neutral-700 p-0.5"
@@ -856,7 +897,23 @@ export function NuevaCitaDrawer({
               </div>
             </div>
 
-            <div className="px-5 py-3 border-t border-neutral-100 flex justify-end gap-2 shrink-0">
+            <div className="px-5 py-3 border-t border-neutral-100 flex items-center justify-end gap-2 shrink-0">
+              {/* La casilla del correo, apagada de entrada (03/09/2026). En un
+                  taller no hay a quién avisar y no sale. */}
+              {!esTaller && (
+                <label
+                  className="flex items-center gap-1.5 text-[11px] text-neutral-600 cursor-pointer mr-auto"
+                  title="Le llega el correo de confirmación con la fecha, la hora y el enlace para cancelar"
+                >
+                  <input
+                    type="checkbox"
+                    checked={avisarCorreo}
+                    onChange={(e) => setAvisarCorreo(e.target.checked)}
+                    className="accent-[var(--color-primary,#1B3A2D)]"
+                  />
+                  Avisar al paciente por correo
+                </label>
+              )}
               <button
                 onClick={onClose}
                 disabled={saving}
@@ -874,5 +931,210 @@ export function NuevaCitaDrawer({
             </div>
           </aside>
         </div>
+  );
+}
+
+/** Arriba del drawer: qué se crea con el hueco pulsado, una cita o un bloqueo. */
+function SelectorModo({ modo, onModo }) {
+  const boton = (clave, texto) => (
+    <button
+      type="button"
+      onClick={() => onModo(clave)}
+      aria-pressed={modo === clave}
+      className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+        modo === clave ? "bg-[var(--color-primary,#0F0F0F)] text-white" : "text-neutral-600 hover:bg-neutral-100"
+      }`}
+    >
+      {texto}
+    </button>
+  );
+  return (
+    <div className="flex items-center gap-1 rounded-lg border border-neutral-200 p-0.5" aria-label="Qué se crea">
+      {boton("cita", "Nueva cita")}
+      {boton("bloqueo", "Bloqueo")}
+    </div>
+  );
+}
+
+/** "10:00" + 60 → "11:00"; sin hora, "". */
+function sumarMinutos(hhmm, minutos) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm ?? ""));
+  if (!m) return "";
+  const total = Math.min(23 * 60 + 59, Number(m[1]) * 60 + Number(m[2]) + minutos);
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
+/**
+ * BloqueoRapido — el mismo drawer, con el formulario de un BLOQUEO dentro
+ * (03/09/2026, Aumenta: «que en el calendario de citas al pulsar pueda elegir
+ * cambiar a bloqueo aparte de una cita en lo alto del modal»).
+ *
+ * Es la versión corta del formulario de Citas → Bloqueos, con el hueco
+ * pulsado ya puesto y una hora de duración de entrada. Mismas reglas que
+ * allí, y las impone el servidor igual: quien no es dirección solo se
+ * bloquea a sí mismo (el «Quién» ni se elige), el motivo es opcional, y las
+ * citas que ya hubiera dentro no se tocan (se avisa cuántas hay).
+ */
+function BloqueoRapido({ inicial, categorias, esAdmin, miFicha, teamMembers, avisar, onModo, onClose, onCreated }) {
+  const [form, setForm] = useState(() => ({
+    teamMemberId: miFicha?.id ?? "",
+    categoryKey: "",
+    label: "",
+    date: inicial.date || "",
+    time: inicial.time || "",
+    endDate: inicial.date || "",
+    endTime: sumarMinutos(inicial.time, 60),
+  }));
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(null);
+  const pon = (campo, valor) => setForm((f) => ({ ...f, [campo]: valor }));
+
+  async function guardar() {
+    setErr(null);
+    if (!form.date || !form.time) { setErr("Pon la fecha y la hora de inicio"); return; }
+    const endDate = form.endDate || form.date;
+    const endTime = form.endTime || "23:59";
+    if (new Date(`${endDate}T${endTime}`) <= new Date(`${form.date}T${form.time}`)) {
+      setErr("El fin tiene que ser posterior al inicio");
+      return;
+    }
+    setSaving(true);
+    try {
+      // La hora viaja PARTIDA (fecha + hora) y el servidor la lee como hora de
+      // Madrid, igual que desde la pantalla de Bloqueos.
+      const cuerpo = {
+        startDate: form.date,
+        startTime: form.time,
+        endDate,
+        endTime,
+        label: form.label.trim(),
+        categoryKey: form.categoryKey || null,
+      };
+      // De quién es solo lo manda dirección; a un no-admin el servidor se lo
+      // pone a su nombre haga lo que haga el navegador.
+      if (esAdmin) cuerpo.teamMemberId = form.teamMemberId || null;
+      const r = await fetch("/api/citas/bloqueos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cuerpo),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j.error || "No se ha podido bloquear el tramo");
+      if (j.data?.citasDentro > 0) {
+        await avisar({
+          titulo: "Bloqueado, con citas dentro",
+          texto: `Hay ${j.data.citasDentro} cita(s) ya puestas en ese tramo; no se han tocado.`,
+        });
+      }
+      onCreated();
+    } catch (e) {
+      setErr(e.message);
+      setSaving(false);
+    }
+  }
+
+  const rotulo = "block text-[11px] font-medium text-neutral-500 mb-1";
+
+  return (
+    <div
+      className="fixed inset-0 z-50"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="absolute inset-0 bg-black/40" />
+      <aside className="absolute right-0 top-14 lg:top-0 bottom-0 w-full max-w-md bg-white shadow-2xl flex flex-col">
+        <div className="px-5 py-4 border-b border-neutral-100 flex items-center justify-between">
+          <SelectorModo modo="bloqueo" onModo={onModo} />
+          <button
+            onClick={onClose}
+            className="text-neutral-400 hover:text-neutral-700 p-0.5"
+            aria-label="Cerrar"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="px-5 py-4 space-y-3 overflow-y-auto flex-1">
+          {err && (
+            <div className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-md px-3 py-2">{err}</div>
+          )}
+          <p className="text-[11px] text-neutral-500">
+            Un tramo en el que no se pasa consulta: la agenda deja de ofrecer esos huecos. Las citas que ya
+            hubiera dentro no se tocan.
+          </p>
+
+          <div>
+            <label className={rotulo}>Quién</label>
+            {esAdmin ? (
+              <select value={form.teamMemberId} onChange={(e) => pon("teamMemberId", e.target.value)} className={inputCls}>
+                {teamMembers.map((m) => (
+                  <option key={m.id} value={m.id}>{m.displayName}</option>
+                ))}
+                <option value="">Todo el centro (cierra a todo el mundo)</option>
+              </select>
+            ) : (
+              <p className={`${inputCls} bg-neutral-50 text-neutral-600`}>{miFicha?.displayName || "Tus ausencias"}</p>
+            )}
+          </div>
+
+          {categorias.length > 0 && (
+            <div>
+              <label className={rotulo}>Categoría</label>
+              <select value={form.categoryKey} onChange={(e) => pon("categoryKey", e.target.value)} className={inputCls}>
+                <option value="">Sin categoría</option>
+                {categorias.map((c) => (
+                  <option key={c.key} value={c.key}>{c.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div>
+            <label className={rotulo}>Motivo (opcional)</label>
+            <input value={form.label} onChange={(e) => pon("label", e.target.value)} className={inputCls} placeholder="Sin motivo" maxLength={120} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className={rotulo}>Empieza</label>
+              <input type="date" value={form.date} onChange={(e) => pon("date", e.target.value)} className={inputCls} />
+            </div>
+            <div>
+              <label className={rotulo}>Hora</label>
+              <input type="time" value={form.time} onChange={(e) => pon("time", e.target.value)} className={inputCls} />
+            </div>
+            <div>
+              <label className={rotulo}>Termina</label>
+              <input type="date" value={form.endDate} min={form.date || undefined} onChange={(e) => pon("endDate", e.target.value)} className={inputCls} />
+            </div>
+            <div>
+              <label className={rotulo}>Hora</label>
+              <input type="time" value={form.endTime} onChange={(e) => pon("endTime", e.target.value)} className={inputCls} />
+            </div>
+          </div>
+          <p className="text-[10px] text-neutral-400">
+            Con «Termina» vacío se bloquea hasta el final del día. Para gestionarlos todos, Citas → Bloqueos.
+          </p>
+        </div>
+
+        <div className="px-5 py-3 border-t border-neutral-100 flex justify-end gap-2 shrink-0">
+          <button
+            onClick={onClose}
+            disabled={saving}
+            className="text-xs px-3 py-1.5 rounded-md border border-neutral-200 text-neutral-700 hover:bg-neutral-50"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={guardar}
+            disabled={saving}
+            className="text-xs px-3 py-1.5 rounded-md bg-[#0F0F0F] text-white hover:bg-[#222] disabled:opacity-50"
+          >
+            {saving ? "Guardando..." : "Bloquear"}
+          </button>
+        </div>
+      </aside>
+    </div>
   );
 }

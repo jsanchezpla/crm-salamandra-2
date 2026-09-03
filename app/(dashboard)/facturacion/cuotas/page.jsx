@@ -333,7 +333,7 @@ export default function CuotasPage() {
         <input
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
-          placeholder="Buscar por familia o por paciente..."
+          placeholder="Buscar por paciente o por familia..."
           className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition w-full sm:w-72"
         />
         <Select
@@ -364,8 +364,11 @@ export default function CuotasPage() {
           <table className="w-full text-sm min-w-[880px]">
             <thead>
               <tr className="border-b border-neutral-100 text-left text-[11px] uppercase tracking-wide text-neutral-400">
-                <th className="px-4 py-3 font-medium">Familia</th>
+                {/* El paciente DELANTE de la familia (03/09/2026, Aumenta: «en
+                    todo lo relativo a facturación que aparezca siempre primero
+                    el paciente»): es a quien conoce el centro. */}
                 <th className="px-4 py-3 font-medium">Paciente</th>
+                <th className="px-4 py-3 font-medium">Familia</th>
                 <th className="px-4 py-3 font-medium">Concepto</th>
                 <th className="px-4 py-3 font-medium text-right">Al mes</th>
                 <th className="px-4 py-3 font-medium">Cómo</th>
@@ -390,12 +393,12 @@ export default function CuotasPage() {
                 return (
                   <tr key={c.id} className={`border-b border-neutral-50 ${c.active ? "" : "bg-neutral-50/60 text-neutral-400"}`}>
                     <td className="px-4 py-3 text-neutral-800">
+                      {rotuloPacienteDeCuota(c)}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-neutral-500">
                       <Link href={`/clientes/${c.clientId}`} className="hover:underline">
                         {c.client?.fiscalName || c.client?.name || "—"}
                       </Link>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-neutral-500">
-                      {rotuloPacienteDeCuota(c)}
                     </td>
                     <td className="px-4 py-3 text-xs text-neutral-500">
                       {nombres.length ? nombres.join(" + ") : <span className="italic text-neutral-300">sin conceptos</span>}

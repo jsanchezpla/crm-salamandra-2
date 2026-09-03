@@ -43,6 +43,7 @@ import useZonaSoltar, { useEvitarSoltarFuera } from "@/components/ui/useZonaSolt
 import useGrabadora, { fmtSegundos } from "@/components/clinica/useGrabadora.js";
 import {
   PLANTILLA_BASE,
+  PLANTILLA_TALLER,
   aFormulario,
   apartadosConPlantillas,
   desdeFormulario,
@@ -92,6 +93,10 @@ export default function SesionTallerDrawer({
   duracionCita = null,
   onClose,
   onSaved,
+  // Desde la agenda el taller abre DIRECTAMENTE este registro (03/09/2026,
+  // Aumenta); la ficha de la cita queda a un clic, aquí arriba. `null` = no
+  // hay cita que abrir (se escribe desde la pestaña del taller).
+  onVerCita = null,
 }) {
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
@@ -149,9 +154,19 @@ export default function SesionTallerDrawer({
       // escribe, igual que en un registro de sesión normal.
       const rp = await fetch("/api/clinica/plantillas", { cache: "no-store" });
       const jp = await rp.json();
-      const lista = jp?.ok && Array.isArray(jp.data?.registro) && jp.data.registro.length
+      const efectivas = jp?.ok && Array.isArray(jp.data?.registro) && jp.data.registro.length
         ? jp.data.registro
         : [PLANTILLA_BASE.registro];
+      /*
+       * La plantilla del TALLER va la primera y es la de una sesión nueva
+       * (03/09/2026, Aumenta: objetivos, actividades, desempeño, comentarios
+       * familiares, preparación previa y devolución a la familia). Si el
+       * centro ha guardado la suya con la misma clave, manda la suya; si el
+       * servidor aún no la ofrece, se pone la de fábrica delante.
+       */
+      const lista = efectivas.some((p) => p?.key === PLANTILLA_TALLER.key)
+        ? efectivas
+        : [PLANTILLA_TALLER, ...efectivas];
       setPlantillas(lista);
 
       if (sesionId) {
@@ -177,7 +192,8 @@ export default function SesionTallerDrawer({
         setMaterialIA(material);
         setDuracionAudio(d.audioDurationSec ?? null);
       } else {
-        const aps = apartadosConPlantillas({}, lista);
+        // Sesión nueva: con los apartados del registro de taller.
+        const aps = apartadosConPlantillas({ plantilla: PLANTILLA_TALLER.key }, lista);
         setApartados(aps);
         setValores(aFormulario({}, aps));
         /*
@@ -427,13 +443,25 @@ export default function SesionTallerDrawer({
             <div className="eyebrow">Registro de taller</div>
             <h3 className="font-display text-lg text-neutral-900 mt-0.5 truncate">{tallerName || "Taller"}</h3>
           </div>
-          <button
-            type="button"
-            onClick={() => !guardando && onClose()}
-            className="text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors shrink-0"
-          >
-            Cerrar
-          </button>
+          <div className="flex items-center gap-3 shrink-0">
+            {onVerCita && (
+              <button
+                type="button"
+                onClick={() => !guardando && onVerCita()}
+                className="text-[11px] px-2.5 py-1 rounded-md border border-neutral-200 text-neutral-600 hover:bg-neutral-50 transition-colors"
+                title="La ficha de la cita: hora, quién lo imparte, pasar lista"
+              >
+                Ver la cita
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => !guardando && onClose()}
+              className="text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors"
+            >
+              Cerrar
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
@@ -630,8 +658,8 @@ export default function SesionTallerDrawer({
                   </div>
                 </div>
                 <p className="text-[11px] text-neutral-400 mt-0.5 mb-2">
-                  Lo que escribas aquí <strong>solo sale en la ficha de esa persona</strong>. Nadie más lo ve, ni
-                  las otras familias del taller.
+                  Las observaciones de cada uno son para <strong>su familia</strong>: salen solo en la ficha de
+                  esa persona y en lo que reciba su familia. Nadie más las ve, ni las otras familias del taller.
                 </p>
 
                 <label className="text-xs block mb-3">

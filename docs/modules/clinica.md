@@ -1577,3 +1577,23 @@ clinica`, que abre las dos puertas (`tenant_modules` y `users.module_access`).
   choques con el equipo real durante la demo.
 - **FK de Clínica apunta a `patients`, no `clients`**: ver
   [`docs/modules/pacientes.md`](pacientes.md).
+
+## El taller se abre por su registro, y con su plantilla (03/09/2026)
+
+- **Pulsar un taller en la agenda abre directamente su registro de sesión**
+  (`SesionTallerDrawer`, montado desde `modules/default/CitasModule.jsx`
+  con `/api/citas/bookings/[id]/taller` para saber grupo y sesión), «como en
+  los pacientes». La ficha de la cita (hora, quién lo imparte, pasar lista)
+  queda a un clic con «Ver la cita» en la cabecera del registro. Sin grupo
+  (taller dado de baja) se cae a la ficha de siempre.
+- **Plantilla «Registro de taller»** (`PLANTILLA_TALLER`,
+  `lib/clinica/plantillas.js`; en `PLANTILLAS_EXTRA.registro`, así que el
+  centro puede sustituirla u ocultarla desde Configuración): objetivos,
+  actividades, desempeño, comentarios familiares, preparación previa y
+  devolución a la familia. Las cuatro primeras claves son las del registro de
+  sesión de siempre para que caigan en las columnas de `clinic_sessions` de
+  cada asistente; las dos últimas viven en el JSONB. Una sesión de taller nueva
+  arranca con ella; las guardadas conservan su foto de apartados.
+- **El apartado privado de cada asistente se llama «Observaciones»**
+  (`ETIQUETA_NOTA_POR_DEFECTO`, `lib/clinica/tallerSesion.js`): un comentario
+  para ESA familia que las demás no ven. Lo ya escrito conserva su título.

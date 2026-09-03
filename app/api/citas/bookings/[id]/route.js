@@ -597,15 +597,30 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
      *
      * `null` = no se ha tocado la hora, así que no hay nada que contar.
      */
+    /*
+     * ── Y SOLO SI QUIEN MUEVE LA CITA LO PIDE (03/09/2026, Aumenta) ──────────
+     * «Revisar que no se envíe automáticamente por correo lo de las citas al
+     * paciente, sino que haya que confirmar enviar al paciente.» Desde hoy el
+     * correo del cambio de hora sale únicamente con `avisarPaciente: true` en
+     * el cuerpo; la pantalla lo pregunta antes de mover (el modal, el
+     * arrastre, cortar y pegar, las columnas por terapeuta). Sin la marca, la
+     * cita se mueve en silencio y se le dice a quien la movió que no se ha
+     * avisado (`motivo: "sin_avisar"`), para que no dé por enterada a una
+     * familia que no lo está.
+     */
     let avisoCambioHora = null;
     if (cambiaHora && row.status !== "cancelled" && row.status !== "no_show") {
-      avisoCambioHora = await sendRescheduledEmail({
-        tenant,
-        tenantModels,
-        booking: row,
-        scheduledAtAnterior: before.scheduledAt,
-        reason: typeof body.motivoCambio === "string" ? body.motivoCambio.trim() || null : null,
-      });
+      if (body.avisarPaciente === true) {
+        avisoCambioHora = await sendRescheduledEmail({
+          tenant,
+          tenantModels,
+          booking: row,
+          scheduledAtAnterior: before.scheduledAt,
+          reason: typeof body.motivoCambio === "string" ? body.motivoCambio.trim() || null : null,
+        });
+      } else {
+        avisoCambioHora = { enviado: false, motivo: "sin_avisar" };
+      }
     }
 
     // Transición meetUrl null→valor en cita CONFIRMADA + ONLINE: AuditLog +

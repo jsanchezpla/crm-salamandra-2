@@ -16,6 +16,7 @@ import { avisarCambioDeConfiguracion } from "../../../../lib/configuracion/aviso
 import { exigeIdentidad } from "../../../../lib/citas/puertaIdentidad.js";
 import { centroVacio, normalizarCentro } from "../../../../lib/tenant/normalizarCentro.js";
 import { limpiaColorBloqueo, COLOR_BLOQUEO_POR_DEFECTO } from "../../../../lib/citas/coloresBloqueo.js";
+import { colorCitasDe } from "../../../../lib/citas/colorCitas.js";
 // Con alias: `categoriasDe` ya está cogido arriba por las categorías de
 // consulta externa de los clientes, que no tienen nada que ver con estas.
 import {
@@ -261,6 +262,7 @@ function diffConfiguracion(antes, despues, nombreAntes, nombreDespues) {
   anota("citas.portalUrl", antes?.citas?.portalUrl, despues?.citas?.portalUrl);
   anota("citas.reservaUrl", antes?.citas?.reservaUrl, despues?.citas?.reservaUrl);
   anota("citas.colorBloqueos", antes?.citas?.colorBloqueos, despues?.citas?.colorBloqueos);
+  anota("citas.colorCitas", antes?.citas?.colorCitas, despues?.citas?.colorCitas);
   // Las categorías de bloqueo van RESUMIDAS a la auditoría: son texto del
   // centro y no hace falta duplicarlas en el log compartido de master. Se
   // compara la lista entera (título y color incluidos), así que renombrar una
@@ -419,6 +421,9 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
     // Color de los tramos bloqueados en la agenda. Se devuelve ya resuelto al
     // negro de siempre para que el selector nunca arranque en blanco.
     colorBloqueos: t.settings?.citas?.colorBloqueos ?? COLOR_BLOQUEO_POR_DEFECTO,
+    // Un color para TODAS las citas (03/09/2026, Aumenta). Vacío = cada
+    // profesional con el suyo, que es lo de siempre (lib/citas/colorCitas.js).
+    colorCitas: colorCitasDe(t) ?? "",
     // Las categorías de bloqueo del centro (01/09/2026). Vacío = no las usa;
     // NO se cae a las de fábrica, que se cargan con un botón (ver
     // lib/citas/categoriasBloqueo.js).
@@ -868,6 +873,24 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   }
 
   /*
+   * Un color para TODAS las citas (03/09/2026, Aumenta: «el mismo color para
+   * las citas de todas las terapeutas: 9BBDC7 con letra negra»). Es un ajuste
+   * y no el comportamiento de todo el mundo porque el color por persona es
+   * justo lo que otros centros usan para distinguir agendas. Vaciarlo vuelve
+   * al color por persona; la letra la calcula la agenda contra el fondo.
+   */
+  if (body.colorCitas !== undefined) {
+    const color = limpiaColorBloqueo(body.colorCitas);
+    if (color && !isValidHexColor(color)) {
+      throw new ValidationError("El color de las citas tiene que ser un hex tipo #RRGGBB");
+    }
+    const citas = { ...(settings.citas ?? {}) };
+    if (color) citas.colorCitas = color;
+    else delete citas.colorCitas;
+    settings.citas = citas;
+  }
+
+  /*
    * Las CATEGORÍAS de bloqueo del centro (01/09/2026, Rodrigo): reunión de
    * equipo, trabajo interno, gestión documental… Cada una con su color, «para
    * que a todo el equipo le salga igual».
@@ -984,6 +1007,7 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
     // vacías fuera, los textos recortados—, que es lo que de verdad se imprime.
     centro: normalizarCentro(settings.centro),
     colorBloqueos: settings.citas?.colorBloqueos ?? COLOR_BLOQUEO_POR_DEFECTO,
+    colorCitas: colorCitasDe({ settings }) ?? "",
     categoriasBloqueo: categoriasBloqueoDe({ settings }),
     incidenciaPorFalta: responsablesDeIncidenciaPorFalta({ settings }),
     coordinadoras: coordinadorasDe({ settings }),

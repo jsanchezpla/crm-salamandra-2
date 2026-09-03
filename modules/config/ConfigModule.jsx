@@ -35,6 +35,7 @@ import {
   AvisosWhatsappCard,
   CategoriasBloqueoCard,
   ColorBloqueosCard,
+  ColorCitasCard,
   RecordatoriosCard,
   VideollamadaCard,
 } from "./tarjetas/Agenda.jsx";
@@ -793,8 +794,19 @@ export default function ConfigModule({ modulos = null }) {
                 readOnly={!!cfg.readOnly}
                 onGuardar={(v) => patchTenant({ colorBloqueos: v }, "Color de los bloqueos guardado")}
               />
-            ) 
+            )
 
+          )}
+
+          {enZona(
+            "colorCitas",
+             isAdmin && (
+              <ColorCitasCard
+                color={cfg.colorCitas}
+                readOnly={!!cfg.readOnly}
+                onGuardar={(v) => patchTenant({ colorCitas: v }, v ? "Todas las citas se pintarán de ese color" : "Cada profesional vuelve a tener su color")}
+              />
+            )
           )}
 
           {enZona(

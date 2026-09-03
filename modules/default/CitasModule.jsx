@@ -32,6 +32,8 @@ import { Waitlist } from "./citas/Waitlist.jsx";
 import MiniMeses from "./citas/MiniMeses.jsx";
 import AgendaPorTerapeuta from "./citas/AgendaPorTerapeuta.jsx";
 import { VOCABULARIO_MIEMBRO } from "@/lib/team/vocabulario.js";
+import { rotuloDeBloqueo, detalleDeBloqueo } from "@/lib/citas/rotuloBloqueo.js";
+import SesionTallerDrawer from "@/components/clinica/SesionTallerDrawer.jsx";
 
 /**
  * `conClientes` y `vocabulario` los resuelve la página (servidor): son para el
@@ -56,6 +58,15 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
   // El bloqueo pulsado en el calendario, para su modal pequeño (31/08/2026):
   // { id, titulo, label, categoryKey, start, end } o null.
   const [bloqueoAbierto, setBloqueoAbierto] = useState(null);
+  /*
+   * El TALLER pulsado en el calendario (03/09/2026, Aumenta: «que si pulsamos
+   * en talleres en el calendario directamente se abra el registro de sesiones
+   * de ese día y ese taller, como en los pacientes»): { bookingId, grupo,
+   * sesionId, cuando, duracion } o null. Abre el registro del grupo
+   * (SesionTallerDrawer) sin pasar por la ficha de la cita; la ficha sigue a
+   * un clic desde el propio registro («Ver la cita»).
+   */
+  const [tallerAbierto, setTallerAbierto] = useState(null);
   /*
    * Las categorías de bloqueo del centro (01/09/2026), que llegan junto al
    * listado de bloqueos. En un `ref` y no en un `useState` a propósito: el
@@ -500,12 +511,14 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
                * bloqueo, que es justo lo que se pidió («si entran en la cita
                * del bloqueo vean el documento aparejado»).
                */
-              title:
-                [
-                  b.categoryLabel && b.categoryLabel !== b.label ? b.categoryLabel : null,
-                  b.label,
-                  b.teamMemberName || "Todo el centro",
-                ].filter(Boolean).join(" · ") + (b.documentos > 0 ? " 📎" : ""),
+              /*
+               * Y desde el 03/09/2026 SOLO la categoría (Aumenta: «nada de
+               * motivo ni la persona, eso solo en el modal del bloqueo»). La
+               * regla vive en lib/citas/rotuloBloqueo.js, compartida con las
+               * columnas por terapeuta; el motivo y de quién es viajan en
+               * `extendedProps` para el modal.
+               */
+              title: rotuloDeBloqueo(b),
               start: b.startAt,
               end: b.endAt,
               /*
@@ -539,6 +552,7 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
               extendedProps: {
                 esBloqueo: true, bloqueoId: b.id, label: b.label,
                 categoryKey: b.categoryKey ?? null, tallerId: b.tallerId ?? null,
+                categoryLabel: b.categoryLabel ?? null, teamMemberName: b.teamMemberName ?? null,
               },
             }));
         }
@@ -581,6 +595,8 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
       setBloqueoAbierto({
         id: info.event.extendedProps.bloqueoId,
         titulo: info.event.title,
+        // Lo que la caja ya no dice (03/09/2026): motivo y de quién es.
+        subtitulo: detalleDeBloqueo(info.event.extendedProps),
         label: info.event.extendedProps.label,
         categoryKey: info.event.extendedProps.categoryKey ?? null,
         tallerId: info.event.extendedProps.tallerId ?? null,
@@ -590,11 +606,58 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
       return;
     }
     const id = info.event.id;
+    // Un taller abre directamente su registro (03/09/2026, Aumenta). Si el
+    // grupo ya no existe, se cae a la ficha de la cita, que siempre está.
+    if (info.event.extendedProps?.tallerGrupoId && (await abrirRegistroDeTaller(id, info.event))) return;
+    await abrirFichaDeCita(id);
+  }
+
+  async function abrirFichaDeCita(id) {
     const res = await fetch(`/api/citas/bookings/${id}`, { cache: "no-store" });
     const j = await res.json();
     if (j.ok) {
       setOpenBooking(j.data);
     }
+  }
+
+  /** El registro del taller de esa cita; `false` si no se pudo (y entonces se abre la ficha). */
+  async function abrirRegistroDeTaller(bookingId, event) {
+    try {
+      const r = await fetch(`/api/citas/bookings/${bookingId}/taller`, { cache: "no-store" });
+      const j = await r.json();
+      if (!j.ok || !j.data?.grupo?.tallerId) return false;
+      setTallerAbierto({
+        bookingId,
+        grupo: j.data.grupo,
+        sesionId: j.data.sesion?.id ?? null,
+        cuando: event.start instanceof Date ? event.start.toISOString() : null,
+        duracion: event.extendedProps?.duration ?? j.data.grupo.duration ?? null,
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /*
+   * ── AVISAR AL PACIENTE SE CONFIRMA (03/09/2026, Aumenta) ─────────────────
+   * «Revisar que no se envíe automáticamente por correo lo de las citas al
+   * paciente, sino que haya que confirmar enviar al paciente.» Mover una cita
+   * mandaba el correo del cambio sin preguntar; ahora se pregunta antes, y el
+   * servidor solo lo manda con `avisarPaciente: true`. No se pregunta cuando
+   * no hay a quién avisar: sin correo en la cita, en un taller (ocho familias)
+   * o si la cita se mueve al pasado (corregir el histórico no es un cambio).
+   */
+  async function preguntarSiAvisar(props, inicio) {
+    if (!props?.clientEmail || props?.tallerGrupoId) return false;
+    const d = inicio ? new Date(inicio) : null;
+    if (d && !Number.isNaN(d.getTime()) && d.getTime() <= Date.now()) return false;
+    return confirmar({
+      titulo: "¿Avisar al paciente por correo?",
+      texto: `Se le mandaría un correo a ${props.clientEmail} con la nueva fecha y hora. Si no, la cita se mueve sin avisar.`,
+      confirmar: "Sí, avisar",
+      cancelar: "Mover sin avisar",
+    });
   }
 
   // Abre "Nueva cita" con la fecha/hora ya puestas desde un clic en el
@@ -687,10 +750,11 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
     if (!destino) return;
     try {
       if (modo === "cortar") {
+        const avisarPaciente = await preguntarSiAvisar(cita.props, destino);
         const res = await fetch(`/api/citas/bookings/${cita.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ scheduledAt: destino }),
+          body: JSON.stringify({ scheduledAt: destino, avisarPaciente }),
         });
         const j = await res.json();
         if (!j.ok) throw new Error(j.error || "No se pudo mover la cita");
@@ -790,10 +854,13 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
     const nuevoIso = info.event.start ? info.event.start.toISOString() : null;
     if (!nuevoIso) { info.revert(); return; }
     try {
+      // Antes de guardar, ¿se avisa a la familia? (03/09/2026). La cita ya
+      // está pintada en el hueco nuevo mientras se contesta.
+      const avisarPaciente = await preguntarSiAvisar(info.event.extendedProps, nuevoIso);
       const res = await fetch(`/api/citas/bookings/${info.event.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scheduledAt: nuevoIso }),
+        body: JSON.stringify({ scheduledAt: nuevoIso, avisarPaciente }),
       });
       const j = await res.json();
       if (!j.ok) throw new Error(j.error || "No se pudo mover la cita");
@@ -1120,6 +1187,7 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
               vista={vista}
               onEventClick={handleEventClick}
               avisar={avisar}
+              preguntarSiAvisar={preguntarSiAvisar}
               onVolver={cerrarPorTerapeuta}
               vocabularioEquipo={vocabularioEquipo}
               version={versionColumnas}
@@ -1230,8 +1298,29 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
              * margen), en vez de 07:00–22:00 para todo el mundo.
              */
             hiddenDays={vista.hiddenDays}
-            slotMinTime={vista.slotMinTime}
-            slotMaxTime={vista.slotMaxTime}
+            /*
+             * De 7 a 21 y se puede subir o bajar (03/09/2026, Aumenta). La
+             * rejilla pinta las VEINTICUATRO horas y arranca desplazada a la
+             * hora de apertura del centro (`scrollTime`, 07:00 por defecto):
+             * lo que hay antes de las 7 o después de las 21 está ahí, un
+             * desplazamiento más arriba o más abajo, en vez de no existir.
+             * Con «Ajustar» puesto no: ahí se encoge justo el horario del
+             * centro para que quepa en la pantalla, y 24 horas encogidas no
+             * se leen.
+             */
+            slotMinTime={compacta ? vista.slotMinTime : "00:00:00"}
+            slotMaxTime={compacta ? vista.slotMaxTime : "24:00:00"}
+            scrollTime={vista.slotMinTime}
+            /*
+             * De cuarto en cuarto de hora (03/09/2026, Aumenta: «calendario de
+             * 15 en 15 minutos y un poco más de zoom»): cada franja es un
+             * cuarto, la etiqueta de la hora sale una vez por hora y una cita
+             * arrastrada cae en cuartos. La altura de la franja (el zoom) es
+             * CSS, en app/globals.css (`.fc-timegrid-slot`).
+             */
+            slotDuration="00:15:00"
+            slotLabelInterval="01:00:00"
+            snapDuration="00:15:00"
             // Si sobra alto, las franjas se reparten lo que haya; con «Ajustar»
             // puesto (arriba) es lo que hace que la jornada quepa sin barra.
             expandRows={true}
@@ -1311,6 +1400,32 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
         />
       )}
 
+      {/* El registro del TALLER pulsado (03/09/2026): se abre sin pasar por la
+          ficha de la cita; «Ver la cita» la abre desde dentro. Guardar
+          refresca la agenda, que pinta «(6/8)» con los que vinieron. */}
+      {tallerAbierto && (
+        <SesionTallerDrawer
+          key={tallerAbierto.sesionId ?? `nueva-${tallerAbierto.bookingId}`}
+          tallerId={tallerAbierto.grupo.tallerId}
+          tallerName={[tallerAbierto.grupo.tallerName, tallerAbierto.grupo.name].filter(Boolean).join(" · ")}
+          grupoId={tallerAbierto.grupo.id ?? null}
+          bookingId={tallerAbierto.bookingId}
+          cuando={tallerAbierto.cuando}
+          duracionCita={tallerAbierto.duracion}
+          sesionId={tallerAbierto.sesionId}
+          onClose={() => setTallerAbierto(null)}
+          onSaved={() => {
+            setTallerAbierto(null);
+            refrescarAgenda();
+          }}
+          onVerCita={() => {
+            const id = tallerAbierto.bookingId;
+            setTallerAbierto(null);
+            abrirFichaDeCita(id);
+          }}
+        />
+      )}
+
       {/* Menú contextual de la cita (clic derecho) y el aviso del pegado. */}
       {menuCita && (
         <CitaMenuContextual menu={menuCita} acciones={accionesDeMenu()} onCerrar={() => setMenuCita(null)} />
@@ -1369,6 +1484,12 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
           eventTypes={eventTypes}
           teamMembers={teamMembers}
           patients={patients}
+          // Para «Cambiar a bloqueo» en lo alto del drawer (03/09/2026): las
+          // categorías del centro, si quien mira es dirección (elige a quién)
+          // y su propia ficha (a quien no lo es se le bloquea a sí mismo).
+          categoriasBloqueo={categoriasBloqueoRef.current}
+          viewerIsAdmin={viewerIsAdmin}
+          miFichaDeEquipo={miFichaDeEquipo}
           confirmar={confirmar}
           avisar={avisar}
           onClose={() => setCreacion(null)}

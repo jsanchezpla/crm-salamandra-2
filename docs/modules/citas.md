@@ -1704,6 +1704,55 @@ valida el solape y, si no deja, la cita vuelve con el aviso. Los bloqueos se
 ven pero no se arrastran ahí; «Volver» devuelve la agenda de siempre en el
 mismo día.
 
+## Cuartos de hora, 7–21, un color, bloqueos solo con categoría, correo con confirmación y «Bloqueo» desde el hueco (03/09/2026)
+
+Tanda de Aumenta (Isa, por Rodrigo), toda en el base:
+
+- **Rejilla de cuarto en cuarto y con más zoom**: `slotDuration` 15 min,
+  etiqueta por hora, `snapDuration` 15 min (CitasModule y las columnas por
+  terapeuta); la altura de la franja —ahora POR CUARTO— en `app/globals.css`
+  (`.fc-timegrid-slot` 1.25em → 5em la hora, un 25 % más que antes).
+- **De 7 a 21 y se puede subir o bajar**: el calendario grande pinta las 24
+  horas (`slotMinTime` 00:00 / `slotMaxTime` 24:00) y arranca desplazado a la
+  hora de apertura (`scrollTime` = `slotMinTime` de `/api/citas/vista`); la
+  rejilla «de siempre» es 07:00–21:00 (`HORA_MAX_DEFECTO`,
+  `lib/citas/vistaAgenda.js`). Con «Ajustar» se encoge solo el horario del
+  centro; las columnas por terapeuta se quedan en ese horario (ocho columnas
+  de 24 h con barra propia no se leen).
+- **Un color para todas las citas**: ajuste `settings.citas.colorCitas`
+  (Configuración → Agenda, tarjeta «Un color para todas las citas»;
+  `lib/citas/colorCitas.js`, prueba en `_smoke-rotulo-bloqueo.mjs`). Puesto,
+  manda sobre el color de la persona y el del tipo; vacío, lo de siempre. Los
+  grises de cancelada / falta / atendida no cambian. La letra la calcula el
+  endpoint del calendario (`textColor` = `colorTextoSobre(color)`): sobre
+  `#9BBDC7` (lo que pidió Aumenta) sale negra. **Hay que ponerlo en su
+  Configuración**; no viene puesto.
+- **La caja de un bloqueo dice SOLO la categoría** (`rotuloDeBloqueo`,
+  `lib/citas/rotuloBloqueo.js`, compartida por los dos calendarios): sin
+  categoría, el motivo; sin ninguno, «Bloqueo». Motivo y persona se leen en
+  el modal (`detalleDeBloqueo`, subtítulo de `BloqueoModal`).
+- **El motivo de un bloqueo es opcional y arranca vacío** (antes el CRM
+  rellenaba «Vacaciones»): `POST`/`PATCH /api/citas/bloqueos` guardan `""`,
+  y la pantalla de Bloqueos, el modal y el drawer lo dejan en blanco. El
+  «Editar» de la pantalla de Bloqueos lleva el formulario a la vista
+  (`scrollIntoView`): con la lista larga se abría fuera de pantalla y parecía
+  que no hacía nada.
+- **El correo al paciente se confirma, no sale solo**: al crear una cita
+  manual hay una casilla «Avisar al paciente por correo», APAGADA de entrada
+  (sin marcarla, `omitirCorreo: true`); al cambiar la hora —modal, arrastre,
+  cortar y pegar, columnas por terapeuta, propuesta de la IA— se pregunta
+  «¿Avisar al paciente por correo?» y `PATCH /api/citas/bookings/[id]` solo
+  manda el correo con `avisarPaciente: true` (sin él responde
+  `avisoCambioHora: { enviado: false, motivo: "sin_avisar" }`). No se
+  pregunta sin correo en la cita, en un taller ni al mover al pasado. Las
+  cancelaciones y el enlace de videollamada no cambian.
+- **«Bloqueo» en lo alto del drawer de nueva cita**: el mismo hueco pulsado
+  se convierte en un tramo bloqueado (`BloqueoRapido` en
+  `NuevaCitaDrawer.jsx`, `POST /api/citas/bloqueos` con la hora partida,
+  una hora de duración de entrada; quien no es dirección se bloquea a sí
+  mismo).
+- Los talleres se abren por su registro desde la agenda: ver `clinica.md`.
+
 ## Migraciones
 
 Las del módulo están registradas en `MODULES.citas` de

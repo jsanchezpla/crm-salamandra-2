@@ -49,6 +49,7 @@ import interactionPlugin from "@fullcalendar/interaction";
 import { COLOR_BLOQUEO_POR_DEFECTO, colorTextoSobre } from "@/lib/citas/coloresBloqueo.js";
 import { COLOR_CITA_POR_DEFECTO } from "@/lib/citas/filtros.js";
 import { VOCABULARIO_MIEMBRO } from "@/lib/team/vocabulario.js";
+import { rotuloDeBloqueo } from "@/lib/citas/rotuloBloqueo.js";
 import { toDateInput } from "./chips.jsx";
 
 /** Con más columnas que esto el día no se lee; se avisa y se enseñan las primeras. */
@@ -79,6 +80,10 @@ export default function AgendaPorTerapeuta({
   vista,
   onEventClick,
   avisar,
+  // ¿Se avisa a la familia por correo al mover la cita? Lo pregunta el padre
+  // (03/09/2026, Aumenta: el correo ya no sale sin confirmar). `null` = no
+  // se avisa nunca desde aquí.
+  preguntarSiAvisar = null,
   onVolver,
   vocabularioEquipo = VOCABULARIO_MIEMBRO,
   // Sube cuando el padre cambia algo desde fuera (el modal de la cita, un
@@ -177,9 +182,9 @@ export default function AgendaPorTerapeuta({
         const color = b.color || COLOR_BLOQUEO_POR_DEFECTO;
         return {
           id: `bloqueo-${b.id}`,
-          title:
-            [b.categoryLabel && b.categoryLabel !== b.label ? b.categoryLabel : null, b.label, b.teamMemberName || "Todo el centro"].filter(Boolean).join(" · ") +
-            (b.documentos > 0 ? " 📎" : ""),
+          // Solo la categoría (03/09/2026): la misma regla que el calendario
+          // grande, en lib/citas/rotuloBloqueo.js.
+          title: rotuloDeBloqueo(b),
           start: b.startAt,
           end: b.endAt,
           display: "block",
@@ -188,7 +193,10 @@ export default function AgendaPorTerapeuta({
           textColor: colorTextoSobre(color),
           editable: false,
           startEditable: false,
-          extendedProps: { esBloqueo: true, bloqueoId: b.id, label: b.label, categoryKey: b.categoryKey ?? null, tallerId: b.tallerId ?? null },
+          extendedProps: {
+            esBloqueo: true, bloqueoId: b.id, label: b.label, categoryKey: b.categoryKey ?? null, tallerId: b.tallerId ?? null,
+            categoryLabel: b.categoryLabel ?? null, teamMemberName: b.teamMemberName ?? null,
+          },
         };
       }), []);
 
@@ -231,10 +239,11 @@ export default function AgendaPorTerapeuta({
     }
     setMoviendo(true);
     try {
+      const avisarPaciente = preguntarSiAvisar ? await preguntarSiAvisar(info.event.extendedProps, inicio) : false;
       const r = await fetch(`/api/citas/bookings/${info.event.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ teamMemberId, scheduledAt: inicio }),
+        body: JSON.stringify({ teamMemberId, scheduledAt: inicio, avisarPaciente }),
       });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || `No se pudo pasar la cita a ${voc.ese}`);
@@ -267,10 +276,11 @@ export default function AgendaPorTerapeuta({
       return;
     }
     try {
+      const avisarPaciente = preguntarSiAvisar ? await preguntarSiAvisar(info.event.extendedProps, inicio) : false;
       const r = await fetch(`/api/citas/bookings/${info.event.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scheduledAt: inicio }),
+        body: JSON.stringify({ scheduledAt: inicio, avisarPaciente }),
       });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || "No se pudo mover la cita");
@@ -364,7 +374,14 @@ export default function AgendaPorTerapeuta({
                       locale="es"
                       firstDay={1}
                       slotMinTime={vista?.slotMinTime ?? "07:00:00"}
-                      slotMaxTime={vista?.slotMaxTime ?? "22:00:00"}
+                      slotMaxTime={vista?.slotMaxTime ?? "21:00:00"}
+                      // De cuarto en cuarto, como el calendario grande
+                      // (03/09/2026). Aquí la rejilla se queda en el horario
+                      // del centro: ocho columnas de 24 horas, cada una con
+                      // su propia barra, no se leen.
+                      slotDuration="00:15:00"
+                      slotLabelInterval="01:00:00"
+                      snapDuration="00:15:00"
                       displayEventEnd={false}
                       eventMinHeight={8}
                       slotEventOverlap={false}

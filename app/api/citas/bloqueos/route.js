@@ -417,7 +417,10 @@ export const POST = withTenant(async (request, _rc, ctx) => {
       }
     }
 
-    const label = (body.label ? String(body.label).trim() : "").slice(0, 120) || "Vacaciones";
+    // El motivo puede ir VACÍO desde el 03/09/2026 (Aumenta): antes se
+    // rellenaba solo con «Vacaciones», y un motivo puesto por el CRM y no por
+    // quien bloquea es un dato inventado. La categoría ya dice qué es.
+    const label = (body.label ? String(body.label).trim() : "").slice(0, 120);
     const notes = body.notes ? String(body.notes).trim() : null;
 
     /*
@@ -564,7 +567,8 @@ export const PATCH = withTenant(async (request, _rc, ctx) => {
     }
 
     if (body.label !== undefined) {
-      cambios.label = (body.label ? String(body.label).trim() : "").slice(0, 120) || "Vacaciones";
+      // Vacío se guarda vacío (03/09/2026): ver el POST.
+      cambios.label = (body.label ? String(body.label).trim() : "").slice(0, 120);
     }
     if (body.notes !== undefined) {
       cambios.notes = body.notes ? String(body.notes).trim() : null;

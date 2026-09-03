@@ -5,6 +5,8 @@ import { resolveCurrentTeamMemberId } from "../../../../../lib/team/currentTeamM
 import { noEsCarritoAbandonado } from "../../../../../lib/citas/booking.js";
 import { veTodaLaAgenda, soloLoSuyo, filtroDeProfesionales } from "../../../../../lib/citas/visibilidad.js";
 import { citasDeTallerQueImparte, conteoDeAsistentes } from "../../../../../lib/clinica/citaDeTaller.js";
+import { colorCitasDe, colorDeCita } from "../../../../../lib/citas/colorCitas.js";
+import { colorTextoSobre } from "../../../../../lib/citas/coloresBloqueo.js";
 
 const STATUS_COLOR_DIM = {
   cancelled: "#9ca3af",
@@ -123,12 +125,15 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
      */
     const idsDeTaller = rows.filter((b) => b.tallerGrupoId).map((b) => b.id);
     const asistentes = await conteoDeAsistentes({ tenantModels, bookingIds: idsDeTaller });
+    const colorUnico = colorCitasDe(tenant);
 
     const events = rows.map((b) => {
       const startIso = new Date(b.scheduledAt);
       const endIso = new Date(startIso.getTime() + b.duration * 60 * 1000);
       const personColor = teamOn && b.teamMember?.avatarColor ? b.teamMember.avatarColor : null;
-      const baseColor = personColor || b.eventType?.color || "#3F6E5B";
+      // El color único del centro manda si lo hay (03/09/2026, Aumenta); si
+      // no, persona → tipo → verde (lib/citas/colorCitas.js).
+      const baseColor = colorDeCita({ unico: colorUnico, persona: personColor, tipo: b.eventType?.color });
       const color = STATUS_COLOR_DIM[b.status] || baseColor;
       // Solo las citas ACTIVAS se pueden arrastrar para reprogramar.
       const arrastrable = b.status !== "cancelled" && b.status !== "no_show" && b.status !== "completed";
@@ -154,6 +159,9 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
         end: endIso.toISOString(),
         backgroundColor: color,
         borderColor: color,
+        // La letra contra el fondo (03/09/2026): sobre el azul claro de Aumenta
+        // sale negra, sobre el verde de siempre sigue blanca.
+        textColor: colorTextoSobre(color),
         startEditable: arrastrable,
         extendedProps: {
           status: b.status,

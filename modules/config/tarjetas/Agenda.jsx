@@ -163,6 +163,99 @@ export function ColorBloqueosCard({ color, readOnly, onGuardar }) {
   );
 }
 
+/** El color con el que arranca el selector al encender el color único: el que pidió Aumenta. */
+const COLOR_CITAS_SUGERIDO = "#9BBDC7";
+
+/**
+ * Un color para TODAS las citas (03/09/2026, Aumenta por Rodrigo: «el mismo
+ * color para las citas de todas las terapeutas: 9BBDC7 con letra negra»).
+ *
+ * Es un ajuste y no el comportamiento de todo el mundo: el color por persona
+ * es justo lo que un centro pequeño usa para ver de quién es cada cita. Vacío
+ * (`""`) = por persona, que es lo de siempre; la regla de qué color gana vive
+ * en lib/citas/colorCitas.js. La letra no se elige: la calcula la agenda
+ * contra el fondo, y la muestra de abajo la enseña con la misma cuenta.
+ */
+export function ColorCitasCard({ color, readOnly, onGuardar }) {
+  const puesto = Boolean(color);
+  const [borrador, setBorrador] = useState(color || COLOR_CITAS_SUGERIDO);
+  useEffect(() => { setBorrador(color || COLOR_CITAS_SUGERIDO); }, [color]);
+
+  const valido = /^#[0-9a-fA-F]{6}$/.test(borrador.trim());
+  const sinCambios = borrador.trim().toUpperCase() === (color ?? "").toUpperCase();
+  const muestra = valido ? borrador.trim().toUpperCase() : COLOR_CITAS_SUGERIDO;
+
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl p-5">
+      <div className="text-sm font-semibold text-neutral-800">Un color para todas las citas</div>
+      <p className="text-xs text-neutral-400 mt-0.5 max-w-lg">
+        {puesto
+          ? "Todas las citas vivas se pintan de este color, sea de quien sea; las canceladas, las faltas y las atendidas conservan sus grises. La letra se calcula sola para que se lea."
+          : "Ahora mismo cada cita va del color de su profesional (o del tipo de cita si no tiene). Pon un color aquí para que todas las citas del centro se pinten igual."}
+      </p>
+
+      <div className="mt-3 flex gap-2 flex-wrap items-end">
+        <div>
+          <label className="block text-[11px] text-neutral-500 mb-1">Color</label>
+          <input
+            type="color"
+            value={muestra}
+            disabled={readOnly}
+            onChange={(e) => setBorrador(e.target.value.toUpperCase())}
+            className="h-10 w-14 border border-neutral-200 rounded-lg p-1 disabled:opacity-40 cursor-pointer"
+            aria-label="Elegir el color de todas las citas"
+          />
+        </div>
+        <div className="flex-1 min-w-[140px]">
+          <label className="block text-[11px] text-neutral-500 mb-1">Código</label>
+          <input
+            type="text"
+            value={borrador}
+            disabled={readOnly}
+            onChange={(e) => setBorrador(e.target.value)}
+            placeholder={COLOR_CITAS_SUGERIDO}
+            className="w-full text-sm border border-neutral-200 rounded-lg px-3 py-2 font-mono disabled:bg-neutral-50"
+          />
+        </div>
+        {!readOnly && (
+          <PrimaryButton onClick={() => valido && onGuardar(borrador.trim().toUpperCase())}>
+            {puesto ? "Guardar" : "Usar este color"}
+          </PrimaryButton>
+        )}
+        {!readOnly && puesto && (
+          <button
+            type="button"
+            onClick={() => onGuardar("")}
+            className="text-xs text-neutral-500 hover:text-neutral-900 underline px-1 py-2"
+          >
+            Volver al color por profesional
+          </button>
+        )}
+      </div>
+
+      {!valido && (
+        <p className="text-[11px] text-rose-600 mt-2">
+          Tiene que ser un código de color tipo <span className="font-mono">#9BBDC7</span>.
+        </p>
+      )}
+
+      <div className="mt-3">
+        <div className="text-[11px] text-neutral-500 mb-1">Así se verá en la agenda</div>
+        <div
+          className="rounded px-2 py-1 text-[11px] font-medium inline-block"
+          style={{ backgroundColor: muestra, color: colorTextoSobre(muestra) }}
+        >
+          10:00 · Hugo Castro
+        </div>
+      </div>
+
+      {!readOnly && puesto && !sinCambios && valido && (
+        <p className="text-[10px] text-neutral-400 mt-2">Sin guardar todavía.</p>
+      )}
+    </div>
+  );
+}
+
 /**
  * Categorías de bloqueo (01/09/2026, Rodrigo).
  *
