@@ -155,7 +155,9 @@ export default function FormulariosModule() {
       const hayPendiente = (json.parte ?? []).some((f) => f.includes("a mano"));
       setAviso({
         tipo: (json.acceso?.intentado && !json.acceso.ok) || hayPendiente ? "warn" : "ok",
-        texto: partes.join(". "),
+        // Cada frase llega con su punto; al encadenarlas se quita para que no
+        // salga «a tiempo.. Se ha guardado» (la captura de AV-0031).
+        texto: partes.map((p) => String(p).trim().replace(/\.+$/, "")).join(". ") + ".",
         clientId: json.client?.id,
       });
       await cargar(tab);
