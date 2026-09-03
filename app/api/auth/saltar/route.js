@@ -4,6 +4,7 @@ import { esPeticionDeBackoffice, esPeticionDeCalendario } from "../../../../lib/
 import { auditarLogin } from "../../../../lib/auth/loginGuard.js";
 import { canjearSalto } from "../../../../lib/calendario-global/salto.js";
 import { enforceRateLimit } from "../../../../lib/utils/rateLimit.js";
+import { origenPeticion } from "../../../../lib/calendar/googleCalendar.js";
 
 /**
  * GET /api/auth/saltar?t=… — el canje del pase del calendario global
@@ -31,13 +32,18 @@ export async function GET(request) {
 
   const ip = request.headers.get("x-forwarded-for") ?? null;
   const token = new URL(request.url).searchParams.get("t");
+  // Dentro del contenedor `request.url` es http://localhost:3000: las
+  // redirecciones se construyen sobre el host PÚBLICO que puso nginx, como
+  // hace la conexión con Google (visto en producción el 03/09/2026: el canje
+  // mandaba a localhost:3000/login).
+  const origen = origenPeticion(request);
 
   let canje;
   try {
     canje = await canjearSalto(token);
   } catch (err) {
     await auditarLogin({ action: "auth.login_failed", email: "", ip, motivo: `salto:${err?.message ?? "invalido"}` });
-    return NextResponse.redirect(new URL("/login", request.url));
+    return NextResponse.redirect(new URL("/login", origen));
   }
 
   const { user, tenant, destino, desde } = canje;
@@ -66,7 +72,7 @@ export async function GET(request) {
     motivo: desde ? `calendario_global:${desde}` : "calendario_global",
   });
 
-  const response = NextResponse.redirect(new URL(destino, request.url), { status: 303 });
+  const response = NextResponse.redirect(new URL(destino, origen), { status: 303 });
   response.headers.set("Cache-Control", "no-store");
   setAuthCookies(response, { accessToken, refreshToken });
   return response;
