@@ -18,7 +18,9 @@ import { useEffect, useRef } from "react";
  * placeholder, className…). El alto se recalcula cada vez que cambia `value`,
  * así que también crece al cargar una incidencia ya escrita.
  */
-export default function TextareaCrece({ value, rows = 3, maxAlto = "45dvh", className = "", style, ...rest }) {
+// El tope: el 45 % del alto visible, pero nunca menos de 16 rem — en una
+// pestaña recién abierta en segundo plano el alto visible puede medir 0.
+export default function TextareaCrece({ value, rows = 3, maxAlto = "max(16rem, 45dvh)", className = "", style, ...rest }) {
   const ref = useRef(null);
 
   useEffect(() => {

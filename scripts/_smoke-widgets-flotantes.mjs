@@ -52,6 +52,18 @@ test("la regla que esconde los widgets tras un panel ignora los fondos apagados 
   assert.ok(selectores.some((s) => s.includes('[class*="z-["]:not')), "los z-[60..90] puntuales");
 });
 
+test("los widgets suben lo que la barra del navegador tape (100vh frente a 100dvh, AV-0035)", () => {
+  // Misma causa que `.alto-ventana`: donde 100vh mide más que el hueco visible,
+  // lo anclado abajo cae detrás de la barra. Se sube la diferencia, que en un
+  // navegador normal es 0. Si alguien quita esto, Blanca vuelve a ver media campana.
+  const inicio = css.indexOf(".crm-flotante.fixed");
+  assert.ok(inicio > -1, "la regla .crm-flotante.fixed sigue en globals.css");
+  const bloque = css.slice(inicio, css.indexOf("}", inicio));
+  assert.match(bloque, /transform:\s*translateY\(calc\(100dvh - 100vh\)\)/, "sube exactamente lo que tapa la barra");
+  const antes = css.slice(Math.max(0, inicio - 60), inicio);
+  assert.match(antes, /@supports \(height: 100dvh\)/, "solo donde el navegador entiende dvh; si no, calc daría error y la regla entera se descartaría igual");
+});
+
 test("el fondo del menú móvil sigue siempre en el DOM y cerrado se apaga con opacity-0", () => {
   assert.match(sidebar, /lg:hidden fixed inset-0 [^`]*z-40/, "el fondo del menú móvil es fixed inset-0 z-40");
   assert.match(sidebar, /mobileOpen \? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"/, "cerrado lleva opacity-0, que es lo que lee la regla");

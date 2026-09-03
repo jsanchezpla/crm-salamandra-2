@@ -35,6 +35,26 @@
   display: none;
 }
 
+/*
+ * Los widgets flotantes suben lo que la barra del navegador tape (03/09/2026,
+ * AV-0035 de Aumenta: «con la barra de tareas solo veo una parte de la
+ * salamandra y de la campanita»).
+ *
+ * Misma causa que arregló `.alto-ventana` para el menú lateral: en algunos
+ * navegadores `100vh` mide MÁS que el hueco visible (`100dvh`), y todo lo que
+ * se ancla al borde de abajo del alto teórico —`bottom-4`, `bottom-[1.375rem]`—
+ * cae detrás de la barra. La diferencia entre los dos altos es exactamente lo
+ * que tapa, así que se sube eso con un `translateY`. En un navegador normal la
+ * diferencia es 0 y esto no mueve nada. Va por transform y no tocando
+ * `bottom` para no reescribir las clases de posición de cada widget (que
+ * además fija `scripts/_smoke-widgets-flotantes.mjs`).
+ */
+@supports (height: 100dvh) {
+  .crm-flotante.fixed {
+    transform: translateY(calc(100dvh - 100vh));
+  }
+}
+
 /* ── Tokens del sistema ──────────────────────────────────────────────── */
 :root {
   /* Tinta cálida (reemplaza el gray-* frío) */
