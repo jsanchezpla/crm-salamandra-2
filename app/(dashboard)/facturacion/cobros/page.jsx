@@ -12,7 +12,7 @@ import ExportButtons from "@/components/billing/ExportButtons.jsx";
 import FacturarMesDrawer from "../_components/FacturarMesDrawer.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 import { useDialogo } from "@/components/ui/Dialogo.jsx";
-import { partesConProrrateo, fraseDeSesiones } from "../../../../lib/billing/prorrateo.js";
+import { partesConProrrateo } from "../../../../lib/billing/prorrateo.js";
 import { cuotasQueEntran, conceptosDeCuotas, importePactado } from "../../../../lib/billing/cuotaParaRellenar.js";
 
 const inputCls =
@@ -817,7 +817,7 @@ export default function CobrosPage() {
                                   className="flex-1 rounded-md border border-neutral-200 bg-white px-1.5 py-0.5 text-[11px] text-neutral-600 focus:outline-none focus:border-neutral-400" />
                                 {parte.prorrateo && (
                                   <span className="text-[10px] text-neutral-400 shrink-0">
-                                    {fraseDeSesiones(parte.prorrateo)} (de {fmtMoney(parte.importeCompleto)})
+                                    {parte.prorrateo.diasCobrados}/{parte.prorrateo.diasDelMes} días (de {fmtMoney(parte.importeCompleto)})
                                   </span>
                                 )}
                               </div>
@@ -836,8 +836,7 @@ export default function CobrosPage() {
                         {conceptosElegidos.length > 0 && (
                           <p className="text-[10px] text-neutral-400">
                             La fecha «Empezó el» solo hace falta si ese servicio empezó a mitad de mes:
-                            su parte se prorratea sola por sesiones, contando el día de la semana de esa
-                            fecha (empezó un martes 15: se cobran 3 de los 5 martes del mes).
+                            su parte se prorratea sola.
                           </p>
                         )}
                       </div>
