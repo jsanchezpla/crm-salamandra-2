@@ -88,6 +88,13 @@ centro en Clínica: son cifras de dinero de todo el equipo.
   no se lea como el de todo. El precio de compra no sale de este endpoint
   hacia ningún sitio público (es de dirección; `paraLaTienda` lo tapa en la
   tienda).
+- **Por talla u opción** (03/09/2026): cada fila de `porProducto` lleva
+  `variantes` (`variantId`, `nombre`, `unidades`, `importe`, por unidades),
+  agrupadas por `order_lines.variant_id` —o por el `variant_name` copiado en
+  la línea si la variante ya no existe—. Una línea sin variante suma al
+  producto y a ninguna talla; un producto sin tallas lleva `[]`. En «Lo más
+  vendido» se despliegan bajo el producto; en el Excel es la hoja «Por
+  variante» (solo si hay alguna) y en el PDF la tabla «Por talla u opción».
 - **Llevárselo** (03/09/2026): `GET /api/productos/estadisticas/export?formato=xlsx|pdf`
   con el mismo `desde`/`hasta`. El Excel lleva cuatro hojas —Resumen, Por
   producto (unidades, pedidos, vendido, coste unitario, margen), Por mes, Por
@@ -111,4 +118,4 @@ centro en Clínica: son cifras de dinero de todo el equipo.
 
 ## Lo que NO hace (todavía)
 
-- Ventas por variante (talla): el ranking va por producto.
+- Nada apuntado a 03/09/2026: Excel/PDF, margen y ventas por variante ya están.

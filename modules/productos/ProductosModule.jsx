@@ -84,18 +84,13 @@ function Kpi({ label, value, sub }) {
   );
 }
 
-/**
- * Barras horizontales sin librería: son pocas filas, no hace falta un motor.
- * `extra`, si se da, pinta una segunda cifra a la derecha (el margen en «Lo
- * más vendido»); `null` sale como «—», que es «no se sabe», no cero.
- */
-function Barras({ datos, etiqueta, valor, formatea = fmtMoney, extra = null }) {
+/** Barras horizontales sin librería: son pocas filas, no hace falta un motor. */
+function Barras({ datos, etiqueta, valor, formatea = fmtMoney }) {
   const max = Math.max(1, ...datos.map((d) => Number(valor(d)) || 0));
   return (
     <div className="space-y-1.5">
       {datos.map((d, i) => {
         const v = Number(valor(d)) || 0;
-        const e = extra ? extra(d) : undefined;
         return (
           <div key={i} className="flex items-center gap-2 text-[12px]">
             <div className="w-28 shrink-0 truncate text-neutral-600" title={etiqueta(d)}>{etiqueta(d)}</div>
@@ -103,10 +98,77 @@ function Barras({ datos, etiqueta, valor, formatea = fmtMoney, extra = null }) {
               <div className="h-full rounded bg-[var(--color-primary,#1B3A2D)]/70" style={{ width: `${(v / max) * 100}%` }} />
             </div>
             <div className="w-20 shrink-0 text-right tabular-nums text-neutral-700">{formatea(v)}</div>
-            {extra && (
-              <div className={`w-20 shrink-0 text-right tabular-nums ${e === null || e === undefined ? "text-neutral-300" : Number(e) < 0 ? "text-red-600" : "text-neutral-500"}`}>
-                {e === null || e === undefined ? "—" : formatea(e)}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * «Lo más vendido»: las barras de siempre, y debajo de cada producto con
+ * tallas u opciones, un desplegable con lo vendido de cada una (03/09/2026).
+ * Para reponer hace falta saber qué talla se vende, no solo qué camiseta. El
+ * producto sin variantes sale como una barra a secas.
+ */
+function RankingVentas({ filas }) {
+  const [abiertos, setAbiertos] = useState(() => new Set());
+  const alternar = (clave) =>
+    setAbiertos((prev) => {
+      const n = new Set(prev);
+      if (n.has(clave)) n.delete(clave); else n.add(clave);
+      return n;
+    });
+  const max = Math.max(1, ...filas.map((d) => Number(d.importe) || 0));
+  const margenCls = (m) => (m === null || m === undefined ? "text-neutral-300" : Number(m) < 0 ? "text-red-600" : "text-neutral-500");
+
+  return (
+    <div className="space-y-1.5">
+      {filas.map((d, i) => {
+        const clave = d.productId || `nombre:${d.nombre}`;
+        const v = Number(d.importe) || 0;
+        const conVariantes = Array.isArray(d.variantes) && d.variantes.length > 0;
+        const abierto = abiertos.has(clave);
+        return (
+          <div key={i}>
+            <div className="flex items-center gap-2 text-[12px]">
+              <div className="w-28 shrink-0 min-w-0">
+                <div className="truncate text-neutral-600" title={d.nombre}>{d.nombre}</div>
+                {conVariantes && (
+                  <button
+                    type="button"
+                    onClick={() => alternar(clave)}
+                    className="text-[10.5px] text-[var(--color-primary,#1B3A2D)] hover:underline"
+                    aria-expanded={abierto}
+                  >
+                    {abierto ? "▾" : "▸"} {d.variantes.length} talla{d.variantes.length === 1 ? "" : "s"} u opci{d.variantes.length === 1 ? "ón" : "ones"}
+                  </button>
+                )}
               </div>
+              <div className="flex-1 h-4 rounded bg-neutral-100 overflow-hidden">
+                <div className="h-full rounded bg-[var(--color-primary,#1B3A2D)]/70" style={{ width: `${(v / max) * 100}%` }} />
+              </div>
+              <div className="w-20 shrink-0 text-right tabular-nums text-neutral-700">{fmtMoney(v)}</div>
+              <div className={`w-20 shrink-0 text-right tabular-nums ${margenCls(d.margen)}`}>
+                {d.margen === null || d.margen === undefined ? "—" : fmtMoney(d.margen)}
+              </div>
+            </div>
+            {conVariantes && abierto && (
+              <ul className="ml-3 mt-1 mb-2 border-l border-neutral-200 pl-3 space-y-0.5">
+                {d.variantes.map((va, j) => (
+                  <li key={j} className="flex items-center gap-2 text-[11.5px] text-neutral-500">
+                    <span className="flex-1 min-w-0 truncate" title={va.nombre}>{va.nombre}</span>
+                    <span className="w-24 shrink-0 text-right tabular-nums">{fmtNum(va.unidades)} ud</span>
+                    <span className="w-20 shrink-0 text-right tabular-nums">{fmtMoney(va.importe)}</span>
+                    <span className="w-20 shrink-0" />
+                  </li>
+                ))}
+                {d.unidades > d.variantes.reduce((s, va) => s + (Number(va.unidades) || 0), 0) && (
+                  <li className="text-[10.5px] text-neutral-400">
+                    y {fmtNum(d.unidades - d.variantes.reduce((s, va) => s + (Number(va.unidades) || 0), 0))} ud vendidas sin talla ni opción
+                  </li>
+                )}
+              </ul>
             )}
           </div>
         );
@@ -257,12 +319,7 @@ function Estadisticas({ conPedidos }) {
                     </span>
                   </div>
                 </div>
-                <Barras
-                  datos={datos.porProducto.slice(0, 8)}
-                  etiqueta={(d) => d.nombre}
-                  valor={(d) => d.importe}
-                  extra={(d) => d.margen}
-                />
+                <RankingVentas filas={datos.porProducto.slice(0, 8)} />
                 {datos.porProducto.length > 8 && (
                   <p className="text-[11px] text-neutral-400 mt-2">y {datos.porProducto.length - 8} más</p>
                 )}

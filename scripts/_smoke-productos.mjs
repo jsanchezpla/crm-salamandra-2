@@ -179,6 +179,52 @@ describe("el margen: lo cobrado menos lo que costó, y «no se sabe» no es cero
   });
 });
 
+describe("las variantes: cada fila del ranking dice qué talla u opción se vendió", () => {
+  const V_M = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const V_L = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const conTallas = [
+    pedido("t1", "completed", [
+      { ...linea(P1, "Camiseta", 2, 20), variantId: V_M, variantName: "Talla M" },
+      { ...linea(P1, "Camiseta", 1, 20), variantId: V_L, variantName: "Talla L" },
+      linea(P2, "Taza", 1, 12),
+    ]),
+    pedido("t2", "shipped", [
+      { ...linea(P1, "Camiseta", 3, 20), variantId: V_M, variantName: "Talla M" },
+      // Vendida «a secas», sin talla: suma al producto, a ninguna variante.
+      linea(P1, "Camiseta", 1, 20),
+    ]),
+    // Un borrador con la talla S no cuenta, como no cuenta su pedido.
+    pedido("t3", "draft", [{ ...linea(P1, "Camiseta", 9, 20), variantId: null, variantName: "Talla S" }]),
+  ];
+
+  it("agrupa por variante dentro del producto, de más a menos unidades, y el producto sigue sumando todo", () => {
+    const r = agregarVentas(conTallas);
+    const camiseta = r.porProducto.find((f) => f.productId === P1);
+    assert.equal(camiseta.unidades, 7);
+    assert.equal(camiseta.importe, 140);
+    assert.deepEqual(
+      camiseta.variantes.map((v) => [v.variantId, v.nombre, v.unidades, v.importe]),
+      [
+        [V_M, "Talla M", 5, 100],
+        [V_L, "Talla L", 1, 20],
+      ]
+    );
+  });
+
+  it("un producto sin tallas lleva `variantes: []`", () => {
+    const r = agregarVentas(conTallas);
+    assert.deepEqual(r.porProducto.find((f) => f.productId === P2).variantes, []);
+    assert.ok(agregarVentas(PEDIDOS).porProducto.every((f) => f.variantes.length === 0));
+  });
+
+  it("una variante borrada del catálogo sigue saliendo por el nombre copiado en la línea", () => {
+    const r = agregarVentas([
+      pedido("v1", "completed", [{ ...linea(P1, "Camiseta", 2, 20), variantId: null, variantName: "Talla XL" }]),
+    ]);
+    assert.deepEqual(r.porProducto[0].variantes, [{ variantId: null, nombre: "Talla XL", unidades: 2, importe: 40 }]);
+  });
+});
+
 describe("costesUnitarios: la ficha por defecto, las entradas de almacén cuando las hay", () => {
   const FICHAS = [
     { id: P1, purchasePrice: "8.00" },

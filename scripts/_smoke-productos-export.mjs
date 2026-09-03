@@ -97,6 +97,28 @@ describe("el Excel de ventas", () => {
     ]);
   });
 
+  it("con tallas u opciones vendidas aparece «Por variante»; sin ellas, no", async () => {
+    const V_M = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const conTallas = {
+      disponible: true,
+      periodo: DATOS.periodo,
+      ...agregarVentas([
+        pedido("t1", "completed", [
+          { ...linea(P1, "Camiseta", 2, 20), variantId: V_M, variantName: "Talla M" },
+          { ...linea(P1, "Camiseta", 1, 20), variantId: null, variantName: "Talla L" },
+          linea(P2, "Taza", 1, 12),
+        ]),
+      ]),
+    };
+    const hojas = await leerHojas(await buildVentasXlsx(conTallas));
+    assert.deepEqual(Object.keys(hojas), ["Resumen", "Por producto", "Por variante", "Por mes", "Por origen"]);
+    assert.deepEqual(hojas["Por variante"].slice(1), [
+      ["Camiseta", "Talla M", 2, 40],
+      ["Camiseta", "Talla L", 1, 20],
+    ]);
+    assert.equal((await buildVentasPdf(conTallas)).subarray(0, 5).toString("latin1"), "%PDF-");
+  });
+
   it("sin ventas, solo el resumen (nada de hojas vacías) y el margen en «—»", async () => {
     const vacio = { disponible: true, periodo: DATOS.periodo, ...agregarVentas([], { activos: [] }) };
     const hojas = await leerHojas(await buildVentasXlsx(vacio));
