@@ -5,6 +5,7 @@ import { ok, error, forbidden } from "../../../../lib/utils/apiResponse.js";
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
 import { madridToday } from "../../../../lib/utils/madridDate.js";
 import { veTodasLasIncidencias, whereIncidenciasVisibles } from "../../../../lib/clinica/alcanceIncidencias.js";
+import { idsVistasPor } from "../../../../lib/clinica/incidenciasDe.js";
 import {
   serializeIncidencia,
   isValidCategory,
@@ -121,6 +122,19 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   const esAdmin = veTodasLasIncidencias(ctx);
   if (!esAdmin) (where[Op.and] ||= []).push(await whereIncidenciasVisibles(M, yoSoy));
 
+  /*
+   * ── LAS QUE YA HE DADO POR VISTAS (04/09/2026, Rodrigo) ───────────────────
+   * «Que le deje de salir»: las que esta persona marcó como vistas se apartan
+   * del listado, aunque la incidencia siga abierta para el resto. Apartadas,
+   * NO escondidas — `?vistas=1` las devuelve, y su alcance no cambia: una
+   * despachada por error se recupera. Ver `lib/clinica/vistoIncidencia.js`.
+   */
+  const misVistas = await idsVistasPor(M, yoSoy);
+  const verVistas = sp.get("vistas") === "1";
+  if (misVistas.length && !verVistas) {
+    (where[Op.and] ||= []).push({ id: { [Op.notIn]: misVistas } });
+  }
+
   let assignedToId = sp.get("assignedToId");
   if (sp.get("mine") === "1" && esAdmin) {
     /*
@@ -195,9 +209,32 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     for (const c of cuenta) docCounts[c.incidenciaId] = Number(c.n);
   }
 
+  // Quién es responsable de qué, para poder decir en cada línea si el botón de
+  // «Visto» le corresponde a quien mira (y si ya lo pulsó). Una consulta para
+  // todas las filas, no una por fila.
+  const soyResponsableDe = new Set();
+  if (M.IncidenciaAssignee && yoSoy && rows.length) {
+    const mias = await M.IncidenciaAssignee.findAll({
+      where: { teamMemberId: yoSoy, incidenciaId: rows.map((r) => r.id) },
+      attributes: ["incidenciaId"],
+      raw: true,
+    });
+    for (const m of mias) soyResponsableDe.add(m.incidenciaId);
+  }
+  const vistas = new Set(misVistas);
+
   return ok({
-    incidencias: rows.map((r) => ({ ...serializeIncidencia(r), docsCount: docCounts[r.id] ?? 0 })),
+    incidencias: rows.map((r) => ({
+      ...serializeIncidencia(r),
+      docsCount: docCounts[r.id] ?? 0,
+      puedeMarcarVisto: soyResponsableDe.has(r.id),
+      visto: vistas.has(r.id),
+    })),
     counts,
+    // Cuántas ha dado por vistas EN TOTAL (no solo con estos filtros), para
+    // poder ofrecer verlas sin que haya que adivinar que existen.
+    vistasTotales: misVistas.length,
+    verVistas,
     therapists,
     patients,
     // Quien mira, si esta en la plantilla. `null` = no tiene ficha de equipo.

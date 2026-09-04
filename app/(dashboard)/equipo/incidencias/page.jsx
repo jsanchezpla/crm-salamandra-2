@@ -6,6 +6,7 @@ import Select from "@/components/ui/Select.jsx";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import IncidenciaModal from "../_components/IncidenciaModal.jsx";
 import { INCIDENCIA_CATEGORIES } from "@/lib/clinica/incidencias.js";
+import { AYUDA_VISTO } from "@/lib/clinica/vistoIncidencia.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 const STATUS_TABS = [
@@ -59,6 +60,14 @@ export default function IncidenciasPage() {
     const t = setTimeout(() => setQBuscada(q.trim()), 300);
     return () => clearTimeout(t);
   }, [q]);
+  /*
+   * ── LAS QUE YA HE DADO POR VISTAS (04/09/2026, Rodrigo) ──────────────────
+   * El botón «Visto» de la ficha aparta la incidencia de esta lista sin
+   * cerrarla para el resto del equipo. Apartada, no escondida: este
+   * interruptor las devuelve, y solo aparece si hay alguna — a quien no usa
+   * el botón no le sale nunca.
+   */
+  const [verVistas, setVerVistas] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [modal, setModal] = useState(null); // { mode, incidencia }
   const [errorMsg, setErrorMsg] = useState(null);
@@ -85,6 +94,7 @@ export default function IncidenciasPage() {
     if (responsableId === null) params.set("mine", "1");
     else if (responsableId) params.set("assignedToId", responsableId);
     if (qBuscada) params.set("q", qBuscada);
+    if (verVistas) params.set("vistas", "1");
     fetch(`/api/clinica/incidencias?${params}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => { if (j.ok) setData(j.data); else setErrorMsg(j.error); })
@@ -92,7 +102,7 @@ export default function IncidenciasPage() {
       .finally(() => setLoading(false));
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { load(); }, [statusTab, category, registroId, responsableId, qBuscada]);
+  useEffect(() => { load(); }, [statusTab, category, registroId, responsableId, qBuscada, verVistas]);
 
   // Deep-link desde la campana (02/09/2026): `?incidencia=<id>` abre ESA ficha
   // fresca del servidor, no la copia del listado. Se lee de window.location y
@@ -119,7 +129,7 @@ export default function IncidenciasPage() {
       window.removeEventListener("focus", alVolver);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusTab, category, registroId, responsableId, qBuscada]);
+  }, [statusTab, category, registroId, responsableId, qBuscada, verVistas]);
 
   const rows = data?.incidencias ?? [];
   // ¿Se está filtrando por responsable? Con `null` («las mías») solo si el
@@ -209,6 +219,14 @@ export default function IncidenciasPage() {
           <Select value={category} onChange={setCategory}
             options={[{ value: "", label: "Todas las categorías" }, ...INCIDENCIA_CATEGORIES.map((c) => ({ value: c.key, label: c.label }))]}
             className="text-xs border border-neutral-200 rounded-lg px-3 py-2 bg-white hover:border-neutral-300 cursor-pointer" />
+          {/* Solo sale si hay alguna dada por vista: a quien no usa el botón
+              no le aparece un interruptor que no le dice nada. */}
+          {data?.vistasTotales > 0 && (
+            <label className="flex items-center gap-2 text-[11px] text-neutral-500 px-1 cursor-pointer select-none" title={AYUDA_VISTO}>
+              <input type="checkbox" checked={verVistas} onChange={(e) => setVerVistas(e.target.checked)} />
+              Ver las {data.vistasTotales} que ya diste por vistas
+            </label>
+          )}
         </div>
       </div>
 
@@ -260,6 +278,13 @@ export default function IncidenciasPage() {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.76c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 011.037-.443 48.282 48.282 0 005.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
                       </svg>
                       {r.comments.length}
+                    </span>
+                  )}
+                  {/* Tu «Visto» — solo se ve al pedir las apartadas, que es
+                      cuando hace falta distinguirlas de las que siguen vivas. */}
+                  {r.visto && (
+                    <span className="shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700" title="La diste por vista: sigue abierta para el resto del equipo">
+                      ✓ Visto
                     </span>
                   )}
                   <span className={`shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full ${STATUS_PILL[r.verificationLevel ?? r.statusLevel] ?? STATUS_PILL.gray}`}>

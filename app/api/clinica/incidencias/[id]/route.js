@@ -1,8 +1,11 @@
+import { Op } from "sequelize";
+
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound } from "../../../../../lib/utils/apiResponse.js";
 import { resolveCurrentTeamMemberId } from "../../../../../lib/team/currentTeamMember.js";
 import { avisarComentarioIncidencia } from "../../../../../lib/clinica/avisoComentarioIncidencia.js";
 import { incidenciaFueraDeAlcance, puedeBorrarIncidencia, puedeVerIncidencia } from "../../../../../lib/clinica/alcanceIncidencias.js";
+import { esActualizacion, aQuienSeLeReabre, vistoDe } from "../../../../../lib/clinica/vistoIncidencia.js";
 import { logClinicaAudit, auditSummary } from "../../../../../lib/clinica/audit.js";
 import { fundirFalta, cierrePorRespuesta } from "../../../../../lib/clinica/faltas.js";
 import {
@@ -41,8 +44,25 @@ export const GET = withTenant(async (request, rc, ctx) => {
   if (!row) return notFound("Incidencia no encontrada");
   // Quién ve qué (02/09/2026, Aumenta AV-0018): una ajena no existe para ti.
   if (await incidenciaFueraDeAlcance(request, ctx, row)) return notFound("Incidencia no encontrada");
-  return ok(serializeIncidencia(row));
+  return ok({ ...serializeIncidencia(row), ...(await miVisto(request, M, id)) });
 });
+
+/**
+ * El «Visto» de QUIEN MIRA sobre esta incidencia (04/09/2026). Una consulta a
+ * la pivote: la ficha necesita saber si puede ofrecer el botón y cómo está.
+ * Ver `lib/clinica/vistoIncidencia.js`.
+ */
+async function miVisto(request, M, incidenciaId) {
+  if (!M.IncidenciaAssignee) return { puedeMarcarVisto: false, visto: false };
+  const yoSoy = await resolveCurrentTeamMemberId(request, M);
+  const filas = await M.IncidenciaAssignee.findAll({
+    where: { incidenciaId },
+    attributes: ["teamMemberId", "vistoAt"],
+    raw: true,
+  });
+  const { puedeMarcar, visto } = vistoDe(filas, yoSoy);
+  return { puedeMarcarVisto: puedeMarcar, visto };
+}
 
 /**
  * PATCH /api/clinica/incidencias/[id]
@@ -173,10 +193,19 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
     }
   }
 
+  /*
+   * ── EL «VISTO» DE QUIEN LLAMA (04/09/2026, Rodrigo) ───────────────────────
+   * `{ visto: true }` marca que ESTA persona ya hizo su parte; `false` lo
+   * deshace. No toca `status`: la incidencia sigue abierta para el resto. Vive
+   * en la pivote y por eso, como los responsables, tampoco va en `changes`.
+   * Reglas y porqué en `lib/clinica/vistoIncidencia.js`.
+   */
+  const vistoPedido = typeof body.visto === "boolean" ? body.visto : null;
+
   // `responsables` NO va en `changes` (vive en la tabla pivote), así que hay
   // que contarlo aparte: si no, cambiar solo los responsables se rechazaba con
   // "Nada que cambiar".
-  if (Object.keys(changes).length === 0 && !commentEntry && !responsables) {
+  if (Object.keys(changes).length === 0 && !commentEntry && !responsables && vistoPedido === null) {
     return error("Nada que cambiar", 422);
   }
 
@@ -204,6 +233,36 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
   }
   if (responsables) await sincronizarResponsables(row, responsables, M);
 
+  /*
+   * ── EL VISTO, Y A QUIÉN SE LE REABRE ──────────────────────────────────────
+   * Quien llama se resuelve una sola vez: hace falta para escribir SU visto y
+   * para saber a quién NO reabrírselo (si Ana comenta después de darla por
+   * vista, no se le devuelve a Ana).
+   */
+  if (M.IncidenciaAssignee && (vistoPedido !== null || esActualizacion({ cambios: changes, hayComentario: !!commentEntry, cambiaronResponsables: !!responsables }))) {
+    const quienLlama = commentEntry?.authorId ?? (await resolveCurrentTeamMemberId(request, M));
+
+    if (vistoPedido !== null) {
+      // Solo los RESPONSABLES tienen «su parte» que dar por hecha. A quien solo
+      // registró la incidencia no se le inventa una fila en la pivote.
+      const [tocadas] = await M.IncidenciaAssignee.update(
+        { vistoAt: vistoPedido ? new Date() : null },
+        { where: { incidenciaId: id, teamMemberId: quienLlama ?? null } }
+      );
+      if (!tocadas) return error("Solo quien es responsable de la incidencia puede marcarla como vista", 422);
+    }
+
+    // Cualquier novedad se la devuelve a quien la había dado por vista. Va
+    // DESPUÉS de escribir el visto propio y excluye a quien la provoca, así
+    // que marcar visto y comentar a la vez no se pisa a sí mismo.
+    if (esActualizacion({ cambios: changes, hayComentario: !!commentEntry, cambiaronResponsables: !!responsables })) {
+      await M.IncidenciaAssignee.update(
+        { vistoAt: null },
+        { where: aQuienSeLeReabre(id, quienLlama, Op) }
+      );
+    }
+  }
+
   const full = await Incidencia.findByPk(id, { include: INCLUDES(M) });
   if (commentEntry) {
     // Que los compañeros se enteren (02/09/2026): hasta hoy el comentario se
@@ -217,7 +276,7 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
       autorUserId: request.headers.get("x-user-id"),
     });
   }
-  return ok(serializeIncidencia(full));
+  return ok({ ...serializeIncidencia(full), ...(await miVisto(request, M, id)) });
 });
 
 // DELETE — borrado físico. Solo dirección.

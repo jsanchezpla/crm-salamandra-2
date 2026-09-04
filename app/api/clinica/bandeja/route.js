@@ -75,7 +75,9 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   // ── Incidencias asignadas sin resolver ──
   // Por la tabla PIVOTE (31/08/2026): antes el 2.º responsable no veía nada
   // aquí — la regla, en lib/clinica/incidenciasDe.js.
-  const deMio = await whereIncidenciasDe(M, therapistId);
+  // `soloPendientes` (04/09/2026): la que ella ya dio por VISTA sale de su
+  // bandeja aunque la incidencia siga abierta para el resto del equipo.
+  const deMio = await whereIncidenciasDe(M, therapistId, { soloPendientes: true });
   const incRows = await Incidencia.findAll({
     where: { ...deMio, status: { [Op.ne]: "resolved" } },
     include: [{ model: Patient, as: "patient", attributes: ["id", "firstName", "lastName"], required: false }],

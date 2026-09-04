@@ -6,6 +6,7 @@ import SelectorPaciente from "@/components/citas/SelectorPaciente.jsx";
 import TextareaCrece from "@/components/ui/TextareaCrece.jsx";
 import { INCIDENCIA_CATEGORIES, INCIDENCIA_PRIORITY, INCIDENCIA_VERIFICATIONS, exigeSubcategoria } from "@/lib/clinica/incidencias.js";
 import { RESPUESTAS_FALTA } from "@/lib/clinica/faltas.js";
+import { AYUDA_VISTO } from "@/lib/clinica/vistoIncidencia.js";
 import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 
 /**
@@ -726,6 +727,26 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
             )}
           </div>
           <div className="flex gap-2">
+            {/* «Visto»: he hecho MI parte (04/09/2026, Rodrigo). No cierra la
+                incidencia —eso es la verificación, y es de todas—: la aparta
+                de mi bandeja, mi campana y mi portada. Solo sale para quien es
+                responsable, que es quien tiene parte que dar por hecha, y lo
+                dice el SERVIDOR (`puedeMarcarVisto`); la lectura del listado
+                queda de respaldo mientras llega la ficha fresca. */}
+            {!isNew && (inc?.puedeMarcarVisto ?? soyResponsable) && (
+              <button
+                onClick={() => patch({ visto: !inc?.visto })}
+                disabled={busy}
+                title={AYUDA_VISTO}
+                className={`px-4 py-2 rounded-lg text-xs font-medium border disabled:opacity-50 transition-colors ${
+                  inc?.visto
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                    : "border-neutral-200 text-neutral-600 hover:bg-neutral-50"
+                }`}
+              >
+                {inc?.visto ? "✓ Visto por ti" : "Marcar como visto"}
+              </button>
+            )}
             <button onClick={() => !busy && onClose?.()} disabled={busy} className="px-4 py-2 rounded-lg border border-neutral-200 text-xs text-neutral-600 hover:bg-neutral-50 disabled:opacity-50">Cerrar</button>
             <button onClick={createOrSaveFields} disabled={busy} className="px-4 py-2 rounded-lg text-white text-xs font-medium disabled:opacity-50" style={{ background: "var(--color-primary, #1B3A2D)" }}>
               {busy ? "Guardando…" : isNew ? "Crear incidencia" : "Guardar cambios"}
