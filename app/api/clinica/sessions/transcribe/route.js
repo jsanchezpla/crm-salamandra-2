@@ -5,7 +5,8 @@ import { vetoAi } from "../../../../../lib/ai/aiAccess.js";
 import { getTenantOpenAIKey } from "../../../../../lib/ai/openaiKey.js";
 import { getTenantAnthropicKey } from "../../../../../lib/ai/anthropicKey.js";
 import { getTenantAnthropicModel } from "../../../../../lib/ai/anthropicModel.js";
-import { transcribeAudio, MAX_AUDIO_BYTES } from "../../../../../lib/clinica/whisper.js";
+import { transcribirVarios, MAX_AUDIO_BYTES } from "../../../../../lib/clinica/whisper.js";
+import { MAX_AUDIOS } from "../../../../../lib/clinica/audios.js";
 import { structureSession } from "../../../../../lib/clinica/structureSession.js";
 import {
   bloquesDelRegistro,
@@ -56,8 +57,16 @@ function jsonDelForm(form, campo) {
  * `transcripcion` el texto que ya sacó Whisper y aquí no se transcribe nada: se
  * va derecho a Claude con el material de esta pasada, sea el que sea.
  *
+ * ── VARIOS AUDIOS (04/09/2026, Rodrigo) ───────────────────────────────────
+ * «Queremos subir más de un audio antes de ponerlo a transcribir.» `file`
+ * puede venir REPETIDO: se transcriben en paralelo y sus textos se juntan en
+ * el orden en que llegaron. Lo habitual, eso sí, es que aquí no llegue ningún
+ * fichero: la pantalla los manda antes a `/api/clinica/audio/transcribir` y
+ * aquí solo entra ya el texto, que es lo que quita la espera de Whisper de
+ * delante del botón de la IA.
+ *
  * Campos del multipart (hace falta `file`, `texto` **o** `transcripcion`):
- *   · `file`       (opcional) el audio, cuando todavía no se ha transcrito.
+ *   · `file`       (opcional, repetible) los audios sin transcribir todavía.
  *   · `texto`      (opcional) lo que haya apuntado a mano; máx. MAX_NOTAS.
  *   · `transcripcion` (opcional) lo que YA sacó Whisper en una pasada anterior.
  *                  Se usa tal cual y NO se vuelve a llamar a OpenAI. Si además
@@ -103,13 +112,16 @@ export const POST = withTenant(async (request, _rc, ctx) => {
   const apartados = jsonDelForm(form, "apartados");
   const escrito = jsonDelForm(form, "escrito");
   const notas = String(form?.get("texto") ?? "").trim();
-  const subido = form?.get("file");
-  const file = subido && typeof subido !== "string" ? subido : null;
+  // VARIOS audios desde el 04/09/2026 (Rodrigo): una sesión se dicta a trozos
+  // y llega en tres notas de voz. Lo normal es que la pantalla los haya
+  // transcrito ya y aquí no llegue ninguno, pero quien pulse la IA sin
+  // transcribir antes tiene que poder mandarlos todos igual.
+  const files = (form?.getAll("file") ?? []).filter((f) => f && typeof f !== "string");
   // Un audio nuevo deja vieja la transcripción anterior: si vienen los dos,
-  // manda el fichero y esto se descarta.
-  const yaTranscrito = file ? "" : String(form?.get("transcripcion") ?? "").trim();
+  // mandan los ficheros y esto se descarta.
+  const yaTranscrito = files.length ? "" : String(form?.get("transcripcion") ?? "").trim();
 
-  if (!file && !notas && !yaTranscrito) return error("Sube un audio o pega tus notas de la sesión.");
+  if (!files.length && !notas && !yaTranscrito) return error("Sube un audio o pega tus notas de la sesión.");
   if (notas.length > MAX_NOTAS) {
     return error(`Las notas no pueden pasar de ${MAX_NOTAS.toLocaleString("es-ES")} caracteres.`, 413);
   }
@@ -119,61 +131,73 @@ export const POST = withTenant(async (request, _rc, ctx) => {
   if (yaTranscrito.length > MAX_TRANSCRIPCION) {
     return error("La transcripción es demasiado larga para volver a procesarla.", 413);
   }
-  if (file && typeof file.size === "number" && file.size > MAX_AUDIO_BYTES) {
-    return error("El audio supera el máximo de 25 MB", 413);
-  }
+  if (files.length > MAX_AUDIOS) return error(`No se pueden procesar más de ${MAX_AUDIOS} audios a la vez.`, 413);
+  const gordo = files.find((f) => typeof f.size === "number" && f.size > MAX_AUDIO_BYTES);
+  if (gordo) return error(`«${gordo.name || "El audio"}» supera el máximo de 25 MB`, 413);
 
   // La clave de OpenAI solo hace falta si hay audio: un registro escrito a mano
   // no pasa por Whisper y no tiene por qué exigir una clave que el centro
   // podría no tener puesta.
-  const fake = isDev && (process.env.CLINICA_FAKE_AI === "1" || !anthropicKey || (file && !openaiKey));
+  const hayAudio = files.length > 0;
+  const fake = isDev && (process.env.CLINICA_FAKE_AI === "1" || !anthropicKey || (hayAudio && !openaiKey));
   if (!fake) {
-    if (file && !openaiKey) return error("Configura la clave de OpenAI en Configuración → IA para transcribir el audio.", 400);
+    if (hayAudio && !openaiKey) return error("Configura la clave de OpenAI en Configuración → IA para transcribir el audio.", 400);
     if (!anthropicKey) return error("Configura la clave de Anthropic en Configuración → IA para estructurar la sesión.", 400);
   }
 
   if (fake) {
     const bloques = bloquesDelRegistro(apartados);
     const propuesta = propuestaDemo(bloques);
-    const transcription = file ? TRANSCRIPCION_DEMO : yaTranscrito;
+    const transcription = hayAudio ? TRANSCRIPCION_DEMO : yaTranscrito;
     return ok({
       transcription,
       material: materialParaLaIA({ transcripcion: transcription, notas }),
       propuesta,
       structured: estructuraHistorica(propuesta),
-      audioDurationSec: file ? 61 : null,
+      audioDurationSec: hayAudio ? 61 * files.length : null,
       demo: true,
     });
   }
 
-  // ── Real: (audio → Whisper, solo la primera vez) + notas → Claude ──
+  // ── Real: (audios → Whisper en paralelo, solo la primera vez) + notas → Claude ──
   let transcription = yaTranscrito;
   let audioDurationSec = null;
-  if (file) {
-    try {
-      const t = await transcribeAudio({ file, apiKey: openaiKey });
-      transcription = t.text;
-      audioDurationSec = t.durationSec;
-    } catch (e) {
-      if (e.code === "BAD_KEY") return error("Tu clave de OpenAI no es válida o no tiene permisos.", 400);
-      if (e.code === "QUOTA") return error("Has alcanzado el límite o la cuota de OpenAI.", 429);
-      if (e.code === "TOO_LARGE") return error(e.message, 413);
-      if (e.code === "UNREACHABLE") return error(e.message, 504);
-      console.error("[clinica:whisper]", e);
+  let audiosFallidos = [];
+  if (hayAudio) {
+    const t0 = Date.now();
+    const { resultados, texto, durationSec } = await transcribirVarios({ files, apiKey: openaiKey });
+    console.info("[clinica:transcribe] whisper", files.length, "audio(s)", `${Date.now() - t0}ms`);
+    audiosFallidos = resultados.filter((r) => r.error);
+    // Todos rotos: no hay transcripción que devolver y el motivo es el mismo
+    // para todos (clave mala, cuota, OpenAI caído). Con notas escritas no se
+    // corta —el registro se puede hacer igual—, sin ellas sí.
+    if (audiosFallidos.length === resultados.length) {
+      const primero = resultados[0];
+      if (primero.code === "BAD_KEY") return error("Tu clave de OpenAI no es válida o no tiene permisos.", 400);
+      if (primero.code === "QUOTA") return error("Has alcanzado el límite o la cuota de OpenAI.", 429);
+      if (primero.code === "TOO_LARGE") return error(primero.error, 413);
+      if (primero.code === "UNREACHABLE") return error(primero.error, 504);
+      console.error("[clinica:whisper]", primero.error);
       return error("La transcripción del audio ha fallado. Inténtalo de nuevo.", 502);
     }
+    transcription = texto;
+    audioDurationSec = durationSec;
     // Un audio mudo solo es un callejón sin salida si no hay nada más: con
     // notas pegadas el registro se puede hacer igual, y avisando.
     if (!transcription && !notas) return error("La transcripción salió vacía. ¿El audio tiene voz?", 422);
   }
 
   const material = materialParaLaIA({ transcripcion: transcription, notas });
-  const avisoAudioMudo =
-    file && !transcription ? "Del audio no ha salido texto (¿tiene voz?). La propuesta sale solo de tus notas." : null;
+  const avisoAudioMudo = audiosFallidos.length
+    ? `${audiosFallidos.length} de ${files.length} audios no se han podido transcribir (${audiosFallidos[0].error}). La propuesta sale del resto.`
+    : hayAudio && !transcription
+      ? "Del audio no ha salido texto (¿tiene voz?). La propuesta sale solo de tus notas."
+      : null;
 
   let structured;
   let propuesta;
   let incidencia = null;
+  const tIA = Date.now();
   try {
     const r = await structureSession({
       transcription: material,
@@ -185,6 +209,7 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     propuesta = r.propuesta;
     structured = r.structured;
     incidencia = r.incidencia;
+    console.info("[clinica:transcribe] claude", `${Date.now() - tIA}ms`, `${material.length} chars`);
   } catch (e) {
     if (e.code === "NO_API_KEY") return error("El resumen con IA no está configurado (falta la clave de Anthropic).", 503);
     console.error("[clinica:structure]", e);
@@ -198,7 +223,7 @@ export const POST = withTenant(async (request, _rc, ctx) => {
       structured: null,
       audioDurationSec,
       demo: false,
-      avisoIA: file
+      avisoIA: hayAudio
         ? "El audio se ha transcrito, pero el reparto por apartados ha fallado. Tienes la transcripción abajo para escribir el registro a mano o volver a intentarlo."
         : "El reparto por apartados ha fallado. Tus notas siguen aquí: vuelve a intentarlo o escribe el registro a mano.",
     });

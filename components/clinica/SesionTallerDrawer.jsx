@@ -41,6 +41,7 @@ import ApartadosEditor from "./ApartadosEditor.jsx";
 import PropuestaIA from "./PropuestaIA.jsx";
 import useZonaSoltar, { useEvitarSoltarFuera } from "@/components/ui/useZonaSoltar.js";
 import useGrabadora, { fmtSegundos } from "@/components/clinica/useGrabadora.js";
+import useAudios from "@/components/clinica/useAudios.js";
 import {
   PLANTILLA_BASE,
   PLANTILLA_TALLER,
@@ -50,6 +51,7 @@ import {
 } from "@/lib/clinica/plantillas.js";
 import { ETIQUETA_NOTA_POR_DEFECTO } from "@/lib/clinica/tallerSesion.js";
 import { MAX_NOTAS } from "@/lib/clinica/registroCompleto.js";
+import { MAX_AUDIOS } from "@/lib/clinica/audios.js";
 import { BLOQUE_INTERNAS, escritoDelTaller, pacienteDeClave } from "@/lib/clinica/tallerCompleto.js";
 import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 
@@ -131,7 +133,10 @@ export default function SesionTallerDrawer({
   // Mismas piezas que en el registro normal: el fichero, lo que sacó Whisper
   // de ESE fichero (se transcribe una sola vez), si entra en esta pasada, las
   // notas escritas, y la propuesta —que se puede volver a abrir—.
-  const [file, setFile] = useState(null);
+  // Los audios NUEVOS de esta pasada, en plural desde el 04/09/2026 (Rodrigo:
+  // «queremos subir más de un audio antes de ponerlo a transcribir»); los dos
+  // estados de al lado son lo que ya venía GUARDADO con la sesión, que se sigue
+  // pudiendo volver a pasar por la IA sin audio ninguno.
   const [transcripcionAudio, setTranscripcionAudio] = useState("");
   const [duracionAudio, setDuracionAudio] = useState(null);
   const [usarAudio, setUsarAudio] = useState(true);
@@ -146,6 +151,8 @@ export default function SesionTallerDrawer({
   const [avisoIA, setAvisoIA] = useState(null);
   const [demoIA, setDemoIA] = useState(false);
   const fileRef = useRef(null);
+  // La lista de audios de esta pasada, con su estado y su transcripción.
+  const audios = useAudios({ onError: setErr, onAviso: setAvisoIA });
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -262,22 +269,32 @@ export default function SesionTallerDrawer({
   // ── La pasada de IA ───────────────────────────────────────────────────────
   useEvitarSoltarFuera();
 
-  /** Un audio nuevo deja vieja la transcripción del anterior. */
-  function ponerAudio(f) {
-    setFile(f);
-    setTranscripcionAudio("");
-    setDuracionAudio(null);
+  /** Los audios se SUMAN; el primero deja vieja la transcripción guardada. */
+  function ponerAudio(...ficheros) {
+    audios.añadir(ficheros.flat());
     setUsarAudio(true);
     setErr(null);
+  }
+
+  /**
+   * Transcribir SIN llamar a la IA (04/09/2026): se mandan los audios en cuanto
+   * están y se sigue escribiendo mientras Whisper trabaja.
+   */
+  async function transcribirAudios() {
+    setErr(null);
+    setAvisoIA(null);
+    const cuantos = audios.pendientes.length;
+    const texto = await audios.transcribir();
+    if (texto) setAvisoIA(`${cuantos > 1 ? `${cuantos} audios transcritos` : "Audio transcrito"}. Ya puedes pulsar la IA sin esperar.`);
   }
 
   // Grabar desde el propio CRM (03/09/2026, AV-0037): en iPhone el selector
   // de archivo no ofrece la grabadora. Lo grabado entra por `ponerAudio`.
   const grabadora = useGrabadora({ onAudio: ponerAudio, onError: setErr });
 
-  // Quitar el audio NO borra las notas escritas: son dos fuentes distintas.
+  // Quitar los audios NO borra las notas escritas: son fuentes distintas.
   function quitarAudio() {
-    setFile(null);
+    audios.limpiar();
     setTranscripcionAudio("");
     setDuracionAudio(null);
     setMaterialIA("");
@@ -290,16 +307,21 @@ export default function SesionTallerDrawer({
 
   const zonaAudio = useZonaSoltar({
     accept: ACEPTA_AUDIO,
-    queSeEspera: "un audio del taller",
-    apagada: procesando || guardando || !!transcripcionAudio,
+    varios: true,
+    queSeEspera: "audios del taller",
+    apagada: procesando || guardando || audios.hueco <= 0,
     pegar: true,
-    onFicheros: ([f]) => ponerAudio(f),
+    onFicheros: (nuevos) => ponerAudio(nuevos),
     onAviso: setErr,
   });
 
   // Qué entra del audio en esta pasada: el fichero (hay que transcribirlo), la
   // transcripción que ya hay (si se deja marcada), o nada.
-  const queEntra = file && !transcripcionAudio ? "audio" : transcripcionAudio && usarAudio ? "transcripcion" : "nada";
+  // El texto del audio: el de los audios de ahora si ya se transcribieron, y si
+  // no, el que venía guardado con la sesión.
+  const textoAudio = audios.hayTexto ? audios.texto : transcripcionAudio;
+  const duracionDelAudio = audios.hayTexto ? audios.duracion : duracionAudio;
+  const queEntra = audios.hayPendientes && usarAudio ? "audio" : textoAudio && usarAudio ? "transcripcion" : "nada";
   const conAudio = queEntra !== "nada";
   const losQueVinieron = asistentes.filter((a) => a.asistio);
   const escritoAhora = escritoDelTaller({ valores, asistentes: losQueVinieron, internalNotes: internas });
@@ -312,13 +334,24 @@ export default function SesionTallerDrawer({
   async function procesarConIA() {
     const texto = notas.trim();
     if (!conAudio && !texto) return;
-    setProcesando(true);
     setErr(null);
     setAvisoIA(null);
+    // Lo que falte por transcribir se transcribe primero y aparte, para que el
+    // texto quede guardado pase lo que pase después con Claude. Lo normal es
+    // que no falte nada: se ha pulsado «Transcribir» mientras se escribía.
+    let transcrito = textoAudio;
+    if (queEntra === "audio") {
+      setProcesando(true);
+      transcrito = await audios.transcribir();
+      if (!transcrito && !texto) {
+        setProcesando(false);
+        return;
+      }
+    }
+    setProcesando(true);
     try {
       const fd = new FormData();
-      if (queEntra === "audio") fd.append("file", file, file.name);
-      else if (queEntra === "transcripcion") fd.append("transcripcion", transcripcionAudio);
+      if (conAudio && transcrito) fd.append("transcripcion", transcrito);
       if (texto) fd.append("texto", texto);
       fd.append("apartados", JSON.stringify(apartados));
       // Solo los que VINIERON tienen nota: a quien faltó no se le puede
@@ -329,10 +362,6 @@ export default function SesionTallerDrawer({
       const r = await fetch("/api/clinica/taller-sesiones/transcribe", { method: "POST", body: fd });
       const j = await leerRespuestaApi(r);
       if (!r.ok) throw new Error(j.error || "No se pudo procesar");
-      if (queEntra === "audio") {
-        setTranscripcionAudio(String(j.data.transcription ?? "").trim());
-        setDuracionAudio(j.data.audioDurationSec ?? null);
-      }
       setMaterialIA(String(j.data.material ?? "").trim());
       setDemoIA(!!j.data.demo);
       const p = j.data.propuesta ?? {};
@@ -406,8 +435,8 @@ export default function SesionTallerDrawer({
         status: cerrada ? "published" : "registered",
         // De qué texto salió (03/09/2026): lo que leyó la IA, si se usó. Se
         // guarda con la sesión para poder volver a pasarla sin el audio.
-        aiTranscription: materialIA || transcripcionAudio || "",
-        audioDurationSec: duracionAudio ?? null,
+        aiTranscription: materialIA || textoAudio || "",
+        audioDurationSec: duracionDelAudio ?? null,
         // Solo los que vinieron. A los desmarcados se les quita su registro —
         // salvo que ya se le haya enviado a su familia, que eso lo frena el
         // servidor y lo cuenta en la respuesta.
@@ -514,28 +543,31 @@ export default function SesionTallerDrawer({
                   ref={fileRef}
                   type="file"
                   accept={ACEPTA_AUDIO}
+                  multiple
                   className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) ponerAudio(f); }}
+                  onChange={(e) => { const fs = Array.from(e.target.files ?? []); if (fs.length) ponerAudio(fs); }}
                 />
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-sm font-semibold text-neutral-800">Audio y bloc de notas, con IA</div>
-                    {!file && !transcripcionAudio ? (
+                    {!audios.lista.length && !transcripcionAudio ? (
                       <p className="text-[11px] text-neutral-500 mt-0.5">
                         {zonaAudio.arrastrando
-                          ? "Suéltalo aquí."
-                          : "Arrastra el audio del taller aquí, pégalo con Ctrl+V o búscalo — o pega abajo lo que tengas apuntado. La IA propone el registro del grupo, la nota de cada niño que vino y las notas internas; tú eliges qué entra. m4a, mp3, wav, ogg, webm · máx. 25 MB."}
+                          ? "Suéltalos aquí."
+                          : `Arrastra aquí los audios del taller, pégalos con Ctrl+V o búscalos — puedes añadir varios (hasta ${MAX_AUDIOS}) y transcribirlos de una vez. O pega abajo lo que tengas apuntado. La IA propone el registro del grupo, la nota de cada niño que vino y las notas internas; tú eliges qué entra. m4a, mp3, wav, ogg, webm · máx. 25 MB cada uno.`}
                       </p>
                     ) : (
                       <p className="text-[11px] text-neutral-600 mt-0.5 truncate">
-                        {file ? `${file.name} · ${fmtSize(file.size)}` : "Texto guardado con la sesión"}
-                        {duracionAudio != null ? ` · ${fmtDur(duracionAudio)}` : ""}
-                        {transcripcionAudio ? " · ya transcrito" : ""}
+                        {audios.lista.length
+                          ? audios.lista.length === 1 ? "1 audio" : `${audios.lista.length} audios`
+                          : "Texto guardado con la sesión"}
+                        {duracionDelAudio != null ? ` · ${fmtDur(duracionDelAudio)}` : ""}
+                        {audios.hayPendientes ? " · sin transcribir todavía" : ""}
                       </p>
                     )}
                   </div>
                   <div className="flex gap-2 shrink-0">
-                    {!file && !transcripcionAudio && grabadora.soportado && (
+                    {audios.hueco > 0 && grabadora.soportado && (
                       <button
                         type="button"
                         onClick={grabadora.grabando ? grabadora.parar : grabadora.empezar}
@@ -546,17 +578,17 @@ export default function SesionTallerDrawer({
                         {grabadora.grabando ? `■ Parar · ${fmtSegundos(grabadora.segundos)}` : "● Grabar"}
                       </button>
                     )}
-                    {!file && !transcripcionAudio && !grabadora.grabando && (
+                    {audios.hueco > 0 && !grabadora.grabando && (
                       <button
                         type="button"
                         onClick={() => fileRef.current?.click()}
                         disabled={procesando || guardando}
                         className="text-xs font-medium px-3 py-2 rounded-lg border border-neutral-200 bg-white hover:border-neutral-400 text-neutral-700 disabled:opacity-50"
                       >
-                        Añadir audio
+                        {audios.lista.length ? "Añadir otro" : "Añadir audio"}
                       </button>
                     )}
-                    {(file || transcripcionAudio) && (
+                    {(audios.lista.length > 0 || transcripcionAudio) && (
                       <button type="button" onClick={quitarAudio} disabled={procesando || guardando} className="text-xs px-3 py-2 text-neutral-500 hover:underline disabled:opacity-50">
                         Quitar
                       </button>
@@ -564,9 +596,66 @@ export default function SesionTallerDrawer({
                   </div>
                 </div>
 
+                {/* La lista de audios, cada uno con su estado y su aspa: quitar
+                    el que sobra no se lleva la transcripción de los demás. */}
+                {audios.lista.length > 0 && (
+                  <ul className="mt-3 space-y-1.5">
+                    {audios.lista.map((a, i) => (
+                      <li key={a.id} className="flex items-center gap-2 text-[11px] rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5">
+                        <span className="w-4 shrink-0 text-neutral-400 tabular-nums">{i + 1}.</span>
+                        <span className="flex-1 min-w-0 truncate text-neutral-700">{a.nombre}</span>
+                        <span className="shrink-0 text-neutral-400">{fmtSize(a.tamano)}</span>
+                        <span
+                          className={`shrink-0 font-medium ${a.error ? "text-rose-600" : a.texto ? "text-emerald-700" : audios.transcribiendo ? "text-neutral-500" : "text-amber-700"}`}
+                          title={a.error || undefined}
+                        >
+                          {a.error
+                            ? "no ha salido texto"
+                            : a.texto
+                              ? `transcrito${a.durationSec != null ? ` · ${fmtDur(a.durationSec)}` : ""}`
+                              : audios.transcribiendo
+                                ? "transcribiendo…"
+                                : "pendiente"}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => audios.quitar(a.id)}
+                          disabled={audios.transcribiendo || procesando || guardando}
+                          className="shrink-0 text-neutral-400 hover:text-rose-600 disabled:opacity-40"
+                          title="Quitar este audio"
+                        >
+                          ✕
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {audios.hayPendientes && (
+                  <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-[11px] text-neutral-500">
+                      {audios.transcribiendo
+                        ? "Transcribiendo… puedes seguir escribiendo mientras."
+                        : "Transcríbelos ahora y sigue escribiendo: al pulsar la IA no habrá que esperar al audio."}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={transcribirAudios}
+                      disabled={audios.transcribiendo || procesando || guardando}
+                      className="text-xs font-medium px-3 py-2 rounded-lg border border-neutral-200 bg-white hover:border-neutral-400 text-neutral-700 disabled:opacity-40"
+                    >
+                      {audios.transcribiendo
+                        ? "Transcribiendo…"
+                        : audios.pendientes.length > 1
+                          ? `Transcribir los ${audios.pendientes.length} audios`
+                          : "Transcribir el audio"}
+                    </button>
+                  </div>
+                )}
+
                 <div className="mt-3 border-t border-neutral-100 pt-3">
                   <div className="flex flex-wrap items-baseline justify-between gap-2 mb-1.5">
-                    <div className="eyebrow">{file || transcripcionAudio ? "…y tus notas" : "O pega tus notas"}</div>
+                    <div className="eyebrow">{audios.lista.length || transcripcionAudio ? "…y tus notas" : "O pega tus notas"}</div>
                     <span className={`text-[10px] ${notas.length > MAX_NOTAS ? "text-rose-600 font-medium" : "text-neutral-400"}`}>
                       {notas.length > 0 && `${notas.length.toLocaleString("es-ES")} / ${MAX_NOTAS.toLocaleString("es-ES")}`}
                     </span>
@@ -581,7 +670,7 @@ export default function SesionTallerDrawer({
                   />
                 </div>
 
-                {transcripcionAudio && (
+                {textoAudio && (
                   <label className="mt-3 flex items-start gap-2 text-[11px] text-neutral-600 cursor-pointer">
                     <input type="checkbox" className="mt-0.5" checked={usarAudio} onChange={(e) => setUsarAudio(e.target.checked)} />
                     <span>
@@ -596,7 +685,7 @@ export default function SesionTallerDrawer({
                     <button
                       type="button"
                       onClick={procesarConIA}
-                      disabled={procesando || guardando || notas.length > MAX_NOTAS || (!conAudio && !notas.trim())}
+                      disabled={procesando || guardando || audios.transcribiendo || notas.length > MAX_NOTAS || (!conAudio && !notas.trim())}
                       className="text-xs font-medium px-4 py-2 rounded-lg text-white hover:opacity-90 inline-flex items-center gap-2 disabled:opacity-40"
                       style={{ background: "var(--color-primary, #1B3A2D)" }}
                     >
@@ -604,9 +693,9 @@ export default function SesionTallerDrawer({
                       {procesando
                         ? queEntra === "audio" ? "Transcribiendo y repartiendo…" : "Repartiendo…"
                         : queEntra === "audio"
-                          ? notas.trim() ? "Procesar audio y notas con IA" : "Procesar el audio con IA"
+                          ? notas.trim() ? "Transcribir y procesar con mis notas" : "Transcribir y procesar con IA"
                           : queEntra === "transcripcion"
-                            ? notas.trim() ? "Proponer otra vez con la transcripción y mis notas" : "Proponer otra vez con la transcripción"
+                            ? notas.trim() ? "Proponer el registro con la transcripción y mis notas" : "Proponer el registro con la transcripción"
                             : "Rellenar el registro con mis notas"}
                     </button>
                   </div>
@@ -627,10 +716,10 @@ export default function SesionTallerDrawer({
                     )}
                   </div>
                 )}
-                {transcripcionAudio && (
+                {textoAudio && (
                   <details className="mt-3 border-t border-neutral-100 pt-3">
                     <summary className="eyebrow cursor-pointer">Texto del que sale el registro</summary>
-                    <p className="mt-1.5 text-xs text-neutral-600 leading-relaxed italic whitespace-pre-line">«{transcripcionAudio}»</p>
+                    <p className="mt-1.5 text-xs text-neutral-600 leading-relaxed italic whitespace-pre-line">«{textoAudio}»</p>
                   </details>
                 )}
               </section>
