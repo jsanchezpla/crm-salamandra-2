@@ -2,6 +2,7 @@ import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, noContent } from "../../../../../lib/utils/apiResponse.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../../../../../lib/utils/errors.js";
 import { getMasterModels } from "../../../../../lib/db/masterDb.js";
+import { isAllowedLeadStatus, LEAD_STATUSES } from "../../../../../lib/outreach/estados.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -76,6 +77,19 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
   const editable = ["name", "sector", "location", "website", "phone", "email", "notes"];
   const patch = {};
   for (const f of editable) if (f in body) patch[f] = body[f];
+
+  // El estado va aparte: lista blanca (lib/outreach/estados.js) y su fecha, que
+  // la pone el servidor. Sin whitelist entraría cualquier string desde el front.
+  if ("status" in body) {
+    if (!isAllowedLeadStatus(body.status)) {
+      throw new ValidationError(`Estado no admitido. Opciones: ${LEAD_STATUSES.join(", ")}`);
+    }
+    if (body.status !== lead.status) {
+      patch.status = body.status;
+      patch.statusAt = new Date();
+    }
+  }
+
   if (Object.keys(patch).length === 0) throw new ValidationError("Nada que actualizar");
   if ("name" in patch && !patch.name?.trim()) throw new ValidationError("El nombre no puede quedar vacío");
 

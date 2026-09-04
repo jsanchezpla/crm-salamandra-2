@@ -7,6 +7,7 @@ import Select from "../../components/ui/Select.jsx";
 import HelpTooltip from "../../components/ui/HelpTooltip.jsx";
 import SECTORES from "./sectores.json";
 import { scoreBand, analysisFor, sourceLabel, formatDate } from "./scores.js";
+import { LEAD_STATUS_LABELS } from "../../lib/outreach/estados.js";
 import { useIntegrations } from "./useIntegrations.js";
 import IntegrationGate from "./IntegrationGate.jsx";
 
@@ -401,6 +402,31 @@ export default function OutreachLeadDetail({ leadId }) {
     }
   };
 
+  /**
+   * Marca el seguimiento del lead. Es un interruptor: volver a pulsar el estado
+   * que ya tiene lo devuelve a "Sin contactar", que es como se deshace un
+   * descarte hecho sin querer.
+   */
+  const setStatus = async (nuevo) => {
+    setActionBusy(true);
+    setActionError(null);
+    try {
+      const destino = lead.status === nuevo ? "new" : nuevo;
+      const r = await fetch(`/api/outreach/leads/${leadId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: destino }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.error || "No se pudo cambiar el estado");
+      refresh();
+    } catch (e) {
+      setActionError(e.message);
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
   const doConvert = async () => {
     setActionBusy(true);
     setActionError(null);
@@ -554,9 +580,23 @@ export default function OutreachLeadDetail({ leadId }) {
                   sin marcar se quedan como estaban.
                 </HelpTooltip>
               </h1>
-              <p className="text-sm text-neutral-500 mt-1">
-                {[lead.sector, lead.location].filter(Boolean).join(" · ") || "Sin sector ni ubicación"}
-              </p>
+              <div className="flex items-center gap-2 flex-wrap mt-1">
+                <p className="text-sm text-neutral-500">
+                  {[lead.sector, lead.location].filter(Boolean).join(" · ") || "Sin sector ni ubicación"}
+                </p>
+                {lead.status && lead.status !== "new" && (
+                  <span
+                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                      lead.status === "contacted"
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        : "bg-neutral-100 text-neutral-600 border border-neutral-300"
+                    }`}
+                  >
+                    {LEAD_STATUS_LABELS[lead.status]}
+                    {lead.statusAt ? ` · ${formatDate(lead.statusAt)}` : ""}
+                  </span>
+                )}
+              </div>
               <div className="flex flex-wrap gap-x-5 gap-y-1 mt-3 text-sm text-neutral-600">
                 {lead.website && (
                   <a href={lead.website} target="_blank" rel="noreferrer" className="hover:text-neutral-900 underline underline-offset-2">
@@ -572,6 +612,34 @@ export default function OutreachLeadDetail({ leadId }) {
         {!editing && (
           <div className="flex flex-col items-end gap-2 shrink-0">
             <div className="flex items-center gap-2 flex-wrap justify-end">
+              <button
+                type="button"
+                onClick={() => setStatus("contacted")}
+                disabled={actionBusy}
+                aria-pressed={lead.status === "contacted"}
+                title={lead.status === "contacted" ? "Quitar el estado y volver a «Sin contactar»" : "Marcar que ya le has escrito o llamado"}
+                className={`px-3 py-2 rounded-lg border text-sm transition disabled:opacity-50 ${
+                  lead.status === "contacted"
+                    ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                    : "border-neutral-200 text-neutral-600 hover:bg-neutral-50"
+                }`}
+              >
+                {LEAD_STATUS_LABELS.contacted}
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatus("discarded")}
+                disabled={actionBusy}
+                aria-pressed={lead.status === "discarded"}
+                title={lead.status === "discarded" ? "Quitar el descarte y volver a «Sin contactar»" : "Dejar de perseguir a esta empresa, sin borrarla"}
+                className={`px-3 py-2 rounded-lg border text-sm transition disabled:opacity-50 ${
+                  lead.status === "discarded"
+                    ? "border-neutral-400 bg-neutral-100 text-neutral-700"
+                    : "border-neutral-200 text-neutral-600 hover:bg-neutral-50"
+                }`}
+              >
+                {LEAD_STATUS_LABELS.discarded}
+              </button>
               <button
                 type="button"
                 onClick={() => {

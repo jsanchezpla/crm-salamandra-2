@@ -116,6 +116,13 @@ export const POST = withTenant(async (request, { params }, ctx) => {
 
   await analysis.update({ sentAt: new Date() });
 
+  // Enviar el correo ES contactar: el estado se pone solo para que la lista no
+  // diga "Sin contactar" en alguien a quien el CRM acaba de escribir. Solo
+  // avanza desde 'new': si ya se descartó a mano, esa decisión manda.
+  if (lead.status === "new") {
+    await lead.update({ status: "contacted", statusAt: new Date() });
+  }
+
   await auditLog({
     tenantId: ctx.tenant.id,
     userId: request.headers.get("x-user-id"),

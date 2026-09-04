@@ -3,6 +3,7 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, created } from "../../../../lib/utils/apiResponse.js";
 import { ForbiddenError, ValidationError } from "../../../../lib/utils/errors.js";
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
+import { isAllowedLeadStatus } from "../../../../lib/outreach/estados.js";
 
 async function auditLog(data) {
   try {
@@ -20,6 +21,7 @@ async function auditLog(data) {
  * tiempo y dinero, y solo ocurre cuando el usuario lo pide explícitamente.
  *
  * Filtros: ?q= &sector= &location= &source= &analyzed=true|false
+ *          &status=new|contacted|discarded   (seguimiento manual del comercial)
  *          &minScore=70&line=agencia   (score mínimo en una línea de negocio)
  *          &limit= &offset=
  */
@@ -41,6 +43,10 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
   }
   const analyzed = sp.get("analyzed");
   if (analyzed === "true" || analyzed === "false") where.analyzed = analyzed === "true";
+  // Estado del seguimiento manual. Un valor que no esté en la lista se ignora
+  // en vez de dar error: es un filtro de listado, no una escritura.
+  const status = sp.get("status")?.trim();
+  if (isAllowedLeadStatus(status)) where.status = status;
   const hasEmail = sp.get("hasEmail");
   if (hasEmail === "true") where.email = { [Op.ne]: null };
   else if (hasEmail === "false") where.email = { [Op.is]: null };

@@ -712,6 +712,10 @@ export const MODULES = {
     // de redacción estaban a fuego e iguales para todos. Columna vacía = el
     // prompt de siempre, así que no cambia el correo de nadie.
     "migrate-outreach-email-template",
+    // Estado del lead: contactado / descartado (04/09/2026). Antes lo único
+    // que se podía marcar era convertirlo en cliente. Backfillea a
+    // 'contacted' los que ya tenían un correo enviado.
+    "migrate-outreach-lead-status",
   ],
 
   // Formularios públicos → bandeja en el CRM → ficha de cliente al aceptar.

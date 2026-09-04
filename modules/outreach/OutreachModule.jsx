@@ -7,6 +7,7 @@ import HelpTooltip from "../../components/ui/HelpTooltip.jsx";
 import SECTORES from "./sectores.json";
 import SectorPicker from "./SectorPicker.jsx";
 import { scoreBand, analysisFor, SOURCES, sourceLabel } from "./scores.js";
+import { LEAD_STATUSES, LEAD_STATUS_LABELS } from "../../lib/outreach/estados.js";
 import { useIntegrations } from "./useIntegrations.js";
 import IntegrationGate from "./IntegrationGate.jsx";
 
@@ -69,6 +70,7 @@ export default function OutreachModule() {
   const [sector, setSector] = useState("");
   const [source, setSource] = useState("");
   const [analyzed, setAnalyzed] = useState("");
+  const [status, setStatus] = useState("");
   const [minScore, setMinScore] = useState("");
   const [scoreLine, setScoreLine] = useState("");
 
@@ -135,6 +137,7 @@ export default function OutreachModule() {
       if (location) p.set("location", location);
       if (source) p.set("source", source);
       if (analyzed) p.set("analyzed", analyzed);
+      if (status) p.set("status", status);
       if (hasEmail) p.set("hasEmail", hasEmail);
       if (minScore && scoreLine) {
         p.set("minScore", minScore);
@@ -154,7 +157,7 @@ export default function OutreachModule() {
     } finally {
       setLoading(false);
     }
-  }, [search, sector, location, source, analyzed, hasEmail, minScore, scoreLine, sort, dir]);
+  }, [search, sector, location, source, analyzed, status, hasEmail, minScore, scoreLine, sort, dir]);
 
   useEffect(() => {
     loadLeads();
@@ -275,7 +278,7 @@ export default function OutreachModule() {
           <h1 className="font-[Fraunces] text-3xl lg:text-4xl text-neutral-800">Captación</h1>
           <p className="text-sm text-neutral-500 mt-1">
             {total} empresa{total !== 1 ? "s" : ""} captada{total !== 1 ? "s" : ""}
-            {search || sector || source || analyzed || minScore ? " (filtradas)" : ""}
+            {search || sector || source || analyzed || status || minScore ? " (filtradas)" : ""}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -340,6 +343,15 @@ export default function OutreachModule() {
             { value: "", label: "Analizados y sin analizar" },
             { value: "true", label: "Solo analizados" },
             { value: "false", label: "Solo sin analizar" },
+          ]}
+        />
+        <Select
+          className={inputCls}
+          value={status}
+          onChange={setStatus}
+          options={[
+            { value: "", label: "Cualquier estado" },
+            ...LEAD_STATUSES.map((s) => ({ value: s, label: LEAD_STATUS_LABELS[s] })),
           ]}
         />
         <input
@@ -463,9 +475,22 @@ export default function OutreachModule() {
                         >
                           {lead.name}
                         </Link>
-                        {!lead.analyzed && (
-                          <div className="text-[11px] text-neutral-400 mt-0.5">sin analizar</div>
-                        )}
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          {!lead.analyzed && (
+                            <span className="text-[11px] text-neutral-400">sin analizar</span>
+                          )}
+                          {lead.status && lead.status !== "new" && (
+                            <span
+                              className={`text-[11px] px-1.5 py-0.5 rounded ${
+                                lead.status === "contacted"
+                                  ? "bg-emerald-50 text-emerald-700"
+                                  : "bg-neutral-100 text-neutral-500"
+                              }`}
+                            >
+                              {LEAD_STATUS_LABELS[lead.status]}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-neutral-600">{lead.sector ?? "—"}</td>
                       <td className="px-4 py-3 text-neutral-600">{lead.location ?? "—"}</td>

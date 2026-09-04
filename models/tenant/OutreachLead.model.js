@@ -77,6 +77,20 @@ export function defineOutreachLead(sequelize) {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      // Seguimiento manual del comercial: 'new' | 'contacted' | 'discarded'.
+      // Lista canónica y etiquetas en lib/outreach/estados.js. STRING y no ENUM
+      // por lo mismo que `source`: añadir un estado no debe migrar tipos.
+      status: {
+        type: DataTypes.STRING(32),
+        allowNull: false,
+        defaultValue: "new",
+      },
+      // Cuándo se puso el estado actual, para saber desde cuándo lleva un lead
+      // contactado sin respuesta o descartado.
+      statusAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
       // Conversión a cliente: cuando se convierte en Client, el lead se marca
       // (no se borra) para (a) desaparecer de la lista de captados y (b) que
       // "Buscar nuevos" no lo vuelva a insertar (ya es cliente). `clientId` es
@@ -105,6 +119,7 @@ export function defineOutreachLead(sequelize) {
         },
         { fields: ["sector"], name: "outreach_leads_sector_idx" },
         { fields: ["analyzed"], name: "outreach_leads_analyzed_idx" },
+        { fields: ["status"], name: "outreach_leads_status_idx" },
       ],
     }
   );
