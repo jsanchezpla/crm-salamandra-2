@@ -95,9 +95,8 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import useZonaSoltar, { useEvitarSoltarFuera } from "@/components/ui/useZonaSoltar.js";
-import useGrabadora, { fmtSegundos } from "@/components/clinica/useGrabadora.js";
+import useGrabadora from "@/components/clinica/useGrabadora.js";
 import useAudios from "@/components/clinica/useAudios.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 import {
@@ -111,26 +110,28 @@ import {
   sesionDeLaCita,
 } from "@/lib/clinica/prepararSesion.js";
 import ApartadosEditor from "@/components/clinica/ApartadosEditor.jsx";
+import MaterialIA, { ACEPTA_AUDIO } from "@/components/clinica/MaterialIA.jsx";
 import PropuestaIA from "@/components/clinica/PropuestaIA.jsx";
 import {
   aFormulario,
   apartadosConPlantillas,
   CLAVE_PLANTILLA,
+  MAX_APARTADOS,
   PLANTILLA_BASE,
   desdeFormulario,
   repartirValoresDeSesion,
   valoresDeSesion,
 } from "@/lib/clinica/plantillas.js";
-import { bloquesDelRegistro, esEnvoltorio, MAX_NOTAS } from "@/lib/clinica/registroCompleto.js";
+import { cabenNuevos } from "@/lib/clinica/apartadosPropuestos.js";
+import { bloquesDelRegistro, esEnvoltorio } from "@/lib/clinica/registroCompleto.js";
 import { MAX_AUDIOS } from "@/lib/clinica/audios.js";
 import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 
 const STATE = { FORM: "form", PROCESSING: "processing", PREPARING: "preparing" };
 
-// Lo que admite cada campo de fichero. En una constante porque ahora lo leen
-// DOS sitios: el `accept` del input (filtra el explorador) y la zona de soltar
-// (filtra lo que llega arrastrado, que el navegador no filtra por su cuenta).
-const ACEPTA_AUDIO = "audio/*,.m4a,.mp3,.wav,.ogg,.webm,.mp4";
+// Lo que admite cada campo de fichero. El del audio vive con la tarjeta que lo
+// pinta (`MaterialIA`), que es quien monta el input; aquí se lee para la zona
+// de soltar, que filtra lo que llega arrastrado (el navegador no lo filtra).
 const ACEPTA_PREP = "image/*,audio/*,application/pdf";
 const MAX_PREP = 10;
 
@@ -232,7 +233,6 @@ function FirmaDeLaSesion({ equipo, valor, onCambio, nombre }) {
 }
 
 const fmtSize = (b) => (b == null ? "" : b < 1024 * 1024 ? `${Math.round(b / 1024)} KB` : `${(b / (1024 * 1024)).toFixed(1)} MB`);
-const fmtDur = (s) => (s == null ? "" : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`);
 
 /**
  * @param {string} patientId  el paciente de la ficha
@@ -321,6 +321,10 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
   // después de aplicarla (o de cerrarla sin aplicar): el panel es una decisión,
   // no un paso del que no se vuelve.
   const [propuesta, setPropuesta] = useState(null);
+  // Los apartados que la IA propone CREAR porque lo dictado no cabía en ninguno
+  // de los de esta sesión (04/09/2026). Aparte de la propuesta: no son el valor
+  // de un apartado, son apartados que habría que añadir.
+  const [nuevosIA, setNuevosIA] = useState([]);
   const [verPropuesta, setVerPropuesta] = useState(false);
   const [avisoAudio, setAvisoAudio] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
@@ -594,17 +598,32 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
   /**
    * Mete contenido en el registro y, si un apartado no está en la plantilla de
    * esta sesión, lo AÑADE al final en vez de escribir en un sitio invisible.
+   *
+   * `creados` son los apartados que la IA se propuso ella y que la profesional
+   * ha aceptado (04/09/2026): vienen con su título y su tipo, así que se añaden
+   * tal cual en vez de caer en el respaldo de abajo, que solo sabe los nombres
+   * de los siete de fábrica.
    */
-  function ponerContenido(nuevos) {
+  function ponerContenido(nuevos, creados = []) {
     setForm((f) => ({ ...f, ...nuevos }));
     setApartados((prev) => {
+      const porClave = new Map(
+        (Array.isArray(creados) ? creados : []).filter((n) => n?.key && n?.label).map((n) => [n.key, n])
+      );
       // Los tres del envoltorio —preparación, devolución y notas internas— NO
       // son apartados de plantilla: tienen su propia tarjeta y su columna. Si
       // se colaran aquí saldrían DOS veces en la pantalla y, peor, se guardarían
       // también dentro de `contentSections`.
       const faltan = Object.keys(nuevos).filter((k) => !esEnvoltorio(k) && !prev.some((a) => a.key === k));
       if (!faltan.length) return prev;
-      return [...prev, ...faltan.map((k) => ({ key: k, label: NOMBRES_AUDIO[k] ?? k, tipo: TIPO_AUDIO[k] ?? "texto" }))];
+      return [
+        ...prev,
+        ...faltan.map((k) => {
+          const creado = porClave.get(k);
+          if (creado) return { key: k, label: creado.label, tipo: creado.tipo ?? "texto" };
+          return { key: k, label: NOMBRES_AUDIO[k] ?? k, tipo: TIPO_AUDIO[k] ?? "texto" };
+        }),
+      ];
     });
   }
 
@@ -669,6 +688,10 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
       // proponer los siete de fábrica.
       fd.append("apartados", JSON.stringify(apartados));
       fd.append("escrito", JSON.stringify(form));
+      // De quién es la sesión: el servidor lee de su ficha la edad y las áreas
+      // para que la propuesta hable el idioma de ESTE paciente. El nombre no
+      // sale del CRM (lib/clinica/estiloClinico.js).
+      fd.append("patientId", id);
       const r = await fetch("/api/clinica/sessions/transcribe", { method: "POST", body: fd });
       const j = await leerRespuestaApi(r);
       if (!r.ok) throw new Error(j.error || "No se pudo procesar");
@@ -682,17 +705,28 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
       });
       const p = j.data.propuesta ?? {};
       const cuantos = Object.values(p).filter((v) => String(v ?? "").trim()).length;
+      // Los apartados que no existían: los que quepan, que el registro no puede
+      // pasar de MAX_APARTADOS y quedarse a medias al guardar.
+      const { entran, fuera } = cabenNuevos(j.data.nuevos ?? [], apartados.length, MAX_APARTADOS);
       setPropuesta(p);
+      setNuevosIA(entran);
       // Con propuesta se abre el panel directamente: es a lo que ha venido.
-      setVerPropuesta(cuantos > 0);
+      setVerPropuesta(cuantos > 0 || entran.length > 0);
       const cuantosAudios = audios.lista.length;
       const elAudio = cuantosAudios > 1 ? `Los ${cuantosAudios} audios` : "El audio";
       const deDonde = conAudio && texto ? `${elAudio} y tus notas` : conAudio ? elAudio : "Tus notas";
+      const conNuevos = entran.length
+        ? ` Y propone ${entran.length} apartado${entran.length === 1 ? "" : "s"} nuevo${entran.length === 1 ? "" : "s"} para lo que no cabía en los tuyos.`
+        : fuera > 0
+          ? ` (La IA proponía apartados nuevos, pero este registro ya tiene ${MAX_APARTADOS}: no caben.)`
+          : "";
       setAvisoAudio(
         j.data.avisoIA ??
           (cuantos > 0
-            ? `${deDonde}: la IA propone ${cuantos} apartado(s). Revísalos y elige cuáles entran.`
-            : `${deDonde}, pero la IA no ha sacado nada que repartir.`)
+            ? `${deDonde}: la IA propone ${cuantos} apartado(s). Revísalos y elige cuáles entran.${conNuevos}`
+            : entran.length > 0
+              ? `${deDonde}: la IA no ha sabido repartirlo por tus apartados, pero propone ${entran.length} nuevo${entran.length === 1 ? "" : "s"}.`
+              : `${deDonde}, pero la IA no ha sacado nada que repartir.`)
       );
       setState(STATE.FORM);
     } catch (e) {
@@ -708,6 +742,7 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
     setUsarAudio(true);
     setResult(null);
     setPropuesta(null);
+    setNuevosIA([]);
     setVerPropuesta(false);
     setAvisoAudio(null);
     if (fileRef.current) fileRef.current.value = "";
@@ -749,13 +784,16 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
   const grabadora = useGrabadora({ onAudio: ponerAudio, onError: setErrorMsg });
 
   /** Lo elegido en el panel entra en el formulario. Guardar sigue siendo suyo. */
-  function aplicarPropuesta(cambios) {
+  function aplicarPropuesta(cambios, creados = []) {
     const cuantos = Object.keys(cambios).length;
-    ponerContenido(cambios);
+    const altas = Array.isArray(creados) ? creados.length : 0;
+    ponerContenido(cambios, creados);
     setVerPropuesta(false);
     setAvisoAudio(
       cuantos > 0
-        ? `Se han escrito ${cuantos} apartado(s) con la propuesta de la IA. Revisa y edita antes de guardar.`
+        ? `Se han escrito ${cuantos} apartado(s) con la propuesta de la IA${
+            altas > 0 ? `, ${altas} de ellos nuevos (los verás al final del punto 2)` : ""
+          }. Revisa y edita antes de guardar.`
         : "No has aplicado ningún apartado."
     );
   }
@@ -1128,15 +1166,6 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
         </div>
       )}
 
-      <input
-        ref={fileRef}
-        type="file"
-        accept={ACEPTA_AUDIO}
-        multiple
-        className="hidden"
-        onChange={(e) => { const fs = Array.from(e.target.files ?? []); if (fs.length) ponerAudio(fs); }}
-      />
-
       {errorMsg && <div className="px-4 py-3 rounded-lg bg-rose-50 border border-rose-100 text-xs text-rose-700">{errorMsg}</div>}
 
       {/* Lo que ha sacado la IA, para elegir apartado por apartado. Se le pasa
@@ -1147,6 +1176,7 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
           bloques={bloques}
           escrito={form}
           propuesta={propuesta}
+          nuevos={nuevosIA}
           // El texto del que salió, tal cual se le mandó a la IA: si hubo audio
           // y notas, las dos cosas con su rótulo. El panel lo enseña plegado.
           transcription={result?.material ?? result?.transcription ?? ""}
@@ -1182,232 +1212,55 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
             </div>
           </div>
 
-          {/* Audio, opcional. Dentro del registro y no como puerta de entrada
-              (26/08/2026, Rodrigo): el registro se escribe; el audio, si lo
-              hay, lo adelanta. */}
-          <div
-            {...zonaAudio.props}
-            className={`bg-white rounded-xl p-4 lg:p-5 border transition-colors ${
-              zonaAudio.arrastrando
-                ? "border-2 border-dashed border-[var(--color-primary,#1B3A2D)] bg-neutral-50"
-                : "border-neutral-100"
-            }`}
-          >
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="shrink-0 w-10 h-10 rounded-lg flex items-center justify-center text-white" style={{ background: "var(--color-primary, #1B3A2D)" }}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" /></svg>
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-xs font-semibold text-[var(--ink-900)]">
-                  ¿Tienes audio o notas de la sesión? <span className="font-normal text-neutral-400">(opcional)</span>
-                  <HelpTooltip title="Qué se guarda y qué no" className="ml-1.5 tracking-normal normal-case">
-                    El audio sirve para sacar el texto y se descarta: en la sesión quedan la
-                    transcripción y la duración, no la grabación. Si quieres conservarla, guárdala tú.
-                    El texto que pegues sí se guarda con la sesión, como constancia de dónde salió el
-                    registro. Lo que adjuntes en «Preparación» también se queda.
-                  </HelpTooltip>
-                </div>
-                {!audios.lista.length ? (
-                  <p className="text-[11px] text-neutral-500 mt-0.5">
-                    {zonaAudio.arrastrando
-                      ? "Suéltalos aquí."
-                      : `Arrastra aquí los audios, pégalos con Ctrl+V o búscalos — puedes añadir varios (hasta ${MAX_AUDIOS}) y transcribirlos de una vez. O pega abajo lo que tengas apuntado. La IA te propone el registro entero, de la preparación a las notas internas; tú eliges qué entra. m4a, mp3, wav, ogg, webm · máx. 25 MB cada uno.`}
-                  </p>
-                ) : (
-                  <p className="text-[11px] text-neutral-600 mt-0.5">
-                    {audios.lista.length === 1 ? "1 audio" : `${audios.lista.length} audios`}
-                    {audios.duracion != null ? ` · ${fmtDur(audios.duracion)} transcritos` : ""}
-                    {audios.hayPendientes ? " · sin transcribir todavía" : ""}
-                  </p>
-                )}
-              </div>
-              <div className="flex gap-2 shrink-0">
-                {audios.hueco > 0 && grabadora.soportado && (
-                  <button
-                    type="button"
-                    onClick={grabadora.grabando ? grabadora.parar : grabadora.empezar}
-                    className={`text-xs font-medium px-3 py-2 rounded-lg border ${grabadora.grabando ? "border-rose-300 bg-rose-50 text-rose-700" : "border-neutral-200 bg-white hover:border-neutral-400 text-neutral-700"}`}
-                    title={grabadora.grabando ? "Parar y usar la grabación" : "Grabar con el micrófono del dispositivo"}
-                  >
-                    {grabadora.grabando ? `■ Parar · ${fmtSegundos(grabadora.segundos)}` : "● Grabar"}
-                  </button>
-                )}
-                {audios.hueco > 0 && !grabadora.grabando && (
-                  <button type="button" onClick={() => fileRef.current?.click()} className="text-xs font-medium px-3 py-2 rounded-lg border border-neutral-200 bg-white hover:border-neutral-400 text-neutral-700">
-                    {audios.lista.length ? "Añadir otro" : "Añadir audio"}
-                  </button>
-                )}
-                {audios.lista.length > 1 && (
-                  <button type="button" onClick={quitarAudio} className="text-xs px-3 py-2 text-neutral-500 hover:underline">
-                    Quitar todos
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* ── La lista de audios (04/09/2026, Rodrigo) ──────────────────
-                Se ven todos con su estado, y cada uno se quita por su cuenta:
-                el que sobra no se lleva por delante la transcripción de los
-                demás, que es lo que pasaba cuando el audio era uno solo. */}
-            {audios.lista.length > 0 && (
-              <ul className="mt-3 space-y-1.5">
-                {audios.lista.map((a, i) => (
-                  <li key={a.id} className="flex items-center gap-2 text-[11px] rounded-lg border border-neutral-100 bg-neutral-50 px-2.5 py-1.5">
-                    <span className="w-4 shrink-0 text-neutral-400 tabular-nums">{i + 1}.</span>
-                    <span className="flex-1 min-w-0 truncate text-neutral-700">{a.nombre}</span>
-                    <span className="shrink-0 text-neutral-400">{fmtSize(a.tamano)}</span>
-                    <span
-                      className={`shrink-0 font-medium ${a.error ? "text-rose-600" : a.texto ? "text-emerald-700" : audios.transcribiendo ? "text-neutral-500" : "text-amber-700"}`}
-                      title={a.error || undefined}
-                    >
-                      {a.error
-                        ? "no ha salido texto"
-                        : a.texto
-                          ? `transcrito${a.durationSec != null ? ` · ${fmtDur(a.durationSec)}` : ""}`
-                          : audios.transcribiendo
-                            ? "transcribiendo…"
-                            : "pendiente"}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => quitarUnAudio(a.id)}
-                      disabled={audios.transcribiendo}
-                      className="shrink-0 text-neutral-400 hover:text-rose-600 disabled:opacity-40"
-                      title="Quitar este audio"
-                    >
-                      ✕
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            {/* Transcribir SIN llamar a la IA: es lo que quita la espera de
-                Whisper de delante del botón del registro. No bloquea nada —
-                mientras transcribe se puede seguir escribiendo aquí abajo. */}
-            {audios.hayPendientes && (
-              <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-[11px] text-neutral-500">
-                  {audios.transcribiendo
-                    ? "Transcribiendo… puedes seguir escribiendo mientras."
-                    : "Transcríbelos ahora y sigue escribiendo: cuando pulses la IA no habrá que esperar al audio."}
-                </p>
+          {/* Audio y notas, opcionales. Dentro del registro y no como puerta
+              de entrada (26/08/2026, Rodrigo): el registro se escribe; el
+              audio, si lo hay, lo adelanta. La tarjeta la comparte con el
+              informe desde el 04/09/2026 (`MaterialIA`), que estrena su
+              pantalla de redacción con este mismo material. */}
+          <MaterialIA
+            audios={audios}
+            grabadora={grabadora}
+            zonaAudio={zonaAudio}
+            fileRef={fileRef}
+            onAudios={ponerAudio}
+            onQuitarAudio={quitarUnAudio}
+            onQuitarTodos={quitarAudio}
+            onTranscribir={transcribirAudios}
+            notas={notas}
+            onNotas={setNotas}
+            usarAudio={usarAudio}
+            onUsarAudio={setUsarAudio}
+            queEntra={queEntra}
+            conAudio={conAudio}
+            onProcesar={procesarConIA}
+            procesando={state !== STATE.FORM}
+            sustantivo="el registro"
+            titulo="¿Tienes audio o notas de la sesión?"
+            descripcion={`Arrastra aquí los audios, pégalos con Ctrl+V o búscalos — puedes añadir varios (hasta ${MAX_AUDIOS}) y transcribirlos de una vez. O pega abajo lo que tengas apuntado. La IA te propone el registro entero, de la preparación a las notas internas; tú eliges qué entra. m4a, mp3, wav, ogg, webm · máx. 25 MB cada uno.`}
+            ayuda={
+              <>
+                El audio sirve para sacar el texto y se descarta: en la sesión quedan la
+                transcripción y la duración, no la grabación. Si quieres conservarla, guárdala tú.
+                El texto que pegues sí se guarda con la sesión, como constancia de dónde salió el
+                registro. Lo que adjuntes en «Preparación» también se queda.
+              </>
+            }
+            aviso={avisoAudio ? `${avisoAudio}${result?.demo ? " (datos de demostración)" : ""}` : null}
+            avisoExtra={
+              /* El panel se puede volver a abrir mientras no se quite el
+                 audio: se cierra sin querer, o se aplica media propuesta y
+                 luego se ve que faltaba un apartado. */
+              (propuesta && Object.values(propuesta).some((v) => String(v ?? "").trim())) || nuevosIA.length > 0 ? (
                 <button
                   type="button"
-                  onClick={transcribirAudios}
-                  disabled={audios.transcribiendo || state !== STATE.FORM}
-                  className="text-xs font-medium px-3 py-2 rounded-lg border border-neutral-200 bg-white hover:border-neutral-400 text-neutral-700 disabled:opacity-40"
+                  onClick={() => setVerPropuesta(true)}
+                  className="shrink-0 font-medium text-emerald-900 underline hover:no-underline"
                 >
-                  {audios.transcribiendo
-                    ? "Transcribiendo…"
-                    : audios.pendientes.length > 1
-                      ? `Transcribir los ${audios.pendientes.length} audios`
-                      : "Transcribir el audio"}
+                  Ver la propuesta de la IA
                 </button>
-              </div>
-            )}
-
-            {/* ── Las notas escritas (01/09/2026, Rodrigo) ──────────────────
-                «Por si apuntan todo en un bloc de notas y lo pasan ahí.» No
-                todo el mundo graba, y para la IA el audio y esto son lo mismo:
-                texto del que sacar el registro. Por eso comparten tarjeta y
-                comparten botón — y si se dan las dos cosas, se usan las dos. */}
-            <div className="mt-3 border-t border-neutral-100 pt-3">
-              <div className="flex flex-wrap items-baseline justify-between gap-2 mb-1.5">
-                <div className="eyebrow">{audios.lista.length ? "…y tus notas" : "O pega tus notas"}</div>
-                <span className={`text-[10px] ${notas.length > MAX_NOTAS ? "text-rose-600 font-medium" : "text-neutral-400"}`}>
-                  {notas.length > 0 && `${notas.length.toLocaleString("es-ES")} / ${MAX_NOTAS.toLocaleString("es-ES")}`}
-                </span>
-              </div>
-              <textarea
-                className={ta}
-                rows={notas ? 5 : 3}
-                placeholder="Pega aquí lo que tengas apuntado: el bloc de notas, el móvil, lo escrito a mano pasado a limpio… Tal cual, sin ordenarlo."
-                value={notas}
-                onChange={(e) => setNotas(e.target.value)}
-              />
-            </div>
-
-            {/* ── Dejar el audio fuera de una pasada (01/09/2026, Rodrigo) ──
-                Solo aparece cuando ya hay transcripción, que es cuando tiene
-                sentido: hasta entonces quitar los audios no cuesta nada. A
-                partir de ahí, quitarlos tiraba lo transcrito, así que quien
-                quería usar la IA solo con lo que acababa de escribir no tenía
-                puerta. Esta es la puerta. */}
-            {audios.hayTexto && (
-              <label className="mt-3 flex items-start gap-2 text-[11px] text-neutral-600 cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="mt-0.5"
-                  checked={usarAudio}
-                  onChange={(e) => setUsarAudio(e.target.checked)}
-                />
-                <span>
-                  Usar también {audios.lista.length > 1 ? "los audios" : "el audio"} en esta pasada.
-                  <span className="text-neutral-400">
-                    {" "}
-                    Desmárcalo para que la IA lea solo tus notas. La transcripción no se pierde ni se vuelve a pagar.
-                  </span>
-                </span>
-              </label>
-            )}
-
-            {(audios.lista.length > 0 || notas.trim()) && (
-              <div className="mt-3 flex justify-end">
-                <button
-                  type="button"
-                  onClick={procesarConIA}
-                  // Sin audio en la pasada y sin notas no hay nada que leer. Y
-                  // mientras Whisper trabaja no se lanza la IA: leería media
-                  // sesión — el audio que está en vuelo aún no tiene texto.
-                  disabled={notas.length > MAX_NOTAS || (!conAudio && !notas.trim()) || audios.transcribiendo}
-                  className="text-xs font-medium px-4 py-2 rounded-lg text-white hover:opacity-90 inline-flex items-center gap-2 disabled:opacity-40"
-                  style={{ background: "var(--color-primary, #1B3A2D)" }}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" /></svg>
-                  {/* El rótulo dice lo que va a pasar de verdad. El de antes
-                      —«Volver a procesar con IA» en cuanto había un `result`—
-                      hacía creer que se volvía a transcribir el audio, que es
-                      exactamente lo que la pantalla hacía y ya no hace. */}
-                  {queEntra === "audio"
-                    ? notas.trim()
-                      ? `Transcribir y procesar ${audios.pendientes.length > 1 ? "los audios" : "el audio"} y mis notas`
-                      : `Transcribir y procesar ${audios.pendientes.length > 1 ? "los audios" : "el audio"} con IA`
-                    : queEntra === "transcripcion"
-                      ? notas.trim()
-                        ? "Proponer el registro con la transcripción y mis notas"
-                        : "Proponer el registro con la transcripción"
-                      : "Rellenar el registro con mis notas"}
-                </button>
-              </div>
-            )}
-
-            {avisoAudio && (
-              <div className="mt-3 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-100 text-[11px] text-emerald-800 flex flex-wrap items-center gap-2">
-                <span className="flex-1 min-w-[12rem]">{avisoAudio}{result?.demo ? " (datos de demostración)" : ""}</span>
-                {/* El panel se puede volver a abrir mientras no se quite el
-                    audio: se cierra sin querer, o se aplica media propuesta y
-                    luego se ve que faltaba un apartado. */}
-                {propuesta && Object.values(propuesta).some((v) => String(v ?? "").trim()) && (
-                  <button
-                    type="button"
-                    onClick={() => setVerPropuesta(true)}
-                    className="shrink-0 font-medium text-emerald-900 underline hover:no-underline"
-                  >
-                    Ver la propuesta de la IA
-                  </button>
-                )}
-              </div>
-            )}
-            {/* La del AUDIO, no la de la última pasada: si la última fue solo de
-                notas, la transcripción sigue estando y se sigue enseñando. */}
-            {audios.hayTexto && (
-              <div className="mt-3 border-t border-neutral-100 pt-3">
-                <div className="eyebrow mb-1.5">Transcripción literal</div>
-                <p className="text-xs text-neutral-600 leading-relaxed italic whitespace-pre-line">«{audios.texto}»</p>
-              </div>
-            )}
-          </div>
+              ) : null
+            }
+          />
 
           {/* 1 · Preparación */}
           <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5 space-y-3">

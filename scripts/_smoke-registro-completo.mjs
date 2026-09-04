@@ -164,11 +164,40 @@ describe("El prompt: lo que se le pide a Claude", () => {
     assert.ok(lineas[0].includes("internalNotes"));
   });
 
-  it("manda no inventar y respetar el tipo de cada apartado", () => {
-    assert.ok(/NO INVENTES/.test(prompt));
+  it("manda no inventar DATOS y respetar el tipo de cada apartado", () => {
+    // 04/09/2026: la regla dejó de ser un «NO INVENTES» a secas —que también
+    // frenaba la elaboración clínica, que es lo que se le pide desde hoy— y
+    // pasó a separar los datos (solo del material) de la interpretación (suya,
+    // y marcada). Lo que no puede perderse es la mitad de los datos.
+    assert.ok(/LOS DATOS salen ÚNICAMENTE del material/.test(prompt));
+    assert.ok(/PROHIBIDO/.test(prompt));
+    assert.ok(/DIAGNOSTICAR/.test(prompt), "un modelo no pone etiquetas diagnósticas en un informe firmado");
     assert.ok(prompt.includes("VACÍO"));
     assert.ok(prompt.includes("lista"));
     assert.ok(prompt.includes("párrafo"));
+  });
+
+  it("y pide la elaboración clínica que antes no pedía", () => {
+    assert.ok(/ELABORACIÓN CLÍNICA/.test(prompt));
+    assert.ok(/hipótesis/i.test(prompt));
+    // Los apartados que se deducen del conjunto van marcados, y solo ellos.
+    // Con los siete de fábrica, porque la plantilla de arriba no tiene ninguno
+    // de síntesis (y por eso su prompt no lleva ni una marca: se comprueba).
+    const deFabrica = promptDeRegistro(bloquesDelRegistro());
+    const marcados = deFabrica.split("\n").filter((l) => l.includes("[SÍNTESIS]"));
+    assert.ok(marcados.some((l) => l.includes("nextSessionNotes")), marcados.join(" | "));
+    assert.ok(!marcados.some((l) => l.includes("familyComments")), "lo que dice la familia es un dato, no una síntesis");
+    assert.ok(!prompt.includes("[SÍNTESIS]"), "sin apartados de síntesis, la marca no aparece");
+  });
+
+  it("el paciente viaja sin nombre, y solo si se sabe algo de él", () => {
+    const conPaciente = promptDeRegistro(bloques, {
+      paciente: { firstName: "Marta", lastName: "Ruiz", birthDate: "2017-03-12", specialties: ["logopedia"] },
+    });
+    assert.ok(/EL PACIENTE/.test(conPaciente));
+    assert.ok(conPaciente.includes("logopedia"));
+    assert.ok(!conPaciente.includes("Marta"), "el nombre del paciente no sale del CRM");
+    assert.ok(!/EL PACIENTE/.test(prompt), "sin paciente, el prompt es el de siempre");
   });
 
   it("el mensaje lleva la transcripción y, si lo hay, lo ya escrito como contexto", () => {
@@ -219,6 +248,38 @@ describe("La respuesta: parseo defensivo", () => {
       assert.deepEqual(Object.keys(p).sort(), bloques.map((b) => b.key).sort());
       assert.ok(propuestaVacia(p), `${JSON.stringify(basura)} debería dar propuesta vacía`);
     }
+  });
+
+  it("rescata el JSON con COMILLAS sin escapar dentro del texto", () => {
+    // El fallo real del 04/09/2026, probado contra la IA de Aumenta: en cuanto
+    // el prompt pide redactar de verdad, el modelo CITA —«verbaliza
+    // autodescalificaciones ("es tonto")»— y esas dos comillas rectas rompían
+    // el JSON entero. Los 18 apartados de una entrevista llegaban vacíos
+    // después de 40 segundos de espera. Pasó en 3 de cada 4 pruebas.
+    const roto =
+      '{"prepText": "Memory de atención.",\n' +
+      ' "activities": "Se trabaja con el memory de 24 piezas.",\n' +
+      ' "regulacion": "Ante el error tira el material y verbaliza autodescalificaciones ("es tonto"), lo que sugiere un autoconcepto que empieza a resentirse.",\n' +
+      ' "parentFeedback": "La madre dice que en casa "está más tranquilo" desde la última sesión."}';
+    const { objeto, incidencia } = leerRespuesta(roto);
+    assert.equal(incidencia, null, "reparado no es una incidencia: no se pierde nada");
+    const p = normalizarPropuesta(roto, bloques);
+    assert.ok(p.regulacion.includes("es tonto"), p.regulacion);
+    assert.ok(p.regulacion.includes("autoconcepto"), "no se pierde el final de la frase");
+    assert.ok(p.parentFeedback.includes("está más tranquilo"), p.parentFeedback);
+    assert.equal(objeto.activities, "Se trabaja con el memory de 24 piezas.");
+  });
+
+  it("y no toca el JSON que ya estaba bien", () => {
+    // La reparación no puede ser un parche que cambie lo que funcionaba: unas
+    // comillas ESCAPADAS tienen que seguir leyéndose igual.
+    const bueno = JSON.stringify({
+      activities: 'Se le pide que repita la consigna "de memoria" antes de empezar.',
+      regulacion: "Line 1\nLine 2",
+    });
+    const p = normalizarPropuesta(bueno, bloques);
+    assert.equal(p.activities, 'Se le pide que repita la consigna "de memoria" antes de empezar.');
+    assert.equal(p.regulacion, "Line 1\nLine 2");
   });
 
   it("tira las claves que nadie ha pedido (el modelo se inventa apartados)", () => {

@@ -125,7 +125,12 @@ describe("el prompt", () => {
     assert.match(p, /NOTA INDIVIDUAL DE CADA ASISTENTE \(Leo Prueba, Marta Ejemplo\)/);
     assert.match(p, /NOTAS INTERNAS/);
     assert.match(p, /va SOLO a su nota individual/);
-    assert.match(p, /NO INVENTES/);
+    // Las reglas comunes vienen de `registroCompleto.js`. Desde el 04/09/2026
+    // ya no son un «NO INVENTES» a secas —eso frenaba también la elaboración
+    // clínica, que es lo que se pide ahora—, sino la separación entre los datos
+    // (solo del material) y la interpretación (marcada, y sin diagnosticar).
+    assert.match(p, /LOS DATOS salen ÚNICAMENTE del material/);
+    assert.match(p, /PROHIBIDO/);
     // El molde lleva todas las claves, la de cada niño incluida.
     assert.match(p, new RegExp(`"${claveDeNota(LEO)}": "…"`));
     assert.match(p, /\[INTERNO — la familia no lo lee NUNCA\]/);

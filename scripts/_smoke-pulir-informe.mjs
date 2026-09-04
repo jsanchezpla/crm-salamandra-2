@@ -13,6 +13,11 @@
  *     salen de su sitio.
  *   · `verificarSinInventar` caza números y meses nuevos, y deja pasar la
  *     redacción legítima.
+ *   · Los apartados de SÍNTESIS (04/09/2026) solo se proponen si están VACÍOS:
+ *     lo que la profesional haya escrito en los logros o en la continuidad no
+ *     se le manda al modelo ni se pisa. Y como se elaboran leyendo el informe
+ *     entero, se verifican contra TODO el volcado y no contra su casilla vacía
+ *     —si no, repetir una fecha de la evolución los tumbaría siempre—.
  *   · La propuesta que encoge de más se AVISA (no se rechaza: unir dos líneas
  *     acorta con razón).
  *   · El modo simulado de la demo pasa su propia verificación — o sea que la
@@ -24,7 +29,9 @@
 
 import {
   SECCIONES_PULIBLES,
+  SECCIONES_SINTESIS,
   loQueHayQuePulir,
+  loQueSePuedeProponer,
   verificarSinInventar,
   avisosDePerdida,
   fakePulirInforme,
@@ -106,6 +113,15 @@ paso("Un dato que no estaba se caza");
   // redacción válida sería una que borrase las fechas.
   const mismos = { evolution: ["El 2 de abril mantiene la tarea 15 minutos."] };
   esperar(verificarSinInventar(entrada, mismos).ok, "repetir un número que ya estaba sí pasa");
+
+  // "mayor" lleva dentro "mayo" (04/09/2026): buscar el mes por `includes`
+  // descartaba el informe entero por una fecha que nadie había escrito, y
+  // "mayor" sale en cualquier redacción clínica.
+  const conMayor = {
+    evolution: ["El 3 de marzo responde con mayor interés y sostiene la tarea con mayor autonomía."],
+  };
+  const v5 = verificarSinInventar(entrada, conMayor);
+  esperar(v5.ok, "«mayor» no es el mes de mayo", v5.motivos.join("; "));
 }
 
 // ── 3. Lo que se pierde se avisa ───────────────────────────────────────────
@@ -149,6 +165,68 @@ paso("El modo simulado de la demo no hace trampas");
   );
   esperar(!("motiveOfIntervention" in propuesta), "y tampoco toca lo que escribió la profesional");
   void avisos;
+}
+
+// ── 4 bis. Los apartados que se elaboran del conjunto ──────────────────────
+paso("Los apartados de síntesis solo se proponen si están vacíos");
+{
+  // En VOLCADO: los logros están vacíos; las recomendaciones y la continuidad,
+  // escritas. Solo se pide lo primero.
+  const proponer = loQueSePuedeProponer(VOLCADO);
+  esperar(proponer.includes("achievements"), "los logros vacíos sí se proponen", proponer.join(", "));
+  esperar(
+    !proponer.includes("recommendations") && !proponer.includes("continuityProposal"),
+    "lo que ya escribió la profesional NO se propone",
+    proponer.join(", ")
+  );
+  esperar(
+    proponer.every((k) => SECCIONES_SINTESIS.includes(k)),
+    "y no se cuela ningún apartado que no sea de síntesis"
+  );
+
+  // Un informe recién volcado: la continuidad viene en blanco siempre.
+  const recienVolcado = { ...VOLCADO, continuityProposal: "", achievements: [] };
+  esperar(
+    loQueSePuedeProponer(recienVolcado).includes("continuityProposal"),
+    "en un informe recién volcado, la continuidad entra en la propuesta"
+  );
+
+  // El motivo de intervención no es de síntesis: de las sesiones no se deduce.
+  esperar(
+    !loQueSePuedeProponer({ ...VOLCADO, motiveOfIntervention: "" }).includes("motiveOfIntervention"),
+    "el motivo de intervención no se propone nunca, ni vacío"
+  );
+}
+
+paso("Un apartado de síntesis se verifica contra el informe entero");
+{
+  const entrada = loQueHayQuePulir(VOLCADO);
+
+  // Se elabora leyendo la evolución: puede citar una fecha que está allí.
+  const conFechaDeOtroApartado = {
+    achievements: ["El 2 de abril sostiene la tarea sin el apoyo visual, lo que sugiere mayor autorregulación."],
+  };
+  const v1 = verificarSinInventar(entrada, conFechaDeOtroApartado);
+  esperar(v1.ok, "una síntesis que cita un dato de otro apartado pasa", v1.motivos.join("; "));
+
+  // Pero inventarse una cifra sigue sin pasar, también aquí.
+  const conCifraNueva = { achievements: ["Ha mejorado un 40 % en atención sostenida."] };
+  esperar(!verificarSinInventar(entrada, conCifraNueva).ok, "una cifra inventada en la síntesis NO pasa");
+
+  const continuidadInventada = { continuityProposal: ["Se propone continuar 6 meses más."] };
+  esperar(
+    !verificarSinInventar(entrada, continuidadInventada).ok,
+    "ni una duración que nadie escribió en las sesiones"
+  );
+}
+
+paso("La demo enseña que la IA completa lo vacío");
+{
+  const recienVolcado = { ...VOLCADO, achievements: [] };
+  const { propuesta } = fakePulirInforme({ contentSections: recienVolcado });
+  esperar((propuesta.achievements ?? []).length > 0, "el modo simulado propone los logros que faltaban");
+  const v = verificarSinInventar(loQueHayQuePulir(recienVolcado), propuesta);
+  esperar(v.ok, "y su propuesta pasa la verificación de siempre", v.motivos.join("; "));
 }
 
 // ── 5. Sin nada volcado ────────────────────────────────────────────────────

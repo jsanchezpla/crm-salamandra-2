@@ -112,6 +112,11 @@ export const POST = withTenant(async (request, _rc, ctx) => {
   const apartados = jsonDelForm(form, "apartados");
   const escrito = jsonDelForm(form, "escrito");
   const notas = String(form?.get("texto") ?? "").trim();
+  // De quién es la sesión (04/09/2026). Del navegador viene SOLO el id: el
+  // paciente se lee de la base del tenant, y al prompt van la edad y las áreas,
+  // nunca el nombre (`lineaDePaciente`). Sin edad, «trabaja la atención» se
+  // escribe igual para un niño de 5 años que para uno de 15.
+  const patientId = String(form?.get("patientId") ?? "").trim();
   // VARIOS audios desde el 04/09/2026 (Rodrigo): una sesión se dicta a trozos
   // y llega en tres notas de voz. Lo normal es que la pantalla los haya
   // transcrito ya y aquí no llegue ninguno, pero quien pulse la IA sin
@@ -153,6 +158,7 @@ export const POST = withTenant(async (request, _rc, ctx) => {
       transcription,
       material: materialParaLaIA({ transcripcion: transcription, notas }),
       propuesta,
+      nuevos: [],
       structured: estructuraHistorica(propuesta),
       audioDurationSec: hayAudio ? 61 * files.length : null,
       demo: true,
@@ -196,6 +202,10 @@ export const POST = withTenant(async (request, _rc, ctx) => {
 
   let structured;
   let propuesta;
+  // Los apartados que el modelo propone CREAR porque lo dictado no cabía en
+  // ninguno de los del registro (04/09/2026). Van aparte de la propuesta: no son
+  // el valor de un apartado, son apartados que habría que añadir.
+  let nuevos = [];
   let incidencia = null;
   const tIA = Date.now();
   try {
@@ -203,10 +213,14 @@ export const POST = withTenant(async (request, _rc, ctx) => {
       transcription: material,
       apartados,
       escrito,
+      paciente: patientId
+        ? await ctx.tenantModels.Patient.findByPk(patientId).catch(() => null)
+        : null,
       apiKey: anthropicKey,
       model: getTenantAnthropicModel(ctx),
     });
     propuesta = r.propuesta;
+    nuevos = r.nuevos ?? [];
     structured = r.structured;
     incidencia = r.incidencia;
     console.info("[clinica:transcribe] claude", `${Date.now() - tIA}ms`, `${material.length} chars`);
@@ -220,6 +234,7 @@ export const POST = withTenant(async (request, _rc, ctx) => {
       transcription,
       material,
       propuesta: {},
+      nuevos: [],
       structured: null,
       audioDurationSec,
       demo: false,
@@ -243,6 +258,7 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     transcription,
     material,
     propuesta,
+    nuevos,
     structured,
     audioDurationSec,
     demo: false,

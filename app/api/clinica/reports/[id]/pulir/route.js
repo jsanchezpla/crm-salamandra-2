@@ -19,9 +19,17 @@ import { pulirInforme, fakePulirInforme } from "../../../../../../lib/clinica/pu
  * este endpoint escriba solo en la base de datos, lo que la familia recibe
  * habrá dejado de ser lo que ella escribió.
  *
- * Del informe solo se le pasan al modelo los cinco apartados que salen del
- * volcado. El motivo de intervención y la propuesta de continuidad los escribe
- * ella y ni siquiera se mandan (ver `lib/clinica/pulirInforme.js`).
+ * Del informe se le pasan al modelo los cinco apartados que salen del volcado.
+ * El motivo de intervención no se manda en ningún sentido: lo escribe ella y de
+ * las sesiones no se deduce. Desde el 04/09/2026 sí se le piden los apartados
+ * de síntesis que están VACÍOS —logros, recomendaciones, propuesta de
+ * continuidad—, que son los que hasta ahora se quedaban en blanco siempre; lo
+ * que ella haya escrito en ellos no se toca (ver `lib/clinica/pulirInforme.js`).
+ *
+ * Al modelo viaja también la edad y las áreas del paciente —lista cerrada, sin
+ * nombres (`lineaDePaciente`)—: sin la edad, el mismo párrafo vale para un niño
+ * de 5 años y para uno de 15, que era una de las razones por las que lo que
+ * salía sonaba genérico.
  *
  * Clave BYOK del tenant; sin clave → 503. En la DEMO, simulado.
  */
@@ -38,7 +46,7 @@ export const POST = withTenant(async (request, rc, ctx) => {
     const { id } = await rc.params;
     if (!UUID_RE.test(id)) return error("id inválido", 422);
 
-    const { ClinicalReport } = ctx.tenantModels;
+    const { ClinicalReport, Patient } = ctx.tenantModels;
     const informe = await ClinicalReport.findByPk(id);
     if (!informe) return notFound("Informe no encontrado");
     if (informe.status === "delivered") {
@@ -56,9 +64,14 @@ export const POST = withTenant(async (request, rc, ctx) => {
 
     const cs = informe.contentSections && typeof informe.contentSections === "object" ? informe.contentSections : {};
 
+    // Solo para el prompt, y solo lo que deja pasar `lineaDePaciente`: edad,
+    // áreas, nivel educativo y tipo de atención. Si el paciente ya no está (o
+    // el informe es viejo), se redacta sin contexto como hasta ahora.
+    const paciente = esFake ? null : await Patient.findByPk(informe.patientId).catch(() => null);
+
     const { propuesta, avisos } = esFake
       ? fakePulirInforme({ contentSections: cs })
-      : await pulirInforme({ contentSections: cs, apiKey, model: getTenantAnthropicModel(ctx) });
+      : await pulirInforme({ contentSections: cs, paciente, apiKey, model: getTenantAnthropicModel(ctx) });
 
     // Se audita QUÉ apartados se propusieron, nunca su texto: el contenido de un
     // informe clínico no se duplica en master.audit_logs.

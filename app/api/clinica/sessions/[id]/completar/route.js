@@ -61,7 +61,7 @@ export const POST = withTenant(async (request, rc, ctx) => {
     const { id } = await rc.params;
     if (!UUID_RE.test(id)) return error("id inválido");
 
-    const { ClinicSession } = ctx.tenantModels;
+    const { ClinicSession, Patient } = ctx.tenantModels;
     const s = await ClinicSession.findByPk(id);
     if (!s) return notFound("Sesión no encontrada");
 
@@ -120,30 +120,37 @@ export const POST = withTenant(async (request, rc, ctx) => {
     for (const clave of CLAVES_ENVOLTORIO) escrito[clave] = String(s[clave] ?? "");
 
     if (fake) {
-      return ok({ propuesta: propuestaDemo(bloques), bloques, escrito, material, demo: true });
+      return ok({ propuesta: propuestaDemo(bloques), nuevos: [], bloques, escrito, material, demo: true });
     }
 
     let propuesta;
+    // Los apartados que el modelo propone CREAR porque lo dictado no cabía en
+    // ninguno de los de esta sesión (04/09/2026). Viajan aparte de la propuesta.
+    let nuevos = [];
     try {
       const r = await structureSession({
         transcription: material,
         apartados,
         escrito,
+        // Edad y áreas del paciente para el prompt; su nombre no viaja nunca
+        // (`lineaDePaciente`). Si la ficha ya no está, se redacta sin contexto.
+        paciente: await Patient.findByPk(s.patientId).catch(() => null),
         apiKey: anthropicKey,
         model: getTenantAnthropicModel(ctx),
       });
       propuesta = r.propuesta;
+      nuevos = r.nuevos ?? [];
     } catch (e) {
       if (e.code === "NO_API_KEY") return error("El resumen con IA no está configurado (falta la clave de Anthropic).", 503);
       console.error("[clinica:completar]", e);
       return error("La IA no ha podido repartir el texto de esta sesión. Inténtalo de nuevo.", 502);
     }
 
-    if (propuestaVacia(propuesta)) {
+    if (propuestaVacia(propuesta) && nuevos.length === 0) {
       return error("La IA no ha sacado nada de este texto. Léelo y escribe el registro a mano.", 422);
     }
 
-    return ok({ propuesta, bloques, escrito, material, demo: false });
+    return ok({ propuesta, nuevos, bloques, escrito, material, demo: false });
   } catch (err) {
     return serverError(err);
   }

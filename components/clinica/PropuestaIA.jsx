@@ -27,8 +27,21 @@
  * En un apartado vacío no hay nada que decidir salvo usarla o no, y viene
  * marcada: es el caso normal y obligar a 12 clics para lo evidente sería peor.
  *
- * Nada de esto guarda: `onAplicar` devuelve solo los apartados elegidos y quien
- * llama decide si eso va al formulario o a un PATCH.
+ * ── APARTADOS QUE NO EXISTÍAN (04/09/2026, Rodrigo) ────────────────────────
+ * «Que la transcripción observe los campos existentes y añada nuevos
+ * automáticamente si así lo decide.» El modelo puede devolver, además del
+ * reparto, apartados que se propone él porque lo dictado no cabía en ninguno
+ * de los del documento (`lib/clinica/apartadosPropuestos.js`). Se enseñan en su
+ * propia sección, al final, y con dos diferencias respecto a los de arriba:
+ *
+ *   · vienen marcados para entrar —como un apartado vacío, que es lo que son—,
+ *   · y su TÍTULO se puede corregir aquí mismo antes de aceptarlo: es el que se
+ *     va a imprimir, y a nadie le sirve un apartado bien traído con un rótulo
+ *     que no usa el centro.
+ *
+ * Nada de esto guarda: `onAplicar` devuelve los apartados elegidos y los
+ * apartados nuevos aceptados, y quien llama decide si eso va al formulario o a
+ * un PATCH.
  */
 
 import { useMemo, useState } from "react";
@@ -90,6 +103,9 @@ export default function PropuestaIA({
   bloques,
   escrito = {},
   propuesta = {},
+  // Apartados que el modelo propone CREAR: `[{ key, label, tipo, valor }]`.
+  // Vacío casi siempre (lib/clinica/apartadosPropuestos.js).
+  nuevos = [],
   onAplicar,
   onCerrar,
   guardando = false,
@@ -116,6 +132,19 @@ export default function PropuestaIA({
     Object.fromEntries(filas.map((f) => [f.key, f.actual ? MANTENER : SUSTITUIR]))
   );
   const [verTranscripcion, setVerTranscripcion] = useState(false);
+
+  // Los apartados propuestos, con su título editable. Entran marcados: un
+  // apartado nuevo es un apartado vacío, y ahí ya se venía marcando «usar».
+  const propuestos = useMemo(() => (Array.isArray(nuevos) ? nuevos : []).filter((n) => n?.key && n?.label), [nuevos]);
+  const [altas, setAltas] = useState(() =>
+    Object.fromEntries(propuestos.map((n) => [n.key, { entra: true, label: n.label }]))
+  );
+  const alta = (n) => altas[n.key] ?? { entra: true, label: n.label };
+  // Con la forma funcional, como `marcar`: dos clics seguidos antes de repintar
+  // leerían el mismo mapa y el segundo borraría al primero.
+  const marcarAlta = (n, cambios) =>
+    setAltas((prev) => ({ ...prev, [n.key]: { ...(prev[n.key] ?? { entra: true, label: n.label }), ...cambios } }));
+  const altasElegidas = propuestos.filter((n) => alta(n).entra && alta(n).label.trim());
 
   /**
    * La decisión vigente de una fila, con su valor por defecto.
@@ -149,7 +178,12 @@ export default function PropuestaIA({
       if (d === SUSTITUIR) cambios[f.key] = f.sugerido;
       else if (d === ANADIR) cambios[f.key] = unir(f.actual, f.sugerido, f.tipo);
     }
-    onAplicar?.(cambios);
+    // Los apartados nuevos aceptados viajan aparte: quien llama tiene que
+    // CREARLOS antes de escribir en ellos, y su texto va en el mismo objeto de
+    // cambios para que se escriba de una vez.
+    const creados = altasElegidas.map((n) => ({ key: n.key, label: alta(n).label.trim(), tipo: n.tipo }));
+    for (const n of altasElegidas) cambios[n.key] = n.valor;
+    onAplicar?.(cambios, creados);
   }
 
   function todos(d) {
@@ -167,7 +201,10 @@ export default function PropuestaIA({
             <h3 className="font-display text-xl text-[var(--ink-900)] mt-1 leading-tight">{titulo}</h3>
             <p className="text-[11px] text-neutral-500 mt-1">
               {filas.length} apartado{filas.length === 1 ? "" : "s"} con propuesta
-              {conTexto > 0 && ` · ${conTexto} ya ten${conTexto === 1 ? "ía" : "ían"} texto tuyo`}. Nada se guarda hasta que lo apliques.
+              {conTexto > 0 && ` · ${conTexto} ya ten${conTexto === 1 ? "ía" : "ían"} texto tuyo`}
+              {propuestos.length > 0 &&
+                ` · ${propuestos.length} apartado${propuestos.length === 1 ? "" : "s"} nuevo${propuestos.length === 1 ? "" : "s"} propuesto${propuestos.length === 1 ? "" : "s"}`}
+              . Nada se guarda hasta que lo apliques.
             </p>
           </div>
           <button onClick={onCerrar} disabled={guardando} className="shrink-0 text-neutral-400 hover:text-neutral-700 p-1 -m-1 disabled:opacity-40" aria-label="Cerrar">
@@ -178,7 +215,7 @@ export default function PropuestaIA({
         </div>
 
         <div className="px-5 lg:px-6 py-5 space-y-4">
-          {filas.length === 0 ? (
+          {filas.length === 0 && propuestos.length === 0 ? (
             <p className="text-xs text-neutral-500">
               La IA no ha sacado nada que repartir de esta transcripción. Léela y escribe el registro a mano.
             </p>
@@ -261,6 +298,47 @@ export default function PropuestaIA({
             </>
           )}
 
+          {/* ── Apartados que la IA propone CREAR (04/09/2026) ──────────────── */}
+          {propuestos.length > 0 && (
+            <div className="border border-dashed border-neutral-300 rounded-lg p-3.5 space-y-3">
+              <div>
+                <div className="eyebrow">Apartados nuevos que propone la IA</div>
+                <p className="text-[10px] text-neutral-400 mt-1 leading-relaxed">
+                  Esto no cabía en ninguno de tus apartados. Si lo aceptas se añade al final,{" "}
+                  <span className="font-medium text-neutral-500">solo en este documento</span>: la plantilla del
+                  centro no se toca. El título es el que se imprimirá — cámbialo si no es el que usáis.
+                </p>
+              </div>
+              {propuestos.map((n) => {
+                const a = alta(n);
+                return (
+                  <div key={n.key} className={`border rounded-lg p-3 ${a.entra ? "border-neutral-200 bg-white" : "border-neutral-100 bg-neutral-50"}`}>
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                      <input
+                        className="flex-1 min-w-[10rem] px-2 py-1.5 text-xs border border-neutral-200 rounded-lg focus:outline-none focus:border-neutral-400 disabled:bg-neutral-50 disabled:text-neutral-400"
+                        value={a.label}
+                        disabled={!a.entra}
+                        aria-label="Título del apartado nuevo"
+                        onChange={(e) => marcarAlta(n, { label: e.target.value })}
+                      />
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Opcion activa={!a.entra} onClick={() => marcarAlta(n, { entra: false })}>
+                          No añadirlo
+                        </Opcion>
+                        <Opcion activa={a.entra} onClick={() => marcarAlta(n, { entra: true })}>
+                          Añadir apartado
+                        </Opcion>
+                      </div>
+                    </div>
+                    <div className="rounded-lg p-2.5 border border-neutral-200 bg-white">
+                      <Cuerpo valor={n.valor} tipo={n.tipo} apagado={!a.entra} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           {/* ── La transcripción, plegada ───────────────────────────────────── */}
           {transcription && (
             <div className="border-t border-neutral-100 pt-3">
@@ -286,16 +364,25 @@ export default function PropuestaIA({
         {/* ── Pie ──────────────────────────────────────────────────────────── */}
         <div className="sticky bottom-0 bg-white border-t border-neutral-100 rounded-b-xl px-5 lg:px-6 py-3.5 flex flex-wrap items-center justify-end gap-2">
           <p className="text-[11px] text-neutral-500 mr-auto">
-            {elegidos.length === 0
+            {elegidos.length === 0 && altasElegidas.length === 0
               ? "No has elegido ningún apartado."
-              : `Se van a escribir ${elegidos.length} apartado${elegidos.length === 1 ? "" : "s"}.`}
+              : [
+                  elegidos.length > 0
+                    ? `Se van a escribir ${elegidos.length} apartado${elegidos.length === 1 ? "" : "s"}`
+                    : "",
+                  altasElegidas.length > 0
+                    ? `${elegidos.length > 0 ? "y a crear" : "Se van a crear"} ${altasElegidas.length} apartado${altasElegidas.length === 1 ? "" : "s"} nuevo${altasElegidas.length === 1 ? "" : "s"}`
+                    : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ") + "."}
           </p>
           <button onClick={onCerrar} disabled={guardando} className="text-xs px-4 py-2 text-neutral-500 hover:underline disabled:opacity-40">
             Cancelar
           </button>
           <button
             onClick={aplicar}
-            disabled={guardando || elegidos.length === 0}
+            disabled={guardando || (elegidos.length === 0 && altasElegidas.length === 0)}
             className="text-xs font-medium px-4 py-2 rounded-lg text-white disabled:opacity-40"
             style={{ background: "var(--color-primary, #1B3A2D)" }}
           >

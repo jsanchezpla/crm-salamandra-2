@@ -29,6 +29,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import ApartadosEditor from "./ApartadosEditor.jsx";
 import { useDialogo } from "../ui/Dialogo.jsx";
 import {
@@ -51,10 +52,11 @@ const STATUS_STYLES = {
 const TA = "w-full px-3 py-2 text-xs border border-neutral-200 rounded-lg focus:outline-none focus:border-neutral-400 leading-relaxed";
 
 /**
- * Los cinco apartados que salen del volcado de sesiones y que, por tanto, puede
- * redactar la IA. Los otros dos —motivo de intervención y propuesta de
- * continuidad— los escribe la profesional y NI SIQUIERA se le mandan al modelo
- * (ver lib/clinica/pulirInforme.js).
+ * Los cinco apartados que salen del volcado de sesiones: son los que decide si
+ * hay algo que redactar. El motivo de intervención lo escribe la profesional y
+ * NI SIQUIERA se le manda al modelo; la propuesta de continuidad se le propone
+ * solo si está vacía (ver lib/clinica/pulirInforme.js), y por eso está abajo en
+ * los rótulos pero no aquí.
  */
 const CLAVES_IA = ["objectives", "evolution", "achievements", "persistentDifficulties", "recommendations"];
 const NOMBRES_IA = {
@@ -63,10 +65,18 @@ const NOMBRES_IA = {
   achievements: "Logros",
   persistentDifficulties: "Dificultades que persisten",
   recommendations: "Recomendaciones",
+  continuityProposal: "Propuesta de continuidad",
 };
 // Con qué forma entra en el informe lo que devuelven el volcado y la IA, por si
 // el apartado no estaba en la plantilla y hay que crearlo.
-const TIPO_IA = { objectives: "lista", evolution: "lista", achievements: "lista", persistentDifficulties: "lista", recommendations: "lista" };
+const TIPO_IA = {
+  objectives: "lista",
+  evolution: "lista",
+  achievements: "lista",
+  persistentDifficulties: "lista",
+  recommendations: "lista",
+  continuityProposal: "texto",
+};
 
 // Pistas bajo el título de algunos apartados de fábrica. Un apartado que el
 // centro se invente no lleva ninguna: nadie sabe qué poner ahí mejor que quien
@@ -439,11 +449,25 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
             </h2>
             <p className="text-[11px] text-neutral-500 mt-1">{therapist.name} · {fmtDate(report.reportDate)}</p>
           </div>
-          <button onClick={onClose} className="shrink-0 text-neutral-400 hover:text-neutral-700 p-1 -m-1" aria-label="Cerrar">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <div className="flex items-start gap-2 shrink-0">
+            {/* «EDITAR INFORME» (04/09/2026, Rodrigo: «no pone un botón de
+                Editar informe»). Este cajón es la revisión: se abre desde el
+                listado para mirar cómo va uno y mandarlo. Escribirlo de verdad
+                —con el audio, las notas y los apartados— es la pantalla
+                entera, la misma en la que se creó. */}
+            <Link
+              href={`/clinica/informes/${report.id}`}
+              className="text-[11px] font-medium px-3 py-1.5 rounded-lg border border-neutral-200 text-neutral-700 hover:border-neutral-400"
+              title="Abre la pantalla completa del informe: audio, notas y apartados"
+            >
+              Editar informe
+            </Link>
+            <button onClick={onClose} className="text-neutral-400 hover:text-neutral-700 p-1 -m-1" aria-label="Cerrar">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         <div className="px-5 lg:px-7 py-5 space-y-5">
@@ -526,8 +550,11 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
             </div>
             <p className="text-[10px] text-neutral-400 mt-2">
               Cada línea sale literal de un registro de sesión, con su fecha delante: aquí no se
-              inventa nada. «Redactar con IA» convierte ese volcado en prosa y te lo enseña al
-              lado para que decidas apartado por apartado — no escribe nada por su cuenta.
+              inventa nada. «Redactar con IA» convierte ese volcado en el informe redactado —con
+              el criterio clínico puesto— y además propone los apartados que estén vacíos
+              (logros, recomendaciones, continuidad). Te lo enseña al lado para que decidas
+              apartado por apartado: no escribe nada por su cuenta, y las cifras y fechas que no
+              estén en las sesiones no pasan.
               El volcado es material de trabajo: <span className="font-medium text-neutral-500">al
               PDF va lo que dejes escrito en los apartados</span>, y de las sesiones solo sus
               fechas (periodo y en cuáles se basa).

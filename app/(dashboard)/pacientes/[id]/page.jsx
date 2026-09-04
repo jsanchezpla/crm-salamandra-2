@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Select from "@/components/ui/Select.jsx";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import PatientBillingSection from "@/components/billing/PatientBillingSection.jsx";
@@ -177,7 +177,15 @@ function SessionDrawer({ session, patient, onClose, onPublish, onSaved, busy }) 
    * cajón, y una sesión vieja no trae su propia foto de apartados. Sería un
    * borrado silencioso de una nota clínica firmada.
    */
-  async function aplicarPropuesta(cambios) {
+  /**
+   * Lo elegido en el panel → la sesión guardada.
+   *
+   * `creados` son los apartados que la IA propuso y ella aceptó (04/09/2026):
+   * se AÑADEN a la lista de esta sesión antes de repartir, para que su texto
+   * caiga en un apartado que existe y la foto guardada los incluya. Solo en
+   * esta sesión: la plantilla del centro no se toca desde aquí.
+   */
+  async function aplicarPropuesta(cambios, creados = []) {
     const claves = Object.keys(cambios);
     if (!claves.length) return;
     setGuardando(true);
@@ -187,7 +195,11 @@ function SessionDrawer({ session, patient, onClose, onPublish, onSaved, busy }) 
       for (const k of CLAVES_ENVOLTORIO) if (k in cambios) body[k] = cambios[k];
       const deApartados = claves.filter((k) => !esEnvoltorio(k));
       const delServidor = (propuesta?.bloques ?? []).filter((b) => !esEnvoltorio(b.key));
-      const lista = delServidor.length ? delServidor : apartados;
+      const base = delServidor.length ? delServidor : apartados;
+      const altas = (Array.isArray(creados) ? creados : []).filter(
+        (n) => n?.key && n?.label && !esEnvoltorio(n.key) && !base.some((a) => a.key === n.key)
+      );
+      const lista = altas.length ? [...base, ...altas] : base;
       if (deApartados.length && lista.length) {
         const mezcla = { ...aFormulario(valores, lista), ...(propuesta?.escrito ?? {}) };
         for (const k of deApartados) mezcla[k] = cambios[k];
@@ -304,6 +316,7 @@ function SessionDrawer({ session, patient, onClose, onPublish, onSaved, busy }) 
           bloques={propuesta.bloques ?? bloquesDelRegistro(apartados)}
           escrito={propuesta.escrito ?? {}}
           propuesta={propuesta.propuesta ?? {}}
+          nuevos={propuesta.nuevos ?? []}
           transcription={propuesta.material ?? session.aiTranscription ?? ""}
           guardando={guardando}
           onAplicar={aplicarPropuesta}
@@ -621,6 +634,7 @@ function SessionDrawer({ session, patient, onClose, onPublish, onSaved, busy }) 
 
 export default function PacienteFichaPage() {
   const params = useParams();
+  const router = useRouter();
   const id = params.id;
   // De dónde se llegó a esta ficha, para que la flecha vuelva ahí. Sin "desde"
   // en la URL sale el listado de siempre, así que abrir una ficha por las bravas
@@ -856,7 +870,12 @@ export default function PacienteFichaPage() {
       const r = await fetch("/api/clinica/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "No se pudo crear");
-      setShowReport(false); setReportForm(informeVacio()); setActiveTab("informes"); load();
+      setShowReport(false); setReportForm(informeVacio());
+      // Y se abre para escribirlo, como el registro de sesión (04/09/2026,
+      // Rodrigo): crear un informe y quedarse en la ficha obligaba a ir a
+      // buscarlo a Informes para poder redactarlo.
+      if (j?.data?.id) { router.push(`/clinica/informes/${j.data.id}`); return; }
+      setActiveTab("informes"); load();
     } catch (e2) { setModalError(e2.message); } finally { setModalBusy(false); }
   };
 
@@ -1275,7 +1294,9 @@ export default function PacienteFichaPage() {
                   div con los dos enlaces dentro. */}
               {reports.map((r) => (
                 <div key={r.id} className="p-4 flex items-center justify-between gap-3 hover:bg-neutral-50/50">
-                  <Link href="/clinica/informes" className="min-w-0 flex-1">
+                  {/* Al INFORME, no al listado (04/09/2026): desde aquí se
+                      llegaba a «Informes» y había que buscarlo en la tabla. */}
+                  <Link href={`/clinica/informes/${r.id}`} className="min-w-0 flex-1">
                     <div className="font-medium text-[var(--ink-900)] text-sm">{nombreDelInforme(r.type)}</div>
                     <div className="text-[10px] text-neutral-400 tabular">{fmtDate(r.reportDate)} · Entrega {fmtDate(r.dueDate)}{r.overdue ? " · vencida" : ""}</div>
                   </Link>

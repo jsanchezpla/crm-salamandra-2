@@ -950,6 +950,87 @@ sale de uno. Lo que NO sale no ha cambiado: preparación, adjuntos, notas
 internas y transcripción siguen fuera, y `_smoke-registro-pdf.mjs` lo fija en
 los tres tipos.
 
+## La pantalla del informe, y el informe dictado (04/09/2026, Rodrigo)
+
+> «A la hora de crear un informe no se abre una pantalla tipo la de Registrar
+> una sesión. Se crea y me lleva directamente a una vista lateral tipo la de
+> revisión final, donde por cierto no pone un botón de Editar informe. Debería
+> ser la pantalla inicial de creación de un informe tras elegir fecha, paciente
+> y tipo, como la del Registro: con su IA, sus notas y sus campos.»
+
+El informe tenía cajón, no pantalla. Crear uno abría `InformeDrawer` —el mismo
+por el que se pasa a repasar uno ya escrito— y ahí dentro, en 720 px, había que
+redactar el documento entero. El registro de sesión llevaba con su pantalla
+completa desde el 01/09; el informe se había quedado atrás.
+
+- **`components/clinica/InformeEditor.jsx`** es ahora LA pantalla del informe,
+  gemela de `RegistroSesionEditor`: la monta `/clinica/informes/[id]`, y se
+  llega a ella al **crear** (desde `/clinica/informes` y desde la ficha del
+  paciente, que ya no se quedan en el listado) y desde el botón **«Editar
+  informe»** del cajón.
+- La fecha del informe se **elige al crearlo** (antes era siempre hoy y no se
+  preguntaba) y se corrige en la cabecera, junto al tipo y la entrega.
+- **`components/clinica/MaterialIA.jsx`**: la tarjeta del material —audios,
+  grabadora, zona de soltar, bloc de notas y el botón de la IA— sale del
+  registro de sesión a un componente compartido. Es marcado, no lógica: el
+  estado sigue en cada pantalla, así que el registro hace exactamente lo que
+  hacía.
+- **El informe se puede DICTAR**: `POST /api/clinica/reports/[id]/desde-material`
+  (multipart `transcripcion` / `texto` / `apartados` / `escrito`) reparte lo
+  dictado o pegado por los apartados de ESE informe.
+  `lib/clinica/informeMaterial.js` monta el prompt sobre las piezas del
+  registro (`registroCompleto.js` + `estiloClinico.js`) y añade lo propio del
+  informe: que **lo lee la familia**, que no lleva fechas de sesión delante de
+  cada frase y que se lee de corrido. `lib/clinica/structureInforme.js` llama al
+  modelo. **No guarda nada**: la propuesta se elige apartado por apartado en
+  `PropuestaIA`, el mismo panel que usa el registro — y ahí cae también la
+  redacción de `/pulir`, que ya no tiene su propio panel dentro del cajón.
+  Aquí NO se transcribe: los audios pasan antes por
+  `/api/clinica/audio/transcribir`, así que no hace falta clave de OpenAI para
+  dictar un informe a partir de notas.
+- Las dos ayudas de siempre siguen intactas: volcar las sesiones elegidas
+  (`desde-sesiones`) y pulir ese volcado (`pulir`).
+- El cajón (`InformeDrawer`) se queda como la **revisión**: se abre desde el
+  listado, y su botón «Editar informe» trae a la pantalla.
+
+### La IA puede proponer apartados que no existen (04/09/2026)
+
+> «Que la transcripción de Claude observe los campos existentes y añada nuevos
+> automáticamente si así lo decide.»
+
+El prompt decía «una clave por apartado y ninguna más». Es lo que hace que la
+propuesta caiga donde debe, pero tenía un coste mudo: lo que la profesional
+contaba y no cabía en ningún apartado de su plantilla **se tiraba**, sin
+escribirse en ningún sitio y sin avisar. Con plantillas que decide cada centro,
+eso pasa a menudo.
+
+- `lib/clinica/apartadosPropuestos.js` añade al prompt la clave `nuevos`:
+  hasta `MAX_NUEVOS` (4) apartados con título, tipo y contenido, y con la orden
+  expresa de no proponer ninguno si el contenido encaja en uno que ya existe.
+  Lo llevan el **registro de sesión**, la **entrevista inicial** (que es un
+  registro con su plantilla) y el **informe**. El registro de TALLER no: su
+  reparto solo escribe en claves que existen, y una nota individual inventada
+  iría a la familia equivocada.
+- **Nada entra solo**, como el resto de la IA de la casa: `PropuestaIA` los
+  enseña en su propia sección, marcados como nuevos, con el título **editable**
+  antes de aceptarlo —es el que se imprime— y con «Añadir apartado» / «No
+  añadirlo». Al aceptarlos se añaden al final de ESE documento; la plantilla del
+  centro no se toca.
+- Los dos cerrojos: una clave nueva **jamás** pisa la de un apartado que ya
+  existe (le borraría el texto al guardar) y un apartado propuesto sin contenido
+  no entra. Además se respeta `MAX_APARTADOS`: lo que no cabe se dice en el
+  aviso en vez de perderse. Lo fija `scripts/_smoke-apartados-propuestos.mjs`.
+
+### Añadir campos y renombrarlos, en los tres documentos
+
+`ApartadosEditor` («Ordenar apartados») está en el **registro de sesión**, en la
+**entrevista inicial** y —ahora que el informe tiene pantalla— en el **informe**:
+renombrar, cambiar párrafo↔lista, subir, bajar, quitar y añadir. Vale solo para
+ESE documento (se guarda en la foto `contentSections.apartados`, ver «Plantillas
+de informes y registros»); guardar la plantilla del centro sigue siendo cosa de
+Configuración. La única excepción es el informe de **beca**, cuyos tres
+apartados los manda la convocatoria.
+
 ## Redactar un informe (31/07/2026)
 
 El informe **se escribe en el CRM**. Hasta el 31/07 el cajón solo mostraba lo
@@ -1021,6 +1102,82 @@ mitad o se quedan vacíos, y el cajón los pinta en ámbar. Unir dos anotaciones
 acorta con razón; perder un hecho, no.
 
 Se fija en `scripts/_smoke-pulir-informe.mjs` (sin base de datos ni servidor).
+
+### De parafrasear a redactar (04/09/2026, Rodrigo)
+
+«La IA de los informes es muy básica, simple y poco técnica: solo reescribe un
+poco lo que le envían. Tiene que completar más, diagnosticar y escribir más
+párrafos.» Y era así porque así estaba pedido: el prompt decía «tu trabajo es
+REDACTARLAS, **no ampliarlas**» y el del registro, «tienes que **repartir** esa
+información». Lo mejor que podía salir era el mismo volcado con las comas
+puestas.
+
+**`lib/clinica/estiloClinico.js`** (fichero nuevo) parte en dos lo que era una
+sola regla —«no inventes»— porque bajo ella escribir *«lo que sugiere una
+dificultad de inhibición»* era tan sospechoso como escribir *«tiene 8 años»* sin
+saberlo:
+
+- **Los DATOS** siguen saliendo solo del material: cifras, fechas, pruebas,
+  diagnósticos ya emitidos, quién dijo qué. `verificarSinInventar` sigue
+  comprobándolo y rechazando el borrador.
+- **La ELABORACIÓN clínica** pasa a pedirse: nombrar los procesos implicados con
+  la terminología del área, explicar qué trabaja cada actividad, relacionar lo
+  observado con lo que cuenta la familia, decir qué sugiere y qué convendría
+  valorar — con las marcas de siempre («se observa…», «sugiere…», «se plantea
+  como hipótesis…») y con extensión de informe, no de telegrama.
+
+Del «diagnosticar» se da lo que se puede dar: perfil funcional, hipótesis
+marcadas y qué valoración conviene. **La etiqueta diagnóstica está prohibida en
+el prompt, con las palabras y con ejemplos** (TDAH, TEA, dislexia…): la emite una
+colegiada tras evaluar, y es el único fallo de este módulo que no tendría arreglo
+una vez que el informe sale del centro.
+
+Lo comparten los CUATRO documentos, porque `REGLAS` de `registroCompleto.js` la
+leen también el registro de sesión, la entrevista inicial, el taller
+(`tallerCompleto.js`) y el informe desde material (`informeMaterial.js`).
+
+**Los apartados de síntesis.** `esApartadoDeSintesis` marca en el prompt
+(`[SÍNTESIS]`) los que se elaboran a partir del conjunto y no de una frase
+dictada — por clave para los de fábrica (impresión clínica, propuesta de
+actuación, próximas sesiones, logros, recomendaciones, continuidad) y por título
+para los que se monte el centro. Son justo los que **salían vacíos siempre**: en
+la entrevista inicial, cinco de quince; en el informe, los logros, que
+`redactarDesdeSesiones` no rellena nunca porque una sesión suelta no dice «esto
+es un logro». En el informe solo se proponen si están **vacíos**: lo que ella
+haya escrito no se le manda al modelo ni se toca, y el motivo de intervención no
+viaja en ningún caso.
+
+**El paciente, sin nombre.** Al prompt van su edad, sus áreas y su nivel
+educativo (`lineaDePaciente`, la lista cerrada de `objetivosIa.js`), nunca su
+nombre. Sin la edad, el mismo párrafo vale para un niño de 5 años y para uno de
+15, y era una de las razones por las que lo que salía sonaba genérico.
+
+**El fallo que apareció al probarlo contra la IA de Aumenta** (04/09/2026, con
+un caso inventado y sin tocar su base de datos): en cuanto la IA redacta de
+verdad, **cita** — «verbaliza autodescalificaciones ("es tonto")» —, y esas
+comillas rectas rompen el JSON entero. Los 18 apartados de la entrevista
+llegaban VACÍOS después de 40 segundos de espera; pasó en **3 de cada 4**
+pruebas, así que no era un caso raro sino el normal. `escaparComillasDeDentro`
+(en `registroCompleto.js`, dentro de `leerRespuesta`) repara esas respuestas
+—una comilla cierra la cadena solo si detrás viene `:`, `}`, `]`, una coma
+seguida de comilla o el final; lo demás es texto— y recuperó 15 de los 18
+apartados de las respuestas que se perdían enteras. Al prompt se le pide además
+usar comillas españolas, pero **pedir no basta**, la misma lección que
+`verificarSinInventar`. Es un candidato serio a ser la causa del «a veces falla
+que lo mande al registro» del 01/09.
+
+**Y tres cosas de fontanería** que se llevaban por delante informes enteros:
+`pulir` pasa de 4.000 a 12.000 tokens y por streaming (un informe redactado no
+cabía en 4.000 y el JSON llegaba partido), reutiliza el parseo defensivo de
+`leerRespuesta` en vez de un `JSON.parse` pelado, y da UN reintento diciendo qué
+cifra sobra antes de descartar el borrador. Además, `meses()` buscaba el mes por
+`includes`: **«mayor» lleva dentro «mayo»**, así que cualquier redacción con «con
+mayor autonomía» se descartaba por una fecha inventada que no existía.
+
+Se fija en `scripts/_smoke-estilo-clinico.mjs` (13 casos: que la prohibición de
+diagnosticar sigue ahí, qué apartados son de síntesis y cuáles no, y que el
+nombre del paciente no viaja) y en las ampliaciones de
+`_smoke-pulir-informe.mjs` y `_smoke-registro-completo.mjs`.
 
 ## Enviar UN registro de sesión a la familia (29/08/2026)
 
@@ -1540,7 +1697,8 @@ REALES de la API (ya no hay datos hardcoded).
 | Ruta | Propósito |
 | --- | --- |
 | `/clinica` | Landing del módulo. KPIs (sesiones, informes pendientes, coordinaciones, próxima entrega), accesos rápidos a Pacientes e Informes, pacientes recientes. H1: "Área clínica". |
-| `/clinica/informes` | Listado de informes con filtros. Click en fila abre **drawer** con el informe completo (`InformeDrawer.jsx`: editor, volcado desde sesiones, IA, envío). |
+| `/clinica/informes` | Listado de informes con filtros. «Nuevo informe» crea el borrador y **abre su pantalla**. Click en fila abre el **drawer** de revisión (`InformeDrawer.jsx`), con «Editar informe». |
+| `/clinica/informes/[id]` | **LA pantalla del informe** (04/09/2026, `InformeEditor.jsx`): cabecera con tipo y fechas, material para dictarlo o pegarlo (`MaterialIA`), volcado desde sesiones, IA (`PropuestaIA`) y sus apartados (`ApartadosEditor`). |
 | `/clinica/coordinaciones` | Listado GENERAL de coordinaciones del centro con filtros por tipo y ámbito, y alta (`NuevaCoordinacionModal.jsx`). Hasta el sprint 2026-07 solo se veían paciente a paciente. |
 | `/clinica/talleres` | Talleres: actividades de grupo e inscripciones (02/08/2026). Desde el 31/08/2026 el taller puede llevar su concepto de cobro del catálogo (`talleres.concept_id` → `billing_concepts`, FK suave; migración `migrate-talleres-concepto`): el formulario ofrece el selector si el centro tiene catálogo y el detalle dice al apuntar qué se cobrará; el GET del listado y el del detalle cuelgan `concepto` a mano. Desde el 01/09/2026 el taller tiene **sesiones**: la ficha las lista y `SesionTallerDrawer.jsx` registra una (registro del grupo + nota por paciente). |
 | `/clinica/estadisticas` | Estadísticas del centro (solo admin): actividad clínica, agenda y ausencias, captación; Excel y PDF. El dinero vive en Facturación a propósito. |

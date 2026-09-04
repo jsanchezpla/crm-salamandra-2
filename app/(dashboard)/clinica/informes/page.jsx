@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Select from "@/components/ui/Select.jsx";
 import SelectorPaciente from "@/components/citas/SelectorPaciente.jsx";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
@@ -34,9 +35,15 @@ const TYPE_STYLES = {
 };
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" }) : "—");
 
-const EMPTY_FORM = { patientId: "", reportType: "evolution", dueDate: "" };
+// La fecha del informe se elige AL CREARLO (04/09/2026, Rodrigo: «la pantalla
+// inicial de creación de un informe tras elegir fecha, paciente y tipo»). Antes
+// era siempre hoy y no se preguntaba, así que un informe que se escribía el
+// lunes con fecha del viernes había que corregirlo después.
+const hoy = () => new Date().toISOString().slice(0, 10);
+const EMPTY_FORM = { patientId: "", reportType: "evolution", reportDate: hoy(), dueDate: "" };
 
 export default function InformesPage() {
+  const router = useRouter();
   const [reports, setReports] = useState([]);
   // El paciente ELEGIDO, no la lista de pacientes (01/09/2026, Rodrigo). Antes
   // esta pantalla se bajaba `/api/pacientes` al abrirse y montaba el desplegable
@@ -115,13 +122,27 @@ export default function InformesPage() {
     setSaving(true);
     setFormError(null);
     try {
-      const payload = { patientId: patient.id, therapistId: patient.mainTherapistId, reportType: form.reportType, dueDate: form.dueDate || null };
+      const payload = {
+        patientId: patient.id,
+        therapistId: patient.mainTherapistId,
+        reportType: form.reportType,
+        reportDate: form.reportDate || null,
+        dueDate: form.dueDate || null,
+      };
       const r = await fetch("/api/clinica/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "No se pudo crear");
       setShowCreate(false);
       setForm(EMPTY_FORM);
       setPacienteElegido(null);
+      // Y SE ABRE PARA ESCRIBIRLO (04/09/2026, Rodrigo). Antes el informe se
+      // creaba y la pantalla se quedaba en el listado: había que buscarlo en la
+      // tabla y abrir el cajón lateral, que además es el de repasar. Ahora se
+      // entra en su pantalla, que es a lo que se venía.
+      if (j?.data?.id) {
+        router.push(`/clinica/informes/${j.data.id}`);
+        return;
+      }
       load();
     } catch (e2) {
       setFormError(e2.message);
@@ -294,16 +315,25 @@ export default function InformesPage() {
                 placeholder="— Paciente —"
                 className={inputCls}
               />
+              <Select
+                value={form.reportType}
+                onChange={(v) => setForm({ ...form, reportType: v })}
+                options={TYPE_OPTIONS}
+                className={inputCls}
+              />
               <div className="grid grid-cols-2 gap-3">
-                <Select
-                  value={form.reportType}
-                  onChange={(v) => setForm({ ...form, reportType: v })}
-                  options={TYPE_OPTIONS}
-                  className={inputCls}
-                />
-                <input type="date" className={inputCls} value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} title="Fecha de entrega" />
+                <label className="block">
+                  <span className="block text-[10px] uppercase tracking-wider text-neutral-400 mb-1">Fecha del informe</span>
+                  <input type="date" className={inputCls} value={form.reportDate} onChange={(e) => setForm({ ...form, reportDate: e.target.value })} />
+                </label>
+                <label className="block">
+                  <span className="block text-[10px] uppercase tracking-wider text-neutral-400 mb-1">Entrega (opcional)</span>
+                  <input type="date" className={inputCls} value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} title="Fecha de entrega" />
+                </label>
               </div>
-              <p className="text-[11px] text-neutral-400">Se crea como borrador. El contenido se redactará después.</p>
+              <p className="text-[11px] text-neutral-400">
+                Se crea como borrador y se abre para escribirlo: con su audio, sus notas y sus apartados.
+              </p>
               {/* La entrevista inicial NO es un informe (03/09/2026, Rodrigo):
                   es un registro de sesión con sus 15 apartados, que se rellena
                   desde el bloc de notas o el audio con IA. Se dice aquí porque
