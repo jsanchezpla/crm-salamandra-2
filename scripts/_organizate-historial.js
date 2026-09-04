@@ -24,6 +24,18 @@
  * detrás, y comprobando con qué etiqueta conocida termina el texto anterior.
  * Buscarla por posición no vale: la fecha lleva coma y hora unas veces sí y
  * otras no, y contando palabras hacia atrás salía «de Octubre Sesión».
+ *
+ * ⚠️ LA EDAD DE LOS BEBÉS VA EN MESES (04/09/2026, AV-0041 de Aumenta)
+ *
+ * El ancla era solo `añ`, y a un niño de menos de dos años Organízate le
+ * escribe la edad en MESES: «Sesión 23me». Esas entradas no encontraban el
+ * ancla, salían «(sin edad)» y el importador las saltaba: **182 sesiones de
+ * 29 pacientes se quedaron fuera del volcado del 02/08/2026**, con su texto
+ * entero, por ser de los más pequeños del centro.
+ *
+ * El `me` se ancla con `\b` a propósito y el `añ` NO: así «23me» casa y «hace
+ * 3 meses» —que puede aparecer en mitad del contenido y adelantarse al ancla
+ * de verdad— no, mientras «14 años» sigue casando como siempre.
  */
 
 /** De la más larga a la más corta: «Cita cancelada» no debe leerse «Cita». */
@@ -51,12 +63,19 @@ const sinAcentos = (s) =>
   String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
 
 /**
+ * El ancla: la edad que va justo detr\u00e1s de la etiqueta. En a\u00f1os (\u00ab14a\u00f1\u00bb, y
+ * tambi\u00e9n \u00ab14 a\u00f1os\u00bb) o en meses para los m\u00e1s peque\u00f1os (\u00ab23me\u00bb). Ver la
+ * cabecera para por qu\u00e9 el `me` lleva `\b` y el `a\u00f1` no.
+ */
+export const EDAD = /\d{1,3}\s*(?:a\u00f1|me\b)/;
+
+/**
  * Qué es esta entrada del historial.
  * @returns una de ETIQUETAS, «(sin edad)» si no lleva el ancla, o
  *          «(no reconocido)» si lleva edad pero la etiqueta no es conocida.
  */
 export function etiquetaDe(txt) {
-  const i = String(txt ?? "").search(/\d{1,2}\s*añ/);
+  const i = String(txt ?? "").search(EDAD);
   if (i < 0) return "(sin edad)";
   const antes = sinAcentos(String(txt).slice(0, i)).trimEnd();
   for (const e of ETIQUETAS) if (antes.endsWith(sinAcentos(e))) return e;
