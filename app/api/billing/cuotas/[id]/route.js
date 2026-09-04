@@ -1,7 +1,7 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, errorConDatos, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { logBillingAudit, datosPeticion } from "../../../../../lib/billing/audit.js";
-import { limpiarCuota } from "../../../../../lib/billing/cuotas.js";
+import { limpiarCuota, cuadrarBajaYActiva } from "../../../../../lib/billing/cuotas.js";
 
 /**
  * PATCH/DELETE /api/billing/cuotas/[id] — modificar, dar de baja o eliminar una
@@ -17,6 +17,11 @@ import { limpiarCuota } from "../../../../../lib/billing/cuotas.js";
  * cuántos hay, cuántos siguen pendientes), y se borra con `?confirmar=1`
  * (01/09/2026, Rodrigo: «que me pida confirmación en lugar de no dejarme»).
  * Los cobros nunca se borran aquí: el dinero no se toca por detrás de nadie.
+ *
+ * ── Y EDITAR NO ES DAR DE BAJA (04/09/2026) ────────────────────────────────
+ * Una edición cualquiera —cambiarle el día de cobro— APAGABA la cuota si tenía
+ * fecha de baja, porque el drawer reenvía siempre ese campo. El porqué y la
+ * regla, en `cuadrarBajaYActiva`.
  */
 export const PATCH = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   try {
@@ -32,15 +37,12 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
     if (problema) return error(problema, 422);
 
     // La baja escrita sin apagar la cuota (o al revés) deja la fila diciendo
-    // dos cosas a la vez. Se cierra el círculo aquí, una sola vez:
-    //  · poner fecha de baja apaga la cuota
-    //  · reactivarla sin quitar la fecha borraría la baja sin querer → se quita
-    const bajaNueva = "endDate" in valores ? valores.endDate : cuota.endDate;
-    if ("endDate" in valores && valores.endDate && !("active" in body)) valores.active = false;
-    if (valores.active === true && bajaNueva && !("endDate" in valores)) valores.endDate = null;
+    // dos cosas a la vez. Quién contradice a quién lo decide `lib/billing/
+    // cuotas.js` (`cuadrarBajaYActiva`), con su prueba: aquí solo se aplica.
+    const cuadrados = cuadrarBajaYActiva(cuota, valores, { activaEnElCuerpo: "active" in body });
 
     const antes = resumenCuota(cuota);
-    await cuota.update(valores);
+    await cuota.update(cuadrados);
 
     const daDeBaja = antes.activa && !cuota.active;
     await logBillingAudit({

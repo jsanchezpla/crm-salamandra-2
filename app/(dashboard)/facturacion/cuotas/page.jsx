@@ -21,7 +21,7 @@ import Select from "@/components/ui/Select.jsx";
 import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
 import { useDialogo } from "@/components/ui/Dialogo.jsx";
 import { fmtMoney, fmtDate } from "../_components/Kpi.jsx";
-import { cuotaDeBaja, bajaTrasMeses, mesesDeTramo } from "../../../../lib/billing/cuotas.js";
+import { cuotaDeBaja, bajaTrasMeses, mesesDeTramo, mesVigente, hoyVigente, mesLegible } from "../../../../lib/billing/cuotas.js";
 import { ivaPorDefecto } from "../../../../lib/billing/ivaPorDefecto.js";
 import { cuotaCasaCon, rotuloPacienteDeCuota } from "../../../../lib/billing/cuotaPacientes.js";
 
@@ -49,8 +49,10 @@ const DURACIONES = [
   { meses: 12, label: "1 año" },
 ];
 
-const hoyIso = () => new Date().toISOString().slice(0, 10);
-const mesActual = () => new Date().toISOString().slice(0, 7);
+// El día y el mes de MADRID, no los de UTC: a las 00:30 del día 1 `toISOString`
+// todavía dice el mes pasado, y una cuota nacía con la fecha de ayer.
+const hoyIso = () => hoyVigente();
+const mesActual = () => mesVigente();
 
 const CUOTA_VACIA = () => ({
   conceptIds: [],
@@ -86,6 +88,28 @@ export default function CuotasPage() {
   // `false` siempre — el botón deja de funcionar sin decir nada.
   const { confirmar, dialogo } = useDialogo();
 
+  /*
+   * CUÁNTAS CUOTAS SIGUEN SIN SU COBRO DE ESTE MES (04/09/2026, Rodrigo: «en
+   * ningún momento pasa a salirme en los cobros»).
+   *
+   * No era un fallo: generar es un botón, no un automatismo, y el mes se genera
+   * una vez —el 01/09 salieron los 274 cobros de Aumenta—. A quien da de alta
+   * una cuota el día 4 no le sale nada en Cobros hasta que alguien vuelva a
+   * darle a «Generar el mes» (relanzarlo no duplica: las ya generadas salen en
+   * «repetidas»). Lo que faltaba era DECIRLO, y decirlo con el número delante.
+   *
+   * Sale de la MISMA vista previa que abre el drawer, así que el número de aquí
+   * y la lista de ahí no pueden discrepar. Lo llama `cargar`, para no pedirlo
+   * dos veces por cada visita.
+   */
+  const [sinGenerar, setSinGenerar] = useState(null);
+  const contarSinGenerar = useCallback(() => {
+    fetch(`/api/billing/cuotas/generar?mes=${mesActual()}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => setSinGenerar(j.ok ? (j.data?.aGenerar?.length ?? 0) : null))
+      .catch(() => setSinGenerar(null));
+  }, []);
+
   const cargar = useCallback(async () => {
     setLoading(true);
     setErrorMsg(null);
@@ -99,12 +123,13 @@ export default function CuotasPage() {
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || "No se pudieron cargar las cuotas");
       setCuotas(j.data?.cuotas ?? []);
+      contarSinGenerar();
     } catch (e) {
       setErrorMsg(e.message);
     } finally {
       setLoading(false);
     }
-  }, [filtroMetodo]);
+  }, [filtroMetodo, contarSinGenerar]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -296,14 +321,31 @@ export default function CuotasPage() {
           <p className="text-xs text-neutral-400 mt-1">
             {visibles.length} {visibles.length === 1 ? "cuota" : "cuotas"}
             {totalMes > 0 && <> · <span className="tabular">{fmtMoney(totalMes)}</span> al mes</>}
+            {sinGenerar > 0 && (
+              <>
+                {" · "}
+                <span className="text-amber-700">
+                  {sinGenerar} sin su cobro de {mesLegible(mesActual())}
+                </span>
+              </>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
           <Link href="/facturacion" className="text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">← Volver</Link>
+          {/* Con cuotas sin cobro de este mes el botón deja de ser gris: es la
+              única forma de que una cuota nueva llegue a Cobros. */}
           <button
             onClick={() => setShowGenerar(true)}
-            className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide border border-neutral-300 text-neutral-700 hover:bg-neutral-50 transition"
-          >Generar el mes</button>
+            className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide border transition ${
+              sinGenerar > 0
+                ? "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                : "border-neutral-300 text-neutral-700 hover:bg-neutral-50"
+            }`}
+          >
+            Generar el mes
+            {sinGenerar > 0 && <span className="ml-1.5 tabular">· {sinGenerar}</span>}
+          </button>
           {/*
             UN SOLO BOTÓN, Y ABRE EL ALTA COMPLETA (01/09/2026, Rodrigo).
 
@@ -596,7 +638,10 @@ function DrawerCuota({ conceptos, cuota = null, inicial = null, ivaSugerido = 21
       // En grupo puede haber saltadas (ya tenían cuota): se enseñan antes de
       // cerrar, que si no nadie se entera de que faltan.
       if (j.data?.omitidas?.length) setResultado(j.data);
-      else onDone(`${j.data.creadas} ${j.data.creadas === 1 ? "cuota creada" : "cuotas creadas"}`);
+      // Y se dice lo que FALTA: la cuota no llega sola a Cobros, hace falta
+      // generar el mes (04/09/2026, Rodrigo: «en ningún momento pasa a
+      // salirme en los cobros»).
+      else onDone(`${j.data.creadas} ${j.data.creadas === 1 ? "cuota creada" : "cuotas creadas"} · dale a «Generar el mes» para que salga en Cobros`);
     } catch (e) {
       setError(e.message);
     } finally {

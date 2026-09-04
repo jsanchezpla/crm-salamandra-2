@@ -820,9 +820,20 @@ conceptos que la componen, importe, método, día de cobro, alta y baja.
   fecha y CONSERVA la fila (los cobros que salieron de ella siguen explicando
   por qué se cobró lo que se cobró). `DELETE` es para el alta equivocada de hace
   cinco minutos: con cobros detrás se niega con 409 y manda dar de baja. La
-  ruta cierra el círculo de los dos campos: poner fecha de baja apaga la cuota,
-  y reactivarla sin quitar la fecha la borra —una fila que dice dos cosas a la
-  vez no la lee nadie—.
+  ruta cierra el círculo de los dos campos con `cuadrarBajaYActiva`
+  (`lib/billing/cuotas.js`), y la idea es UNA: **solo una fecha de baja YA
+  PASADA contradice a `active: true`**. Ponerla apaga la cuota; reactivarla sin
+  quitarla la borra —una fila que dice dos cosas a la vez no la lee nadie—.
+- **Editar NO es dar de baja** (04/09/2026, Rodrigo: «cuando añado un paciente a
+  una nueva cuota a veces da problemas y se da de baja solo»). Estaba en la
+  auditoría de Aumenta con 32 segundos entre las dos líneas: `cuota.created` a
+  las 13:37:24 y `cuota.ended` a las 13:37:56, habiendo tocado él solo la fecha
+  de alta. El drawer de edición reenvía SIEMPRE `endDate`, y la ruta apagaba la
+  cuota en cuanto veía una fecha de baja en el cuerpo — o sea que cualquier
+  retoque a una cuota «durante N meses» la mandaba al cuadro de bajas sin decir
+  nada, y encima «Reintegrar» le borraba la fecha de fin. Ahora solo apaga si la
+  fecha CAMBIA y ya ha pasado: una baja futura es justo lo que crea «durante N
+  meses» y el alta la deja activa. Lo fija `_smoke-cuotas.mjs`.
 - **Apagada SIN fecha de baja = en pausa** (no genera ningún mes). Apagada CON
   fecha de baja SÍ genera hasta esa fecha, prorrateado. Es la distinción que
   fija el smoke.
@@ -837,6 +848,16 @@ preguntando por el importe raro.
   entrado. Morosidad, el bloqueo del portal y «Facturar el mes» miran
   `status = 'completed'`, así que un mes generado y sin cobrar sigue contando
   como impagado — que es la verdad. Se pasa a cobrado desde Cobros.
+- **Y GENERAR ES UN BOTÓN, NO UN AUTOMATISMO** — no hay cron ni tarea que lo
+  lance (solo el botón y `scripts/generar-cuotas-del-mes.js`). El mes se genera
+  una vez: Aumenta sacó sus 274 cobros el 01/09, así que la cuota dada de alta
+  el día 4 no aparecía en Cobros y parecía perdida (04/09/2026, Rodrigo: «en
+  ningún momento pasa a salirme en los cobros»). Relanzar el mes no duplica, así
+  que lo único que faltaba era decirlo: la pantalla cuenta **cuántas cuotas
+  siguen sin su cobro de este mes** —del mismo `GET …/generar` que abre el
+  drawer, para que el número y la lista no discrepen—, lo pinta junto al total y
+  pone el botón en ámbar; y el aviso del alta lo remata («dale a "Generar el
+  mes" para que salga en Cobros»).
 - **Relanzar el mes NO duplica**: cada cobro guarda su `cuota_id` y la cuota que
   ya tiene cobro de ese mes sale en «repetidas». El candado real está DENTRO de
   la transacción (`findOne` con `LOCK.UPDATE` antes del `create`), porque entre

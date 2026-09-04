@@ -47,6 +47,8 @@ import {
   cuotaDeBaja,
   bajaTrasMeses,
   mesesDeTramo,
+  cuadrarBajaYActiva,
+  hoyVigente,
 } from "../lib/billing/cuotas.js";
 import { prorrateoDeCuota } from "../lib/billing/prorrateo.js";
 
@@ -408,5 +410,64 @@ describe("mesesDeTramo: cuántos meses cubre, para poder decirlo en la pantalla"
   it("sin fecha de baja no hay número: es indefinida", () => {
     assert.equal(mesesDeTramo("2026-09-01", null), null);
     assert.equal(mesesDeTramo("2026-09-01", "2026-08-31"), null);
+  });
+});
+
+/*
+ * ── EDITAR UNA CUOTA NO ES DARLA DE BAJA (04/09/2026) ──────────────────────
+ * Rodrigo: «cuando añado un paciente a una nueva cuota a veces da problemas y
+ * se da de baja solo». La auditoría de Aumenta lo tenía escrito con 32 segundos
+ * entre las dos líneas: alta a las 13:37:24 y `cuota.ended` a las 13:37:56,
+ * habiendo tocado él solo la fecha de alta. El drawer reenvía SIEMPRE `endDate`
+ * y la ruta apagaba la cuota en cuanto veía una fecha de baja en el cuerpo.
+ */
+describe("cuadrarBajaYActiva: qué contradice a una cuota activa", () => {
+  const HOY = "2026-09-04";
+  const conBaja = { endDate: "2027-06-30", active: true };
+
+  it("reenviar la MISMA fecha de baja no apaga nada (el fallo que se cobraba)", () => {
+    const salida = cuadrarBajaYActiva(conBaja, { startDate: "2026-09-03", endDate: "2027-06-30" }, { hoy: HOY });
+    assert.equal(salida.active, undefined, "una edición cualquiera no toca `active`");
+    assert.equal(salida.endDate, "2027-06-30", "ni le quita la baja que ya tenía");
+  });
+
+  it("una baja FUTURA nueva tampoco: es lo que crea «durante N meses», y el alta la deja activa", () => {
+    const salida = cuadrarBajaYActiva({ endDate: null, active: true }, { endDate: "2027-06-30" }, { hoy: HOY });
+    assert.equal(salida.active, undefined);
+    assert.equal(salida.endDate, "2027-06-30");
+  });
+
+  it("una baja YA PASADA sí apaga la cuota: es la que se contradice con seguir activa", () => {
+    const salida = cuadrarBajaYActiva({ endDate: null, active: true }, { endDate: "2026-08-31" }, { hoy: HOY });
+    assert.equal(salida.active, false);
+  });
+
+  it("hoy mismo cuenta como pasada: dar de baja «desde hoy» apaga", () => {
+    assert.equal(cuadrarBajaYActiva({ endDate: null }, { endDate: HOY }, { hoy: HOY }).active, false);
+  });
+
+  it("el botón «Dar de baja» manda `active` y gana él, sin que nadie lo adivine", () => {
+    const salida = cuadrarBajaYActiva(conBaja, { endDate: "2026-12-31", active: false }, { hoy: HOY, activaEnElCuerpo: true });
+    assert.equal(salida.active, false);
+    assert.equal(salida.endDate, "2026-12-31");
+  });
+
+  it("reactivar con una baja pasada pegada se la quita; con una futura la conserva", () => {
+    const pasada = cuadrarBajaYActiva({ endDate: "2026-08-31", active: false }, { active: true }, { hoy: HOY });
+    assert.equal(pasada.endDate, null, "activa y terminada en agosto sería una fila que dice dos cosas");
+    const futura = cuadrarBajaYActiva({ endDate: "2027-06-30", active: false }, { active: true }, { hoy: HOY });
+    assert.equal(futura.endDate, undefined, "una baja futura no estorba: sigue siendo «hasta junio»");
+  });
+
+  it("sin `hoy` mira el día de MADRID, no el de UTC", () => {
+    // Misma razón que `mesVigente`: el servidor va en UTC y a las 00:30 del día
+    // 1 en Madrid todavía es día 31 en UTC. Una baja de ayer tiene que apagar.
+    const ayer = new Date(Date.now() - 36 * 3600 * 1000).toISOString().slice(0, 10);
+    assert.equal(cuadrarBajaYActiva({ endDate: null }, { endDate: ayer }).active, false);
+    assert.match(hoyVigente(), /^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it("sin cambios no inventa campos", () => {
+    assert.deepEqual(cuadrarBajaYActiva({ endDate: null, active: true }, {}, { hoy: HOY }), {});
   });
 });
