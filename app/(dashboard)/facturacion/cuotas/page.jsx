@@ -24,6 +24,7 @@ import { fmtMoney, fmtDate } from "../_components/Kpi.jsx";
 import { cuotaDeBaja, bajaTrasMeses, mesesDeTramo, mesVigente, hoyVigente, mesLegible } from "../../../../lib/billing/cuotas.js";
 import { ivaPorDefecto } from "../../../../lib/billing/ivaPorDefecto.js";
 import { cuotaCasaCon, rotuloPacienteDeCuota } from "../../../../lib/billing/cuotaPacientes.js";
+import { coincidePorNombre } from "../../../../lib/utils/busqueda.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -76,6 +77,14 @@ export default function CuotasPage() {
   // «necesito poder filtrar por las mismas cuotas»): elegir una enseña sus
   // miembros, y el alta desde ahí nace con esa cuota puesta.
   const [filtroConcepto, setFiltroConcepto] = useState("");
+  /*
+   * «Solo las que no dicen de qué hijo son» (04/09/2026, Rodrigo: «hay que
+   * revisar a todos los pacientes para que cada paciente tenga la cuota que le
+   * toca y no se pague por su hermano»). Son 35 en Aumenta, y hasta hoy no
+   * había forma de encontrarlas entre 278: se buscaban a ojo. Con el filtro,
+   * repasarlas es una tarde.
+   */
+  const [soloSinPaciente, setSoloSinPaciente] = useState(false);
   const [busca, setBusca] = useState("");
   const [buscaBajas, setBuscaBajas] = useState("");
 
@@ -182,8 +191,15 @@ export default function CuotasPage() {
    * así que escribir el nombre del niño la encuentra igual.
    */
   const visibles = useMemo(
-    () => cuotas.filter((c) => !cuotaDeBaja(c, hoy) && conEsaCuota(c) && cuotaCasaCon(c, busca)),
-    [cuotas, busca, conEsaCuota, hoy]
+    () =>
+      cuotas.filter(
+        (c) =>
+          !cuotaDeBaja(c, hoy) &&
+          conEsaCuota(c) &&
+          cuotaCasaCon(c, busca) &&
+          (!soloSinPaciente || !c.patientId)
+      ),
+    [cuotas, busca, conEsaCuota, hoy, soloSinPaciente]
   );
 
   const bajas = useMemo(
@@ -396,6 +412,19 @@ export default function CuotasPage() {
           options={[{ value: "", label: "Todos los métodos" }, ...METODOS]}
           className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200"
         />
+        {/* Las que hay que repasar: a nombre de la familia y sin decir de qué
+            hijo son. Mientras estén así, al cobrar a un hermano sale la cuota
+            entera de la casa (04/09/2026). */}
+        <label className="flex items-center gap-1.5 text-xs text-neutral-600 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={soloSinPaciente}
+            onChange={(e) => setSoloSinPaciente(e.target.checked)}
+            className="w-3.5 h-3.5 rounded border-neutral-300 accent-[var(--color-primary,#1B3A2D)]"
+          />
+          Sin paciente asignado
+          {soloSinPaciente && <span className="text-neutral-400">({visibles.length})</span>}
+        </label>
       </div>
 
       {errorMsg && <div className="mb-4 px-4 py-3 bg-red-50 border border-red-100 rounded-lg text-xs text-red-600">{errorMsg}</div>}
@@ -594,10 +623,20 @@ function DrawerCuota({ conceptos, cuota = null, inicial = null, ivaSugerido = 21
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState(null);
   const [resultado, setResultado] = useState(null);
+  // El buscador del catálogo de cuotas (04/09/2026): 46 conceptos no caben en
+  // un cajón de 176 px.
+  const [buscaCatalogo, setBuscaCatalogo] = useState("");
 
   const porId = useMemo(() => new Map(conceptos.map((c) => [String(c.id), c])), [conceptos]);
   const sumaConceptos = form.conceptIds.reduce((s, id) => s + Number(porId.get(String(id))?.unitPrice || 0), 0);
   const importeFinal = form.amount === "" ? sumaConceptos : Number(form.amount || 0);
+
+  // Lo que se ve en la lista del catálogo: lo que casa con la búsqueda MÁS lo
+  // ya marcado, que no se puede esconder (ver el comentario del buscador).
+  const conceptosVisibles = useMemo(
+    () => conceptos.filter((c) => form.conceptIds.includes(String(c.id)) || coincidePorNombre(buscaCatalogo, [c.name])),
+    [conceptos, buscaCatalogo, form.conceptIds]
+  );
 
   function alternarConcepto(id) {
     setForm((f) => ({
@@ -730,6 +769,27 @@ function DrawerCuota({ conceptos, cuota = null, inicial = null, ivaSugerido = 21
                 />
               )}
 
+              {/*
+                ── BUSCADOR DE CUOTAS MENSUALES (04/09/2026, Rodrigo) ─────────
+                El catálogo de Aumenta tiene 46 conceptos y esta lista es un
+                cajón de 176 px: elegir una cuota era rodar la rueda del ratón
+                hasta encontrarla. Filtra por nombre sin importar tildes
+                (`coincidePorNombre`, la misma regla que el resto de buscadores
+                del CRM), y las YA MARCADAS no se esconden nunca — si no, al
+                escribir desaparecerían de la vista las que se acaban de elegir
+                y no habría forma de quitarlas.
+
+                Solo sale a partir de 8: en un centro con cuatro cuotas, un
+                buscador es una caja vacía que estorba.
+              */}
+              {conceptos.length >= 8 && (
+                <input
+                  value={buscaCatalogo}
+                  onChange={(e) => setBuscaCatalogo(e.target.value)}
+                  placeholder="Buscar una cuota del catálogo…"
+                  className="mt-2 w-full rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition"
+                />
+              )}
               {conceptos.length === 0 ? (
                 <p className="text-xs text-neutral-400 mt-1">
                   No hay ninguna cuota en el catálogo todavía. Crea la primera con{" "}
@@ -739,7 +799,12 @@ function DrawerCuota({ conceptos, cuota = null, inicial = null, ivaSugerido = 21
                 </p>
               ) : (
                 <div className="mt-1 max-h-44 overflow-y-auto border border-neutral-100 rounded-xl divide-y divide-neutral-50">
-                  {conceptos.map((c) => (
+                  {conceptosVisibles.length === 0 && (
+                    <p className="px-3 py-4 text-center text-[11px] text-neutral-400">
+                      Ninguna cuota del catálogo se llama así.
+                    </p>
+                  )}
+                  {conceptosVisibles.map((c) => (
                     <label key={c.id} className="flex items-center gap-3 px-3 py-2 text-xs cursor-pointer hover:bg-neutral-50">
                       <input type="checkbox" checked={form.conceptIds.includes(String(c.id))}
                         onChange={() => alternarConcepto(String(c.id))}
