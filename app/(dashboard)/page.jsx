@@ -18,8 +18,8 @@ import TarjetaModulo from "../../components/home/TarjetaModulo.jsx";
  * desplaza.
  *
  * Cada pieza llega ya gateada del servidor (lib/home/summary.js): módulo del
- * tenant ∩ acceso del usuario, la agenda con su regla de visibilidad, y el
- * cobrado solo para admin.
+ * tenant ∩ acceso del usuario, la agenda con su regla de visibilidad, y las
+ * cifras de dinero solo para quien esté adherido a Facturación.
  *
  * Quien NO está adherido a facturación no ve gráficas de ningún tipo (Rodrigo,
  * 29/08/2026): su mitad derecha es «Mi trabajo» (bandeja, semana, tareas). La
@@ -153,7 +153,7 @@ export default async function HomePage() {
   const mes = new Date().toLocaleDateString("es-ES", { month: "long", timeZone: "Europe/Madrid" });
 
   const [portada, sinLeer] = await Promise.all([loadPortada(), respuestasSinLeer()]);
-  const { admin, finance, agenda, agendaCalendario, vistas, tarjetas = [], trabajo } = portada;
+  const { finance, agenda, agendaCalendario, vistas, tarjetas = [], trabajo } = portada;
 
   const pendiente = [...portada.pendiente];
   if (sinLeer.length > 0) {
@@ -179,10 +179,11 @@ export default async function HomePage() {
   const hayTrabajo = !hayNegocio && Boolean(trabajo);
   const hayDerecha = hayNegocio || hayTrabajo;
 
-  // «Cobrado» es de admin (magnitud sensible) y sale de los cobros del mes:
-  // sin cobros que leer llega en null y la fila se queda en dos columnas, no en
-  // tres con un hueco.
-  const conCobrado = admin && finance?.collected != null;
+  // «Cobrado» lo ve quien tenga Facturación, admin o no (04/09/2026, Rodrigo:
+  // en Aumenta las dos que llevan el dinero no son admin). Sale de los cobros
+  // del mes: sin cobros que leer llega en null y la fila se queda en dos
+  // columnas, no en tres con un hueco.
+  const conCobrado = finance?.collected != null;
 
   // La gráfica NO manda sobre el reparto: si hay tarjetas, comparte rejilla con
   // ellas; si es lo único, se queda con el ancho, que entonces sí es suyo.

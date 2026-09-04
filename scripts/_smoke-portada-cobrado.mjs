@@ -50,10 +50,22 @@ test("un mes sin facturas pero con cobros: la portada enseña lo que ha entrado"
   assert.equal(p.finance.collectedCount, 84, "el pie cuenta cobros, no un % sobre lo facturado");
 });
 
-test("cobrado sigue siendo solo de admin", async () => {
+test("cobrado lo ve quien tiene Facturación, aunque no sea admin", async () => {
+  // 04/09/2026, Rodrigo: en Aumenta las dos personas que llevan el dinero —Olga
+  // y Rosa— no son admin, y ver dos ceros era justo lo contrario de proteger
+  // nada. El gate es el módulo, no el rol.
   const p = await buildPortada(ctxDe({ role: "user" }));
-  assert.ok(p.finance, "el resto de cifras sí las ve");
-  assert.equal(p.finance.collected, undefined, "un no-admin no ve el dinero cobrado");
+  assert.ok(p.finance, "las cifras tienen que llegar");
+  assert.equal(p.finance.collected, 14701);
+  assert.equal(p.finance.collectedCount, 84);
+  assert.equal(p.finance.month.billed, 0, "y el facturado sigue saliendo de las facturas");
+});
+
+test("sin el módulo de Facturación no llega ninguna cifra de dinero", async () => {
+  const ctx = ctxDe({ role: "user" });
+  ctx.hasModule = () => false;
+  const p = await buildPortada(ctx);
+  assert.equal(p.finance, null, "el gate sigue siendo el módulo");
 });
 
 test("sin tabla de cobros la portada no pierde las otras cifras", async () => {
