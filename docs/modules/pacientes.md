@@ -290,7 +290,7 @@ datos reales.
 | Ruta | Propósito |
 | --- | --- |
 | `/pacientes` | Listado paginado (`GET /api/pacientes`, 300 por página). 4 KPIs: los tres de estado salen del **resumen del servidor sobre todo el filtro** (no de la página cargada); «Sesiones registradas» suma solo la página. Filtros: búsqueda por nombre (con retardo), terapeuta, estado. Tabla con avatar + nombre + centro + motivo + terapeuta + última sesión + estado + «Ver ficha». Alta en modal con `SpecialtyPicker`. |
-| `/pacientes/[id]` | Ficha. Cabecera con avatar, nombre + chip de estado, datos clave (centro, terapeuta, fecha alta, frecuencia), 3 botones («Subir audio», «Nuevo informe», «Editar ficha»). 6 pestañas: Resumen, Plan, Sesiones, Informes, Coordinaciones, Documentos (detalle abajo). |
+| `/pacientes/[id]` | Ficha. Cabecera con avatar, nombre + chip de estado, datos clave (centro, terapeuta, fecha alta, frecuencia), 4 botones («Nuevo registro» —se llamó «Subir audio» hasta el 26/08/2026—, «Nuevo informe», «Nueva entrevista inicial» (04/09/2026; solo si el centro ofrece esa plantilla, ver `clinica.md`) y «Editar ficha»). 6 pestañas: Resumen, Plan, Sesiones, Informes, Coordinaciones, Documentos (detalle abajo). |
 | `/pacientes/[id]/sesiones/nueva` | Flujo REAL de subida de audio con 4 estados: sube → `POST /api/clinica/sessions/transcribe` → revisar/editar → `POST /api/clinica/sessions` (+ adjuntos de preparación a `prep-files`). Máx. 25 MB; m4a/mp3/wav/ogg/webm. |
 
 ### Dos cosas que se rompieron en silencio y se arreglaron el 26/08/2026 (Lau, Aumenta)

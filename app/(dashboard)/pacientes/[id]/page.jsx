@@ -664,6 +664,19 @@ export default function PacienteFichaPage() {
   const [reportForm, setReportForm] = useState(informeVacio());
   // Catálogo de derivación del centro (editable por cliente desde 2026-07-31).
   const [derivaciones, setDerivaciones] = useState([]);
+  /*
+   * ¿Este centro ofrece la plantilla «Entrevista inicial»? De ella vive el
+   * botón de la cabecera (04/09/2026, más abajo).
+   *
+   * Arranca PUESTO y no apagado: la plantilla es de fábrica y se ofrece en
+   * todos los centros con clínica (`plantillasDe`), así que en la práctica
+   * siempre está — y con `false` de salida el botón aparecería de golpe medio
+   * segundo después de pintarse la ficha, empujando lo de al lado. Solo se
+   * apaga si el centro la borró desde Configuración (`plantillasOcultas`), y
+   * entonces el botón sobra: abriría un registro con OTRA plantilla, que es
+   * peor que no estar.
+   */
+  const [ofreceEntrevista, setOfreceEntrevista] = useState(true);
   const [modalBusy, setModalBusy] = useState(false);
   const [modalError, setModalError] = useState(null);
 
@@ -740,6 +753,19 @@ export default function PacienteFichaPage() {
     fetch("/api/clinica/derivaciones", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => setDerivaciones(j?.data?.especialidades ?? []))
+      .catch(() => {});
+  }, []);
+
+  // Las plantillas de registro del centro, solo para saber si la entrevista
+  // inicial sigue entre ellas. Si la petición se cae no se toca nada: la ficha
+  // se queda con lo de siempre en vez de esconder un botón por un fallo de red.
+  useEffect(() => {
+    fetch("/api/clinica/plantillas", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        const delCentro = j?.data?.registro;
+        if (Array.isArray(delCentro)) setOfreceEntrevista(delCentro.some((p) => p?.key === CLAVE_ENTREVISTA));
+      })
       .catch(() => {});
   }, []);
 
@@ -925,6 +951,21 @@ export default function PacienteFichaPage() {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
               Nuevo informe
             </button>
+            {/* «Nueva entrevista inicial» (04/09/2026, Rodrigo: «para las
+                entrevistas iniciales también querríamos poder hacerlas desde la
+                ficha de paciente, un botón debajo de los de Nuevo registro y
+                Nuevo informe»).
+                Hasta hoy solo se llegaba a ella desde la CITA de valoración
+                inicial —que la elige sola— o entrando por «Nuevo registro» y
+                cambiando la plantilla a mano, que hay que saber que se puede.
+                Es el mismo formulario del registro de sesión: lo único que
+                cambia es con qué plantilla se abre, y eso viaja en la URL. */}
+            {ofreceEntrevista && (
+              <Link href={`/pacientes/${patient.id}/sesiones/nueva?plantilla=${CLAVE_ENTREVISTA}`} className="text-xs font-medium px-4 py-2 rounded-lg border border-neutral-200 hover:border-neutral-400 text-neutral-700 inline-flex items-center gap-2">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" /></svg>
+                Nueva entrevista inicial
+              </Link>
+            )}
             <button onClick={openEdit} className="text-xs font-medium px-4 py-2 rounded-lg border border-neutral-200 hover:border-neutral-400 text-neutral-700">Editar ficha</button>
           </div>
         </div>
@@ -1386,7 +1427,7 @@ export default function PacienteFichaPage() {
                   registro nuevo ya con esa plantilla. */}
               <p className="text-[11px] text-neutral-400">
                 ¿Una entrevista inicial? No es un informe:{" "}
-                <Link href={`/pacientes/${patient.id}/sesiones/nueva?plantilla=entrevista_inicial`} className="underline hover:text-neutral-600">
+                <Link href={`/pacientes/${patient.id}/sesiones/nueva?plantilla=${CLAVE_ENTREVISTA}`} className="underline hover:text-neutral-600">
                   escríbela como registro de sesión
                 </Link>
                 , con sus 15 apartados y la IA del audio o del bloc de notas.

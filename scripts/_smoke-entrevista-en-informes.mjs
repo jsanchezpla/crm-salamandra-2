@@ -28,6 +28,11 @@
  *   4. La ficha sigue pintando cada pestaña con su lista (se lee el código: es
  *      un componente con hooks y tres fetch, y lo que se rompería aquí es qué
  *      array mapea cada pestaña).
+ *   5. Y desde el 04/09/2026 la ficha también la ESTRENA: el botón «Nueva
+ *      entrevista inicial» de la cabecera, que abre el registro de siempre con
+ *      la plantilla puesta (Rodrigo). Se prueba aquí, con el resto de la
+ *      entrevista, porque es la misma clave la que decide las tres cosas: con
+ *      qué plantilla se abre, en qué pestaña se archiva y cómo se titula.
  */
 
 import { describe, it } from "node:test";
@@ -39,6 +44,12 @@ import { CLAVE_ENTREVISTA, esEntrevistaInicial, repartirRegistros } from "../lib
 import { tituloDeRegistro } from "../lib/clinica/sessionPdf.js";
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+// La ficha del paciente, leída una vez: la miran los dos últimos bloques (qué
+// pinta cada pestaña y el botón de la cabecera). `codigo` es la misma fuente
+// sin comentarios, para no dar por buena una regla que solo esté explicada.
+const fuente = fs.readFileSync(path.join(RAIZ, "app", "(dashboard)", "pacientes", "[id]", "page.jsx"), "utf8");
+const codigo = fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 
 const entrevista = (extra = {}) => ({
   id: "e1",
@@ -131,9 +142,6 @@ describe("la ficha y el PDF contestan lo mismo", () => {
 });
 
 describe("las pestañas de la ficha pintan la lista que les toca", () => {
-  const fuente = fs.readFileSync(path.join(RAIZ, "app", "(dashboard)", "pacientes", "[id]", "page.jsx"), "utf8");
-  const codigo = fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-
   it("Sesiones mapea `sesiones` (el reparto), no la lista cruda", () => {
     const i = codigo.indexOf('activeTab === "sesiones"');
     assert.ok(i > 0, "ancla: la pestaña Sesiones ha cambiado de nombre; revisa esta prueba");
@@ -155,6 +163,48 @@ describe("las pestañas de la ficha pintan la lista que les toca", () => {
       codigo,
       /plantilla=\$\{CLAVE_ENTREVISTA\}/,
       "sin la segunda petición, la entrevista de un paciente con más de 100 sesiones desaparecería de la ficha"
+    );
+  });
+});
+
+describe("el botón «Nueva entrevista inicial» de la cabecera", () => {
+  // Dónde empieza la columna de botones de la cabecera, para no dar por bueno
+  // el enlace que vive dentro del modal de «Nuevo informe» (que es otra cosa:
+  // ahí es una nota de «esto no es un informe», y no el botón que se pidió).
+  const cabecera = codigo.indexOf("Nuevo registro");
+  const bloque = codigo.slice(cabecera, cabecera + 2600);
+
+  it("está en la cabecera, con los de «Nuevo registro» y «Nuevo informe»", () => {
+    assert.ok(cabecera > 0, "ancla: «Nuevo registro» ha cambiado de nombre; revisa esta prueba");
+    assert.match(bloque, /Nuevo informe/);
+    assert.match(bloque, /Nueva entrevista inicial/, "04/09/2026, Rodrigo: la entrevista se estrena desde la ficha");
+  });
+
+  it("abre el registro nuevo con la plantilla de la entrevista", () => {
+    assert.match(
+      bloque,
+      /\/pacientes\/\$\{patient\.id\}\/sesiones\/nueva\?plantilla=\$\{CLAVE_ENTREVISTA\}/,
+      "el botón es el formulario de siempre; lo único que cambia es la plantilla, y viaja en la URL"
+    );
+  });
+
+  it("la clave sale de la constante y no escrita a mano en ningún sitio", () => {
+    // Si mañana cambia `CLAVE_ENTREVISTA`, una copia literal dejaría el botón
+    // abriendo un registro normal sin que nada avisara.
+    assert.equal(
+      codigo.includes(`plantilla=${CLAVE_ENTREVISTA}`),
+      false,
+      "la ficha tiene que componer la URL con CLAVE_ENTREVISTA, no con el texto"
+    );
+  });
+
+  it("solo sale si el centro ofrece la plantilla", () => {
+    assert.match(bloque, /ofreceEntrevista &&/, "un centro que la borró de sus plantillas abriría un registro con otra");
+    assert.match(codigo, /\/api\/clinica\/plantillas/, "y eso hay que preguntárselo al centro");
+    assert.match(
+      codigo,
+      /\[ofreceEntrevista, setOfreceEntrevista\] = useState\(true\)/,
+      "arranca puesta: la de fábrica está en todos los centros y el botón no debe aparecer medio segundo tarde"
     );
   });
 });

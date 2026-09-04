@@ -305,7 +305,7 @@ export default function InformesPage() {
                   aquí es donde se venía a buscarla. */}
               <p className="text-[11px] text-neutral-400">
                 ¿Una entrevista inicial? No es un informe: se escribe como registro de sesión desde la ficha del paciente
-                («Nuevo registro», plantilla «Entrevista inicial») o desde su cita de valoración inicial.
+                (botón «Nueva entrevista inicial») o desde su cita de valoración inicial.
               </p>
               {formError && <p className="text-xs text-rose-600">{formError}</p>}
               <div className="flex justify-end gap-2 pt-1">
