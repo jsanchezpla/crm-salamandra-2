@@ -2,8 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Sidebar from "./Sidebar.jsx";
-import Salamandrobot from "../assistant/Salamandrobot.jsx";
-import NotificationBell from "./NotificationBell.jsx";
 import DemoTabs from "./DemoTabs.jsx";
 import AvisoCorreoCuenta from "./AvisoCorreoCuenta.jsx";
 
@@ -69,7 +67,8 @@ export default function DashboardShell({
 
   return (
     <div className="dashboard-shell flex alto-ventana" style={shellStyle}>
-      <NotificationBell />
+      {/* La campana y el Salamandrobot ya no se montan aquí: desde el
+          04/09/2026 son dos iconos más del pie del menú (ver Sidebar.jsx). */}
       <Sidebar
         tenant={tenant}
         user={user}
@@ -130,8 +129,6 @@ export default function DashboardShell({
         <AvisoCorreoCuenta />
         <main className="flex-1 overflow-auto min-w-0 fade-in">{children}</main>
       </div>
-
-      <Salamandrobot />
     </div>
   );
 }

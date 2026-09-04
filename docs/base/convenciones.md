@@ -83,10 +83,13 @@ className="fixed top-0 right-0 h-full"
 | --- | --- |
 | Panel de drawer o modal | `z-50` |
 | Backdrop | `z-40` |
-| **Widgets flotantes** (campana, Salamandrobot) | **`z-30`** |
+| **Desplegables de la campana y del Salamandrobot** | **`z-30`** |
 
-Los flotantes van **por debajo**: al abrir cualquier drawer quedan tapados y
-no pisan botones. Todo modal nuevo sigue esa escala.
+Van **por debajo**: al abrir cualquier drawer quedan tapados y no pisan
+botones. Todo modal nuevo sigue esa escala. Desde el 04/09/2026 sus BOTONES ya
+no flotan —viven en el pie del menú, junto a ayuda, soporte, configuración y
+salir— y lo único que se ancla a la pantalla son los desplegables, que salen a
+`<body>` por un portal.
 
 ## 5. Overrides de UI
 

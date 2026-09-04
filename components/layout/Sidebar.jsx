@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import NotificationBell from "./NotificationBell.jsx";
+import Salamandrobot from "../assistant/Salamandrobot.jsx";
 import { vocabularioCliente } from "../../lib/clients/vocabulario.js";
 import { EVENTO_SIN_VER } from "../../lib/buzon/buzon.js";
 import { esFormacionAbierta, HIJOS_OCULTOS_FORMACION_ABIERTA } from "../../lib/training/formacionAbierta.js";
@@ -1014,7 +1016,13 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
             clientes (módulo `support`); el interrogante es su línea con
             NOSOTROS. Va delante porque la ve todo el mundo —no depende de ningún
             módulo— y porque hasta hoy los clientes que sí tenían Soporte no
-            tenían ninguna forma de escribirnos. */}
+            tenían ninguna forma de escribirnos.
+            04/09/2026: entran la CAMPANA y el SALAMANDROBOT, que flotaban abajo
+            a la derecha y se ponían delante de los botones de los paneles
+            (Rodrigo: «ponerlos debajo del nombre de usuario junto a los
+            iconitos … y así quedan estéticos y no molestan»). Van los primeros
+            para no mover de sitio a los cuatro de siempre. Sus desplegables no
+            caben en esta columna y salen por un portal: ver NotificationBell. */}
         <div className="px-4 py-3 border-t border-white/[0.08]">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-white/[0.08] border border-white/15 flex items-center justify-center font-display text-[13px] text-white/70 shrink-0">
@@ -1026,6 +1034,8 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
             </div>
           </div>
           <div className="flex items-center justify-end gap-1 mt-1.5">
+            <NotificationBell alAbrir={onClose} />
+            <Salamandrobot alAbrir={onClose} />
             <Link
               href="/ayuda"
               className={`relative p-1 rounded transition-colors hover:bg-white/[0.06] ${

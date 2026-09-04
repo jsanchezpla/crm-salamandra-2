@@ -309,12 +309,15 @@ despliegue que toque módulos.
     (`scripts/_schema-targets.js`). Excepción: seeds y backfills SÍ miran
     `status` (no se siembra en un cliente apagado).
 13. **Responsivo**: todo modal o drawer respeta la barra móvil (`top-14
-    lg:top-0 … bottom-0`). Capas: backdrop `z-40` + panel `z-50`; widgets
-    flotantes (campana, Salamandrobot) `z-30`, por debajo, ABAJO a la derecha,
-    y se esconden mientras hay un panel abierto (regla `.crm-flotante` de
+    lg:top-0 … bottom-0`). Capas: backdrop `z-40` + panel `z-50`. **La campana
+    y el Salamandrobot NO flotan**: son dos iconos del pie del menú, con ayuda
+    · soporte · configuración · salir (04/09/2026, Rodrigo: flotando se ponían
+    delante de los botones de los paneles). Solo flotan sus desplegables, que
+    salen a `<body>` por un portal, van `z-30` —por debajo de todo panel— y se
+    esconden mientras hay uno abierto (regla `.crm-flotante` de
     `app/globals.css`, que ignora los fondos apagados con `opacity-0`; un mes
-    ocultos por no hacerlo, ver
-    `docs/decisions/2026-09-03-campana-y-salamandrobot-abajo-a-la-derecha.md`).
+    ocultos por no hacerlo). Ver
+    `docs/decisions/2026-09-04-la-campana-y-el-bot-al-pie-del-menu.md`.
 14. **La Configuración es universal** (ver «Decisiones técnicas cerradas»).
 15. **Secrets de producción NUNCA pasan por chats con LLMs ni canales no
     seguros**: se generan en local, se ponen en `.env.production` por SSH y se

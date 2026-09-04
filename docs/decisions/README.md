@@ -53,6 +53,7 @@ decisión se supera, la nueva lo dice y enlaza a la anterior.
 | 03/09 | [La campana y el Salamandrobot van abajo a la derecha, y estuvieron un mes ocultos](2026-09-03-campana-y-salamandrobot-abajo-a-la-derecha.md) — la regla `.crm-flotante` detectaba el fondo apagado del menú móvil; `:not(.opacity-0)` y prueba | layout, notificaciones, Salamandrobot |
 | 03/09 | [Una semana aquí, dos fuera](2026-09-03-una-semana-aqui-dos-fuera.md) — la retención de las copias baja a una semana en el VPS y dos en el Drive (Rodrigo), contada por NÚMERO de copias y no por edad; supera la caducidad a 90 días del 21/08 | copias, VPS |
 | 03/09 | [El calendario global: un tercer host para mirar varios clientes a la vez](2026-09-03-el-calendario-global.md) — calendar.salamandrasolutions.com, tabla `master.calendario_global_vinculos` como autorización, pase de un solo uso para abrir el CRM del cliente (`/api/auth/saltar`) | calendar, auth, middleware, back-office |
+| 04/09 | [La campana y el Salamandrobot dejan de flotar: al pie del menú](2026-09-04-la-campana-y-el-bot-al-pie-del-menu.md) — se ponían delante de los botones de los paneles; los botones pasan a la fila de ayuda · soporte · configuración · salir y solo flotan sus desplegables, por un portal a `<body>`; supera al de la víspera | layout, notificaciones, Salamandrobot |
 
 Otras decisiones con su propio doc fuera de esta carpeta:
 `docs/sprint-aumenta-2026-07.md` (las pantallas del sprint de Aumenta),

@@ -1,16 +1,21 @@
 @import "tailwindcss";
 
-/* ── Botones flotantes vs. paneles ───────────────────────────────────────
- * La campanita de notificaciones y el Salamandrobot se anclan abajo a la
- * derecha, justo donde los paneles laterales y los modales ponen su botón de
- * Guardar/Crear. Los tapaban: pulsar "Guardar" abría el asistente. Afectaba a
- * TODO el CRM (69 paneles usan `fixed inset-0 z-50`), no a una pantalla suelta.
+/* ── Lo flotante vs. los paneles ─────────────────────────────────────────
+ * 04/09/2026: los BOTONES de la campanita y del Salamandrobot ya no flotan.
+ * Se anclaban abajo a la derecha, justo donde los paneles laterales y los
+ * modales ponen su Guardar/Crear, y los tapaban —pulsar "Guardar" abría el
+ * asistente— en TODO el CRM (69 paneles usan `fixed inset-0 z-50`). La cura de
+ * verdad fue sacarlos de ahí: hoy son dos iconos del pie del menú
+ * (`Sidebar.jsx`), donde no pueden ponerse delante de nada.
  *
- * Bajarles el z-index NO lo arregla (probado hasta z-10: el widget seguía
+ * Lo que sigue flotando son sus DESPLEGABLES, que se van a <body> por un
+ * portal —no caben en una columna de 220 px—, y por eso esta regla cuelga del
+ * `body` y ya no de `.dashboard-shell`: fuera de ese árbol, `:has()` desde la
+ * shell no los alcanzaría. Se esconden mientras hay algo abierto por encima,
+ * que es lo correcto: con un panel abierto no quieres el chat ni la campanita.
+ * (Bajarles el z-index nunca bastó: probado hasta z-10, el widget seguía
  * recibiendo el clic, porque los paneles se montan dentro de `main` y no
- * compiten en la misma capa). Lo que funciona es ocultarlos mientras hay algo
- * abierto por encima — que además es lo correcto: con un panel abierto no
- * quieres el chat ni la campanita.
+ * compiten en la misma capa.)
  *
  * Se detecta el overlay por su z: z-40 (el fondo de un panel lateral, regla 13
  * de CLAUDE.md), z-50 (el panel y la mayoría de modales) y los z-[60..90]
@@ -25,25 +30,30 @@
  *   · `z-0` — el capturador de clics de la propia campanita; si no, se
  *     ocultaría a sí misma al abrir su desplegable.
  *
+ * El fondo del menú móvil ABIERTO sí cuenta, y con los botones dentro del
+ * cajón eso escondería el desplegable justo al pulsarlo: por eso abrir la
+ * campana o el bot cierra el cajón (`alAbrir` en Sidebar.jsx).
+ *
  * Lo fija `scripts/_smoke-widgets-flotantes.mjs`: si alguien quita el
  * `:not(.opacity-0)` de aquí o el `opacity-0` del fondo del menú, la prueba
  * lo dice antes de que vuelvan a desaparecer en silencio.
  */
-.dashboard-shell:has(.fixed.inset-0.z-40:not(.opacity-0)) .crm-flotante,
-.dashboard-shell:has(.fixed.inset-0.z-50:not(.opacity-0)) .crm-flotante,
-.dashboard-shell:has(.fixed.inset-0[class*="z-["]:not(.opacity-0)) .crm-flotante {
+body:has(.fixed.inset-0.z-40:not(.opacity-0)) .crm-flotante,
+body:has(.fixed.inset-0.z-50:not(.opacity-0)) .crm-flotante,
+body:has(.fixed.inset-0[class*="z-["]:not(.opacity-0)) .crm-flotante {
   display: none;
 }
 
 /*
- * Los widgets flotantes suben lo que la barra del navegador tape (03/09/2026,
- * AV-0035 de Aumenta: «con la barra de tareas solo veo una parte de la
- * salamandra y de la campanita»).
+ * Lo flotante sube lo que la barra del navegador tape (03/09/2026, AV-0035 de
+ * Aumenta: «con la barra de tareas solo veo una parte de la salamandra y de la
+ * campanita»). Nació por los botones; desde el 04/09/2026 los botones están en
+ * el menú y esto protege a sus desplegables, que siguen anclados abajo.
  *
  * Misma causa que arregló `.alto-ventana` para el menú lateral: en algunos
  * navegadores `100vh` mide MÁS que el hueco visible (`100dvh`), y todo lo que
- * se ancla al borde de abajo del alto teórico —`bottom-4`, `bottom-[1.375rem]`—
- * cae detrás de la barra. La diferencia entre los dos altos es exactamente lo
+ * se ancla al borde de abajo del alto teórico —`bottom-3`— cae detrás de la
+ * barra. La diferencia entre los dos altos es exactamente lo
  * que tapa, así que se sube eso con un `translateY`. En un navegador normal la
  * diferencia es 0 y esto no mueve nada. Va por transform y no tocando
  * `bottom` para no reescribir las clases de posición de cada widget (que
