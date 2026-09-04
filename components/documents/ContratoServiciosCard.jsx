@@ -14,6 +14,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 
 function fmtPeso(bytes) {
   if (!bytes && bytes !== 0) return "";
@@ -58,7 +59,7 @@ export default function ContratoServiciosCard({ isAdmin = true }) {
       fd.append("file", file);
       fd.append("name", "Contrato de Prestación de Servicios");
       const r = await fetch("/api/documents/contrato-servicios", { method: "POST", body: fd });
-      const j = await r.json().catch(() => ({}));
+      const j = await leerRespuestaApi(r, { siGrande: "El archivo pesa demasiado. El tope son 25 MB por documento." });
       if (!r.ok || !j.ok) throw new Error(j.error || "No se pudo subir el contrato");
       setContrato(j.data);
     } catch (e) {

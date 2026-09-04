@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
+import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 
 /**
  * Portal público de soporte — seguimiento de UNA solicitud por token.
@@ -90,7 +91,7 @@ export default function SeguimientoTicketPage() {
           body: JSON.stringify({ body: respuesta }),
         });
       }
-      const json = await res.json().catch(() => ({}));
+      const json = await leerRespuestaApi(res);
       if (!res.ok) throw new Error(json.error || "No se ha podido enviar.");
       setRespuesta("");
       setFiles([]);

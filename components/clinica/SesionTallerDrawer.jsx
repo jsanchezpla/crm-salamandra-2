@@ -51,6 +51,7 @@ import {
 import { ETIQUETA_NOTA_POR_DEFECTO } from "@/lib/clinica/tallerSesion.js";
 import { MAX_NOTAS } from "@/lib/clinica/registroCompleto.js";
 import { BLOQUE_INTERNAS, escritoDelTaller, pacienteDeClave } from "@/lib/clinica/tallerCompleto.js";
+import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition";
@@ -326,7 +327,7 @@ export default function SesionTallerDrawer({
       fd.append("etiquetaNota", etiquetaNota || ETIQUETA_NOTA_POR_DEFECTO);
       fd.append("escrito", JSON.stringify(escritoAhora));
       const r = await fetch("/api/clinica/taller-sesiones/transcribe", { method: "POST", body: fd });
-      const j = await r.json();
+      const j = await leerRespuestaApi(r);
       if (!r.ok) throw new Error(j.error || "No se pudo procesar");
       if (queEntra === "audio") {
         setTranscripcionAudio(String(j.data.transcription ?? "").trim());

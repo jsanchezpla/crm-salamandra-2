@@ -6,6 +6,7 @@ import SelectorPaciente from "@/components/citas/SelectorPaciente.jsx";
 import TextareaCrece from "@/components/ui/TextareaCrece.jsx";
 import { INCIDENCIA_CATEGORIES, INCIDENCIA_PRIORITY, INCIDENCIA_VERIFICATIONS, exigeSubcategoria } from "@/lib/clinica/incidencias.js";
 import { RESPUESTAS_FALTA } from "@/lib/clinica/faltas.js";
+import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 
 /**
  * Un solo control para el resultado: la VERIFICACIÓN, que arrastra el estado
@@ -219,7 +220,7 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
     fd.append("file", file);
     fd.append("name", name);
     const r = await fetch(`/api/clinica/incidencias/${incidenciaId}/documents`, { method: "POST", body: fd });
-    const j = await r.json();
+    const j = await leerRespuestaApi(r, { siGrande: "El archivo pesa demasiado. El tope son 25 MB por documento." });
     if (!r.ok) throw new Error(j.error || "No se pudo subir el documento");
     return j.data;
   };

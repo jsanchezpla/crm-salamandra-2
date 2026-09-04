@@ -9,6 +9,8 @@
 
 
 import { useRef, useState } from "react";
+import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
+
 const CSV_HEADER_MAP = {
   nombre: "name",
   name: "name",
@@ -190,7 +192,7 @@ export function ImportModal({ onClose, onImported }) {
           body: JSON.stringify({ leads: formattedLeads }),
         });
       }
-      const data = await res.json();
+      const data = await leerRespuestaApi(res);
       setResult(data.ok ? data.data : { error: data.error || "Error desconocido" });
     } catch {
       setResult({ error: "Error de red al importar" });

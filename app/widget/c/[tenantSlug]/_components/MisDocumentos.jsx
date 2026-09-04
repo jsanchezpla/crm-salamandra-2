@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 
 /**
  * "Mis documentos" del portal del paciente.
@@ -107,7 +108,7 @@ export default function MisDocumentos({ tenantSlug, authFetch, profesional, onFi
       fd.append("file", file);
       const res = await authFetch("/citas-portal/documents", { method: "POST", body: fd });
       if (res.status === 401) return;
-      const j = await res.json().catch(() => ({}));
+      const j = await leerRespuestaApi(res);
       if (!res.ok || !j.ok) throw new Error(j?.error || "No pudimos subir el archivo");
       setJustUploaded(j.data?.name ?? file.name);
       await load();

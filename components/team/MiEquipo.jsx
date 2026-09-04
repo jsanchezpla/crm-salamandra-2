@@ -10,6 +10,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
+import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 
 const STATUS_LABELS = { active: "Activo", inactive: "Inactivo", on_leave: "De baja" };
 
@@ -73,7 +74,7 @@ export default function MiEquipo({ modulos = null }) {
       fd.append("file", file);
       const r = await fetch("/api/team/me/documents", { method: "POST", body: fd });
       if (!r.ok) {
-        const j = await r.json().catch(() => ({}));
+        const j = await leerRespuestaApi(r, { siGrande: "El archivo pesa demasiado. El tope son 25 MB por documento." });
         throw new Error(j?.error || "No se pudo subir el documento");
       }
       loadDocs();

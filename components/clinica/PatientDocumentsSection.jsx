@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import useZonaSoltar, { useEvitarSoltarFuera } from "@/components/ui/useZonaSoltar.js";
 import PdfPreviewModal from "@/components/documents/PdfPreviewModal.jsx";
 import { tipoParaVerEnPantalla } from "@/lib/documents/verEnPantalla.js";
+import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 
 function fmtSize(n) {
   if (!n) return "";
@@ -147,7 +148,7 @@ export default function PatientDocumentsSection({ patientId }) {
           ? `/api/pacientes/contract-template`
           : `/api/pacientes/${patientId}/documents`;
       const r = await fetch(url, { method: "POST", body: fd });
-      const j = await r.json();
+      const j = await leerRespuestaApi(r, { siGrande: "El archivo pesa demasiado. El tope son 25 MB por documento." });
       if (!r.ok) throw new Error(j.error || "No se pudo subir el documento");
       setPending(null);
       setPendingName("");

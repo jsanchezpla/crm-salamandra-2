@@ -9,6 +9,7 @@ import CreateEmployeeDrawer from "../../../../../components/training/CreateEmplo
 import ArchiveUserDialog from "../../../../../components/training/ArchiveUserDialog.jsx";
 import HardDeleteUserDialog from "../../../../../components/training/HardDeleteUserDialog.jsx";
 import { anchoPantalla } from "../../../../../components/layout/anchoPantalla.js";
+import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 
 const TABS = [
   { id: "info", label: "Información" },
@@ -1175,7 +1176,7 @@ function ImportDrawer({ companyId, companyName, onClose, onCompleted }) {
         method: "POST",
         body: fd,
       });
-      const json = await res.json();
+      const json = await leerRespuestaApi(res);
       if (!res.ok) throw new Error(json.error || "Error al analizar el Excel");
       setPreview(json.data ?? json);
       setStep("preview");
@@ -1197,7 +1198,7 @@ function ImportDrawer({ companyId, companyName, onClose, onCompleted }) {
         method: "POST",
         body: fd,
       });
-      const json = await res.json();
+      const json = await leerRespuestaApi(res);
       if (!res.ok) throw new Error(json.error || "Error al importar");
       setImportResult(json.data ?? json);
       setStep("done");

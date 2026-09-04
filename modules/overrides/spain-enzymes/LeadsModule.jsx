@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
+import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 
 function useMounted() {
   const [m, setM] = useState(false);
@@ -461,7 +462,7 @@ export default function SpainEnzymesLeadsModule() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ leads: payload }),
       });
-      const data = await res.json();
+      const data = await leerRespuestaApi(res);
       setImportResult(data);
       if (data.ok) { fetchLeads(); setCsvText(""); setCsvParsed(null); }
     } finally {
@@ -477,7 +478,7 @@ export default function SpainEnzymesLeadsModule() {
       const formData = new FormData();
       formData.append("file", file);
       const res = await fetch("/api/leads/import/excel", { method: "POST", body: formData });
-      const data = await res.json();
+      const data = await leerRespuestaApi(res);
       setImportResult(data);
       if (data.ok) fetchLeads();
     } finally {

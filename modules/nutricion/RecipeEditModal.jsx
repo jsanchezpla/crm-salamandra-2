@@ -19,6 +19,7 @@ import Select from "@/components/ui/Select.jsx";
 import { computeFoodMacros, computeRecipeMacros } from "@/lib/nutricion/macros.js";
 import { useFoodSections } from "./foodSections.js";
 import PropagarRecetaPanel from "./PropagarRecetaPanel.jsx";
+import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 
 const UNIT_OPTS = [
   { value: "g", label: "gramos" },
@@ -146,7 +147,7 @@ export default function RecipeEditModal({ recipe, onClose, onSaved }) {
         const fd = new FormData();
         fd.append("file", photoFile);
         const pr = await fetch(`/api/nutricion/recipes/${data.id}/photo`, { method: "POST", body: fd });
-        const pj = await pr.json().catch(() => ({}));
+        const pj = await leerRespuestaApi(pr);
         if (!pj.ok) return finishErr(`Receta guardada, pero la foto falló: ${pj.error || "error de red"}. Reábrela e inténtalo de nuevo.`);
         data = { ...data, hasPhoto: true };
       } else if (photoRemoved && recipe?.hasPhoto) {

@@ -31,6 +31,7 @@ import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 import { enlaceDeVuelta } from "@/lib/clients/volver.js";
 import { rotuloDeBorrador } from "@/lib/clinica/borradorDeCita.js";
 import { CLAVE_ENTREVISTA, esEntrevistaInicial, repartirRegistros } from "@/lib/clinica/entrevistaInicial.js";
+import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 
 // Los tipos que se pueden CREAR: la entrevista inicial ya no está (03/09/2026),
 // es un registro de sesión con su plantilla (lib/clinica/serialize.js).
@@ -266,7 +267,7 @@ function SessionDrawer({ session, patient, onClose, onPublish, onSaved, busy }) 
       const fd = new FormData();
       fd.append("file", file, file.name);
       const r = await fetch(`/api/clinica/sessions/${session.id}/prep-files`, { method: "POST", body: fd });
-      const j = await r.json().catch(() => ({}));
+      const j = await leerRespuestaApi(r);
       if (!r.ok || !j.ok) throw new Error(j.error || "No se pudo subir el archivo");
       onSaved?.();
     } catch (e) {

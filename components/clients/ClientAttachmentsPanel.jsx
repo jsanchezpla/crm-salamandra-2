@@ -34,6 +34,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import TimestampRelative from "../ui/TimestampRelative.jsx";
+import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 
 const MAX_FILE_MB = 25;
 const MAX_FILES = 50;
@@ -152,7 +153,7 @@ export default function ClientAttachmentsPanel({ clientId, textos: textosProp })
         method: "POST",
         body: fd,
       });
-      const j = await r.json().catch(() => ({}));
+      const j = await leerRespuestaApi(r, { siGrande: "El archivo pesa demasiado. El tope son 10 MB por adjunto." });
       if (!j?.ok) {
         setUploadError(j?.error || `Error al subir (HTTP ${r.status})`);
         return;

@@ -98,6 +98,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import useZonaSoltar, { useEvitarSoltarFuera } from "@/components/ui/useZonaSoltar.js";
 import useGrabadora, { fmtSegundos } from "@/components/clinica/useGrabadora.js";
+import useAudios from "@/components/clinica/useAudios.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 import {
   fechaDePreparacion,
@@ -121,6 +122,7 @@ import {
   valoresDeSesion,
 } from "@/lib/clinica/plantillas.js";
 import { bloquesDelRegistro, esEnvoltorio, MAX_NOTAS } from "@/lib/clinica/registroCompleto.js";
+import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 
 const STATE = { FORM: "form", PROCESSING: "processing", PREPARING: "preparing" };
 
@@ -304,18 +306,7 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
   const [apartados, setApartados] = useState(() => PLANTILLA_BASE.registro.apartados.map((a) => ({ ...a })));
   const [plantillas, setPlantillas] = useState([]);
   const [plantillaKey, setPlantillaKey] = useState("");
-  const [file, setFile] = useState(null);
-  // ── UN AUDIO SE TRANSCRIBE UNA SOLA VEZ (01/09/2026, Rodrigo) ─────────────
-  // «Cuando intento usar la IA después de haber usado el audio, solo entiende
-  // que estoy volviendo a intentar retranscribir el audio en lugar de hacerlo
-  // independiente.» Lo que sacó Whisper de ESTE fichero vive aquí y no dentro
-  // de `result`, que es la foto de la ÚLTIMA pasada: si la última fue solo de
-  // notas, `result` no trae transcripción y sin esto se habría perdido —y la
-  // siguiente pasada volvería a subir el audio y a pagarlo—. Se limpia al
-  // quitar el audio y al cambiarlo, que son las dos veces que deja de valer.
-  const [transcripcionAudio, setTranscripcionAudio] = useState("");
-  const [duracionAudio, setDuracionAudio] = useState(null);
-  // Y el interruptor que faltaba: dejar el audio FUERA de esta pasada sin tener
+  // El interruptor que faltaba: dejar el audio FUERA de esta pasada sin tener
   // que quitarlo (y perder su transcripción) para poder usar la IA solo con lo
   // que se acaba de escribir.
   const [usarAudio, setUsarAudio] = useState(true);
@@ -333,6 +324,14 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
   const [avisoAudio, setAvisoAudio] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
   const [saving, setSaving] = useState(false);
+  // ── LOS AUDIOS, EN PLURAL (04/09/2026, Rodrigo) ──────────────────────────
+  // «Queremos subir más de un audio antes de ponerlo a transcribir.» La lista,
+  // el estado de cada uno y lo que Whisper sacó de él viven en `useAudios`. Lo
+  // transcrito se guarda AHÍ y no dentro de `result` —que es la foto de la
+  // ÚLTIMA pasada—: una pasada solo de notas no trae transcripción y sin esto
+  // se perdería, obligando a subir los audios otra vez y a pagarlos
+  // (01/09/2026: un audio se transcribe UNA sola vez).
+  const audios = useAudios({ onError: setErrorMsg, onAviso: setAvisoAudio });
   // Adjuntos de la PREPARACIÓN (punto 4 del sprint). Se quedan en memoria hasta
   // que la sesión existe: el endpoint de adjuntos necesita su id.
   const [prepFiles, setPrepFiles] = useState([]);
@@ -611,8 +610,8 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
   // ¿Qué material entra en la PRÓXIMA pasada? De aquí salen los pasos que se
   // pintan, el rótulo del botón y lo que se manda al servidor: los tres tienen
   // que contar lo mismo o la pantalla vuelve a mentir.
-  const conAudio = !!file && usarAudio;
-  const queEntra = conAudio ? (transcripcionAudio ? "transcripcion" : "audio") : "notas";
+  const conAudio = audios.lista.length > 0 && usarAudio;
+  const queEntra = conAudio ? (audios.hayPendientes ? "audio" : "transcripcion") : "notas";
   const pasos = pasosDelProceso(queEntra);
 
   // Animación de los pasos mientras la petición está en vuelo.
@@ -640,17 +639,29 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
   async function procesarConIA() {
     const texto = notas.trim();
     if (!conAudio && !texto) return;
-    setState(STATE.PROCESSING);
     setErrorMsg(null);
     setAvisoAudio(null);
+    // Lo que falte por transcribir se transcribe AHORA y aparte, para que el
+    // texto quede guardado en la lista pase lo que pase después con Claude. Lo
+    // normal es que no falte nada: la profesional le ha dado a «Transcribir»
+    // mientras escribía y aquí solo se espera el reparto.
+    let transcrito = audios.texto;
+    if (conAudio && audios.hayPendientes) {
+      setState(STATE.PROCESSING);
+      transcrito = await audios.transcribir();
+      if (!transcrito && !texto) {
+        setState(STATE.FORM);
+        return;
+      }
+    }
+    setState(STATE.PROCESSING);
     try {
       const fd = new FormData();
-      // El fichero solo SUBE la primera vez. Ya transcrito viaja el texto: ni se
-      // paga Whisper dos veces ni se espera dos veces por lo mismo, y sobre todo
-      // la pasada deja de ser «volver a intentar el audio» para ser lo que es —
-      // una propuesta nueva con el material que hay ahora.
-      if (queEntra === "audio") fd.append("file", file, file.name);
-      else if (queEntra === "transcripcion") fd.append("transcripcion", transcripcionAudio);
+      // Los audios ya no suben aquí: viaja su texto. Ni se paga Whisper dos
+      // veces ni se espera dos veces por lo mismo, y la pasada deja de ser
+      // «volver a intentar el audio» para ser lo que es — una propuesta nueva
+      // con el material que hay ahora.
+      if (conAudio && transcrito) fd.append("transcripcion", transcrito);
       if (texto) fd.append("texto", texto);
       // Los apartados del centro y lo ya tecleado viajan con el material: sin
       // ellos el servidor no sabría qué apartados tiene esta sesión y volvería a
@@ -658,39 +669,28 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
       fd.append("apartados", JSON.stringify(apartados));
       fd.append("escrito", JSON.stringify(form));
       const r = await fetch("/api/clinica/sessions/transcribe", { method: "POST", body: fd });
-      const j = await r.json();
+      const j = await leerRespuestaApi(r);
       if (!r.ok) throw new Error(j.error || "No se pudo procesar");
-      // La transcripción del audio se guarda la primera vez y ya no se vuelve a
-      // pedir. La duración la mide Whisper, así que en las pasadas siguientes el
-      // servidor no la manda: se conserva la de la primera o el registro se
+      // La duración la mide Whisper al transcribir, así que aquí el servidor no
+      // la manda: se toma la que guarda la lista de audios o el registro se
       // guardaría como si nunca hubiera habido audio.
-      if (queEntra === "audio") {
-        setTranscripcionAudio(String(j.data.transcription ?? "").trim());
-        setDuracionAudio(j.data.audioDurationSec ?? null);
-      }
       setResult({
         ...j.data,
-        audioDurationSec: j.data.audioDurationSec ?? (conAudio ? duracionAudio : null),
+        transcription: j.data.transcription || transcrito,
+        audioDurationSec: j.data.audioDurationSec ?? (conAudio ? audios.duracion : null),
       });
       const p = j.data.propuesta ?? {};
       const cuantos = Object.values(p).filter((v) => String(v ?? "").trim()).length;
       setPropuesta(p);
       // Con propuesta se abre el panel directamente: es a lo que ha venido.
       setVerPropuesta(cuantos > 0);
-      const deDonde =
-        conAudio && texto
-          ? queEntra === "audio"
-            ? "Audio y notas leídos"
-            : "Transcripción y notas releídas"
-          : conAudio
-            ? queEntra === "audio"
-              ? "Audio transcrito"
-              : "Transcripción releída"
-            : "Notas leídas";
+      const cuantosAudios = audios.lista.length;
+      const elAudio = cuantosAudios > 1 ? `Los ${cuantosAudios} audios` : "El audio";
+      const deDonde = conAudio && texto ? `${elAudio} y tus notas` : conAudio ? elAudio : "Tus notas";
       setAvisoAudio(
         j.data.avisoIA ??
           (cuantos > 0
-            ? `${deDonde}. La IA propone ${cuantos} apartado(s): revísalos y elige cuáles entran.`
+            ? `${deDonde}: la IA propone ${cuantos} apartado(s). Revísalos y elige cuáles entran.`
             : `${deDonde}, pero la IA no ha sacado nada que repartir.`)
       );
       setState(STATE.FORM);
@@ -700,12 +700,10 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
     }
   }
 
-  // Quitar el audio NO borra las notas escritas: son dos fuentes distintas y
+  // Quitar los audios NO borra las notas escritas: son dos fuentes distintas y
   // quien tenga las dos puede querer deshacerse solo de una.
   function quitarAudio() {
-    setFile(null);
-    setTranscripcionAudio("");
-    setDuracionAudio(null);
+    audios.limpiar();
     setUsarAudio(true);
     setResult(null);
     setPropuesta(null);
@@ -714,13 +712,34 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
     if (fileRef.current) fileRef.current.value = "";
   }
 
-  /** Un audio nuevo deja vieja la transcripción del anterior. */
-  function ponerAudio(f) {
-    setFile(f);
-    setTranscripcionAudio("");
-    setDuracionAudio(null);
+  /** Uno menos, con su transcripción. Los demás siguen donde estaban. */
+  function quitarUnAudio(idAudio) {
+    audios.quitar(idAudio);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  /** Los audios se SUMAN: un audio nuevo no pisa al anterior (04/09/2026). */
+  function ponerAudio(...ficheros) {
+    audios.añadir(ficheros.flat());
     setUsarAudio(true);
     setErrorMsg(null);
+  }
+
+  /**
+   * Transcribir SIN pasar por la IA (04/09/2026, Rodrigo). Es lo que permite
+   * mandar los audios en cuanto están y seguir escribiendo mientras: la espera
+   * de Whisper deja de estar delante del botón de la IA.
+   */
+  async function transcribirAudios() {
+    setErrorMsg(null);
+    setAvisoAudio(null);
+    const antes = audios.pendientes.length;
+    const texto = await audios.transcribir();
+    if (texto) {
+      setAvisoAudio(
+        `${antes > 1 ? `${antes} audios transcritos` : "Audio transcrito"}. Puedes seguir escribiendo o pulsar el botón de la IA: ya no hay que esperar a la transcripción.`
+      );
+    }
   }
 
   // Grabar desde el propio CRM (03/09/2026, AV-0037): en iPhone el selector
@@ -960,14 +979,13 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
 
   const zonaAudio = useZonaSoltar({
     accept: ACEPTA_AUDIO,
-    queSeEspera: "un audio de la sesión",
-    // Con el audio ya TRANSCRITO no se admite otro: primero hay que quitarlo,
-    // que es lo que borra la transcripción vieja. Antes miraba `result`, y
-    // desde que una pasada puede ser solo de notas eso apagaba la zona sin que
-    // hubiera ningún audio de por medio.
-    apagada: state !== STATE.FORM || !!transcripcionAudio,
+    // Varios de golpe desde el 04/09/2026: quien descarga tres notas de voz de
+    // WhatsApp las suelta las tres juntas. Se apaga solo cuando ya no caben.
+    varios: true,
+    queSeEspera: "audios de la sesión",
+    apagada: state !== STATE.FORM || audios.hueco <= 0,
     pegar: true,
-    onFicheros: ([f]) => ponerAudio(f),
+    onFicheros: (nuevos) => ponerAudio(nuevos),
     onAviso: setErrorMsg,
   });
 
@@ -1113,8 +1131,9 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
         ref={fileRef}
         type="file"
         accept={ACEPTA_AUDIO}
+        multiple
         className="hidden"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) ponerAudio(f); }}
+        onChange={(e) => { const fs = Array.from(e.target.files ?? []); if (fs.length) ponerAudio(fs); }}
       />
 
       {errorMsg && <div className="px-4 py-3 rounded-lg bg-rose-50 border border-rose-100 text-xs text-rose-700">{errorMsg}</div>}
@@ -1187,21 +1206,22 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
                     registro. Lo que adjuntes en «Preparación» también se queda.
                   </HelpTooltip>
                 </div>
-                {!file ? (
+                {!audios.lista.length ? (
                   <p className="text-[11px] text-neutral-500 mt-0.5">
                     {zonaAudio.arrastrando
-                      ? "Suéltalo aquí."
-                      : "Arrastra el audio aquí, pégalo con Ctrl+V o búscalo — o pega abajo lo que tengas apuntado. La IA te propone el registro entero, de la preparación a las notas internas; tú eliges qué entra. m4a, mp3, wav, ogg, webm · máx. 25 MB."}
+                      ? "Suéltalos aquí."
+                      : `Arrastra aquí los audios, pégalos con Ctrl+V o búscalos — puedes añadir varios (hasta ${MAX_AUDIOS}) y transcribirlos de una vez. O pega abajo lo que tengas apuntado. La IA te propone el registro entero, de la preparación a las notas internas; tú eliges qué entra. m4a, mp3, wav, ogg, webm · máx. 25 MB cada uno.`}
                   </p>
                 ) : (
-                  <p className="text-[11px] text-neutral-600 mt-0.5 truncate">
-                    {file.name} · {fmtSize(file.size)}{duracionAudio != null ? ` · ${fmtDur(duracionAudio)}` : ""}
-                    {transcripcionAudio ? " · ya transcrito" : ""}
+                  <p className="text-[11px] text-neutral-600 mt-0.5">
+                    {audios.lista.length === 1 ? "1 audio" : `${audios.lista.length} audios`}
+                    {audios.duracion != null ? ` · ${fmtDur(audios.duracion)} transcritos` : ""}
+                    {audios.hayPendientes ? " · sin transcribir todavía" : ""}
                   </p>
                 )}
               </div>
               <div className="flex gap-2 shrink-0">
-                {!file && grabadora.soportado && (
+                {audios.hueco > 0 && grabadora.soportado && (
                   <button
                     type="button"
                     onClick={grabadora.grabando ? grabadora.parar : grabadora.empezar}
@@ -1211,18 +1231,80 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
                     {grabadora.grabando ? `■ Parar · ${fmtSegundos(grabadora.segundos)}` : "● Grabar"}
                   </button>
                 )}
-                {!file && !grabadora.grabando && (
+                {audios.hueco > 0 && !grabadora.grabando && (
                   <button type="button" onClick={() => fileRef.current?.click()} className="text-xs font-medium px-3 py-2 rounded-lg border border-neutral-200 bg-white hover:border-neutral-400 text-neutral-700">
-                    Añadir audio
+                    {audios.lista.length ? "Añadir otro" : "Añadir audio"}
                   </button>
                 )}
-                {file && (
+                {audios.lista.length > 1 && (
                   <button type="button" onClick={quitarAudio} className="text-xs px-3 py-2 text-neutral-500 hover:underline">
-                    {result ? "Quitar audio" : "Quitar"}
+                    Quitar todos
                   </button>
                 )}
               </div>
             </div>
+
+            {/* ── La lista de audios (04/09/2026, Rodrigo) ──────────────────
+                Se ven todos con su estado, y cada uno se quita por su cuenta:
+                el que sobra no se lleva por delante la transcripción de los
+                demás, que es lo que pasaba cuando el audio era uno solo. */}
+            {audios.lista.length > 0 && (
+              <ul className="mt-3 space-y-1.5">
+                {audios.lista.map((a, i) => (
+                  <li key={a.id} className="flex items-center gap-2 text-[11px] rounded-lg border border-neutral-100 bg-neutral-50 px-2.5 py-1.5">
+                    <span className="w-4 shrink-0 text-neutral-400 tabular-nums">{i + 1}.</span>
+                    <span className="flex-1 min-w-0 truncate text-neutral-700">{a.nombre}</span>
+                    <span className="shrink-0 text-neutral-400">{fmtSize(a.tamano)}</span>
+                    <span
+                      className={`shrink-0 font-medium ${a.error ? "text-rose-600" : a.texto ? "text-emerald-700" : audios.transcribiendo ? "text-neutral-500" : "text-amber-700"}`}
+                      title={a.error || undefined}
+                    >
+                      {a.error
+                        ? "no ha salido texto"
+                        : a.texto
+                          ? `transcrito${a.durationSec != null ? ` · ${fmtDur(a.durationSec)}` : ""}`
+                          : audios.transcribiendo
+                            ? "transcribiendo…"
+                            : "pendiente"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => quitarUnAudio(a.id)}
+                      disabled={audios.transcribiendo}
+                      className="shrink-0 text-neutral-400 hover:text-rose-600 disabled:opacity-40"
+                      title="Quitar este audio"
+                    >
+                      ✕
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {/* Transcribir SIN llamar a la IA: es lo que quita la espera de
+                Whisper de delante del botón del registro. No bloquea nada —
+                mientras transcribe se puede seguir escribiendo aquí abajo. */}
+            {audios.hayPendientes && (
+              <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[11px] text-neutral-500">
+                  {audios.transcribiendo
+                    ? "Transcribiendo… puedes seguir escribiendo mientras."
+                    : "Transcríbelos ahora y sigue escribiendo: cuando pulses la IA no habrá que esperar al audio."}
+                </p>
+                <button
+                  type="button"
+                  onClick={transcribirAudios}
+                  disabled={audios.transcribiendo || state !== STATE.FORM}
+                  className="text-xs font-medium px-3 py-2 rounded-lg border border-neutral-200 bg-white hover:border-neutral-400 text-neutral-700 disabled:opacity-40"
+                >
+                  {audios.transcribiendo
+                    ? "Transcribiendo…"
+                    : audios.pendientes.length > 1
+                      ? `Transcribir los ${audios.pendientes.length} audios`
+                      : "Transcribir el audio"}
+                </button>
+              </div>
+            )}
 
             {/* ── Las notas escritas (01/09/2026, Rodrigo) ──────────────────
                 «Por si apuntan todo en un bloc de notas y lo pasan ahí.» No
@@ -1231,7 +1313,7 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
                 comparten botón — y si se dan las dos cosas, se usan las dos. */}
             <div className="mt-3 border-t border-neutral-100 pt-3">
               <div className="flex flex-wrap items-baseline justify-between gap-2 mb-1.5">
-                <div className="eyebrow">{file ? "…y tus notas" : "O pega tus notas"}</div>
+                <div className="eyebrow">{audios.lista.length ? "…y tus notas" : "O pega tus notas"}</div>
                 <span className={`text-[10px] ${notas.length > MAX_NOTAS ? "text-rose-600 font-medium" : "text-neutral-400"}`}>
                   {notas.length > 0 && `${notas.length.toLocaleString("es-ES")} / ${MAX_NOTAS.toLocaleString("es-ES")}`}
                 </span>
@@ -1251,7 +1333,7 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
                 de ahí, quitarlo tiraba la transcripción, así que quien quería
                 usar la IA solo con lo que acababa de escribir no tenía puerta.
                 Esta es la puerta. */}
-            {file && transcripcionAudio && (
+            {audios.hayTexto && (
               <label className="mt-3 flex items-start gap-2 text-[11px] text-neutral-600 cursor-pointer">
                 <input
                   type="checkbox"
@@ -1269,7 +1351,7 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
               </label>
             )}
 
-            {(file || notas.trim()) && (
+            {(audios.lista.length > 0 || notas.trim()) && (
               <div className="mt-3 flex justify-end">
                 <button
                   type="button"
@@ -1316,10 +1398,10 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
             )}
             {/* La del AUDIO, no la de la última pasada: si la última fue solo de
                 notas, la transcripción sigue estando y se sigue enseñando. */}
-            {transcripcionAudio && (
+            {audios.hayTexto && (
               <div className="mt-3 border-t border-neutral-100 pt-3">
                 <div className="eyebrow mb-1.5">Transcripción literal</div>
-                <p className="text-xs text-neutral-600 leading-relaxed italic">«{transcripcionAudio}»</p>
+                <p className="text-xs text-neutral-600 leading-relaxed italic whitespace-pre-line">«{audios.texto}»</p>
               </div>
             )}
           </div>
@@ -1526,10 +1608,14 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-7 h-7 animate-spin"><path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
           </div>
           <h2 className="font-display text-xl lg:text-2xl text-[var(--ink-900)]">
-            {file ? "Procesando audio con IA" : "Rellenando el registro con tus notas"}
+            {conAudio ? "Procesando el audio con IA" : "Rellenando el registro con tus notas"}
           </h2>
           <p className="text-xs text-neutral-500 mt-1">
-            {file?.name ?? `${notas.trim().length.toLocaleString("es-ES")} caracteres`}
+            {conAudio
+              ? audios.lista.length > 1
+                ? `${audios.lista.length} audios`
+                : (audios.lista[0]?.nombre ?? "un audio")
+              : `${notas.trim().length.toLocaleString("es-ES")} caracteres`}
           </p>
           <ul className="mt-8 max-w-md mx-auto space-y-2 text-left">
             {pasos.map((step, i) => {

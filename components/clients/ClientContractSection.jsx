@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import HelpTooltip from "../ui/HelpTooltip.jsx";
 import { esAdmin } from "../../lib/auth/permisos.js";
+import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 
 function formatSize(bytes) {
   if (!bytes && bytes !== 0) return "";
@@ -83,7 +84,7 @@ export default function ClientContractSection({ clientId }) {
       const fd = new FormData();
       fd.append("file", file);
       const r = await fetch(`/api/clients/${clientId}/contract`, { method: "POST", body: fd });
-      const d = await r.json().catch(() => ({}));
+      const d = await leerRespuestaApi(r);
       if (!r.ok) throw new Error(d.error || "No se pudo subir el contrato");
       setEstado(d.data);
     } catch (e) {

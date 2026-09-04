@@ -30,6 +30,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { PRIORIDADES, SECCIONES_BACKLOG } from "../../lib/tablero/parser.js";
 import { tonoDe } from "./tableroTonos.js";
+import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 
 /** Lo que se ofrece al mover: las tres prioridades y las dos salas de espera. */
 export const SECCIONES = SECCIONES_BACKLOG;
@@ -615,7 +616,7 @@ export function Capturas({ tarea, documento, ocupada, onCambio, onFallo }) {
         else form.append("clave", tarea.clave);
 
         const r = await fetch("/api/admin/tablero/adjuntos", { method: "POST", body: form });
-        const j = await r.json().catch(() => null);
+        const j = await leerRespuestaApi(r);
         if (!r.ok || !j?.ok) throw new Error(j?.error || `Error ${r.status}`);
         await onCambio();
       } catch (e) {

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
+import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 
 /**
  * Portal público de soporte — abrir una solicitud.
@@ -85,7 +86,7 @@ export default function SoportePortalPage() {
           body: JSON.stringify({ ...form, _hp: hpRef.current?.value || "" }),
         });
       }
-      const json = await res.json().catch(() => ({}));
+      const json = await leerRespuestaApi(res);
       if (!res.ok) throw new Error(json.error || "No se ha podido enviar. Inténtalo de nuevo.");
       setExito(json.data || json);
     } catch (err) {

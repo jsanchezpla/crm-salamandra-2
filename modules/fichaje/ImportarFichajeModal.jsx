@@ -26,6 +26,7 @@
 import { useEffect, useState } from "react";
 
 import { formatearMinutos } from "@/lib/fichaje/parseHora.js";
+import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 
 export default function ImportarFichajeModal({ periodo: periodoInicial, onClose, onHecho }) {
   const [periodo, setPeriodo] = useState(periodoInicial);
@@ -63,7 +64,7 @@ export default function ImportarFichajeModal({ periodo: periodoInicial, onClose,
         fd.append("periodo", periodo);
         fd.append("mapeos", JSON.stringify(asignados));
         const r = await fetch("/api/fichaje/import/preview", { method: "POST", body: fd });
-        const j = await r.json();
+        const j = await leerRespuestaApi(r);
         if (j?.ok) setPreview(j.data);
       } catch {
         // El preview que ya había sigue en pantalla; aplicar re-valida igual.
@@ -86,7 +87,7 @@ export default function ImportarFichajeModal({ periodo: periodoInicial, onClose,
       fd.append("file", file);
       fd.append("periodo", periodo);
       const r = await fetch("/api/fichaje/import/preview", { method: "POST", body: fd });
-      const j = await r.json();
+      const j = await leerRespuestaApi(r);
       if (!j?.ok) {
         setError(j?.error || `HTTP ${r.status}`);
         return;
@@ -116,7 +117,7 @@ export default function ImportarFichajeModal({ periodo: periodoInicial, onClose,
       fd.append("periodo", periodo);
       fd.append("mapeos", JSON.stringify(mapeos));
       const r = await fetch("/api/fichaje/import", { method: "POST", body: fd });
-      const j = await r.json();
+      const j = await leerRespuestaApi(r);
       if (!j?.ok) {
         setError(j?.error || `HTTP ${r.status}`);
         return;

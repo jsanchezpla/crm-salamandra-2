@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import LectoresPicker from "@/components/documents/LectoresPicker.jsx";
 import { inputCls, toDateInput, toTimeInput } from "./chips.jsx";
+import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 
 /**
  * El modal pequeño de un bloqueo pulsado en el calendario (31/08/2026,
@@ -127,7 +128,7 @@ export function BloqueoModal({ bloqueo, categorias = [], equipo = [], administra
       fd.append("name", nombre);
       fd.append("lectores", JSON.stringify(pendiente.lectores));
       const r = await fetch(`/api/citas/bloqueos/${bloqueo.id}/documents`, { method: "POST", body: fd });
-      const j = await r.json().catch(() => ({}));
+      const j = await leerRespuestaApi(r, { siGrande: "El archivo pesa demasiado. El tope son 25 MB por documento." });
       if (!r.ok) throw new Error(j.error || "No se pudo subir el documento");
       setPendiente(null);
       limpiarInput();

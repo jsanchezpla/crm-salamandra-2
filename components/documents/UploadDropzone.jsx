@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 
 const ACCEPT = ".pdf,.docx,.xlsx";
 const MAX_MB = 25;
@@ -30,7 +31,7 @@ export default function UploadDropzone({ folderId, visibility, onUploaded, disab
       try {
         const r = await fetch("/api/documents", { method: "POST", body: fd });
         if (!r.ok) {
-          const j = await r.json().catch(() => ({}));
+          const j = await leerRespuestaApi(r, { siGrande: "El archivo pesa demasiado. El tope son 25 MB por documento." });
           errs.push(`${file.name}: ${j.error || `error ${r.status}`}`);
         }
       } catch (e) {

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ESTADOS, PRIORIDADES, ORDEN_PRIORIDADES, fmtFecha, haceCuanto, plazo } from "./supportUi.js";
+import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 
 /**
  * Drawer de detalle de un ticket: hilo a la izquierda, propiedades a la
@@ -110,7 +111,7 @@ export default function TicketDetail({ ticketId, categorias, equipo, esAdmin, on
           body: JSON.stringify({ body: texto, isInternal, sendEmail: mandarEmail }),
         });
       }
-      const json = await res.json();
+      const json = await leerRespuestaApi(res);
       if (!res.ok) throw new Error(json.error || "No se ha podido enviar");
       setTexto("");
       setFiles([]);

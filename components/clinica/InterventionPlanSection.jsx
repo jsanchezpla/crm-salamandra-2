@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import useGrabadora, { fmtSegundos } from "@/components/clinica/useGrabadora.js";
+import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -93,7 +94,7 @@ function ObjetivosConIa({ patientId, plan, onAnadir }) {
       const fd = new FormData();
       fd.append("file", file, file.name || "audio");
       const res = await fetch(`/api/pacientes/${patientId}/plan/transcribir`, { method: "POST", body: fd });
-      const j = await res.json();
+      const j = await leerRespuestaApi(res);
       if (!j.ok) throw new Error(j.error || "No se ha podido transcribir el audio");
       const texto = String(j.data?.texto ?? "").trim();
       setIdeas((prev) => (prev.trim() ? `${prev.trim()}\n${texto}` : texto).slice(0, 2000));

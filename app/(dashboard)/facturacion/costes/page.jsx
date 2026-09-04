@@ -12,6 +12,7 @@ import { useSortState, SortableTh } from "../_components/tableSort.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 import { coincidePorNombre } from "../../../../lib/utils/busqueda.js";
 import { haySocios } from "../../../../lib/billing/socios.js";
+import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -233,7 +234,7 @@ export default function CostesPage() {
       const fd = new FormData();
       fd.append("file", file);
       const r = await fetch("/api/billing/costs/adjunto", { method: "POST", body: fd });
-      const j = await r.json();
+      const j = await leerRespuestaApi(r);
       if (!r.ok) throw new Error(j.error || "No se pudo subir el adjunto");
       setForm((f) => ({ ...f, attachmentUrl: j.data.url, attachmentName: j.data.fileName }));
     } catch (e) {

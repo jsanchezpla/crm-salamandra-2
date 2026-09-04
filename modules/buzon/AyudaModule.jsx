@@ -12,9 +12,11 @@ import {
   MB_POR_ADJUNTO,
   EVENTO_SIN_VER,
 } from "../../lib/buzon/buzon.js";
+import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 
 /**
- * Lee la respuesta SIN dar por hecho que es JSON.
+ * Lee la respuesta SIN dar por hecho que es JSON, con el aviso que esta
+ * pantalla sabe dar mejor que nadie cuando el adjunto se pasa de tamaño.
  *
  * ── POR QUÉ NO BASTA CON `res.json()` ───────────────────────────────────────
  * Porque no todas las respuestas las escribe nuestra app. Cuando el cuerpo de
@@ -26,22 +28,18 @@ import {
  *
  * Lo encontró Jorge el 13/08/2026 adjuntando un PNG normal, con el bloque del
  * CRM en el 1 MB por defecto de nginx.
+ *
+ * Volvió a morder el 04/09/2026, esta vez en los documentos de un paciente y
+ * por un 502 en vez de un 413. Lo que se arregló aquí en agosto era la cura de
+ * todas las subidas, así que se mudó a `lib/utils/respuestaApi.js`; de esta
+ * función solo queda el mensaje propio.
  */
-async function leerRespuesta(res) {
-  const texto = await res.text();
-  try {
-    return JSON.parse(texto);
-  } catch {
-    if (res.status === 413) {
-      return {
-        ok: false,
-        error:
-          `Esa captura pesa demasiado para enviarla. El tope es ${MB_POR_ADJUNTO} MB por archivo ` +
-          `y hasta ${LIMITES.adjuntos}. Recórtala, o mándanos el aviso sin ella y nos la pasas aparte.`,
-      };
-    }
-    return { ok: false, error: `No se ha podido enviar (error ${res.status}). Vuelve a intentarlo.` };
-  }
+function leerRespuesta(res) {
+  return leerRespuestaApi(res, {
+    siGrande:
+      `Esa captura pesa demasiado para enviarla. El tope es ${MB_POR_ADJUNTO} MB por archivo ` +
+      `y hasta ${LIMITES.adjuntos}. Recórtala, o mándanos el aviso sin ella y nos la pasas aparte.`,
+  });
 }
 
 /**
