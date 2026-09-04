@@ -36,7 +36,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { getTenantDb } from "../../lib/db/tenantDb.js";
-import { etiquetaDe } from "../_organizate-historial.js";
+import { etiquetaDe, claveSesion } from "../_organizate-historial.js";
 
 const args = process.argv.slice(2);
 const CONFIRM = args.includes("--confirm");
@@ -110,6 +110,15 @@ function partir(txt) {
     desempeno: trozo(iDes, /Desempe[ñn]o/i),
     tareas: trozo(iTar, RE_TAREA),
   };
+}
+
+/** Las claves de lo que YA está importado en el CRM. Una sola construcción. */
+async function claves(m, transaction) {
+  const filas = await m.ClinicSession.findAll({
+    attributes: ["patientId", "sessionDate", "observations"],
+    ...(transaction ? { transaction } : {}),
+  });
+  return new Set(filas.map((s) => claveSesion(s.patientId, s.sessionDate, s.observations?.textoOriginal)));
 }
 
 async function main() {
@@ -189,6 +198,32 @@ async function main() {
     console.log(`  Periodo: ${f[0]} → ${f[f.length - 1]}\n`);
   }
 
+  // ⚠️ LA SIMULACIÓN TIENE QUE SIMULAR LA PARTE PELIGROSA (04/09/2026)
+  //
+  // Antes, el reparto entre «ya está» y «nueva» se calculaba DENTRO de la
+  // transacción, o sea solo con --confirm. El seco decía «22.168 importables»
+  // —que es el volcado entero— y no distinguía de las 22.045 que ya estaban en
+  // el CRM: enseñaba el número tranquilizador y se callaba el único que
+  // importaba. Con la clave rota, el seco salió igual de bien y el --confirm
+  // creó 22.154 duplicados. Ahora se cuenta SIEMPRE, y en seco se enseña.
+  const yaEnElCrm = await claves(m);
+  const nuevas = listas.filter((s) => !yaEnElCrm.has(claveSesion(s.paciente.id, s.fecha, s.original)));
+  const repetidas = listas.length - nuevas.length;
+
+  console.log(`  Ya están en el CRM       ${String(repetidas).padStart(6)}`);
+  console.log(`  SE CREARÍAN              ${String(nuevas.length).padStart(6)}\n`);
+
+  // Un volcado que no reconoce NADA de lo que ya hay es la señal de que la
+  // clave se ha vuelto a romper, no de que la tabla esté vacía.
+  if (yaEnElCrm.size > 0 && repetidas === 0) {
+    console.log(`${"═".repeat(62)}`);
+    console.log(` ⚠️  ALTO: el CRM tiene ${yaEnElCrm.size} sesiones importadas y este volcado`);
+    console.log("    no reconoce NI UNA. La clave de idempotencia no está casando:");
+    console.log("    seguir crearía un duplicado de cada una. Ver `claveSesion`.");
+    console.log(`${"═".repeat(62)}\n`);
+    process.exit(2);
+  }
+
   if (!CONFIRM) {
     console.log(`${"═".repeat(62)}`);
     console.log(" SIMULACIÓN: no se ha escrito nada. Con --confirm se ejecuta.");
@@ -207,13 +242,22 @@ async function main() {
     // dos sesiones del mismo día cuyo texto no llevaba ese bloque daban las dos
     // la misma clave («paciente|fecha|») y la segunda se descartaba como
     // repetida. Se perdían 27 sesiones que no eran repetidas de nada.
-    const yaHay = new Set(
-      (await m.ClinicSession.findAll({ attributes: ["patientId", "sessionDate", "observations"], transaction: t }))
-        .map((s) => `${s.patientId}|${s.sessionDate}|${String(s.observations?.textoOriginal ?? "").slice(0, 80)}`)
-    );
+    //
+    // ⚠️ LOS DOS LADOS DE LA CLAVE SE NORMALIZAN IGUAL (04/09/2026)
+    //
+    // `session_date` es `timestamptz` y Sequelize lo devuelve como objeto
+    // Date, así que el lado de la BD daba «Mon Feb 10 2026 00:00:00 GMT+0000
+    // (...)» y el del volcado, «2026-02-10». No casaban NUNCA, y por tanto la
+    // tabla entera parecía vacía: al reimportar el 04/09/2026 se crearon
+    // 22.154 sesiones duplicadas en producción. En agosto no se vio porque la
+    // tabla estaba vacía de verdad y no había con qué comparar.
+    //
+    // Por eso la clave la construye UNA función para los dos lados. Si algún
+    // día cambia, cambia para ambos.
+    const yaHay = await claves(m, t);
 
     for (const s of listas) {
-      const clave = `${s.paciente.id}|${s.fecha}|${String(s.original ?? "").slice(0, 80)}`;
+      const clave = claveSesion(s.paciente.id, s.fecha, s.original);
       if (yaHay.has(clave)) { yaEstaban++; continue; }
       yaHay.add(clave);
 

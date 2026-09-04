@@ -81,3 +81,39 @@ export function etiquetaDe(txt) {
   for (const e of ETIQUETAS) if (antes.endsWith(sinAcentos(e))) return e;
   return "(no reconocido)";
 }
+
+/**
+ * El DÍA de una sesión, venga como venga: «2026-02-10».
+ *
+ * El volcado trae la fecha como texto `YYYY-MM-DD`; la base la devuelve como
+ * objeto Date, porque `clinic_sessions.session_date` es `timestamptz`. Los dos
+ * tienen que dar lo mismo o cualquier comparación entre ellos falla en
+ * silencio.
+ *
+ * De un Date se lee el día en UTC, que es como se guardaron (medianoche UTC).
+ * De un texto se cogen los diez primeros caracteres sin construir un Date, que
+ * es lo que evita que la zona horaria mueva el día.
+ */
+export function diaDe(fecha) {
+  if (fecha == null) return "";
+  if (fecha instanceof Date) {
+    return Number.isNaN(fecha.getTime()) ? "" : fecha.toISOString().slice(0, 10);
+  }
+  const s = String(fecha).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
+}
+
+/**
+ * La clave con la que se sabe si una sesión del volcado ya está en el CRM:
+ * paciente, día y los primeros 80 caracteres del texto original.
+ *
+ * ⚠️ La construyen los DOS lados de la comparación, y por eso vive aquí. El
+ * 04/09/2026 cada lado normalizaba la fecha a su manera —Date por un lado,
+ * texto por otro—, no casaba ninguna, la tabla entera pareció vacía y una
+ * reimportación creó 22.154 sesiones duplicadas en producción.
+ */
+export function claveSesion(patientId, fecha, textoOriginal) {
+  return `${patientId}|${diaDe(fecha)}|${String(textoOriginal ?? "").slice(0, 80)}`;
+}
