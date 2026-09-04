@@ -38,6 +38,7 @@ import {
   desdeFormulario,
 } from "@/lib/clinica/plantillas.js";
 import { SECCIONES_BECA } from "@/lib/clinica/beca.js";
+import { nombreDelInforme } from "@/lib/clinica/serialize.js";
 
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" }) : "—");
 
@@ -432,7 +433,7 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
       <aside className="fixed right-0 top-14 lg:top-0 bottom-0 z-50 w-full sm:w-[720px] bg-white shadow-2xl overflow-y-auto">
         <div className="sticky top-0 bg-white border-b border-neutral-100 px-5 lg:px-7 py-4 flex items-start justify-between gap-3 z-10">
           <div className="min-w-0">
-            <div className="eyebrow">Informe {String(report.typeLabel ?? "").toLowerCase()}</div>
+            <div className="eyebrow">{nombreDelInforme(report.type)}</div>
             <h2 className="font-display text-xl text-[var(--ink-900)] mt-1 leading-tight">
               {patient.name} <span className="text-neutral-400 font-normal">· {patient.edad ?? patient.age ?? "—"} años</span>
             </h2>

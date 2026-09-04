@@ -15,7 +15,7 @@ import PatientExternalContactsSection from "@/components/clinica/PatientExternal
 import InterventionPlanSection from "@/components/clinica/InterventionPlanSection.jsx";
 import PreviewBanner from "../../clinica/_components/PreviewBanner.jsx";
 import PropuestaIA from "@/components/clinica/PropuestaIA.jsx";
-import { REPORT_TYPES_NUEVOS, REPORT_TYPE_LABEL } from "@/lib/clinica/serialize.js";
+import { REPORT_TYPES_NUEVOS, REPORT_TYPE_LABEL, nombreDelInforme } from "@/lib/clinica/serialize.js";
 import { fechaNacimientoCorta as fmtFechaNacimiento } from "@/lib/clinica/edad.js";
 import {
   aFormulario,
@@ -1276,7 +1276,7 @@ export default function PacienteFichaPage() {
               {reports.map((r) => (
                 <div key={r.id} className="p-4 flex items-center justify-between gap-3 hover:bg-neutral-50/50">
                   <Link href="/clinica/informes" className="min-w-0 flex-1">
-                    <div className="font-medium text-[var(--ink-900)] text-sm">Informe {r.typeLabel.toLowerCase()}</div>
+                    <div className="font-medium text-[var(--ink-900)] text-sm">{nombreDelInforme(r.type)}</div>
                     <div className="text-[10px] text-neutral-400 tabular">{fmtDate(r.reportDate)} · Entrega {fmtDate(r.dueDate)}{r.overdue ? " · vencida" : ""}</div>
                   </Link>
                   <div className="flex items-center gap-2 shrink-0">

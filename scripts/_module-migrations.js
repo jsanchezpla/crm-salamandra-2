@@ -518,6 +518,11 @@ export const MODULES = {
     // El informe para la beca NEAE (26/08/2026, Aumenta): añade 'beca' al enum
     // de tipos de informe. Sus apartados van en contentSections (JSONB).
     "migrate-informe-beca",
+    // El informe de asesoramiento (04/09/2026, Aumenta): añade 'asesoramiento'
+    // al mismo enum. Sus apartados los pone el centro con sus plantillas, así
+    // que no hay nada más que migrar. VA ANTES del despliegue: el modelo lo
+    // declara y la UI lo ofrece al crear.
+    "migrate-informe-asesoramiento",
     // Apartados del registro de sesión (29/08/2026, Aumenta): content_sections
     // JSONB en clinic_sessions, el mismo cajón que ya tenían los informes. El
     // MODELO lo declara, así que sin esta migración el primer SELECT de

@@ -21,11 +21,16 @@ const STATUS_STYLES = {
   reviewed: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-500" },
   delivered: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
 };
+// Un color por tipo. Sin el suyo, un tipo cae al del evolutivo y dos chips
+// distintos se pintan iguales: le pasaba a la beca desde el 26/08/2026 y se ve
+// al añadir el asesoramiento (04/09/2026), que es cuando se arregla.
 const TYPE_STYLES = {
   evolution: { bg: "bg-sky-50", text: "text-sky-700" },
   admission: { bg: "bg-violet-50", text: "text-violet-700" },
   discharge: { bg: "bg-emerald-50", text: "text-emerald-700" },
   referral: { bg: "bg-amber-50", text: "text-amber-700" },
+  beca: { bg: "bg-rose-50", text: "text-rose-700" },
+  asesoramiento: { bg: "bg-teal-50", text: "text-teal-700" },
 };
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" }) : "—");
 

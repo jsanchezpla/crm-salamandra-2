@@ -39,8 +39,16 @@ export function defineClinicalReport(sequelize) {
       // nombres oficiales de la cabecera viven en lib/clinica/beca.js; el valor
       // lo añade al enum de cada schema scripts/migrate-informe-beca.js, que va
       // ANTES del despliegue.
+      // 'asesoramiento' (04/09/2026, Aumenta por Rodrigo): el informe de las
+      // sesiones de asesoramiento —las que ya factura el centro como tales—.
+      // NO tiene apartados propios escritos aquí a propósito: se compone con
+      // las plantillas del centro como el evolutivo, el de alta y el de
+      // derivación (lib/clinica/plantillas.js); el único que se sale de esa
+      // regla es la beca, porque sus apartados los manda la convocatoria. El
+      // valor lo añade al enum de cada schema
+      // scripts/migrate-informe-asesoramiento.js, que va ANTES del despliegue.
       reportType: {
-        type: DataTypes.ENUM("evolution", "admission", "discharge", "referral", "beca"),
+        type: DataTypes.ENUM("evolution", "admission", "discharge", "referral", "beca", "asesoramiento"),
         allowNull: false,
         defaultValue: "evolution",
       },

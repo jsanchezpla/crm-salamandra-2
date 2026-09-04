@@ -1032,6 +1032,13 @@ describe("buildReportPdfBuffer: la cabecera y la ficha de datos", () => {
       await textoInforme({ tenantName: null, report: { reportType: "referral" } }),
       /^Informe de derivación\n/
     );
+    // El informe de asesoramiento (04/09/2026): tipo nuevo, misma portada. El
+    // resto de sus reglas —que se pueda crear y que sus apartados los ponga el
+    // centro— las fija `_smoke-informe-asesoramiento.mjs`.
+    assert.match(
+      await textoInforme({ report: { reportType: "asesoramiento" } }),
+      /^Centro Aumenta\nInforme de asesoramiento\n/
+    );
     // Un tipo que no está en el catálogo cae en «Informe» también DENTRO del
     // documento, no solo en el nombre del fichero (son dos respaldos distintos).
     assert.match(await textoInforme({ report: { reportType: "wat" } }), /^Centro Aumenta\nInforme\n/);
