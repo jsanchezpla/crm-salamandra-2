@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import Select from "@/components/ui/Select.jsx";
@@ -30,6 +30,7 @@ import { SPECIALTY_LABEL } from "@/lib/clinica/specialties.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 import { enlaceDeVuelta } from "@/lib/clients/volver.js";
 import { rotuloDeBorrador } from "@/lib/clinica/borradorDeCita.js";
+import { CLAVE_ENTREVISTA, esEntrevistaInicial, repartirRegistros } from "@/lib/clinica/entrevistaInicial.js";
 
 // Los tipos que se pueden CREAR: la entrevista inicial ya no está (03/09/2026),
 // es un registro de sesión con su plantilla (lib/clinica/serialize.js).
@@ -314,7 +315,10 @@ function SessionDrawer({ session, patient, onClose, onPublish, onSaved, busy }) 
       <aside className="fixed right-0 top-14 lg:top-0 bottom-0 z-50 w-full sm:w-[640px] bg-white shadow-2xl overflow-y-auto">
         <div className="sticky top-0 bg-white border-b border-neutral-100 px-5 lg:px-7 py-4 flex items-start justify-between gap-3 z-10">
           <div className="min-w-0">
-            <div className="eyebrow">Sesión</div>
+            {/* El cajón dice qué documento es: desde Informes se abre una
+                entrevista inicial, y llamarla «Sesión» sería lo mismo que
+                seguir guardándola donde no toca (04/09/2026, AV-0042). */}
+            <div className="eyebrow">{esEntrevistaInicial(session) ? "Entrevista inicial" : "Sesión"}</div>
             <h2 className="font-display text-xl text-[var(--ink-900)] mt-1 leading-tight">{fmtDateTime(session.sessionDate)}</h2>
             <p className="text-[11px] text-neutral-500 mt-1">{patient.firstName} {patient.lastName} · {session.therapist?.name ?? "—"} · {session.duration ?? "—"} min</p>
           </div>
@@ -627,6 +631,14 @@ export default function PacienteFichaPage() {
   });
   const [patient, setPatient] = useState(null);
   const [sessions, setSessions] = useState([]);
+  /*
+   * Las ENTREVISTAS INICIALES, pedidas aparte (04/09/2026, AV-0042 de Aumenta).
+   * El listado de sesiones trae las 100 últimas, y la entrevista es el registro
+   * más antiguo del paciente: en cuanto deja de ser reciente se caería de la
+   * ficha justo cuando hay que ir a buscarla. `repartirRegistros` une las dos
+   * listas y las reparte entre las pestañas.
+   */
+  const [entrevistasSueltas, setEntrevistasSueltas] = useState([]);
   const [reports, setReports] = useState([]);
   const [coordinations, setCoordinations] = useState([]);
   const [citas, setCitas] = useState([]);
@@ -655,11 +667,29 @@ export default function PacienteFichaPage() {
   const [modalBusy, setModalBusy] = useState(false);
   const [modalError, setModalError] = useState(null);
 
+  /**
+   * Los registros del paciente, en DOS peticiones: las últimas sesiones (el
+   * listado de siempre) y sus entrevistas iniciales, que se archivan con los
+   * informes y no pueden depender de que la sesión sea reciente. Devuelve
+   * `[sesiones, entrevistas]`; una entrevista de esta semana llega por las dos
+   * y `repartirRegistros` la deduplica.
+   */
+  const pedirRegistros = useCallback(
+    () =>
+      Promise.all([
+        fetch(`/api/clinica/sessions?patientId=${id}`, { cache: "no-store" }).then((r) => r.json()).catch(() => null),
+        fetch(`/api/clinica/sessions?patientId=${id}&plantilla=${CLAVE_ENTREVISTA}&limit=50`, { cache: "no-store" })
+          .then((r) => r.json())
+          .catch(() => null),
+      ]).then(([sj, ej]) => [sj?.data?.sessions ?? [], ej?.data?.sessions ?? []]),
+    [id],
+  );
+
   const load = useCallback(() => {
     setLoading(true);
     Promise.all([
       fetch(`/api/pacientes/${id}`, { cache: "no-store" }).then((r) => (r.status === 404 ? "404" : r.json())),
-      fetch(`/api/clinica/sessions?patientId=${id}`, { cache: "no-store" }).then((r) => r.json()),
+      pedirRegistros(),
       fetch(`/api/clinica/reports?patientId=${id}`, { cache: "no-store" }).then((r) => r.json()),
       fetch(`/api/clinica/coordinations?patientId=${id}`, { cache: "no-store" }).then((r) => r.json()),
       // Citas del paciente. Resiliente: si el tenant no tiene módulo citas (403)
@@ -668,17 +698,28 @@ export default function PacienteFichaPage() {
         .then((r) => (r.ok ? r.json() : null))
         .catch(() => null),
     ])
-      .then(([pj, sj, rj, cj, bj]) => {
+      .then(([pj, [ultimas, entrevistasJ], rj, cj, bj]) => {
         if (pj === "404" || !pj?.ok) { setNotFound(true); return; }
         setPatient(pj.data);
-        setSessions(sj?.data?.sessions ?? []);
+        setSessions(ultimas);
+        setEntrevistasSueltas(entrevistasJ);
         setReports(rj?.data?.reports ?? []);
         setCoordinations(cj?.data?.coordinations ?? []);
         setCitas(bj?.data?.bookings ?? []);
       })
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, pedirRegistros]);
+
+  /*
+   * Dónde va cada registro en la ficha (04/09/2026, AV-0042): las entrevistas
+   * iniciales, con los informes; el resto, en «Sesiones». La regla vive en
+   * lib/clinica/entrevistaInicial.js, que es también quien las nombra en el PDF.
+   */
+  const { sesiones, entrevistas } = useMemo(
+    () => repartirRegistros(sessions, entrevistasSueltas),
+    [sessions, entrevistasSueltas],
+  );
 
   useEffect(() => { load(); }, [load]);
 
@@ -893,7 +934,7 @@ export default function PacienteFichaPage() {
       <div className="border-b border-neutral-200">
         <div className="flex gap-1 overflow-x-auto">
           {TABS.map((t) => {
-            const count = t.key === "sesiones" ? sessions.length : t.key === "informes" ? reports.length : t.key === "coordinaciones" ? coordinations.length : null;
+            const count = t.key === "sesiones" ? sesiones.length : t.key === "informes" ? reports.length + entrevistas.length : t.key === "coordinaciones" ? coordinations.length : null;
             return (
               <button key={t.key} onClick={() => setActiveTab(t.key)} className={`text-xs font-medium px-4 py-2.5 border-b-2 transition-colors whitespace-nowrap ${activeTab === t.key ? "border-[var(--color-primary,#1B3A2D)] text-[var(--ink-900)]" : "border-transparent text-neutral-500 hover:text-neutral-700"}`}>
                 {t.label}
@@ -1099,15 +1140,22 @@ export default function PacienteFichaPage() {
           </div>
         )}
 
+        {/* Las entrevistas iniciales NO salen aquí: van con los informes
+            (04/09/2026, AV-0042 de Aumenta). Se escriben como registro de
+            sesión —esa parte no cambia— pero se archivan donde se buscan. */}
         {activeTab === "sesiones" && (
-          sessions.length === 0 ? (
+          sesiones.length === 0 ? (
             <div className="bg-white border border-dashed border-neutral-200 rounded-xl p-10 text-center">
               <p className="text-sm text-neutral-600">Sin sesiones registradas.</p>
-              <p className="text-[11px] text-neutral-400 mt-1">Sube un audio o crea una sesión para empezar el historial.</p>
+              <p className="text-[11px] text-neutral-400 mt-1">
+                {entrevistas.length > 0
+                  ? "Su entrevista inicial está en la pestaña Informes."
+                  : "Sube un audio o crea una sesión para empezar el historial."}
+              </p>
             </div>
           ) : (
             <div className="bg-white border border-neutral-100 rounded-xl divide-y divide-neutral-100">
-              {sessions.map((se) => {
+              {sesiones.map((se) => {
                 const ss = sStatus(se.status);
                 return (
                   <button key={se.id} onClick={() => setOpenSession(se)} className="w-full text-left p-4 lg:p-5 hover:bg-neutral-50/50 transition-colors">
@@ -1147,10 +1195,37 @@ export default function PacienteFichaPage() {
         )}
 
         {activeTab === "informes" && (
-          reports.length === 0 ? (
+          reports.length === 0 && entrevistas.length === 0 ? (
             <div className="bg-white border border-dashed border-neutral-200 rounded-xl p-10 text-center"><p className="text-sm text-neutral-600">Sin informes generados.</p></div>
           ) : (
             <div className="bg-white border border-neutral-100 rounded-xl divide-y divide-neutral-100">
+              {/* LA ENTREVISTA INICIAL, ARRIBA (04/09/2026, AV-0042 de Aumenta).
+                  Se escribe como registro de sesión —con sus 15 apartados y la
+                  IA del audio o del bloc de notas, que es lo que se decidió el
+                  03/09— pero se guarda aquí, con los informes: es el documento
+                  al que se vuelve, y entre las sesiones semanales de un paciente
+                  (241 en el que más) no se encontraba. Se abre en el mismo cajón
+                  que desde Sesiones y su PDF es el del registro. */}
+              {entrevistas.map((se) => (
+                <div key={se.id} className="p-4 flex items-center justify-between gap-3 hover:bg-neutral-50/50">
+                  <button type="button" onClick={() => setOpenSession(se)} className="min-w-0 flex-1 text-left">
+                    <div className="font-medium text-[var(--ink-900)] text-sm">Entrevista inicial</div>
+                    <div className="text-[10px] text-neutral-400 tabular">{fmtDate(se.sessionDate)} · {se.therapist?.name ?? "—"}</div>
+                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <a
+                      href={`/api/clinica/sessions/${se.id}/pdf`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Abre el PDF en una pestaña nueva. No lo envía a nadie."
+                      className="text-[10px] font-medium text-neutral-600 border border-neutral-200 hover:border-neutral-400 px-2 py-0.5 rounded-full"
+                    >
+                      PDF
+                    </a>
+                    <span className="text-[10px] font-medium text-neutral-600 bg-neutral-100 px-2 py-0.5 rounded-full">{se.statusLabel}</span>
+                  </div>
+                </div>
+              ))}
               {/* La fila ya no es UN enlace: lleva dos destinos. El texto abre
                   el informe donde se edita, y «PDF» abre el documento en una
                   pestaña sin entregárselo a nadie (26/08/2026). Un <a> dentro
@@ -1236,13 +1311,11 @@ export default function PacienteFichaPage() {
           // Tras tocar la preparación o los adjuntos hay que releer: el cajón
           // enseña la sesión que trajo la lista, y se quedaría con la vieja.
           onSaved={async () => {
-            const j = await fetch(`/api/clinica/sessions?patientId=${id}`, { cache: "no-store" })
-              .then((r) => r.json())
-              .catch(() => null);
-            const arr = j?.data?.sessions ?? [];
-            if (arr.length) {
-              setSessions(arr);
-              const actual = arr.find((s) => s.id === openSession.id);
+            const [ultimas, entrevistasJ] = await pedirRegistros();
+            if (ultimas.length || entrevistasJ.length) {
+              setSessions(ultimas);
+              setEntrevistasSueltas(entrevistasJ);
+              const actual = [...ultimas, ...entrevistasJ].find((s) => s.id === openSession.id);
               if (actual) setOpenSession(actual);
             }
           }}

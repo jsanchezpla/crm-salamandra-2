@@ -379,9 +379,16 @@ Pestañas (`TABS` en `app/(dashboard)/pacientes/[id]/page.jsx`):
    /api/pacientes/[id]/plan`, auditado).
 3. **Sesiones**: lista. Click en una sesión abre un drawer con el registro en
    3 partes (preparación + adjuntos, informe, devolución de la familia).
-   Respeta la regla #13 (`top-14 lg:top-0`).
-4. **Informes**: listado de informes (evolutivo / entrevista inicial / alta /
-   derivación); enlaza a `/clinica/informes`.
+   Respeta la regla #13 (`top-14 lg:top-0`). **Sin las entrevistas iniciales**
+   (04/09/2026, AV-0042): están en Informes.
+4. **Informes**: las **entrevistas iniciales** del paciente y debajo los
+   informes (evolutivo / alta / derivación / beca), que enlazan a
+   `/clinica/informes`. La entrevista se escribe como registro de sesión pero
+   se archiva aquí; abre el mismo cajón que desde Sesiones y su botón PDF es
+   el del registro (`/api/clinica/sessions/[id]/pdf`). La regla —qué es una
+   entrevista y dónde va— vive en `lib/clinica/entrevistaInicial.js`, y la
+   ficha las pide aparte (`/api/clinica/sessions?plantilla=entrevista_inicial`)
+   para que no dependan de estar entre las 100 últimas sesiones.
 5. **Coordinaciones**: primero la agenda de **contactos externos** del paciente
    (`PatientExternalContactsSection`, `/api/pacientes/[id]/contactos/**`), luego
    las actas, con alta (`NuevaCoordinacionModal`).

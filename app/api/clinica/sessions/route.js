@@ -3,7 +3,7 @@ import { clientIdOfPatient } from "../../../../lib/clinica/patientClient.js";
 import { ok, created, error, forbidden } from "../../../../lib/utils/apiResponse.js";
 import { serializeSession } from "../../../../lib/clinica/serialize.js";
 import { logClinicaAudit, auditSummary } from "../../../../lib/clinica/audit.js";
-import { limpiarContentSections } from "../../../../lib/clinica/plantillas.js";
+import { limpiarContentSections, CLAVE_PLANTILLA } from "../../../../lib/clinica/plantillas.js";
 import { estadoDeLasCitas } from "../../../../lib/clinica/borradorDeCita.js";
 
 function gate(ctx) {
@@ -23,6 +23,17 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   // esa cita ya tiene registro —y decir «Seguir con la sesión» en vez de
   // «Preparar sesión»— sin tener que traerse las 22.045 del paciente.
   if (sp.get("bookingId")) where.bookingId = sp.get("bookingId");
+  /*
+   * Escrito con qué PLANTILLA (04/09/2026, AV-0042 de Aumenta). La ficha del
+   * paciente pide las ENTREVISTAS INICIALES aparte, porque ya no viven en la
+   * pestaña de sesiones sino con los informes, y ahí no pueden depender de que
+   * la sesión esté entre las últimas del listado: la entrevista es el registro
+   * más antiguo del paciente, y 50 de los 587 pacientes con historia de Aumenta
+   * pasan de 100 sesiones. Filtra por la clave dentro del JSONB
+   * (`content_sections->>'plantilla'`), que es donde se guarda.
+   */
+  const plantilla = (sp.get("plantilla") ?? "").trim();
+  if (plantilla) where.contentSections = { [CLAVE_PLANTILLA]: plantilla };
   const limit = Math.min(200, Math.max(1, parseInt(sp.get("limit") ?? "100", 10) || 100));
   const rows = await ClinicSession.findAll({
     where,
