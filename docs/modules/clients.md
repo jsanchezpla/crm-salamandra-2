@@ -92,6 +92,7 @@ campos. Resumen:
 | `/api/clients/[id]` | DELETE | Borrar. Bloquea si tiene facturas. **GC** del directorio físico de attachments | JWT |
 | `/api/clients/[id]/interactions` | GET/POST | Timeline legacy de interacciones (call/email/meeting/note) | JWT |
 | `/api/clients/[id]/notes` | GET/POST | Notas internas (ver sección abajo) | JWT |
+| `/api/clients/[id]/notes/[noteId]` | PATCH | `{ content }`: corregir una entrada sin perder su fecha (04/09/2026). 422 si viene vacío, 404 si la nota no es de esa ficha | JWT + `hasModule(clients)` |
 | `/api/clients/[id]/notes/[noteId]` | DELETE | Borrar nota | JWT |
 | `/api/clients/[id]/attachments` | GET/POST | Archivos PDF (ver sección abajo) | JWT |
 | `/api/clients/[id]/attachments/[attachmentId]` | PATCH | `{ visibleToClient }`: si el paciente lo ve en su portal (solo adjuntos `source='ficha'`) | JWT + `hasModule(clients)` |
@@ -328,6 +329,31 @@ updatedAt   TIMESTAMPTZ
 `Interaction` se mantiene para tenants que ya lo usan (spain_enzymes
 tiene historial). En la ficha de paciente de nutri_laura, el bloque
 legacy aparece collapsible al final (solo si existe contenido).
+
+### Corregir una entrada (04/09/2026, AV-0040 de Laura)
+
+Hasta el 04/09/2026 una entrada solo se podía **borrar**: con una errata había
+que tirarla entera y volver a escribirla, y la copia nueva nacía con la fecha
+de hoy — en una historia clínica, perder el día en que se escribió algo no es
+un detalle. Ahora hay `PATCH /api/clients/:id/notes/:noteId` y la pestaña la
+corrige en su sitio (textarea sobre la propia entrada; Escape cancela; una a
+la vez).
+
+- La entrada **conserva su `createdAt`**; lo que se mueve es `updatedAt`, y de
+  ahí sale el «editada hace X» que se pinta al lado del autor. Regla en
+  `lib/clients/notas.js` (`fueEditada`, margen de 2 s para no marcar como
+  editado lo que acaba de nacer) — en el JSX no hay ningún `if` suelto.
+- **Quién puede: los mismos que pueden borrar.** Sin restricción por autor, la
+  misma política que el DELETE; el día que se restrinja, se restringen las dos
+  a la vez.
+- La auditoría (`client.note.updated`) guarda quién, cuándo y de qué ficha,
+  **nunca el texto**: `master.audit_logs` lo comparten todos los clientes y en
+  una historia clínica ahí hay datos de salud. No queda copia del texto
+  anterior en ningún sitio: se corrige, no se versiona.
+- Prueba: `scripts/_smoke-editar-nota.mjs`.
+
+No hizo falta migración: `client_notes.updated_at` existe desde que la creó
+`migrate-client-attachments-and-notes.js`.
 
 ### Caveat JWT antiguo
 
@@ -795,7 +821,7 @@ claves, paneles, tablas y endpoints siguen siendo los de siempre —
 | Tab | Componente | Endpoints leídos | Notas |
 |---|---|---|---|
 | Datos (antes "Información") | `PatientCard` + delete inline | `GET/PUT/DELETE /api/clients/:id` | Edición inline; `editMode`/`editForm` viven en el padre para sobrevivir cambios de tab |
-| Historia clínica (antes "Notas") | `components/clients/ClientNotesPanel.jsx` ⁽²⁾ | `GET/POST /api/clients/:id/notes`, `DELETE /api/clients/:id/notes/:noteId` | Paginación incremental "Cargar más" (limit 50). Sin restricción de borrado por autor (Laura es única usuaria) |
+| Historia clínica (antes "Notas") | `components/clients/ClientNotesPanel.jsx` ⁽²⁾ | `GET/POST /api/clients/:id/notes`, `PATCH`/`DELETE /api/clients/:id/notes/:noteId` | Paginación incremental "Cargar más" (limit 50). Editar y borrar inline, sin restricción por autor (Laura es única usuaria) |
 | Documentos (antes "Adjuntos") | `components/clients/ClientAttachmentsPanel.jsx` ⁽²⁾ | `GET/POST /api/clients/:id/attachments`, `DELETE`, `GET .../download`, `PATCH` (visibilidad), `GET /contract` (firmas) | Drop zone + validación frontend (cualquier tipo, ≤25MB, ≤50 archivos); «que la paciente lo vea»; tarjeta Firmas |
 | Sesiones (antes "Citas") | `components/clients/ClientBookingsPanel.jsx` ⁽²⁾ | `GET /api/citas/bookings?clientId=&clientEmail=`, `PATCH .../confirm`, `PATCH .../reject` | En la consulta cada cita ES una sesión de seguimiento. Confirm/Reject inline para `pending` con mini-modal opcional para motivo |
 | Pautas (antes "Plan") | `ClientPlansPanel.jsx` (`modules/nutricion/`) | `GET /api/clients/:id/plans`, `POST /api/nutricion/plans/:id/reapply-template` | Plan activo + histórico archivado (Recetario C4) |
@@ -835,10 +861,10 @@ sin entrada en `UI_OVERRIDES` ven el módulo default.
 
 ### Backlog UI (post-Checkpoint 3)
 
-- PATCH endpoint `/api/clients/:id/notes/:noteId` para edición inline de
-  notas (hoy solo crear/borrar).
-- Enforce ownership backend en `DELETE` de notes y attachments cuando
-  entre una segunda usuaria al tenant.
+- ~~PATCH endpoint `/api/clients/:id/notes/:noteId` para edición inline de
+  notas~~ — hecho el 04/09/2026 (AV-0040 de Laura), ver «Corregir una entrada».
+- Enforce ownership backend en `PATCH`/`DELETE` de notes y en `DELETE` de
+  attachments cuando entre una segunda usuaria al tenant.
 - Drawer detalle de Booking en la tab Citas (click en fila).
 - Botón "Marcar completada" para bookings `confirmed`.
 - FK física `Booking.clientId → clients.id` opcional, evitando que un
