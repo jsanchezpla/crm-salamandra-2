@@ -31,6 +31,10 @@ export default async function ProductosPage() {
   let conInventario = false;
   let conPedidos = false;
   let conTienda = false;
+  // Los SERVICIOS (04/09/2026): un centro que vende sesiones ve, junto a sus
+  // artículos, cada cuota con quién está apuntado y cuánto suma. Hacen falta
+  // los dos módulos: las cuotas son de Facturación y los tipos, de Citas.
+  let conServicios = false;
   try {
     const { Tenant, TenantModule } = getMasterModels();
     const tenant = slug ? await Tenant.findOne({ where: { slug } }) : null;
@@ -47,6 +51,7 @@ export default async function ProductosPage() {
       conInventario = avanzado && encendidos.has(MODULE_KEYS.INVENTORY);
       conPedidos = avanzado && encendidos.has(MODULE_KEYS.ORDERS);
       conTienda = avanzado && encendidos.has(MODULE_KEYS.TIENDA);
+      conServicios = encendidos.has(MODULE_KEYS.BILLING) && encendidos.has(MODULE_KEYS.CITAS);
     }
   } catch {
     // Ante la duda, cerrado: la API gatea igual, así que enseñar la pantalla
@@ -61,6 +66,7 @@ export default async function ProductosPage() {
       conInventario={conInventario}
       conPedidos={conPedidos}
       conTienda={conTienda}
+      conServicios={conServicios}
     />
   );
 }

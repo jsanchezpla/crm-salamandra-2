@@ -182,6 +182,130 @@ function RankingVentas({ filas }) {
  * pantalla: la pregunta «¿qué se vende?» y la pregunta «¿a cuánto lo tengo?»
  * se hacen mirando la misma lista.
  */
+/**
+ * SERVICIOS — lo que vende un centro que vende sesiones (04/09/2026, Aumenta
+ * por Rodrigo: «ahí saldrán todas las citas y las cuotas asignadas a cada cita
+ * para medir de forma tanto terapéutica como económica a qué están apuntados
+ * los pacientes y qué deben pagar»).
+ *
+ * Una fila por cuota del catálogo, y en la misma fila las dos medidas: qué
+ * tipos de cita la cubren y cuántos pacientes están apuntados (lo terapéutico),
+ * cuántas citas la llevan este mes y cuánto suma al mes (lo económico).
+ *
+ * Debajo, lo que falta por conectar: los tipos de cita sin cuota. Esa lista es
+ * la mitad del encargo — mientras tenga filas, hay citas que nacen sin decir de
+ * qué se cobran.
+ */
+function Servicios() {
+  const [datos, setDatos] = useState(null);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let vivo = true;
+    fetch("/api/productos/servicios", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (!vivo) return;
+        if (!j.ok) throw new Error(j.error || "No se han podido cargar los servicios");
+        setDatos(j.data);
+      })
+      .catch((e) => vivo && setError(e.message))
+      .finally(() => vivo && setCargando(false));
+    return () => { vivo = false; };
+  }, []);
+
+  if (cargando) return <div className="text-[12.5px] text-neutral-400">Cargando servicios…</div>;
+  if (error) return <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-700">{error}</div>;
+  if (!datos?.disponible) {
+    return (
+      <div className="rounded-xl border border-dashed border-neutral-200 bg-white px-4 py-8 text-center text-[12.5px] text-neutral-500">
+        Los servicios salen del catálogo de cuotas de Facturación. Este centro no lo tiene.
+      </div>
+    );
+  }
+
+  const { servicios = [], sinCuota = [], totales } = datos;
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Kpi label="Servicios con gente" value={`${totales.conCuotaViva}/${totales.servicios}`} sub="cuotas del catálogo en uso" />
+        <Kpi label="Pacientes apuntados" value={totales.pacientes} sub="con cuota viva" />
+        <Kpi label="Al mes" value={fmtMoney(totales.alMes)} sub="a tarifa del catálogo" />
+        <Kpi label="Citas este mes" value={totales.citas} sub="con su cuota puesta" />
+      </div>
+
+      <div className="rounded-xl border border-neutral-200 bg-white overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-[12.5px]">
+            <thead className="bg-neutral-50 text-neutral-500">
+              <tr>
+                <th className="text-left font-medium px-4 py-2.5">Servicio</th>
+                <th className="text-left font-medium px-4 py-2.5">Tipos de cita que lo cubren</th>
+                <th className="text-right font-medium px-4 py-2.5">Pacientes</th>
+                <th className="text-right font-medium px-4 py-2.5">Citas del mes</th>
+                <th className="text-right font-medium px-4 py-2.5">Al mes</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-100">
+              {servicios.map((s) => (
+                <tr key={s.id} className={s.cuotas === 0 ? "text-neutral-400" : ""}>
+                  <td className="px-4 py-2.5">
+                    <div className="text-neutral-800">{s.nombre}</div>
+                    <div className="text-[11px] text-neutral-400">{fmtMoney(s.precio)} al mes</div>
+                  </td>
+                  <td className="px-4 py-2.5">
+                    {s.tipos.length ? (
+                      <span className="text-neutral-600">{s.tipos.map((t) => t.nombre).join(", ")}</span>
+                    ) : (
+                      <span className="text-amber-700">Sin tipo de cita</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5 text-right tabular-nums">
+                    {s.pacientes}
+                    {s.sinPaciente > 0 && (
+                      <span className="text-[11px] text-amber-700" title="Cuotas a nombre de la familia, sin decir de qué hijo son">
+                        {" "}+{s.sinPaciente} sin hijo
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5 text-right tabular-nums">{s.citas || "—"}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums text-neutral-800">{s.alMes ? fmtMoney(s.alMes) : "—"}</td>
+                </tr>
+              ))}
+              {servicios.length === 0 && (
+                <tr><td colSpan={5} className="px-4 py-8 text-center text-neutral-400">Sin cuotas en el catálogo.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <p className="text-[11px] text-neutral-400">
+        «Al mes» es lo que dice la tarifa: las cuotas vivas de cada servicio por su precio. Una
+        familia con precio pactado paga lo suyo, y eso se ve en su cuota.
+      </p>
+
+      {sinCuota.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <div className="text-[12.5px] font-medium text-amber-900">
+            {sinCuota.length} tipo{sinCuota.length === 1 ? "" : "s"} de cita sin cuota puesta
+          </div>
+          <p className="text-[11.5px] text-amber-800 mt-0.5">
+            Las citas de estos tipos nacen sin decir de qué se cobran. Se les pone su cuota en{" "}
+            <Link href="/citas/tipos" className="underline">Citas → Tipos</Link>.
+          </p>
+          <div className="text-[11.5px] text-amber-900/80 mt-1.5">
+            {sinCuota.slice(0, 12).map((t) => t.nombre).join(" · ")}
+            {sinCuota.length > 12 && ` … y ${sinCuota.length - 12} más`}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Estadisticas({ conPedidos }) {
   const [rango, setRango] = useState({ desde: primeroDeMes(), hasta: hoyISO() });
   const [datos, setDatos] = useState(null);
@@ -344,7 +468,22 @@ function Estadisticas({ conPedidos }) {
   );
 }
 
-export default function ProductosModule({ avanzado = false, conInventario = false, conPedidos = false, conTienda = false }) {
+export default function ProductosModule({
+  avanzado = false,
+  conInventario = false,
+  conPedidos = false,
+  conTienda = false,
+  /*
+   * ¿Este centro vende SESIONES además de artículos? (04/09/2026, Aumenta por
+   * Rodrigo: «eso hay que dejarlo reflejado en la pestaña de producto»). Con
+   * Citas y Facturación, el catálogo de lo que se vende tiene dos mitades: los
+   * artículos de siempre y los servicios —cada cuota con quién está apuntado y
+   * cuánto suma—. Sin esos módulos la pestaña no existe y la pantalla es la de
+   * antes.
+   */
+  conServicios = false,
+}) {
+  const [vista, setVista] = useState("articulos");
   const [productos, setProductos] = useState([]);
   const [categorias, setCategorias] = useState([]);
   const [cargando, setCargando] = useState(false);
@@ -480,6 +619,29 @@ export default function ProductosModule({ avanzado = false, conInventario = fals
         </button>
       </div>
 
+      {conServicios && (
+        <div className="flex gap-1 border-b border-neutral-200">
+          {[["articulos", "Artículos"], ["servicios", "Servicios"]].map(([k, l]) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setVista(k)}
+              className={`text-[12.5px] font-medium px-4 py-2 border-b-2 -mb-px transition-colors ${
+                vista === k
+                  ? "border-[var(--color-primary,#1B3A2D)] text-neutral-800"
+                  : "border-transparent text-neutral-500 hover:text-neutral-700"
+              }`}
+            >
+              {l}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {vista === "servicios" && conServicios && <Servicios />}
+
+      {(vista === "articulos" || !conServicios) && (
+        <>
       {avanzado && <Estadisticas conPedidos={conPedidos} />}
 
       {accesos.length > 0 && (
@@ -590,6 +752,9 @@ export default function ProductosModule({ avanzado = false, conInventario = fals
           </table>
         </div>
       </div>
+
+        </>
+      )}
 
       {/* ── Panel de alta / edición ───────────────────────────────────────── */}
       {panel && (
