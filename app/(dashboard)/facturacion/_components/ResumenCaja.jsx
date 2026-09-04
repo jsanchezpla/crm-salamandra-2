@@ -8,16 +8,44 @@
  * no una fila que falta. La domiciliación cuenta como banco (para quien mira el
  * día es lo mismo); un cobro PENDIENTE no cuenta, y por eso se enseña aparte —
  * desde que las cuotas se generan solas, son cientos de filas al mes.
+ *
+ * ── Y DEBAJO DE CADA DÍA, SUS COBROS (04/09/2026, Rodrigo) ─────────────────
+ * «Solo sale el total del día, tanto en efectivo como en tarjeta como en
+ * banco»: con eso se cuadra el cajón, pero no se puede repasar. Cada día se
+ * despliega y enseña la lista de lo que lo compone —hora, de quién es, cómo
+ * pagó y cuánto—, que suma exactamente el total de su fila. Se abre pulsando el
+ * día, o todos a la vez con la casilla de arriba; y cuando se mira UN SOLO día
+ * (mismo desde y hasta, el cierre de caja de hoy) sale ya abierto, porque
+ * entonces la lista es justo lo que se ha venido a ver.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { fmtMoney, fmtDate } from "./Kpi.jsx";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition";
 
+// Los mismos rótulos que la pantalla de Cobros: es el mismo dato.
+const METODOS = {
+  card: "Tarjeta",
+  transfer: "Transferencia",
+  cash: "Efectivo",
+  direct_debit: "Domiciliación",
+};
+
 const hoy = () => new Date().toISOString().slice(0, 10);
 const primeroDeMes = () => `${new Date().toISOString().slice(0, 7)}-01`;
+
+/** La hora del cobro, en Madrid: el servidor va en UTC y el cajón, no. */
+function fmtHora(iso) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleTimeString("es-ES", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Madrid",
+  });
+}
 
 export default function ResumenCaja({ cajaId }) {
   const [desde, setDesde] = useState(primeroDeMes());
@@ -26,6 +54,20 @@ export default function ResumenCaja({ cajaId }) {
   const [cargando, setCargando] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const [soloConMovimiento, setSoloConMovimiento] = useState(true);
+  // Qué días están desplegados. `verTodos` los abre de golpe; un solo día
+  // pedido (desde === hasta) abre el suyo sin que haya que pulsarlo.
+  const [abiertos, setAbiertos] = useState(() => new Set());
+  const [verTodos, setVerTodos] = useState(false);
+  const unSoloDia = desde === hasta;
+
+  const alternar = useCallback((fecha) => {
+    setAbiertos((previos) => {
+      const siguiente = new Set(previos);
+      if (siguiente.has(fecha)) siguiente.delete(fecha);
+      else siguiente.add(fecha);
+      return siguiente;
+    });
+  }, []);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -45,6 +87,7 @@ export default function ResumenCaja({ cajaId }) {
   }, [desde, hasta, cajaId]);
 
   useEffect(() => { cargar(); }, [cargar]);
+  useEffect(() => { setAbiertos(new Set()); }, [desde, hasta, cajaId]);
 
   const dias = (datos?.dias ?? []).filter(
     (d) => !soloConMovimiento || d.cobrado !== 0 || d.movimientos.entradas !== 0 || d.movimientos.salidas !== 0
@@ -64,6 +107,10 @@ export default function ResumenCaja({ cajaId }) {
         <label className="flex items-center gap-2 text-[12.5px] text-neutral-600">
           <input type="checkbox" checked={soloConMovimiento} onChange={(e) => setSoloConMovimiento(e.target.checked)} />
           Ocultar los días sin nada
+        </label>
+        <label className="flex items-center gap-2 text-[12.5px] text-neutral-600">
+          <input type="checkbox" checked={verTodos} onChange={(e) => setVerTodos(e.target.checked)} />
+          Ver los cobros de cada día
         </label>
       </div>
 
@@ -98,22 +145,120 @@ export default function ResumenCaja({ cajaId }) {
                   Ningún cobro en estas fechas.
                 </td></tr>
               )}
-              {!cargando && dias.map((d) => (
-                <tr key={d.fecha} className="border-t border-neutral-100">
-                  <td className="px-3 py-2 text-neutral-700">{fmtDate(d.fecha)}</td>
-                  <td className="px-3 py-2 text-right tabular text-neutral-600">{d.efectivo.importe ? fmtMoney(d.efectivo.importe) : "—"}</td>
-                  <td className="px-3 py-2 text-right tabular text-neutral-600">{d.tarjeta.importe ? fmtMoney(d.tarjeta.importe) : "—"}</td>
-                  <td className="px-3 py-2 text-right tabular text-neutral-600">{d.banco.importe ? fmtMoney(d.banco.importe) : "—"}</td>
-                  <td className="px-3 py-2 text-right tabular font-semibold text-neutral-900">{fmtMoney(d.cobrado)}</td>
-                  <td className="px-3 py-2 text-right tabular text-neutral-500">
-                    {d.movimientos.entradas === 0 && d.movimientos.salidas === 0
-                      ? "—"
-                      : <span className={d.movimientos.neto < 0 ? "text-rose-600" : "text-emerald-700"}>
-                          {d.movimientos.neto > 0 ? "+" : ""}{fmtMoney(d.movimientos.neto)}
-                        </span>}
-                  </td>
-                </tr>
-              ))}
+              {!cargando && dias.map((d) => {
+                const cobros = d.lista ?? [];
+                const abierto = verTodos || unSoloDia || abiertos.has(d.fecha);
+                const desplegable = cobros.length > 0 || d.pendientes?.cobros > 0;
+                return (
+                  <Fragment key={d.fecha}>
+                    <tr
+                      className={`border-t border-neutral-100 ${desplegable ? "cursor-pointer hover:bg-neutral-50" : ""}`}
+                      onClick={desplegable ? () => alternar(d.fecha) : undefined}
+                    >
+                      <td className="px-3 py-2 text-neutral-700">
+                        {desplegable ? (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); alternar(d.fecha); }}
+                            aria-expanded={abierto}
+                            className="inline-flex items-center gap-1.5 text-left hover:text-neutral-900 transition-colors"
+                          >
+                            <span className={`text-neutral-400 transition-transform ${abierto ? "rotate-90" : ""}`} aria-hidden="true">›</span>
+                            {fmtDate(d.fecha)}
+                            {cobros.length > 0 && (
+                              <span className="text-[11px] text-neutral-400">
+                                · {cobros.length} {cobros.length === 1 ? "cobro" : "cobros"}
+                              </span>
+                            )}
+                          </button>
+                        ) : (
+                          <span className="pl-[18px] inline-block">{fmtDate(d.fecha)}</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular text-neutral-600">{d.efectivo.importe ? fmtMoney(d.efectivo.importe) : "—"}</td>
+                      <td className="px-3 py-2 text-right tabular text-neutral-600">{d.tarjeta.importe ? fmtMoney(d.tarjeta.importe) : "—"}</td>
+                      <td className="px-3 py-2 text-right tabular text-neutral-600">{d.banco.importe ? fmtMoney(d.banco.importe) : "—"}</td>
+                      <td className="px-3 py-2 text-right tabular font-semibold text-neutral-900">{fmtMoney(d.cobrado)}</td>
+                      <td className="px-3 py-2 text-right tabular text-neutral-500">
+                        {d.movimientos.entradas === 0 && d.movimientos.salidas === 0
+                          ? "—"
+                          : <span className={d.movimientos.neto < 0 ? "text-rose-600" : "text-emerald-700"}>
+                              {d.movimientos.neto > 0 ? "+" : ""}{fmtMoney(d.movimientos.neto)}
+                            </span>}
+                      </td>
+                    </tr>
+
+                    {/* El detalle del día: lo que suma la fila de arriba, cobro
+                        a cobro y en orden de hora. */}
+                    {abierto && desplegable && (
+                      <tr className="bg-neutral-50/70">
+                        <td colSpan={6} className="px-3 pb-3 pt-1">
+                          {cobros.length > 0 && (
+                            <table className="w-full text-[12px]">
+                              <thead className="text-neutral-400">
+                                <tr>
+                                  <th className="text-left font-medium px-2 py-1 w-16">Hora</th>
+                                  <th className="text-left font-medium px-2 py-1">Paciente / cliente</th>
+                                  <th className="text-left font-medium px-2 py-1">Método</th>
+                                  <th className="text-left font-medium px-2 py-1">Factura</th>
+                                  <th className="text-right font-medium px-2 py-1">Importe</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {cobros.map((c) => (
+                                  <tr key={c.id} className="border-t border-neutral-200/70">
+                                    <td className="px-2 py-1.5 text-neutral-500 tabular">{fmtHora(c.paidAt)}</td>
+                                    {/* El paciente primero y el pagador detrás, como en Cobros
+                                        (03/09/2026, Aumenta). Sin paciente queda el cliente solo. */}
+                                    <td className="px-2 py-1.5 text-neutral-700">
+                                      {c.patientName ? (
+                                        <>
+                                          {c.patientName}
+                                          <span className="text-neutral-400"> · {c.clientName ?? "—"}</span>
+                                        </>
+                                      ) : (
+                                        c.clientName ?? <span className="text-neutral-400">—</span>
+                                      )}
+                                    </td>
+                                    <td className="px-2 py-1.5 text-neutral-600">{METODOS[c.method] ?? c.method}</td>
+                                    <td className="px-2 py-1.5 font-mono text-[11.5px]">
+                                      {c.invoiceId ? (
+                                        <Link
+                                          href={`/facturacion/facturas/${c.invoiceId}`}
+                                          onClick={(e) => e.stopPropagation()}
+                                          className="text-[var(--color-primary,#1B3A2D)] hover:underline"
+                                        >
+                                          {c.invoiceNumber}
+                                        </Link>
+                                      ) : (
+                                        <span className="text-neutral-400">
+                                          sin factura{c.periodMonth ? ` · ${c.periodMonth}` : ""}
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="px-2 py-1.5 text-right tabular font-medium text-neutral-800">{fmtMoney(c.amount)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
+                          {/* Los pendientes de ese día no están en la lista porque no
+                              suman: se dicen para que nadie los eche en falta. */}
+                          {d.pendientes?.cobros > 0 && (
+                            <p className="text-[11.5px] text-neutral-500 mt-2 px-2">
+                              Y {d.pendientes.cobros} {d.pendientes.cobros === 1 ? "cobro pendiente" : "cobros pendientes"} por{" "}
+                              {fmtMoney(d.pendientes.importe)}, que no cuentan en la caja hasta que entren.{" "}
+                              <Link href="/facturacion/cobros" onClick={(e) => e.stopPropagation()} className="underline hover:text-neutral-700">
+                                Verlos en Cobros
+                              </Link>
+                            </p>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
             {datos && dias.length > 0 && (
               <tfoot>

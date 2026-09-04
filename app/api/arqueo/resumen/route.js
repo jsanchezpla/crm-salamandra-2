@@ -1,7 +1,8 @@
 import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, forbidden, error } from "../../../../lib/utils/apiResponse.js";
-import { resumenDelDia, saldoDeMovimientos, cestaDe } from "../../../../lib/billing/caja.js";
+import { resumenDelDia, saldoDeMovimientos, cestaDe, cobrosDelDia } from "../../../../lib/billing/caja.js";
+import { billingHasPatients } from "../../../../lib/billing/patientLink.js";
 import { madridToday, madridDayRange } from "../../../../lib/utils/madridDate.js";
 
 /**
@@ -41,9 +42,32 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   const { start } = madridDayRange(mediodia(desde));
   const { end } = madridDayRange(mediodia(hasta));
 
+  /*
+   * El cobro viaja con QUIÉN pagó y por qué, porque la fila del día se
+   * despliega y enseña la lista (04/09/2026, Rodrigo). El cliente llega por los
+   * dos caminos de siempre —el enlace directo del cobro y el de su factura—,
+   * como en la pantalla de Cobros; el paciente solo donde hay tabla de
+   * pacientes. `required: false` en todos: un cobro sin factura, sin ficha o
+   * sin paciente tiene que seguir saliendo en el arqueo.
+   */
+  const { Client, Invoice, Patient } = tenantModels;
+  const conPaciente = Boolean(Patient) && billingHasPatients(hasModule);
+  const include = [];
+  if (Invoice) {
+    include.push({
+      model: Invoice, as: "invoice", attributes: ["id", "number"], required: false,
+      ...(Client ? { include: [{ model: Client, as: "client", attributes: ["id", "name"], required: false }] } : {}),
+    });
+  }
+  if (Client) include.push({ model: Client, as: "client", attributes: ["id", "name"], required: false });
+  if (conPaciente) {
+    include.push({ model: Patient, as: "patient", attributes: ["id", "firstName", "lastName"], required: false });
+  }
+
   const cobros = await Payment.findAll({
     where: { paidAt: { [Op.gte]: start, [Op.lt]: end } },
-    attributes: ["id", "amount", "method", "status", "paidAt"],
+    attributes: ["id", "amount", "method", "status", "paidAt", "clientId", "invoiceId", "periodMonth"],
+    include,
   });
 
   const movimientos = await CashMovement.findAll({
@@ -65,10 +89,18 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     if (dias.has(dia)) dias.get(dia).movimientos.push(m.toJSON());
   }
 
-  const filas = [...dias.entries()].map(([fecha, { cobros: c, movimientos: m }]) => ({
-    fecha,
-    ...resumenDelDia({ cobros: c, movimientos: m }),
-  }));
+  const filas = [...dias.entries()].map(([fecha, { cobros: c, movimientos: m }]) => {
+    const detalle = cobrosDelDia(c);
+    return {
+      fecha,
+      ...resumenDelDia({ cobros: c, movimientos: m }),
+      // La lista que se despliega bajo la fila: lo que suma, en orden de hora.
+      lista: detalle.lista.map(unCobro),
+      // Los pendientes NO se listan (son cientos al generar las cuotas del
+      // mes), pero se dice cuántos son para que nadie los eche en falta.
+      pendientes: detalle.pendientes,
+    };
+  });
 
   // El total del periodo se calcula sobre TODO junto (no sumando las filas):
   // así el redondeo se hace una sola vez, como en el resto del dinero.
@@ -89,6 +121,28 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     metodosSinCesta: [...new Set(cobros.map((c) => c.method).filter((m) => !cestaDe(m)))],
   });
 });
+
+/**
+ * Un cobro, plano, tal y como lo pinta la lista del día: el pagador por los dos
+ * caminos posibles y el paciente delante cuando lo hay (03/09/2026, Aumenta:
+ * «que aparezca siempre primero el paciente»).
+ */
+function unCobro(c) {
+  const cliente = c.client ?? c.invoice?.client ?? null;
+  return {
+    id: c.id,
+    paidAt: c.paidAt,
+    amount: Number(c.amount) || 0,
+    method: c.method,
+    clientName: cliente?.name ?? null,
+    patientName: c.patient
+      ? [c.patient.firstName, c.patient.lastName].filter(Boolean).join(" ") || null
+      : null,
+    invoiceId: c.invoice?.id ?? null,
+    invoiceNumber: c.invoice?.number ?? null,
+    periodMonth: c.periodMonth ? String(c.periodMonth).slice(0, 7) : null,
+  };
+}
 
 /** El día siguiente de 'AAAA-MM-DD' (en fechas civiles, sin husos de por medio). */
 function siguiente(f) {

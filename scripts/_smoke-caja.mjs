@@ -35,6 +35,7 @@ import {
   limpiarMovimiento,
   saldoDeMovimientos,
   resumenDelDia,
+  cobrosDelDia,
 } from "../lib/billing/caja.js";
 
 const CAJA = "11111111-1111-1111-1111-111111111111";
@@ -165,5 +166,47 @@ describe("el resumen del día", () => {
   it("un método desconocido no se suma a ninguna cesta ni descuadra el total", () => {
     const r = resumenDelDia({ cobros: [{ amount: 10, method: "bizum", status: "completed" }] });
     assert.equal(r.cobrado, 0);
+  });
+});
+
+describe("la lista de cobros de un día", () => {
+  const cobros = [
+    { id: "c3", amount: 30, method: "cash", status: "completed", paidAt: "2026-09-04T16:40:00.000Z" },
+    { id: "c1", amount: 50, method: "card", status: "completed", paidAt: "2026-09-04T07:05:00.000Z" },
+    { id: "p1", amount: 200, method: "transfer", status: "pending", paidAt: "2026-09-04T08:00:00.000Z" },
+    { id: "c2", amount: 90, method: "transfer", status: "completed", paidAt: "2026-09-04T09:30:00.000Z" },
+  ];
+
+  it("SUMA LO MISMO QUE LA FILA: la lista es el total del día, desglosado", () => {
+    const { lista } = cobrosDelDia(cobros);
+    const suma = lista.reduce((s, c) => s + c.amount, 0);
+    assert.equal(suma, resumenDelDia({ cobros }).cobrado);
+  });
+
+  it("va en orden de hora, de la primera cobrada a la última", () => {
+    const { lista } = cobrosDelDia(cobros);
+    assert.deepEqual(lista.map((c) => c.id), ["c1", "c2", "c3"]);
+  });
+
+  it("los pendientes NO se listan (son cientos al generar las cuotas), pero se cuentan", () => {
+    const { lista, pendientes } = cobrosDelDia(cobros);
+    assert.ok(!lista.some((c) => c.id === "p1"));
+    assert.equal(pendientes.cobros, 1);
+    assert.equal(pendientes.importe, 200);
+  });
+
+  it("un cobro sin hora va al final, no el primero", () => {
+    const { lista } = cobrosDelDia([
+      { id: "sinhora", amount: 10, method: "cash", status: "completed", paidAt: null },
+      { id: "conhora", amount: 10, method: "cash", status: "completed", paidAt: "2026-09-04T10:00:00.000Z" },
+    ]);
+    assert.deepEqual(lista.map((c) => c.id), ["conhora", "sinhora"]);
+  });
+
+  it("un día sin nada devuelve lista vacía y cero pendientes, no huecos", () => {
+    const r = cobrosDelDia();
+    assert.deepEqual(r.lista, []);
+    assert.equal(r.pendientes.cobros, 0);
+    assert.equal(r.pendientes.importe, 0);
   });
 });
