@@ -335,8 +335,16 @@ const navigation = [
           // `requiresAll` con `team_avanzado` — sus siete hermanos de abajo
           // exigen además `clinica`, y atar un control horario a un módulo
           // clínico lo dejaría invendible al cliente que solo quiere Equipo,
-          // que es justo quien lo compra. adminOnly: son datos laborales.
-          { key: "fichaje", label: "Fichaje", href: "/equipo/fichaje", adminOnly: true, moduleKey: "fichaje" },
+          // que es justo quien lo compra.
+          //
+          // Y SIN `adminOnly` desde el 04/09/2026: son datos laborales, sí,
+          // pero eso pedía «no para todo el equipo», no «solo dirección». Quien
+          // lleva el control horario suele ser recepción, y hacerla admin por
+          // ver una tabla de horas le abría Dirección, Desempeño y la
+          // facturación entera. La llave es tener el módulo CONCEDIDO, que se
+          // da uno a uno en Equipo → Usuarios. El porqué y la regla, en
+          // `lib/fichaje/acceso.js`; la página y los endpoints dicen lo mismo.
+          { key: "fichaje", label: "Fichaje", href: "/equipo/fichaje", moduleKey: "fichaje" },
           { key: "team-desempeno", label: "Desempeño", href: "/equipo/mi-desempeno", adminOnly: true, requiresAll: ["team_avanzado", "clinica"] },
           { key: "team-direccion", label: "Dirección", href: "/equipo/direccion", adminOnly: true, requiresAll: ["team_avanzado", "clinica"] },
           { key: "team-productividad", label: "Productividad", href: "/equipo/productividad", adminOnly: true, requiresAll: ["team_avanzado", "clinica"] },

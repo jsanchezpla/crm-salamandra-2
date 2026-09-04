@@ -3,7 +3,6 @@ import { ok, error, forbidden, notFound, serverError } from "../../../../../../l
 import { auditar, datosPeticion } from "../../../../../../lib/utils/auditoria.js";
 import { revertir } from "../../../../../../lib/fichaje/importar.js";
 
-const ADMIN = new Set(["admin", "superadmin"]);
 
 /**
  * POST /api/fichaje/imports/[id]/revertir — deshacer un volcado ENTERO.
@@ -19,7 +18,8 @@ const ADMIN = new Set(["admin", "superadmin"]);
 export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tenantSequelize, hasModule, user }) => {
   try {
     if (!hasModule("fichaje")) return forbidden("Módulo fichaje no activo");
-    if (!ADMIN.has(request.headers.get("x-user-role"))) return forbidden("Solo administradores");
+    // Sin puerta de rol: la llave es tener el módulo CONCEDIDO, y eso ya lo
+    // cruza `hasModule` (`lib/fichaje/acceso.js`, 04/09/2026).
 
     const { id } = await ctx.params;
 

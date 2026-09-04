@@ -6,7 +6,6 @@ import { leerLibro } from "../../../../lib/fichaje/leerLibro.js";
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
 import { isDemoTenant } from "../../../../lib/demo/isDemo.js";
 
-const ADMIN = new Set(["admin", "superadmin"]);
 const MAX_BYTES = 10 * 1024 * 1024;
 
 /**
@@ -21,7 +20,8 @@ export const POST = withTenant(async (request, _ctx, ctx) => {
   const { tenant, tenantModels, tenantSequelize, hasModule, user } = ctx;
   try {
     if (!hasModule("fichaje")) return forbidden("Módulo fichaje no activo");
-    if (!ADMIN.has(request.headers.get("x-user-role"))) return forbidden("Solo administradores");
+    // Sin puerta de rol: la llave es tener el módulo CONCEDIDO, y eso ya lo
+    // cruza `hasModule` (`lib/fichaje/acceso.js`, 04/09/2026).
     // La demo es pública y da sesión de admin a cualquiera. Dejar que un
     // visitante anónimo escriba jornadas del escaparate no rompe nada grave,
     // pero ensucia la demo para el siguiente y no aporta: se ve igual con los

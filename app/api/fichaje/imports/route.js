@@ -1,7 +1,6 @@
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 
-const ADMIN = new Set(["admin", "superadmin"]);
 
 /**
  * GET /api/fichaje/imports — histórico de volcados.
@@ -14,7 +13,8 @@ const ADMIN = new Set(["admin", "superadmin"]);
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   try {
     if (!hasModule("fichaje")) return forbidden("Módulo fichaje no activo");
-    if (!ADMIN.has(request.headers.get("x-user-role"))) return forbidden("Solo administradores");
+    // Sin puerta de rol: la llave es tener el módulo CONCEDIDO, y eso ya lo
+    // cruza `hasModule` (`lib/fichaje/acceso.js`, 04/09/2026).
 
     const { FichajeImport, TeamMember } = tenantModels;
     const url = new URL(request.url);

@@ -8,7 +8,6 @@ import { avisosDePuntualidad } from "../../../lib/fichaje/puntualidad.js";
 import { cargarFestivos, esFestivo } from "../../../lib/citas/festivos.js";
 import { describirParser } from "../../../lib/fichaje/parsers/index.js";
 
-const ADMIN = new Set(["admin", "superadmin"]);
 
 /**
  * /api/fichaje — el mes de fichaje del centro.
@@ -108,7 +107,8 @@ async function festivosDelPeriodo(tenantModels, rango) {
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   try {
     if (!hasModule("fichaje")) return forbidden("Módulo fichaje no activo");
-    if (!ADMIN.has(request.headers.get("x-user-role"))) return forbidden("Solo administradores");
+    // Sin puerta de rol: la llave es tener el módulo CONCEDIDO, y eso ya lo
+    // cruza `hasModule` (`lib/fichaje/acceso.js`, 04/09/2026).
 
     const url = new URL(request.url);
     const mes = url.searchParams.get("mes");
@@ -166,7 +166,8 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
 export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule, user }) => {
   try {
     if (!hasModule("fichaje")) return forbidden("Módulo fichaje no activo");
-    if (!ADMIN.has(request.headers.get("x-user-role"))) return forbidden("Solo administradores");
+    // Sin puerta de rol: la llave es tener el módulo CONCEDIDO, y eso ya lo
+    // cruza `hasModule` (`lib/fichaje/acceso.js`, 04/09/2026).
 
     let body;
     try { body = await request.json(); } catch { return error("Body inválido"); }

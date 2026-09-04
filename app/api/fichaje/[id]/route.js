@@ -2,7 +2,6 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../lib/utils/apiResponse.js";
 import { auditar, datosPeticion } from "../../../../lib/utils/auditoria.js";
 
-const ADMIN = new Set(["admin", "superadmin"]);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -32,7 +31,8 @@ async function cargar(tenantModels, id) {
 export const PATCH = withTenant(async (request, ctx, { tenant, tenantModels, hasModule, user }) => {
   try {
     if (!hasModule("fichaje")) return forbidden("Módulo fichaje no activo");
-    if (!ADMIN.has(request.headers.get("x-user-role"))) return forbidden("Solo administradores");
+    // Sin puerta de rol: la llave es tener el módulo CONCEDIDO, y eso ya lo
+    // cruza `hasModule` (`lib/fichaje/acceso.js`, 04/09/2026).
 
     const { id } = await ctx.params;
     const { errorMsg, fila } = await cargar(tenantModels, id);
@@ -88,7 +88,8 @@ export const PATCH = withTenant(async (request, ctx, { tenant, tenantModels, has
 export const DELETE = withTenant(async (request, ctx, { tenant, tenantModels, hasModule, user }) => {
   try {
     if (!hasModule("fichaje")) return forbidden("Módulo fichaje no activo");
-    if (!ADMIN.has(request.headers.get("x-user-role"))) return forbidden("Solo administradores");
+    // Sin puerta de rol: la llave es tener el módulo CONCEDIDO, y eso ya lo
+    // cruza `hasModule` (`lib/fichaje/acceso.js`, 04/09/2026).
 
     const { id } = await ctx.params;
     const { errorMsg, fila } = await cargar(tenantModels, id);

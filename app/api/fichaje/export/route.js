@@ -6,7 +6,6 @@ import { xlsxResponse } from "../../../../lib/billing/exportXlsx.js";
 import { resumirPorPersona, rangoDelPeriodo } from "../../../../lib/fichaje/totales.js";
 import { formatearMinutos } from "../../../../lib/fichaje/parseHora.js";
 
-const ADMIN = new Set(["admin", "superadmin"]);
 
 /**
  * GET /api/fichaje/export?mes=YYYY-MM — el mes en Excel.
@@ -23,7 +22,8 @@ const ADMIN = new Set(["admin", "superadmin"]);
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   try {
     if (!hasModule("fichaje")) return forbidden("Módulo fichaje no activo");
-    if (!ADMIN.has(request.headers.get("x-user-role"))) return forbidden("Solo administradores");
+    // Sin puerta de rol: la llave es tener el módulo CONCEDIDO, y eso ya lo
+    // cruza `hasModule` (`lib/fichaje/acceso.js`, 04/09/2026).
 
     const mes = new URL(request.url).searchParams.get("mes");
     const rango = rangoDelPeriodo(mes);

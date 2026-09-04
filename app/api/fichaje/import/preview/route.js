@@ -3,7 +3,6 @@ import { ok, error, forbidden, serverError } from "../../../../../lib/utils/apiR
 import { previsualizar, hashDeFichero } from "../../../../../lib/fichaje/importar.js";
 import { leerLibro } from "../../../../../lib/fichaje/leerLibro.js";
 
-const ADMIN = new Set(["admin", "superadmin"]);
 const MAX_BYTES = 10 * 1024 * 1024;
 
 /**
@@ -21,7 +20,8 @@ const MAX_BYTES = 10 * 1024 * 1024;
 export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   try {
     if (!hasModule("fichaje")) return forbidden("Módulo fichaje no activo");
-    if (!ADMIN.has(request.headers.get("x-user-role"))) return forbidden("Solo administradores");
+    // Sin puerta de rol: la llave es tener el módulo CONCEDIDO, y eso ya lo
+    // cruza `hasModule` (`lib/fichaje/acceso.js`, 04/09/2026).
 
     const form = await request.formData();
     const file = form.get("file");
