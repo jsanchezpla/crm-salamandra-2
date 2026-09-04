@@ -95,6 +95,33 @@ test("un cobro pelado tampoco se queda sin ticket", async () => {
   assert.equal(buffer.subarray(0, 5).toString("latin1"), "%PDF-");
 });
 
+test("por largo que sea, el ticket cabe en UNA página", async () => {
+  // El fallo que trajo la medición en dos pasadas: con los ajustes reales de
+  // un centro —dirección que dobla, pie de página largo— la estimación a ojo
+  // se quedaba corta y el justificante salía en dos hojas.
+  const buffer = await buildTicketPdfBuffer({
+    payment: {
+      id: "abcdef12-3456-4789-8abc-def012345678",
+      amount: 1234.56,
+      method: "direct_debit",
+      paidAt: "2026-09-04T10:30:00Z",
+      periodMonth: "2026-09",
+      notes: "Nota muy larga. ".repeat(30),
+    },
+    clientName: "María del Carmen Fernández de la Torre y Álvarez",
+    patientName: "Juan Antonio Rodríguez Fernández de la Torre",
+    invoiceNumber: "F-2026-000123",
+    settings: {
+      fiscalName: "Centro de Psicología y Formación Aumenta Sociedad Limitada",
+      taxId: "B12345678",
+      address: "Calle de la Constitución número 123, portal 4, escalera B, 2º izquierda, 28944 Fuenlabrada (Madrid)",
+      invoiceFooterText: "Datos protegidos conforme al RGPD. ".repeat(6),
+    },
+  });
+  const paginas = (buffer.toString("latin1").match(/\/Type\s*\/Page[^s]/g) || []).length;
+  assert.equal(paginas, 1, "un justificante partido en dos hojas no se entrega");
+});
+
 test("un logo corrupto no tumba el ticket", async () => {
   // Misma regla que el PDF de factura: un problema estético no puede dejar a
   // una familia sin su justificante.
