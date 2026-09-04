@@ -45,7 +45,7 @@ function ScorePill({ score }) {
  * Correo modelo: la IA lo propone, una persona lo revisa, lo edita y confirma
  * el envío. Nunca se manda solo.
  */
-function EmailDraft({ leadId, line, analysis, recipients, onSent, emailReady }) {
+function EmailDraft({ leadId, line, analysis, recipients, onSent, emailReady, puedeAdjuntar }) {
   const draft = analysis.emailDraft;
   const [open, setOpen] = useState(false);
   const [to, setTo] = useState(recipients[0]?.email ?? "");
@@ -53,6 +53,9 @@ function EmailDraft({ leadId, line, analysis, recipients, onSent, emailReady }) 
   const [body, setBody] = useState(draft?.body ?? "");
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState(null);
+  // Archivos de Documentos marcados para este correo: [{id, fileName, fileSize}].
+  const [adjuntos, setAdjuntos] = useState([]);
+  const [buscador, setBuscador] = useState(false);
 
   if (!draft?.subject && !draft?.body) return null;
 
@@ -65,7 +68,14 @@ function EmailDraft({ leadId, line, analysis, recipients, onSent, emailReady }) 
       const r = await fetch(`/api/outreach/leads/${leadId}/enviar-correo`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ businessLineId: line.id, to, subject, body, force: alreadySent }),
+        body: JSON.stringify({
+          businessLineId: line.id,
+          to,
+          subject,
+          body,
+          force: alreadySent,
+          documentIds: adjuntos.map((a) => a.id),
+        }),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j?.error || "No se pudo enviar");
@@ -137,41 +147,229 @@ function EmailDraft({ leadId, line, analysis, recipients, onSent, emailReady }) 
           )}
 
           {/*
-            EL ENVÍO YA NO SALE DE AQUÍ (24/08/2026, Rodrigo: «si tenemos la
-            pantalla de Correo, todo el correo debería darse por ahí»).
+            EL ENVÍO VUELVE A SALIR DE AQUÍ (04/09/2026, Rodrigo: «los correos
+            se pueden enviar desde captación también, el correo modelo y eso que
+            preparaba Claude, es ahí donde va la plantilla»).
 
-            El correo del CRM se manda desde /correo y en ningún otro sitio, y
-            no es un capricho de orden: en /correo cada envío se apunta en la
-            ficha del cliente, se elige desde qué dirección sale y se respeta
-            quién puede usar cuál. Nada de eso existía en este botón.
-
-            Se comprobó antes de quitarlo: en toda la auditoría de producción
-            había CERO envíos desde Captación (`outreach.email.sent`), así que
-            no se le rompe el flujo a nadie. El endpoint sigue vivo por si
-            alguien lo llamaba desde fuera, pero la pantalla ya no lo ofrece.
-
-            El texto redactado por la IA no se pierde: se copia y se pega.
+            Estuvo apagado desde el 24/08 mandando a /correo, que es donde el
+            envío queda apuntado en la ficha del cliente. Para un lead de
+            captación eso no aplica —todavía no hay ficha de cliente— y obligaba
+            a copiar y pegar a mano el correo que acaba de redactar la IA.
+            El rastro aquí es `analysis.sentAt` más la auditoría
+            `outreach.email.sent`, que ahora también apunta los adjuntos.
           */}
-          <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 space-y-2">
-            <p className="text-xs text-neutral-600">
-              El correo se manda desde la pantalla de <strong>Correo</strong>, que es donde queda
-              apuntado en la ficha del cliente y donde se elige la dirección de envío.
-            </p>
-            <Link
-              href="/correo"
-              className="inline-block px-4 py-2 rounded-lg text-white text-sm font-medium hover:opacity-90 transition"
+
+          {/* Adjuntos: se eligen del archivo de Documentos, no del escritorio. */}
+          {puedeAdjuntar && (
+            <div>
+              <div className="flex items-center justify-between gap-2">
+                <label className="block text-[11px] font-medium text-neutral-500">Archivos adjuntos</label>
+                <button
+                  type="button"
+                  onClick={() => setBuscador(true)}
+                  className="text-xs px-2.5 py-1 rounded-lg border border-neutral-200 text-neutral-600 hover:bg-neutral-50 transition"
+                >
+                  + Adjuntar archivos
+                </button>
+              </div>
+              {adjuntos.length === 0 ? (
+                <p className="text-[11px] text-neutral-400 mt-1.5">
+                  Sin adjuntos. Se eligen de Documentos, así que el dossier se sube una vez y se manda siempre igual.
+                </p>
+              ) : (
+                <ul className="mt-1.5 flex flex-col gap-1">
+                  {adjuntos.map((a) => (
+                    <li
+                      key={a.id}
+                      className="flex items-center justify-between gap-2 text-xs bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-1.5"
+                    >
+                      <span className="truncate text-neutral-700">{a.fileName}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-neutral-400 tabular-nums">{formatoTamano(a.fileSize)}</span>
+                        <button
+                          type="button"
+                          onClick={() => setAdjuntos((prev) => prev.filter((x) => x.id !== a.id))}
+                          className="text-neutral-400 hover:text-rose-600"
+                          aria-label={`Quitar ${a.fileName}`}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={send}
+              disabled={sending || !emailReady}
+              title={emailReady ? undefined : "Configura la clave de Resend en Configuración para poder enviar"}
+              className="px-4 py-2 rounded-lg text-white text-sm font-medium hover:opacity-90 disabled:opacity-50 transition"
               style={{ backgroundColor: "var(--color-primary)" }}
             >
-              Ir a Correo →
-            </Link>
+              {sending ? "Enviando..." : alreadySent ? "Volver a enviar" : "Enviar correo"}
+            </button>
+            {alreadySent && !sending && (
+              <span className="text-[11px] text-neutral-400">
+                Ya se envió una vez; al pulsar se manda otra.
+              </span>
+            )}
           </div>
         </div>
+      )}
+
+      {buscador && (
+        <SelectorDeDocumentos
+          yaElegidos={adjuntos}
+          onCerrar={() => setBuscador(false)}
+          onElegir={(docs) => {
+            setAdjuntos(docs);
+            setBuscador(false);
+          }}
+        />
       )}
     </div>
   );
 }
 
-function BusinessLinePanel({ leadId, line, analysis, recipients, onSent, emailReady }) {
+/** Tamaño en la unidad que se lee de un vistazo, no en bytes. */
+function formatoTamano(bytes) {
+  const n = Number(bytes ?? 0);
+  if (!n) return "";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * Elegir archivos del módulo Documentos para adjuntarlos al correo.
+ *
+ * Lista lo que ESE usuario puede ver (el endpoint ya filtra por visibilidad y
+ * carpetas compartidas), con buscador por nombre porque un archivo con mil
+ * documentos no se recorre a ojo.
+ */
+function SelectorDeDocumentos({ yaElegidos, onCerrar, onElegir }) {
+  const [q, setQ] = useState("");
+  const [busqueda, setBusqueda] = useState("");
+  const [docs, setDocs] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState(null);
+  const [marcados, setMarcados] = useState(() => new Map(yaElegidos.map((d) => [d.id, d])));
+
+  useEffect(() => {
+    const t = setTimeout(() => setBusqueda(q), 300);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  useEffect(() => {
+    let vivo = true;
+    setCargando(true);
+    setError(null);
+    const p = new URLSearchParams({ all: "1", visibility: "all" });
+    if (busqueda) p.set("q", busqueda);
+    fetch(`/api/documents?${p.toString()}`)
+      .then((r) => r.json())
+      .then((j) => {
+        if (!vivo) return;
+        if (j?.error) throw new Error(j.error);
+        setDocs(j?.data?.documents ?? []);
+      })
+      .catch((e) => vivo && setError(e.message || "No se pudieron cargar los documentos"))
+      .finally(() => vivo && setCargando(false));
+    return () => {
+      vivo = false;
+    };
+  }, [busqueda]);
+
+  const alternar = (doc) => {
+    setMarcados((prev) => {
+      const m = new Map(prev);
+      if (m.has(doc.id)) m.delete(doc.id);
+      else m.set(doc.id, { id: doc.id, fileName: doc.fileName, fileSize: doc.fileSize });
+      return m;
+    });
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onCerrar}
+    >
+      <div
+        className="bg-white rounded-xl shadow-xl w-full max-w-lg flex flex-col max-h-[80vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="p-5 pb-3 border-b border-neutral-100">
+          <h3 className="font-[Fraunces] text-xl text-neutral-800">Adjuntar archivos</h3>
+          <p className="text-sm text-neutral-500 mt-1">Del archivo de Documentos del centro.</p>
+          <input
+            className={`${inputCls} mt-3`}
+            placeholder="Buscar por nombre..."
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            autoFocus
+          />
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-3">
+          {cargando && <p className="text-sm text-neutral-400 p-2">Cargando...</p>}
+          {error && <p className="text-sm text-rose-600 p-2">{error}</p>}
+          {!cargando && !error && docs.length === 0 && (
+            <p className="text-sm text-neutral-500 p-2">
+              {busqueda ? "Ningún archivo con ese nombre." : "El archivo de Documentos está vacío."}
+            </p>
+          )}
+          <ul className="flex flex-col">
+            {docs.map((d) => (
+              <li key={d.id}>
+                <label className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-neutral-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={marcados.has(d.id)}
+                    onChange={() => alternar(d)}
+                    className="shrink-0"
+                  />
+                  <span className="flex-1 min-w-0 text-sm text-neutral-700 truncate">{d.fileName}</span>
+                  <span className="text-xs text-neutral-400 tabular-nums shrink-0">
+                    {formatoTamano(d.fileSize)}
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="flex justify-between items-center gap-2 p-4 border-t border-neutral-100">
+          <span className="text-xs text-neutral-500">
+            {marcados.size === 0
+              ? "Ninguno elegido"
+              : `${marcados.size} archivo${marcados.size === 1 ? "" : "s"} elegido${marcados.size === 1 ? "" : "s"}`}
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={onCerrar}
+              className="px-4 py-2 rounded-lg border border-neutral-200 text-sm text-neutral-600 hover:bg-neutral-50"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={() => onElegir([...marcados.values()])}
+              className="px-4 py-2 rounded-lg text-white text-sm font-medium hover:opacity-90"
+              style={{ backgroundColor: "var(--color-primary)" }}
+            >
+              Adjuntar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BusinessLinePanel({ leadId, line, analysis, recipients, onSent, emailReady, puedeAdjuntar }) {
   return (
     <section className="bg-white rounded-xl border border-neutral-200 p-5 flex flex-col">
       <header className="mb-4">
@@ -241,6 +439,7 @@ function BusinessLinePanel({ leadId, line, analysis, recipients, onSent, emailRe
             recipients={recipients}
             onSent={onSent}
             emailReady={emailReady}
+            puedeAdjuntar={puedeAdjuntar}
           />
 
           <footer className="mt-auto pt-4 border-t border-neutral-100 flex items-center justify-between text-xs text-neutral-400">
@@ -304,6 +503,8 @@ export default function OutreachLeadDetail({ leadId }) {
   const { status: integrations, has } = useIntegrations();
   const analyzeReady = has("anthropic");
   const emailReady = has("resend");
+  // Lo dice el servidor con la ficha: el tenant tiene archivo de Documentos.
+  const [puedeAdjuntar, setPuedeAdjuntar] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -314,7 +515,10 @@ export default function OutreachLeadDetail({ leadId }) {
         return j;
       })
       .then((j) => {
-        if (!cancelled) setData({ lead: j.data.lead, lines: j.data.businessLines ?? [], error: null, loadedFor: leadId });
+        if (!cancelled) {
+          setData({ lead: j.data.lead, lines: j.data.businessLines ?? [], error: null, loadedFor: leadId });
+          setPuedeAdjuntar(Boolean(j.data.puedeAdjuntar));
+        }
       })
       .catch((e) => {
         if (!cancelled) setData({ lead: null, lines: [], error: e.message, loadedFor: leadId });
@@ -824,6 +1028,7 @@ export default function OutreachLeadDetail({ leadId }) {
               recipients={recipients}
               onSent={refresh}
               emailReady={emailReady}
+              puedeAdjuntar={puedeAdjuntar}
             />
           ))}
         </div>

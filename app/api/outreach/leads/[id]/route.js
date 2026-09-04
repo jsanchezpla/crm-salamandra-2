@@ -3,6 +3,7 @@ import { ok, noContent } from "../../../../../lib/utils/apiResponse.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../../../../../lib/utils/errors.js";
 import { getMasterModels } from "../../../../../lib/db/masterDb.js";
 import { isAllowedLeadStatus, LEAD_STATUSES } from "../../../../../lib/outreach/estados.js";
+import { MODULE_KEYS } from "../../../../../lib/tenant/moduleKeys.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -54,6 +55,10 @@ export const GET = withTenant(async (request, { params }, ctx) => {
   return ok({
     lead: lead.toJSON(),
     businessLines: businessLines.map((b) => b.toJSON()),
+    // Si este tenant tiene archivo de Documentos, el correo puede llevar
+    // adjuntos. Lo dice el servidor y no el navegador: es el único que conoce
+    // los módulos de verdad, y así el botón no aparece donde no funcionaría.
+    puedeAdjuntar: ctx.hasModule(MODULE_KEYS.DOCUMENTS_AVANZADO),
   });
 });
 

@@ -5,6 +5,8 @@ import { assertNotDemoPaidCall } from "../../../../../../lib/demo/isDemo.js";
 import { getMasterModels } from "../../../../../../lib/db/masterDb.js";
 import { sendEmail } from "../../../../../../lib/email/resendClient.js";
 import { getTenantResendConfig } from "../../../../../../lib/outreach/resendConfig.js";
+import { adjuntosDesdeDocumentos } from "../../../../../../lib/outreach/adjuntosDeDocumentos.js";
+import { MODULE_KEYS } from "../../../../../../lib/tenant/moduleKeys.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -89,10 +91,32 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     );
   }
 
+  // Archivos del módulo Documentos marcados en «Adjuntar archivos». Se resuelven
+  // ANTES de llamar a Resend: si uno no se puede leer o no es tuyo, no sale el
+  // correo. Un dossier a medias es peor que un correo sin dossier.
+  let adjuntos = [];
+  const documentIds = body?.documentIds;
+  if (Array.isArray(documentIds) && documentIds.length > 0) {
+    if (!ctx.hasModule(MODULE_KEYS.DOCUMENTS_AVANZADO)) {
+      throw new ValidationError("Adjuntar archivos exige el módulo Documentos avanzado");
+    }
+    const userId = request.headers.get("x-user-id");
+    if (!userId) throw new ForbiddenError();
+    const r = await adjuntosDesdeDocumentos({
+      tenantModels: ctx.tenantModels,
+      tenantSlug: ctx.slug,
+      userId,
+      documentIds,
+    });
+    if (r.error) throw new ValidationError(r.error);
+    adjuntos = r.adjuntos;
+  }
+
   const result = await sendEmail({
     to: to.trim(),
     subject: subject.trim(),
     text,
+    attachments: adjuntos.length ? adjuntos : undefined,
     from: resend.fromEmail || undefined,
     // Las respuestas del lead caen en un buzón que sí se lee (reply-to),
     // distinto del remitente del outreach (que puede ser un subdominio de envío).
@@ -130,7 +154,15 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     entity: "OutreachAnalysis",
     entityId: analysis.id,
     before: null,
-    after: { leadId: lead.id, businessLine: line.key, to: to.trim(), providerId: result.id ?? null },
+    after: {
+      leadId: lead.id,
+      businessLine: line.key,
+      to: to.trim(),
+      providerId: result.id ?? null,
+      // Qué se mandó adjunto, por nombre: si alguien pregunta «¿le enviamos el
+      // dossier?», la respuesta está en la auditoría y no en la memoria de nadie.
+      adjuntos: adjuntos.map((a) => a.filename),
+    },
     ip: request.headers.get("x-forwarded-for"),
   });
 
