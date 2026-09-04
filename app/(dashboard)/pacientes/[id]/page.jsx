@@ -10,6 +10,7 @@ import SpecialtyPicker from "@/components/clinica/SpecialtyPicker.jsx";
 import TerapeutasPicker from "@/components/clinica/TerapeutasPicker.jsx";
 import NuevaCoordinacionModal from "../../../../components/clinica/NuevaCoordinacionModal.jsx";
 import PatientDocumentsSection from "@/components/clinica/PatientDocumentsSection.jsx";
+import EnviarRegistroModal from "@/components/clinica/EnviarRegistroModal.jsx";
 import CitasDelPaciente from "@/components/citas/CitasDelPaciente.jsx";
 import PatientExternalContactsSection from "@/components/clinica/PatientExternalContactsSection.jsx";
 import InterventionPlanSection from "@/components/clinica/InterventionPlanSection.jsx";
@@ -121,8 +122,10 @@ function SessionDrawer({ session, patient, onClose, onPublish, onSaved, busy }) 
   const [errorPartes, setErrorPartes] = useState(null);
   // Enviar ESTE registro al área privada de la familia (29/08/2026). Lo que
   // sube es el PDF; el servidor manda sobre si se puede (sin pagador, 409).
-  const [enviando, setEnviando] = useState(false);
   const [errorEnvio, setErrorEnvio] = useState(null);
+  // El cajón de envío (04/09/2026): antes de publicar se repasa el correo que
+  // le llega a la familia — ver `components/clinica/EnviarRegistroModal.jsx`.
+  const [enviandoModal, setEnviandoModal] = useState(false);
 
   // ── Completar el registro con IA desde su transcripción (01/09/2026) ─────
   // La transcripción se quedaba guardada en la sesión sin poder volver a
@@ -235,20 +238,15 @@ function SessionDrawer({ session, patient, onClose, onPublish, onSaved, busy }) 
     }
   }
 
-  async function enviarALaFamilia() {
-    if (session.deliveredDocumentId && !window.confirm("Se sube un PDF nuevo y se retira el anterior de su área privada. ¿Seguimos?")) return;
-    setEnviando(true);
+  /*
+   * Enviar deja de ser un botón que hace cosas y pasa a ser un cajón que las
+   * enseña antes (04/09/2026): a quién va, qué correo sale y con qué texto. El
+   * `confirm` del reenvío se dice ahí dentro, con el resto del contexto
+   * delante, en vez de en un diálogo del navegador sin nada más.
+   */
+  function enviarALaFamilia() {
     setErrorEnvio(null);
-    try {
-      const r = await fetch(`/api/clinica/sessions/${session.id}/enviar`, { method: "POST" });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok || !j.ok) throw new Error(j.error || "No se pudo enviar el registro");
-      onSaved?.();
-    } catch (e) {
-      setErrorEnvio(e.message);
-    } finally {
-      setEnviando(false);
-    }
+    setEnviandoModal(true);
   }
 
   async function guardarPartes() {
@@ -597,11 +595,11 @@ function SessionDrawer({ session, patient, onClose, onPublish, onSaved, busy }) 
                 Reenviar reemplaza, así que la familia nunca tiene dos. */}
             <button
               onClick={enviarALaFamilia}
-              disabled={enviando}
+              disabled={enviandoModal}
               title="Sube el PDF de este registro a su área privada. No lleva la preparación ni las notas internas."
               className="text-xs px-3 py-2 rounded-lg border border-neutral-200 text-neutral-700 hover:border-neutral-400 disabled:opacity-50"
             >
-              {enviando ? "Enviando…" : session.deliveredDocumentId ? "Volver a enviar" : "Enviar al paciente"}
+              {session.deliveredDocumentId ? "Volver a enviar" : "Enviar al paciente"}
             </button>
             {/* Cierra el registro para el equipo y nada más. Se llamaba «Marcar
                 como publicada» y se leía como que subía la sesión al portal de la
@@ -626,6 +624,18 @@ function SessionDrawer({ session, patient, onClose, onPublish, onSaved, busy }) 
             </p>
           )}
           {errorEnvio && <div className="text-[11px] text-rose-600">{errorEnvio}</div>}
+          {enviandoModal && (
+            <EnviarRegistroModal
+              sessionId={session.id}
+              reenvio={Boolean(session.deliveredDocumentId)}
+              onCerrar={() => setEnviandoModal(false)}
+              onEnviado={(d) => {
+                setEnviandoModal(false);
+                if (d?.correoEnviado === false && d?.correoError) setErrorEnvio(`Registro publicado, pero el correo no salió: ${d.correoError}`);
+                onSaved?.();
+              }}
+            />
+          )}
         </div>
       </aside>
     </>

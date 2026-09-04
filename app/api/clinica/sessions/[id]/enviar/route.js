@@ -7,6 +7,11 @@ import { clientIdOfPatient } from "@/lib/clinica/patientClient.js";
 import { buildSessionPdfBuffer, sessionPdfFilename } from "@/lib/clinica/sessionPdf.js";
 import { includesDeLaSesion, argumentosDelPdfDeSesion } from "@/lib/clinica/argumentosDelPdf.js";
 import { documentoDeRegistro, motivoParaNoEnviar } from "@/lib/clinica/envioRegistro.js";
+import { propuestaDeCorreo, limpiarCorreo, motivoParaNoAvisar } from "@/lib/clinica/correoRegistro.js";
+import { registroEnviadoTemplate } from "@/lib/email/templates/clinica/registroEnviado.js";
+import { getTenantResendConfig } from "@/lib/outreach/resendConfig.js";
+import { sendEmail, envioRealizado } from "@/lib/email/resendClient.js";
+import { assertNotDemoPaidCall } from "@/lib/demo/isDemo.js";
 import {
   quotaBytesDe,
   getTenantStorageUsage,
@@ -34,7 +39,16 @@ import {
  * Reenviar es reemplazar: PDF nuevo, se borra el anterior. La familia no tiene
  * nunca dos versiones del mismo registro.
  *
- * No lleva guard de demo: no manda correo, no gasta IA y no escribe en master.
+ * ── Y AVISA POR CORREO (04/09/2026, Rodrigo) ────────────────────────────────
+ * Publicar el PDF no le decía nada a nadie: la familia se enteraba si entraba a
+ * mirar. Ahora, opcionalmente, sale un correo con un RESUMEN de la sesión.
+ * El texto lo propone `lib/clinica/correoRegistro.js` a partir de la Devolución
+ * a la familia y quien envía lo repasa y lo cambia antes de mandarlo — se pide
+ * con `GET` y se manda con el `POST`. El PDF **no se adjunta**: es un documento
+ * clínico de un menor y se recoge en el área privada, que pide identificarse.
+ *
+ * Desde que manda correo SÍ lleva guard de demo: las cuatro demos son públicas
+ * con sesión de admin.
  */
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -43,14 +57,70 @@ function gate(ctx) {
   return ctx.hasModule("clinica") || ctx.hasModule("pacientes");
 }
 
+/**
+ * GET — qué se va a enviar: la propuesta de correo (editable) y a quién iría.
+ * Se pide al abrir el cajón de envío, para que el texto se pueda repasar antes
+ * de que salga nada.
+ */
+export const GET = withTenant(async (request, rc, ctx) => {
+  try {
+    if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
+    const { id } = await rc.params;
+    if (!UUID_RE.test(id)) return error("id inválido", 422);
+
+    const { ClinicSession, Client } = ctx.tenantModels;
+    const session = await ClinicSession.findByPk(id, { include: includesDeLaSesion(ctx.tenantModels) });
+    if (!session) return notFound("Sesión no encontrada");
+
+    const argumentos = await argumentosDelPdfDeSesion(session, ctx);
+    const clientId =
+      session.clientId ?? argumentos.patientClientId ?? (await clientIdOfPatient(ctx.tenantModels, session.patientId));
+    const cliente = clientId && Client ? await Client.findByPk(clientId, { attributes: ["id", "name", "email"] }) : null;
+
+    return ok({
+      propuesta: propuestaDeCorreo({
+        sesion: session,
+        tenant: ctx.tenant,
+        patientName: argumentos.patientName,
+        centro: ctx.tenant?.name ?? null,
+      }),
+      destinatario: cliente ? { nombre: cliente.name, email: cliente.email ?? null } : null,
+      motivoParaNoEnviar: motivoParaNoEnviar({ clientId }),
+      motivoParaNoAvisar: motivoParaNoAvisar({ email: cliente?.email }),
+    });
+  } catch (err) {
+    return serverError(err);
+  }
+});
+
 export const POST = withTenant(async (request, rc, ctx) => {
   try {
     if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
     const { id } = await rc.params;
     if (!UUID_RE.test(id)) return error("id inválido", 422);
 
-    const { ClinicSession, TeamMember, Document } = ctx.tenantModels;
+    const { ClinicSession, TeamMember, Document, Client } = ctx.tenantModels;
     if (!Document) return error("Este cliente no tiene el archivo de documentos activado", 503);
+
+    /*
+     * ── EL CORREO A LA FAMILIA (04/09/2026, Rodrigo) ────────────────────────
+     * Opcional: sin `correo.enviar` esto se comporta EXACTAMENTE como hasta
+     * hoy —publica el PDF y calla—. El texto viene YA repasado desde la
+     * pantalla; aquí solo se sanea. Se valida ANTES de escribir nada: un
+     * correo vacío se dice antes de mover documentos, no después.
+     */
+    let correo = null;
+    if (request.headers.get("content-type")?.includes("application/json")) {
+      const body = await request.json().catch(() => ({}));
+      if (body?.correo?.enviar) {
+        // Manda correo: las cuatro demos son públicas con sesión de admin.
+        const noDemo = assertNotDemoPaidCall(ctx, "Avisar por correo");
+        if (noDemo) return noDemo;
+        const limpio = limpiarCorreo(body.correo);
+        if (limpio.error) return error(limpio.error, 422);
+        correo = limpio;
+      }
+    }
 
     const session = await ClinicSession.findByPk(id, { include: includesDeLaSesion(ctx.tenantModels) });
     if (!session) return notFound("Sesión no encontrada");
@@ -123,10 +193,55 @@ export const POST = withTenant(async (request, rc, ctx) => {
       ip: request.headers.get("x-forwarded-for"),
     });
 
+    /*
+     * El correo va AL FINAL y es best-effort: el registro YA está publicado en
+     * el área privada, que es lo que de verdad se ha pedido. Si Resend falla,
+     * el envío no se deshace — se cuenta en la respuesta (`correoEnviado` /
+     * `correoError`) y la pantalla lo dice. Misma regla que el envío de
+     * facturas: el estado no puede depender de que conteste un proveedor.
+     */
+    let correoEnviado = null;
+    let correoError = null;
+    if (correo) {
+      try {
+        const cliente = Client ? await Client.findByPk(clientId, { attributes: ["id", "name", "email"] }) : null;
+        const motivoCorreo = motivoParaNoAvisar({ email: cliente?.email });
+        if (motivoCorreo) {
+          correoEnviado = false;
+          correoError = motivoCorreo;
+        } else {
+          const resend = getTenantResendConfig({ tenant: ctx.tenant });
+          const tpl = registroEnviadoTemplate({
+            tenantName: ctx.tenant.name,
+            brand: ctx.tenant.settings?.brand,
+            asunto: correo.asunto,
+            texto: correo.texto,
+            portalUrl: ctx.tenant.settings?.widget?.auth?.loginUrl ?? null,
+          });
+          const envio = await sendEmail({
+            to: cliente.email,
+            subject: tpl.subject,
+            html: tpl.html,
+            text: tpl.text,
+            from: resend.fromEmail || undefined,
+            replyTo: resend.replyTo || undefined,
+            apiKey: resend.apiKey || undefined,
+          });
+          const { salio, motivo } = envioRealizado(envio, `clinica:registro ${id}`);
+          correoEnviado = salio;
+          correoError = salio ? null : motivo;
+        }
+      } catch (mailErr) {
+        process.stderr.write(`[clinica:enviar-registro] correo falló: ${mailErr.message}\n`);
+        correoEnviado = false;
+        correoError = "No se pudo enviar el correo";
+      }
+    }
+
     await session.reload({
       include: [{ model: TeamMember, as: "therapist", attributes: ["id", "displayName", "position", "avatarColor"] }],
     });
-    return ok({ ...serializeSession(session), deliveredFileName: fileName });
+    return ok({ ...serializeSession(session), deliveredFileName: fileName, correoEnviado, correoError });
   } catch (err) {
     return serverError(err);
   }
