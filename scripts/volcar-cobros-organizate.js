@@ -58,6 +58,8 @@ import { logBillingAudit } from "../lib/billing/audit.js";
 const args = process.argv.slice(2);
 const CONFIRM = args.includes("--confirm");
 const DETALLE = args.includes("--detalle");
+/** Crear también lo PENDIENTE que no es cuota (bonos, informes, citas sueltas). */
+const CON_NO_CUOTA = args.includes("--con-no-cuota");
 const valorDe = (flag, porDefecto) => (args.includes(flag) ? args[args.indexOf(flag) + 1] : porDefecto);
 const SLUG = valorDe("--slug", "aumenta");
 const MES = valorDe("--mes", "2026-09");
@@ -129,6 +131,44 @@ async function main() {
     if (!pendientesPorFamilia.has(k)) pendientesPorFamilia.set(k, []);
     pendientesPorFamilia.get(k).push(c);
   }
+  // ── Segunda pasada: lo que ya vive en un cobro PENDIENTE marcado ─────────
+  // El 02/09 lo pendiente de Organízate se escribió en cobros del CRM con la
+  // marca «Organízate #id». Si la contable lo cobra después allí, hoy viene
+  // como PAGADO pero su id ya está marcado: saltarlo por «ya volcado» lo
+  // dejaría pendiente para siempre en el CRM (18 cuotas, 2.330 €, el 04/09).
+  // Esas líneas se reevalúan sobre ESE cobro, no se saltan.
+  const cobroPendienteDeLinea = new Map(); // idLinea → cobro pendiente que la lleva
+  for (const c of cobros) {
+    if (c.status !== "pending") continue;
+    for (const m of String(c.notes ?? "").matchAll(/Organízate #(\d+)/g)) cobroPendienteDeLinea.set(Number(m[1]), c);
+  }
+  // Una misma línea puede estar citada en DOS cobros: el pendiente que la
+  // alineó un día y el cobrado que la saldó después. Si ya está en uno COBRADO,
+  // su dinero está registrado y no se vuelve a marcar — sin esto, la segunda
+  // pasada duplicaba el cobro (190 € el 04/09/2026) y dejaba el pendiente
+  // sobrante convertido en un cobro más.
+  const lineasYaCobradas = new Set();
+  for (const c of cobros) {
+    if (c.status !== "completed") continue;
+    for (const m of String(c.notes ?? "").matchAll(/Organízate #(\d+)/g)) lineasYaCobradas.add(Number(m[1]));
+  }
+  // Lo que el centro ha cobrado A MANO en el CRM (cobrado y sin marca): si
+  // Organízate lo trae también como pagado, no se crea otro cobro. Se le pone
+  // la marca al que ya está (el 03/09, dos entrevistas de 50 € cobradas en el
+  // CRM por la mañana y anotadas en Organízate por la tarde).
+  const completadosSinMarca = new Map(); // familia → cobros cobrados sin marca
+  for (const c of cobros) {
+    if (c.status !== "completed" || /Organízate #/.test(String(c.notes ?? ""))) continue;
+    const k = String(c.clientId);
+    if (!completadosSinMarca.has(k)) completadosSinMarca.set(k, []);
+    completadosSinMarca.get(k).push(c);
+  }
+  /** El cobro hecho a mano en el CRM que explica este importe, y se consume para no usarlo dos veces. */
+  const yaCobradoEnCrm = (familia, pacienteId, importe) => {
+    const lista = completadosSinMarca.get(String(familia)) ?? [];
+    const i = lista.findIndex((c) => round2(c.amount) === round2(importe) && (!c.patientId || !pacienteId || String(c.patientId) === String(pacienteId)));
+    return i < 0 ? null : lista.splice(i, 1)[0];
+  };
   const cuotas = Cuota ? await Cuota.findAll({ attributes: ["id", "clientId", "method"], raw: true }) : [];
   const metodoDeFamilia = new Map(cuotas.map((q) => [String(q.clientId), q.method]).filter(([, m]) => m));
 
@@ -173,10 +213,32 @@ async function main() {
   // aposta («sobra en el CRM»).
   const familiasPasadas = new Set(cobros.filter((c) => /Organízate #/.test(String(c.notes ?? ""))).map((c) => String(c.clientId)));
   const familiasConLineas = new Set();
-  const plan = { marcar: [], crearCobrados: [], alinear: [], crearPendientes: [], sinPaciente: [], listados: [], sobranCrm: [], saltados: { "ya volcado": 0, "cita a 0 € (sesión de cuota)": 0, "pendiente y cuadra": 0 } };
+  const plan = { marcar: [], marcarExistente: [], crearCobrados: [], alinear: [], crearPendientes: [], sinPaciente: [], listados: [], sobranCrm: [], saltados: { "ya volcado": 0, "cita a 0 € (sesión de cuota)": 0, "pendiente y cuadra": 0, "ya cobrada en otro cobro": 0 } };
+  /** Dar por cobrado un cobro pendiente del CRM… salvo que el centro ya lo cobrara a mano: entonces solo se marca el que está y el pendiente se lista. */
+  const marcarOMarcarExistente = (m) => {
+    const aMano = yaCobradoEnCrm(m.cobro.clientId, m.lineas[0]?.paciente?.id, m.importe);
+    if (!aMano) { plan["marcar"].push(m); return; }
+    plan.marcarExistente.push({ cobro: aMano, lineas: m.lineas, nombre: m.nombre, importe: m.importe });
+    plan.sobranCrm.push({ cobro: m.cobro, familia: String(m.cobro.clientId), nota: "cobrado a mano en el CRM: este pendiente sobra" });
+  };
+  /** Crear un cobro cobrado… salvo que el centro ya lo cobrara a mano: entonces solo se marca el que está. */
+  const crearCobradoOMarcar = (c) => {
+    const aMano = yaCobradoEnCrm(c.familia, c.paciente?.id, c.importe);
+    if (!aMano) { plan["crearCobrados"].push(c); return; }
+    plan.marcarExistente.push({ cobro: aMano, lineas: c.lineas, nombre: c.nombre, importe: c.importe });
+  };
   for (const fila of datos.caja) {
     const [estado, ddmm, tipo, importe, idPac, idLinea, nombreFila] = fila;
-    if (yaVolcados.has(idLinea)) {
+    // Su dinero ya está en un cobro COBRADO: no se toca nada más por ella.
+    if (lineasYaCobradas.has(idLinea)) {
+      plan.saltados["ya cobrada en otro cobro"]++;
+      const p0 = pacienteDe(idPac, nombreFila);
+      if (p0?.clientId) familiasConLineas.add(String(p0.clientId));
+      continue;
+    }
+    // Una línea marcada en un cobro PENDIENTE no está «ya volcada»: se reevalúa.
+    const cobroMarcado = cobroPendienteDeLinea.get(idLinea) ?? null;
+    if (yaVolcados.has(idLinea) && !cobroMarcado) {
       plan.saltados["ya volcado"]++;
       const p = pacienteDe(idPac, nombreFila);
       if (p?.clientId) familiasConLineas.add(String(p.clientId));
@@ -189,17 +251,59 @@ async function main() {
     const familia = String(paciente.clientId);
     familiasConLineas.add(familia);
     if (!familias.has(familia)) familias.set(familia, []);
-    familias.get(familia).push({ estado, ddmm, tipo, importe: round2(importe), idLinea, paciente, nombre });
+    familias.get(familia).push({ estado, ddmm, tipo, importe: round2(importe), idLinea, paciente, nombre, cobroMarcado });
   }
 
-  for (const [familia, lineas] of familias) {
-    // Citas y bonos: aparte de las cuotas.
-    for (const l of lineas.filter((x) => x.tipo !== "G")) {
-      if (l.estado !== "P") { plan.listados.push(l); continue; }
-      const ff = formaYFecha([l], familia);
-      plan.crearCobrados.push({ ...l, ...ff, familia, periodo: mesDe(ddmmDe(ff.fecha), anio), motivo: l.tipo === "C" ? "cita" : "bono", lineas: [l], cuotaId: null });
+  /**
+   * Las líneas que una pasada anterior dejó en un cobro PENDIENTE marcado,
+   * reevaluadas sobre ese cobro con lo que Organízate dice HOY: si todas están
+   * pagadas, el cobro se cobra; si solo algunas, el cobro se queda con lo que
+   * sigue pendiente y lo pagado nace como cobro nuevo cobrado; si ninguna,
+   * sigue como estaba.
+   */
+  const pasadaSobreCobrosMarcados = (familia, marcadas) => {
+    const porCobro = new Map();
+    for (const l of marcadas) {
+      const k = String(l.cobroMarcado.id);
+      if (!porCobro.has(k)) porCobro.set(k, { cobro: l.cobroMarcado, lineas: [] });
+      porCobro.get(k).lineas.push(l);
     }
-    const G = lineas.filter((x) => x.tipo === "G");
+    for (const { cobro, lineas } of porCobro.values()) {
+      const pagadas = lineas.filter((l) => l.estado === "P");
+      const pendientes = lineas.filter((l) => l.estado === "M");
+      if (!pagadas.length) { plan.saltados["pendiente y cuadra"]++; continue; }
+      const RP = suma(pagadas), RQ = suma(pendientes);
+      const nombre = pagadas[0].nombre;
+      if (!pendientes.length) {
+        marcarOMarcarExistente({ cobro, importe: RP, importeAntes: Number(cobro.amount), ...formaYFecha(pagadas, familia), lineas: pagadas, nombre });
+      } else {
+        plan.alinear.push({ cobro, importe: RQ, importeAntes: Number(cobro.amount), lineas: pendientes, nombre });
+        crearCobradoOMarcar({ importe: RP, ...formaYFecha(pagadas, familia), familia, paciente: pagadas[0].paciente, periodo, motivo: "cuota", lineas: pagadas, cuotaId: cobro.cuotaId, nombre });
+      }
+    }
+  };
+
+  for (const [familia, lineas] of familias) {
+    // Lo que ya vivía en un cobro pendiente marcado, primero y aparte.
+    pasadaSobreCobrosMarcados(familia, lineas.filter((x) => x.cobroMarcado));
+    const sinMarca = lineas.filter((x) => !x.cobroMarcado);
+    // Citas y bonos: aparte de las cuotas.
+    for (const l of sinMarca.filter((x) => x.tipo !== "G")) {
+      if (l.estado !== "P") {
+        // Lo pendiente que no es cuota (bonos, informes, citas sueltas) solo se
+        // LISTA por defecto: el CRM no tiene de dónde colgarlo y hay que
+        // decidirlo. Con --con-no-cuota se crea como cobro pendiente, que es lo
+        // que pidió Rodrigo el 04/09/2026 («todos los cobros de septiembre,
+        // cobrados y pendientes, tienen que salir en el CRM»).
+        if (CON_NO_CUOTA) {
+          plan.crearPendientes.push({ importe: l.importe, metodo: metodoDeFamilia.get(familia) ?? "transfer", familia, paciente: l.paciente, periodo, lineas: [l], nombre: l.nombre, motivo: l.tipo === "C" ? "cita" : "bono" });
+        } else plan.listados.push(l);
+        continue;
+      }
+      const ff = formaYFecha([l], familia);
+      crearCobradoOMarcar({ ...l, ...ff, familia, periodo: mesDe(ddmmDe(ff.fecha), anio), motivo: l.tipo === "C" ? "cita" : "bono", lineas: [l], cuotaId: null });
+    }
+    const G = sinMarca.filter((x) => x.tipo === "G");
     if (!G.length) continue;
     // Un cobro que ya lleva la marca de Organízate es de una pasada anterior:
     // no vuelve a repartirse (así una segunda pasada solo hace lo que faltó).
@@ -214,7 +318,7 @@ async function main() {
       const c = libres.find((x) => String(x.patientId) === String(l.paciente.id)) ?? libres[0] ?? null;
       if (!c) { sueltas.push(l); continue; }
       usados.add(String(c.id));
-      if (l.estado === "P") plan.marcar.push({ cobro: c, importe: l.importe, importeAntes: Number(c.amount), ...formaYFecha([l], familia), lineas: [l], nombre: l.nombre });
+      if (l.estado === "P") marcarOMarcarExistente({ cobro: c, importe: l.importe, importeAntes: Number(c.amount), ...formaYFecha([l], familia), lineas: [l], nombre: l.nombre });
       else plan.saltados["pendiente y cuadra"]++;
     }
     // 2. Lo que sobra, consolidado por familia.
@@ -230,12 +334,12 @@ async function main() {
     if (carrier) {
       if (RQ > 0) {
         if (round2(carrier.amount) !== RQ || pendientes.length) plan.alinear.push({ cobro: carrier, importe: RQ, importeAntes: Number(carrier.amount), lineas: pendientes, nombre });
-        if (RP > 0) plan.crearCobrados.push({ importe: RP, ...formaYFecha(pagadas, familia), familia, paciente: pagadas[0].paciente, periodo, motivo: "cuota", lineas: pagadas, cuotaId: carrier.cuotaId, nombre });
+        if (RP > 0) crearCobradoOMarcar({ importe: RP, ...formaYFecha(pagadas, familia), familia, paciente: pagadas[0].paciente, periodo, motivo: "cuota", lineas: pagadas, cuotaId: carrier.cuotaId, nombre });
       } else if (RP > 0) {
-        plan.marcar.push({ cobro: carrier, importe: RP, importeAntes: Number(carrier.amount), ...formaYFecha(pagadas, familia), lineas: pagadas, nombre });
+        marcarOMarcarExistente({ cobro: carrier, importe: RP, importeAntes: Number(carrier.amount), ...formaYFecha(pagadas, familia), lineas: pagadas, nombre });
       }
     } else {
-      if (RP > 0) plan.crearCobrados.push({ importe: RP, ...formaYFecha(pagadas, familia), familia, paciente: pagadas[0].paciente, periodo, motivo: "cuota", lineas: pagadas, cuotaId: null, nombre });
+      if (RP > 0) crearCobradoOMarcar({ importe: RP, ...formaYFecha(pagadas, familia), familia, paciente: pagadas[0].paciente, periodo, motivo: "cuota", lineas: pagadas, cuotaId: null, nombre });
       if (RQ > 0) plan.crearPendientes.push({ importe: RQ, metodo: metodoDeFamilia.get(familia) ?? "transfer", familia, paciente: pendientes[0].paciente, periodo, lineas: pendientes, nombre });
     }
   }
@@ -249,9 +353,10 @@ async function main() {
   const conDif = plan.marcar.filter((m) => round2(m.importe) !== round2(m.importeAntes)).length;
   process.stdout.write(`  Cobros pendientes → COBRADOS            ${plan.marcar.length}  (${eur(suma(plan.marcar))}; con importe distinto al del CRM: ${conDif})\n`);
   process.stdout.write(`  Cobros nuevos ya cobrados               ${plan.crearCobrados.length}  (${eur(suma(plan.crearCobrados))}: cuota ${plan.crearCobrados.filter((x) => x.motivo === "cuota").length}, cita ${plan.crearCobrados.filter((x) => x.motivo === "cita").length}, bono ${plan.crearCobrados.filter((x) => x.motivo === "bono").length})\n`);
+  process.stdout.write(`  Ya cobrados a mano en el CRM (solo marca) ${plan.marcarExistente.length}  (${eur(suma(plan.marcarExistente))}: no se duplican)\n`);
   process.stdout.write(`  Pendientes alineados a Organízate       ${plan.alinear.length}  (CRM ${eur(suma(plan.alinear, "importeAntes"))} → ${eur(suma(plan.alinear))})\n`);
   process.stdout.write(`  Pendientes nuevos (sin cobro en el CRM) ${plan.crearPendientes.length}  (${eur(suma(plan.crearPendientes))})\n`);
-  process.stdout.write(`  Cobros del CRM que sobran (no se tocan) ${plan.sobranCrm.length}  (${eur(plan.sobranCrm.map((x) => x.cobro), "amount")})\n`);
+  process.stdout.write(`  Cobros del CRM que sobran (no se tocan) ${plan.sobranCrm.length}  (${eur(suma(plan.sobranCrm.map((x) => x.cobro), "amount"))})\n`);
   process.stdout.write(`  Pendientes del CRM sin líneas en Organízate ${crmSinOrganizate.length}  (${eur(suma(crmSinOrganizate, "amount"))})\n`);
   process.stdout.write(`  Sin paciente en el CRM                  ${plan.sinPaciente.length}\n`);
   process.stdout.write(`  Saltados                                ${Object.entries(plan.saltados).map(([k, v]) => `${k}: ${v}`).join(" · ")}\n`);
@@ -267,6 +372,7 @@ async function main() {
     if (plan.alinear.length) process.stdout.write(`  Alineados (muestra):\n${muestra(plan.alinear, (x) => `      ${eur(x.importeAntes)} → ${eur(x.importe)} · ${x.nombre} · ${x.lineas.length} línea(s) pendientes`)}\n\n`);
     if (plan.crearCobrados.length) process.stdout.write(`  Cobros nuevos cobrados (muestra):\n${muestra(plan.crearCobrados, (x) => `      ${x.motivo} ${eur(x.importe)} · ${x.metodo} · ${x.nombre}`)}\n\n`);
     if (plan.crearPendientes.length) process.stdout.write(`  Pendientes nuevos (muestra):\n${muestra(plan.crearPendientes, (x) => `      ${eur(x.importe)} · ${x.nombre}`)}\n\n`);
+    if (plan.marcarExistente.length) process.stdout.write(`  Ya cobrados a mano en el CRM (solo se marcan):\n${muestra(plan.marcarExistente, (x) => `      ${eur(x.importe)} · ${x.nombre} · ${x.lineas.length} línea(s) · cobro del ${String(x.cobro.paidAt).slice(0, 10)}`)}\n\n`);
     if (plan.sobranCrm.length) process.stdout.write(`  Sobran en el CRM:\n${muestra(plan.sobranCrm, (x) => `      ${eur(x.cobro.amount)} · familia ${x.familia.slice(0, 8)} · ${String(x.cobro.notes ?? "").slice(0, 70)}`)}\n\n`);
     if (crmSinOrganizate.length) process.stdout.write(`  CRM sin Organízate:\n${muestra(crmSinOrganizate, (c) => `      ${eur(c.amount)} · familia ${String(c.clientId).slice(0, 8)} · ${String(c.notes ?? "").slice(0, 70)}`)}\n\n`);
     if (plan.listados.length) process.stdout.write(`  Pendientes no de cuota:\n${muestra(plan.listados, (x) => `      ${x.tipo} ${eur(x.importe)} · ${x.nombre}`)}\n\n`);
@@ -277,7 +383,13 @@ async function main() {
   const { Tenant } = getMasterModels();
   const tenant = await Tenant.findOne({ where: { slug: SLUG }, attributes: ["id"] });
   const auditar = (action, entityId, before, after) => logBillingAudit({ tenantId: tenant?.id ?? null, userId: null, action, entity: "Payment", entityId, before, after: { ...after, via: "script:volcar-cobros-organizate" }, ip: null });
-  const hecho = { marcados: 0, creados: 0, alineados: 0, pendientesCreados: 0 };
+  const hecho = { marcados: 0, marcadosExistentes: 0, creados: 0, alineados: 0, pendientesCreados: 0 };
+  for (const x of plan.marcarExistente) {
+    const nota = `${x.cobro.notes ? `${x.cobro.notes} — ` : ""}Cobrado también en Organízate (${marca(x.lineas)}): el CRM ya lo tenía cobrado a mano`;
+    await x.cobro.update({ notes: nota.slice(0, 2000) });
+    await auditar("payment.updated", x.cobro.id, { notes: "sin marca de Organízate" }, { notes: "con marca de Organízate" });
+    hecho.marcadosExistentes++;
+  }
   const pagosTxt = (x) => (x.pagos?.length ? `, pago${x.pagos.length > 1 ? "s" : ""} ${x.pagos.join("/")}` : "");
   for (const m of plan.marcar) {
     const before = { status: m.cobro.status, amount: Number(m.cobro.amount), method: m.cobro.method };
@@ -301,11 +413,13 @@ async function main() {
     hecho.creados++;
   }
   for (const p of plan.crearPendientes) {
-    const fila = await Payment.create({ invoiceId: null, clientId: p.familia, patientId: p.paciente.id, periodMonth: p.periodo, amount: round2(p.importe), paidAt: fechaDe(`01/${MES.slice(5, 7)}`, anio), method: p.metodo, status: "pending", notes: `Pendiente según Organízate (${marca(p.lineas)}); sin cobro de cuota en el CRM` });
+    const queEs = p.motivo === "bono" ? "Bono pendiente" : p.motivo === "cita" ? "Cita pendiente" : "Pendiente";
+    const cola = p.motivo ? "" : "; sin cobro de cuota en el CRM";
+    const fila = await Payment.create({ invoiceId: null, clientId: p.familia, patientId: p.paciente.id, periodMonth: p.periodo, amount: round2(p.importe), paidAt: fechaDe(`01/${MES.slice(5, 7)}`, anio), method: p.metodo, status: "pending", notes: `${queEs} según Organízate (${marca(p.lineas)})${cola}` });
     await auditar("payment.created", fila.id, null, { status: "pending", amount: round2(p.importe), method: p.metodo });
     hecho.pendientesCreados++;
   }
-  process.stdout.write(`  ✓ marcados cobrados ${hecho.marcados} · cobros nuevos ${hecho.creados} · importes alineados ${hecho.alineados} · pendientes nuevos ${hecho.pendientesCreados}\n\n`);
+  process.stdout.write(`  ✓ marcados cobrados ${hecho.marcados} · ya cobrados a mano (marcados) ${hecho.marcadosExistentes} · cobros nuevos ${hecho.creados} · importes alineados ${hecho.alineados} · pendientes nuevos ${hecho.pendientesCreados}\n\n`);
   process.exit(0);
 }
 
