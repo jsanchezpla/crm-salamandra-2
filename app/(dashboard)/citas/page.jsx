@@ -5,6 +5,7 @@ import CitasModule from "../../../modules/default/CitasModule.jsx";
 import { getMasterModels } from "../../../lib/db/masterDb.js";
 import { vocabularioCliente } from "../../../lib/clients/vocabulario.js";
 import { VOCABULARIO_MIEMBRO, vocabularioEquipo } from "../../../lib/team/vocabulario.js";
+import { cobroObligatorio } from "../../../lib/citas/dineroDeLaCita.js";
 
 /**
  * Página de Citas.
@@ -63,6 +64,24 @@ const modulosActivos = cache(async (slug) => {
   }
 });
 
+/**
+ * ¿Este centro exige que toda cita nazca atada a un dinero? (04/09/2026,
+ * Aumenta por Rodrigo). Se resuelve en el SERVIDOR y baja como prop, igual que
+ * `conClientes` y el vocabulario: `CitasModule` es "use client" y no puede
+ * leer los ajustes del tenant. Ante la duda, `false` — la agenda sigue
+ * funcionando como siempre y nadie se queda sin poder apuntar una cita.
+ */
+const exigeCobroDelCentro = cache(async (slug) => {
+  if (!slug) return false;
+  try {
+    const { Tenant } = getMasterModels();
+    const tenant = await Tenant.findOne({ where: { slug } });
+    return cobroObligatorio(tenant);
+  } catch {
+    return false;
+  }
+});
+
 export async function generateMetadata() {
   const headersList = await headers();
   const slug = headersList.get("x-tenant");
@@ -75,6 +94,9 @@ export default async function CitasPage() {
   const Component = (tenantSlug && UI_OVERRIDES[tenantSlug]) || CitasModule;
 
   const activos = await modulosActivos(tenantSlug);
+  // El interruptor solo manda si el centro factura: sin catálogo no hay cuota
+  // que elegir, y el freno dejaría la agenda muerta.
+  const exigeCobro = (await exigeCobroDelCentro(tenantSlug)) && activos?.has("billing") === true;
   // `null` = no se pudo averiguar. Se trata como «no lo tiene»: ver arriba.
   const conClientes = activos?.has("clients") === true;
   const vocabulario = vocabularioCliente((k) => activos?.has(k) === true);
@@ -87,5 +109,12 @@ export default async function CitasPage() {
   // identidad es estable, y además esto es un componente de SERVIDOR: se
   // renderiza una vez por petición, no hay remontaje posible.
   // eslint-disable-next-line react-hooks/static-components
-  return <Component conClientes={conClientes} vocabulario={vocabulario} vocabularioEquipo={vocabularioEquipoDelCentro} />;
+  return (
+    <Component
+      conClientes={conClientes}
+      vocabulario={vocabulario}
+      vocabularioEquipo={vocabularioEquipoDelCentro}
+      exigeCobro={exigeCobro}
+    />
+  );
 }

@@ -14,11 +14,12 @@ import { logCitasAudit } from "../../../../lib/citas/audit.js";
 import { normalizarPreguntas } from "../../../../lib/citas/preguntasCita.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // ───────────────────────────────────────────────────────────────────────────
 // GET /api/citas/event-types — listar
 // ───────────────────────────────────────────────────────────────────────────
-export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
+export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule, tenantHasModule }) => {
   try {
     if (!hasModule("citas")) return forbidden("Módulo citas no activo");
 
@@ -30,8 +31,26 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       where.active = searchParams.get("active") === "true";
     }
 
+    /*
+     * El CONCEPTO que cubre las citas de cada tipo (04/09/2026, Aumenta) viaja
+     * con el tipo: así el alta de una cita puede enseñar «Cuota: Logopedia
+     * 45x1» sin pedirle nada a `/api/billing/conceptos`, que exige el módulo de
+     * facturación —y la mitad del equipo no lo tiene—. Solo se intenta si el
+     * centro tiene el modelo: en uno sin facturación, `billing_concepts` ni
+     * existe y el include daría 42P01.
+     *
+     * Se piden solo tres columnas: el precio lo recorta después
+     * `filtrarTipos` para quien no es dirección.
+     */
+    const { BillingConcept } = tenantModels;
+    const include =
+      BillingConcept && tenantHasModule("billing")
+        ? [{ model: BillingConcept, as: "concepto", attributes: ["id", "name", "unitPrice"], required: false }]
+        : [];
+
     const eventTypes = await EventType.findAll({
       where,
+      include,
       order: [["order", "ASC"], ["createdAt", "ASC"]],
     });
 
@@ -161,6 +180,12 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     // «Esta es la valoración inicial»: como mucho una por cliente. Si se crea
     // marcada, la que lo estuviera deja de estarlo (la BD lo impone además con
     // un índice único parcial).
+    // La cuota del tipo (04/09/2026): un id de concepto o nada. No se comprueba
+    // contra la tabla —un centro puede no tener facturación— pero sí que es un
+    // UUID, para no guardar basura que luego nadie sabe de dónde salió.
+    const conceptId =
+      typeof body.conceptId === "string" && UUID_RE.test(body.conceptId.trim()) ? body.conceptId.trim() : null;
+
     const isInitialAssessment = Boolean(body.isInitialAssessment);
     if (isInitialAssessment) {
       await EventType.update({ isInitialAssessment: false }, { where: { isInitialAssessment: true } });
@@ -190,6 +215,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       formQuestions: normalizarPreguntas(body.formQuestions),
       isInitialAssessment,
       isHidden,
+      conceptId,
       active,
       order,
     });

@@ -77,6 +77,13 @@ export default function CobrosPage() {
   // con logopedia y el 17 con psicología, y cada servicio paga lo suyo.
   const [conceptosCatalogo, setConceptosCatalogo] = useState([]);
   const [lineasCuota, setLineasCuota] = useState([]); // [{ id, inicio }]
+  /*
+   * De dónde salió lo que hay puesto (04/09/2026): `{ fuente: "citas", citas: n,
+   * mes }` cuando lo han dicho las CITAS de ese mes. Se enseña bajo los
+   * conceptos porque un importe que aparece solo, sin decir de dónde sale, no se
+   * puede ni confirmar ni corregir.
+   */
+  const [origenCuota, setOrigenCuota] = useState(null);
 
   const conceptosElegidos = lineasCuota
     .map(({ id, inicio }) => {
@@ -173,6 +180,7 @@ export default function CobrosPage() {
     // Primero limpiar, siempre: más vale el importe en blanco que el de otra familia.
     setLineasCuota([]);
     setCuotaDeLaFamilia(null);
+    setOrigenCuota(null);
     setForm((f) => (f.amount === "" ? f : { ...f, amount: "" }));
     if (!form.clientId || !conceptosCatalogo.length) return;
 
@@ -191,14 +199,39 @@ export default function CobrosPage() {
        */
       const cuotas = cuotasQueEntran(todas, form.patientId);
       let ids = conceptosDeCuotas(cuotas);
+      let deLasCitas = null;
+      /*
+       * ── LO QUE DICEN SUS CITAS DE ESE MES (04/09/2026, Aumenta) ───────────
+       *
+       * Desde que cada cita nace atada a una cuota, el mes que se está cobrando
+       * ya sabe lo que lleva: se pregunta a la agenda en vez de reconstruirlo.
+       * Va DESPUÉS de la cuota asignada —que es lo pactado con la familia y
+       * manda— y ANTES de la cuota «aprendida» del último cobro, que es una
+       * suposición a partir del pasado: si en octubre empezó logopedia, las
+       * citas de octubre lo saben y el cobro de septiembre no.
+       */
+      if (!cuotas.length) {
+        const jCitas = await pedir(
+          `/api/citas/cobro-del-mes?clientId=${encodeURIComponent(form.clientId)}` +
+            `&mes=${encodeURIComponent(form.periodMonth)}` +
+            (form.patientId ? `&patientId=${encodeURIComponent(form.patientId)}` : "")
+        );
+        if (turno !== turnoCuota.current) return;
+        const conCuota = (jCitas?.data?.cuotas ?? []).filter((l) => l.conceptId);
+        if (conCuota.length) {
+          ids = conCuota.map((l) => l.conceptId);
+          deLasCitas = { fuente: "citas", citas: jCitas?.data?.citas ?? 0, mes: form.periodMonth };
+        }
+      }
       // El respaldo es para quien NO tiene cuota asignada. Una cuota asignada
       // con importe pero sin conceptos manda igual: rellenarla con lo que se
       // le cobró hace meses sería contar otra historia.
-      if (!cuotas.length) {
+      if (!cuotas.length && !deLasCitas) {
         const jFicha = await pedir(`/api/billing/fichas?id=${encodeURIComponent(form.clientId)}`);
         if (turno !== turnoCuota.current) return;
         ids = Array.isArray(jFicha?.data?.cuotaConceptIds) ? jFicha.data.cuotaConceptIds : [];
       }
+      setOrigenCuota(deLasCitas);
 
       const items = ids
         .filter((id) => conceptosCatalogo.some((c) => String(c.id) === String(id)))
@@ -223,7 +256,7 @@ export default function CobrosPage() {
         });
       }
     })();
-  }, [form.clientId, form.patientId, form.modo, conceptosCatalogo]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [form.clientId, form.patientId, form.modo, form.periodMonth, conceptosCatalogo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -878,6 +911,17 @@ export default function CobrosPage() {
                             ? <> · importe <strong className="text-neutral-600">pactado con la familia</strong>, no la tarifa del catálogo.</>
                             : "."}{" "}
                           <Link href="/facturacion/cuotas" className="underline hover:text-neutral-600">Ver sus cuotas</Link>
+                        </>
+                      ) : origenCuota ? (
+                        /* Lo han dicho sus CITAS de ese mes (04/09/2026). Se
+                           dice cuántas para que se pueda contrastar de un
+                           vistazo con la agenda. */
+                        <>
+                          Sin cuota asignada: se ha rellenado con lo que dicen sus{" "}
+                          <strong className="text-neutral-600">
+                            {origenCuota.citas === 1 ? "1 cita" : `${origenCuota.citas} citas`}
+                          </strong>{" "}
+                          de ese mes.
                         </>
                       ) : conceptosElegidos.length ? (
                         "Sin cuota asignada: se ha rellenado con lo último que se le cobró."

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
+import Select from "../../../../components/ui/Select.jsx";
 import { eurosToCents, centsToEuros, formatMoney } from "../../../../lib/payments/money.js";
 import { slugify } from "../../../../lib/citas/validation.js";
 import {
@@ -36,6 +37,11 @@ const EMPTY_FORM = {
   maxAdvanceDays: 60,
   // En EUROS mientras se edita; se convierte a céntimos al guardar. Vacío = gratis.
   price: "",
+  // La CUOTA que cubre las citas de este tipo (04/09/2026): un concepto del
+  // catálogo de Facturación. Vacío = ninguna, y entonces cada cita de este tipo
+  // hay que decir de qué se cobra. No confundir con `price`, que es lo que se
+  // cobra CON TARJETA en la agenda pública.
+  conceptId: "",
   // Bono de sesiones y pago a plazos (04/08/2026). 1 sesión = cita suelta.
   sessionsCount: 1,
   instalmentPrice: "",
@@ -263,6 +269,13 @@ export default function CitasTiposPage() {
    * y quitarlo medio segundo después sería enseñarlo igual.
    */
   const [esAdmin, setEsAdmin] = useState(null);
+  /*
+   * El catálogo de conceptos («las cuotas») para poder decir cuál cubre cada
+   * tipo de cita (04/09/2026, Aumenta). Se pide con `billing`; en un centro sin
+   * facturación el endpoint responde 403, la lista queda vacía y el campo no se
+   * enseña — el resto de la pantalla funciona igual.
+   */
+  const [conceptos, setConceptos] = useState([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -291,6 +304,13 @@ export default function CitasTiposPage() {
     fetch("/api/tenant/settings", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => setTenantSlug(j?.data?.slug ?? null))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/billing/conceptos", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setConceptos(j?.data?.conceptos ?? []))
       .catch(() => {});
   }, []);
 
@@ -333,6 +353,7 @@ export default function CitasTiposPage() {
         minNoticeHours: data.minNoticeHours ?? 3,
         maxAdvanceDays: data.maxAdvanceDays ?? 60,
         price: data.price != null ? centsToEuros(data.price) : "",
+        conceptId: data.conceptId ?? "",
         sessionsCount: data.sessionsCount ?? 1,
         instalmentPrice: data.instalmentPrice != null ? centsToEuros(data.instalmentPrice) : "",
         instalmentMonths: data.instalmentMonths ?? "",
@@ -399,6 +420,7 @@ export default function CitasTiposPage() {
       maxAdvanceDays: Number(form.maxAdvanceDays),
       // La API trabaja en CÉNTIMOS; el formulario, en euros. Vacío → null (gratis).
       price: eurosToCents(form.price),
+      conceptId: form.conceptId || null,
       sessionsCount: Number(form.sessionsCount) || 1,
       // Los dos van juntos o no va ninguno: una cuota sin meses no se puede
       // cobrar, y unos meses sin cuota tampoco.
@@ -700,6 +722,38 @@ export default function CitasTiposPage() {
                       {Number(form.sessionsCount) > 1
                         ? "Precio del bono ENTERO pagado de una vez."
                         : "Vacío = sin cobro. Con precio, se cobra al reservar."}
+                    </p>
+                  </div>
+                )}
+                {/*
+                 * LA CUOTA DEL TIPO (04/09/2026, Aumenta por Rodrigo). Se pone
+                 * una vez aquí y baja sola a cada cita que se apunte con este
+                 * tipo, que es lo que hace que atar cada cita a un dinero no
+                 * cueste un clic más. En el alta se puede cambiar.
+                 *
+                 * No es lo mismo que «Precio»: aquel es lo que la familia paga
+                 * CON TARJETA al reservar por la web; esto es de qué se cobra
+                 * la cita cuando se cobra el mes.
+                 */}
+                {esAdmin && conceptos.length > 0 && (
+                  <div className="sm:col-span-2">
+                    <label className="block text-[11px] font-medium text-neutral-500 mb-1">
+                      Cuota que cubre estas citas
+                    </label>
+                    <Select
+                      value={form.conceptId}
+                      onChange={(v) => updateForm("conceptId", v)}
+                      className={inputCls}
+                      options={[
+                        { value: "", label: "Ninguna — se elige en cada cita" },
+                        ...conceptos.map((c) => ({
+                          value: c.id,
+                          label: `${c.name}${c.unitPrice != null ? ` · ${Number(c.unitPrice).toFixed(2)} €` : ""}`,
+                        })),
+                      ]}
+                    />
+                    <p className="text-[10px] text-neutral-400 mt-1">
+                      Cada cita nueva de este tipo nacerá con esta cuota puesta. Se puede cambiar al apuntarla.
                     </p>
                   </div>
                 )}

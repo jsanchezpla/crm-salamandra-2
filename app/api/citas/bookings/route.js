@@ -25,6 +25,7 @@ import { cargarAusencias, minutosOcupados } from "../../../../lib/citas/ausencia
 import { getMadridParts } from "../../../../lib/citas/slots.js";
 import { asignarSesion } from "../../../../lib/citas/packs.js";
 import { grupoDeTipoDeCita, montarCitaDeTaller } from "../../../../lib/clinica/citaDeTaller.js";
+import { cobroObligatorio, cobroDelTipo, normalizarCobro } from "../../../../lib/citas/dineroDeLaCita.js";
 import { terapeutasDeGrupo } from "../../../../lib/clinica/grupoDeTaller.js";
 
 
@@ -427,6 +428,53 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       ? await asignarSesion(tenantModels, { email: clientEmail, eventTypeId })
       : null;
 
+    /*
+     * ── EL DINERO DE LA CITA (04/09/2026, Aumenta por Rodrigo) ──────────────
+     *
+     * «Para crear una cita tiene que estar asociada a una cuota o a un cobro de
+     * texto libre… y nunca se crean citas gratuitas sin quererlo.» La regla
+     * entera —los tres modos y por qué son tres— vive en
+     * `lib/citas/dineroDeLaCita.js`; aquí solo se resuelve el concepto contra
+     * la base y se guarda lo que diga.
+     *
+     * Lo que baja por defecto es el concepto DEL TIPO: se pone una vez en
+     * Citas → Tipos y no cuesta un clic en cada una de las ~250 citas que
+     * Aumenta apunta al día. El alta puede cambiarlo.
+     *
+     * Tres cosas que NO bloquean nunca, a propósito:
+     *   · un centro sin `billing` (no tiene catálogo que elegir);
+     *   · un centro con el interruptor apagado, que es como nacen todos;
+     *   · una cita de TALLER, que no tiene UNA familia a la que cobrarle: su
+     *     dinero va por la inscripción de cada niño al grupo.
+     */
+    // `tenantHasModule` y no `hasModule`: lo que decide es si el CENTRO factura,
+    // no si quien apunta la cita tiene acceso al módulo de facturación — en
+    // Aumenta apunta citas todo el equipo y casi nadie tiene Facturación.
+    const exigirCobro = cobroObligatorio(tenant) && tenantHasModule("billing") && !tallerGrupoId;
+    let cobro = null;
+    {
+      const { BillingConcept } = tenantModels;
+      const hayCatalogo = Boolean(BillingConcept) && tenantHasModule("billing");
+      const pedido = body.cobro && typeof body.cobro === "object" ? body.cobro : {};
+      const conceptIdPedido =
+        pedido.modo === "cuota" && typeof pedido.conceptId === "string" && UUID_RE.test(pedido.conceptId)
+          ? pedido.conceptId
+          : null;
+      // El concepto que hay que cargar: el que pide el alta o, si no dice nada,
+      // el del tipo de cita.
+      const idConcepto = conceptIdPedido ?? (pedido.modo ? null : eventType.conceptId ?? null);
+      const concepto = idConcepto && hayCatalogo ? await BillingConcept.findByPk(idConcepto) : null;
+      if (conceptIdPedido && !concepto) return error("La cuota elegida ya no existe", 422);
+      const res = normalizarCobro(pedido, {
+        concepto,
+        exigido: exigirCobro,
+        // Sin modo pedido, hereda el del tipo (si el tipo lo tiene).
+        porDefecto: pedido.modo ? null : cobroDelTipo(concepto),
+      });
+      if (res.error) return error(res.error, 422);
+      cobro = res.cobro;
+    }
+
     const row = await Booking.create({
       eventTypeId,
       clientName,
@@ -445,6 +493,10 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       packId: enBono?.packId ?? null,
       sessionNumber: enBono?.sessionNumber ?? null,
       tallerGrupoId,
+      cobroModo: cobro?.modo ?? null,
+      cobroConceptId: cobro?.conceptId ?? null,
+      cobroTexto: cobro?.texto ?? null,
+      cobroImporte: cobro?.importe ?? null,
     });
 
     /*

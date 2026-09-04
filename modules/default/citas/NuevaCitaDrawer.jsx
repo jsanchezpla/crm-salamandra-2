@@ -13,6 +13,7 @@ import SelectorPaciente from "../../../components/citas/SelectorPaciente.jsx";
 import { datosAlElegirFicha } from "../../../lib/clients/contactoDeFicha.js";
 import { repasarContactoDeCita, avisoDeContacto } from "../../../lib/citas/contactoCita.js";
 import { CADENCIAS, fechasDeRepeticion } from "../../../lib/citas/recurrencia.js";
+import { cobroDelTipo, normalizarCobro, euros } from "../../../lib/citas/dineroDeLaCita.js";
 import { inputCls } from "./chips.jsx";
 
 const EMPTY_BOOKING_FORM = {
@@ -52,6 +53,10 @@ export function NuevaCitaDrawer({
   categoriasBloqueo = [],
   viewerIsAdmin = false,
   miFichaDeEquipo = null,
+  // ¿Este centro exige que la cita nazca atada a un dinero? (04/09/2026,
+  // Aumenta). Lo decide el servidor; aquí solo cambia si el bloque de cobro se
+  // puede dejar en blanco. Ver `lib/citas/dineroDeLaCita.js`.
+  exigeCobro = false,
 }) {
   const [createForm, setCreateForm] = useState({
     ...EMPTY_BOOKING_FORM,
@@ -82,6 +87,45 @@ export function NuevaCitaDrawer({
   const selectedEventType = useMemo(() => {
     return eventTypes.find((e) => e.id === createForm.eventTypeId) ?? null;
   }, [eventTypes, createForm.eventTypeId]);
+
+  /*
+   * ── EL DINERO DE LA CITA (04/09/2026, Aumenta por Rodrigo) ────────────────
+   *
+   * «Para crear una cita tiene que estar asociada a una cuota o a un cobro de
+   * texto libre… y nunca se crean citas gratuitas sin quererlo.»
+   *
+   * `cobro` es lo que se va a mandar: `{ modo, conceptId, texto, importe }`.
+   * Empieza puesto con la cuota del TIPO —ese es el punto entero: con 63 tipos
+   * y 250 citas al día, elegir el concepto en cada una sería elegir siempre lo
+   * mismo— y se puede cambiar a un cobro de texto libre o a «sin coste».
+   *
+   * `null` mientras no hay tipo elegido, y en los talleres, que no tienen UNA
+   * familia a la que cobrar: su dinero va por la inscripción de cada niño.
+   */
+  const [cobro, setCobro] = useState(null);
+  // El catálogo de conceptos, para poder cambiar la cuota. Se pide con
+  // `billing`: quien no tenga el módulo recibe 403, la lista queda vacía y solo
+  // podrá quedarse con la del tipo, escribir un cobro libre o marcar sin coste.
+  const [conceptos, setConceptos] = useState([]);
+  useEffect(() => {
+    let vivo = true;
+    fetch("/api/billing/conceptos", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => vivo && setConceptos(j?.data?.conceptos ?? []))
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, []);
+
+  /*
+   * Al cambiar de tipo, el cobro vuelve a lo que diga el tipo nuevo. Es lo que
+   * hay que hacer: si estaba puesto «Logopedia 45x1» porque lo traía el tipo
+   * anterior, dejarlo al cambiar a «Psicología» apuntaría la cita a la cuota
+   * equivocada sin que nadie lo tocara.
+   */
+  useEffect(() => {
+    if (!selectedEventType || selectedEventType.tallerGrupoId) { setCobro(null); return; }
+    setCobro(cobroDelTipo(selectedEventType.concepto));
+  }, [selectedEventType]);
 
   /*
    * ── ¿ES UN TALLER? (01/09/2026, Rodrigo) ─────────────────────────────────
@@ -310,6 +354,20 @@ export function NuevaCitaDrawer({
       return;
     }
     if (!createForm.modality) { setFormError("Selecciona modalidad"); return; }
+    /*
+     * El dinero de la cita se valida con la MISMA función que el servidor
+     * (`normalizarCobro`), no con un `if` paralelo: dos reglas que dicen lo
+     * mismo hoy dejan de decirlo el día que alguien toque una. Aquí solo sirve
+     * para enseñar el error antes de mandar; el que manda es el 422 de la API.
+     */
+    if (!esTaller) {
+      const { error: errorCobro } = normalizarCobro(cobro ?? {}, {
+        concepto: cobro?.modo === "cuota" ? { id: cobro.conceptId, name: cobro.texto, unitPrice: null } : null,
+        exigido: exigeCobro,
+        porDefecto: null,
+      });
+      if (errorCobro) { setFormError(errorCobro); return; }
+    }
 
     /*
      * ── SIN CORREO NI TELÉFONO SE PUEDE, PERO NO EN SILENCIO (28/08/2026) ────
@@ -374,6 +432,21 @@ export function NuevaCitaDrawer({
             notes: createForm.notes.trim() || null,
             patientId: createForm.patientId || null,
             teamMemberId: createForm.teamMemberId || null,
+            /*
+             * Lo que cubre la cita. En modo `cuota` NO se manda el importe: lo
+             * pone el servidor leyendo el concepto. Y no es un detalle — quien
+             * no es dirección recibe el catálogo SIN precios
+             * (`lib/citas/dinero.js`), así que mandar lo que ve la pantalla
+             * apuntaría 0 € en toda cita creada por el equipo.
+             */
+            ...(cobro
+              ? {
+                  cobro:
+                    cobro.modo === "cuota"
+                      ? { modo: "cuota", conceptId: cobro.conceptId, texto: cobro.texto }
+                      : { modo: cobro.modo, texto: cobro.texto, importe: cobro.importe },
+                }
+              : {}),
           };
       const enviar = (insistir) =>
         fetch("/api/citas/bookings", {
@@ -885,6 +958,133 @@ export function NuevaCitaDrawer({
                   className={`${inputCls} min-h-[70px]`}
                 />
               </div>
+
+              {/*
+                * ── EL COBRO DE LA CITA (04/09/2026, Aumenta por Rodrigo) ──────
+                *
+                * Sale cuando el centro lo exige o cuando el tipo trae cuota; en
+                * los demás centros la pantalla no cambia. En un TALLER no sale:
+                * el dinero de un taller va por la inscripción de cada niño.
+                *
+                * Tres modos y no más, los mismos que valida el servidor:
+                * la cuota del catálogo, un cobro de texto libre, o sin coste
+                * DICIENDO POR QUÉ — que es lo que convierte una cita gratis en
+                * una decisión en vez de en un olvido.
+                */}
+              {!esTaller && (exigeCobro || cobro) && (
+                <div className="border border-neutral-200 rounded-xl p-3 bg-neutral-50/60 space-y-2">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <label className="text-[11px] font-medium text-neutral-500">
+                      Cobro {exigeCobro && <span className="text-neutral-400">*</span>}
+                    </label>
+                    <div className="flex gap-1">
+                      {[
+                        ["cuota", "Cuota"],
+                        ["libre", "Cobro suelto"],
+                        ["sin_coste", "Sin coste"],
+                      ].map(([k, lbl]) => (
+                        <button
+                          key={k}
+                          type="button"
+                          onClick={() =>
+                            setCobro((c) =>
+                              c?.modo === k
+                                ? c
+                                : k === "cuota"
+                                  ? cobroDelTipo(selectedEventType?.concepto) ?? { modo: "cuota", conceptId: "", texto: "", importe: 0 }
+                                  : { modo: k, conceptId: null, texto: "", importe: 0 }
+                            )
+                          }
+                          className={`px-2.5 py-1 rounded-lg text-[11px] border transition ${
+                            cobro?.modo === k
+                              ? "border-transparent text-white"
+                              : "bg-white border-neutral-200 text-neutral-500 hover:border-neutral-300"
+                          }`}
+                          style={cobro?.modo === k ? { background: "var(--color-primary, #1B3A2D)" } : undefined}
+                        >
+                          {lbl}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {cobro?.modo === "cuota" && (
+                    <>
+                      {conceptos.length > 0 ? (
+                        <Select
+                          value={cobro.conceptId ?? ""}
+                          onChange={(v) => {
+                            const c = conceptos.find((x) => x.id === v) ?? null;
+                            setCobro(c ? cobroDelTipo(c) : { modo: "cuota", conceptId: "", texto: "", importe: 0 });
+                          }}
+                          options={[
+                            { value: "", label: "— Elige la cuota —" },
+                            ...conceptos.map((c) => ({
+                              value: c.id,
+                              label: `${c.name}${c.unitPrice != null ? ` · ${Number(c.unitPrice).toFixed(2)} €` : ""}`,
+                            })),
+                          ]}
+                          className={inputCls}
+                          searchable
+                        />
+                      ) : (
+                        /* Sin catálogo (no tiene el módulo de facturación): se
+                           queda con la que trae el tipo, que es lo normal. */
+                        <p className="text-xs text-neutral-600">
+                          {cobro.texto || "Este tipo de cita no tiene cuota puesta."}
+                          {cobro.importe > 0 && <span className="text-neutral-400"> · {euros(cobro.importe)}</span>}
+                        </p>
+                      )}
+                      {conceptos.length === 0 && !cobro.conceptId && exigeCobro && (
+                        <p className="text-[10px] text-amber-700">
+                          Ponle la cuota a este tipo en Citas → Tipos, o escribe un cobro suelto.
+                        </p>
+                      )}
+                    </>
+                  )}
+
+                  {cobro?.modo === "libre" && (
+                    <div className="grid grid-cols-[1fr_110px] gap-2">
+                      <input
+                        type="text"
+                        maxLength={200}
+                        placeholder="Qué se cobra"
+                        value={cobro.texto}
+                        onChange={(e) => setCobro((c) => ({ ...c, texto: e.target.value }))}
+                        className={inputCls}
+                      />
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        placeholder="€"
+                        value={cobro.importe ? String(cobro.importe / 100) : ""}
+                        onChange={(e) =>
+                          setCobro((c) => ({ ...c, importe: Math.round((Number(e.target.value) || 0) * 100) }))
+                        }
+                        className={inputCls}
+                      />
+                    </div>
+                  )}
+
+                  {cobro?.modo === "sin_coste" && (
+                    <input
+                      type="text"
+                      maxLength={200}
+                      placeholder="Por qué no se cobra (recuperación, reunión, cortesía…)"
+                      value={cobro.texto}
+                      onChange={(e) => setCobro((c) => ({ ...c, texto: e.target.value }))}
+                      className={inputCls}
+                    />
+                  )}
+
+                  {!cobro && (
+                    <p className="text-[11px] text-neutral-500">
+                      Elige de qué se cobra esta cita, o márcala como sin coste.
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div>
                 <label className="block text-[11px] font-medium text-neutral-500 mb-1">Notas internas</label>

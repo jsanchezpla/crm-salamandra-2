@@ -46,7 +46,14 @@ import SesionTallerDrawer from "@/components/clinica/SesionTallerDrawer.jsx";
  * lib/team/vocabulario.js. Las frases de aquí abajo que nombran a alguien
  * del equipo salen de él, no se escriben a mano.
  */
-export default function CitasModule({ conClientes = false, vocabulario = undefined, vocabularioEquipo = VOCABULARIO_MIEMBRO }) {
+export default function CitasModule({
+  conClientes = false,
+  vocabulario = undefined,
+  vocabularioEquipo = VOCABULARIO_MIEMBRO,
+  // ¿Toda cita tiene que nacer atada a un dinero? (04/09/2026, Aumenta). Lo
+  // resuelve la página en el servidor: ver `lib/citas/dineroDeLaCita.js`.
+  exigeCobro = false,
+}) {
   const calendarRef = useRef(null);
   const router = useRouter();
   // Menú contextual de una cita (clic derecho sobre la caja): { x, y, titulo,
@@ -1490,6 +1497,7 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
           categoriasBloqueo={categoriasBloqueoRef.current}
           viewerIsAdmin={viewerIsAdmin}
           miFichaDeEquipo={miFichaDeEquipo}
+          exigeCobro={exigeCobro}
           confirmar={confirmar}
           avisar={avisar}
           onClose={() => setCreacion(null)}

@@ -570,6 +570,20 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
     const precio = enBono ? null : (compraDeBono ? compraDeBono.amount : precioTarifa);
 
     /*
+     * La CUOTA que cubre esta cita (04/09/2026), heredada del tipo. Se carga
+     * fuera de la transacción y solo si el tipo la tiene: si un tipo lleva
+     * concepto es que ese centro tiene facturación, así que la tabla existe.
+     * Se copia el NOMBRE además del id, que es lo que hace que la cita siga
+     * diciendo qué la cubría aunque el concepto se borre luego.
+     */
+    let conceptoDelTipo = null;
+    if (eventType.conceptId && tenantModels.BillingConcept) {
+      conceptoDelTipo = await tenantModels.BillingConcept.findByPk(eventType.conceptId, {
+        attributes: ["id", "name"],
+      });
+    }
+
+    /*
      * ¿ESTA CITA ESPERA EN LA LISTA? (07/08/2026, Rodrigo)
      *
      * Dos motivos para esperar, y ninguno tiene que ver con el modo del centro:
@@ -832,6 +846,21 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
             sessionNumber: enBono?.sessionNumber ?? null,
             // Respuestas del formulario del tipo de cita, si lo tiene.
             formAnswers: respuestasFormulario,
+            /*
+             * El dinero de la cita (04/09/2026) baja del TIPO, sin preguntar
+             * nada: aquí quien reserva es la familia y no hay a quién pedirle
+             * que elija una cuota. Si el tipo no lleva concepto, la cita nace
+             * sin cobro y el centro se lo pone al confirmarla desde su ficha —
+             * el interruptor `cobroObligatorio` NO frena la agenda pública, que
+             * sería cerrarle la puerta a quien viene de fuera.
+             *
+             * Solo el id y el texto: el importe de una cita reservada por web
+             * lo manda `amount` (lo que se le cobra con tarjeta), y escribir
+             * aquí otra cifra sería tener dos precios para la misma cita.
+             */
+            cobroModo: conceptoDelTipo ? "cuota" : null,
+            cobroConceptId: conceptoDelTipo?.id ?? null,
+            cobroTexto: conceptoDelTipo?.name ?? null,
           },
           { transaction: t }
         );

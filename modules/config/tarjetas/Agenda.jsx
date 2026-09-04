@@ -80,6 +80,55 @@ export function AgendaCompartidaCard({ activo, readOnly, onChange }) {
 }
 
 /**
+ * Toda cita nace atada a un dinero (04/09/2026, Aumenta por Rodrigo).
+ *
+ * «Para crear una cita tiene que estar asociada a una cuota o a un cobro de
+ * texto libre, así cuando se crea una cita siempre está aparejada a un dinero y
+ * se puede cobrar con comodidad y nunca se crean citas gratuitas sin quererlo.»
+ *
+ * La tarjeta dice las dos cosas que hay que saber antes de encenderlo: de dónde
+ * sale el dinero (del tipo de cita, que se rellena en Citas → Tipos) y que
+ * sigue habiendo citas gratis, pero marcadas a mano. Sin lo primero, encenderlo
+ * bloquea el alta de citas hasta que alguien rellene 63 tipos.
+ */
+export function CobroDeLaCitaCard({ activo, readOnly, onChange }) {
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl p-5">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-neutral-800">Toda cita, con su cobro</div>
+          <p className="text-xs text-neutral-400 mt-0.5 max-w-lg">
+            Al apuntar una cita hay que decir de qué se cobra: la <strong>cuota</strong> del
+            catálogo, un <strong>cobro suelto</strong> escrito a mano, o marcarla{" "}
+            <strong>sin coste</strong> diciendo por qué. La cuota viene puesta sola desde el tipo de
+            cita, así que en el día a día no hay que tocar nada.
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={readOnly}
+          onClick={() => onChange(!activo)}
+          className={`shrink-0 relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-40 ${activo ? "bg-[var(--color-primary,#1B3A2D)]" : "bg-neutral-300"}`}
+          aria-label={activo ? "Dejar crear citas sin cobro" : "Exigir cobro en cada cita"}
+        >
+          <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${activo ? "translate-x-6" : "translate-x-1"}`} />
+        </button>
+      </div>
+      <div className="mt-1 text-[11px] font-medium">
+        {activo
+          ? <span className="text-emerald-700">Activo: no se puede guardar una cita sin decir de qué se cobra.</span>
+          : <span className="text-neutral-400">Apagado: las citas pueden quedarse sin cobro asociado.</span>}
+      </div>
+      <p className="text-[10px] text-neutral-400 mt-2">
+        Antes de encenderlo, ponle su cuota a cada tipo en <strong>Citas → Tipos</strong>: es de
+        donde la coge cada cita nueva. Los talleres no entran (su dinero va por la inscripción de
+        cada niño) y la agenda pública tampoco se frena.
+      </p>
+    </div>
+  );
+}
+
+/**
  * Color de los tramos bloqueados de la agenda (10/08/2026, Rodrigo).
  *
  * Es el del CENTRO. Cada profesional puede pisarlo con el suyo desde su ficha

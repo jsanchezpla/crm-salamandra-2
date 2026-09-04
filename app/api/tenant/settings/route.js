@@ -256,6 +256,7 @@ function diffConfiguracion(antes, despues, nombreAntes, nombreDespues) {
   anota("citas.formularioObligatorio", antes?.citas?.formularioObligatorio, despues?.citas?.formularioObligatorio);
   anota("citas.contratoObligatorio", antes?.citas?.contratoObligatorio, despues?.citas?.contratoObligatorio);
   anota("citas.soloConPago", antes?.citas?.soloConPago, despues?.citas?.soloConPago);
+  anota("citas.cobroObligatorio", antes?.citas?.cobroObligatorio, despues?.citas?.cobroObligatorio);
   anota("clientes.categoriasExternas", antes?.clientes?.categoriasExternas, despues?.clientes?.categoriasExternas);
   anota("citas.identidadObligatoria", antes?.citas?.identidadObligatoria, despues?.citas?.identidadObligatoria);
   anota("citas.formularioUrl", antes?.citas?.formularioUrl, despues?.citas?.formularioUrl);
@@ -396,6 +397,9 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
     // Puerta de caja (05/08/2026): desde la agenda pública solo se reserva lo
     // que se cobra —pasarela ahora o bono ya pagado—. Ver tiposVisibles.js.
     soloConPago: t.settings?.citas?.soloConPago === true,
+    // Toda cita atada a un dinero (04/09/2026, Aumenta). No es una puerta de la
+    // agenda pública: es el alta DEL CENTRO. Ver lib/citas/dineroDeLaCita.js.
+    cobroObligatorio: t.settings?.citas?.cobroObligatorio === true,
     // Puerta de identidad (05/08/2026): sin cuenta no se reserva. Se lee con el
     // helper porque respeta también el interruptor viejo del widget.
     identidadObligatoria: exigeIdentidad(t),
@@ -813,6 +817,15 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   if (typeof body.soloConPago === "boolean") {
     settings.citas = { ...(settings.citas ?? {}), soloConPago: body.soloConPago };
   }
+  /*
+   * Toda cita nace atada a un dinero (04/09/2026, Aumenta por Rodrigo). APAGADO
+   * por defecto: encenderlo sin haberle puesto la cuota a los tipos de cita
+   * deja el alta bloqueada, así que es una decisión del centro y no un default.
+   * La regla vive en `lib/citas/dineroDeLaCita.js`.
+   */
+  if (typeof body.cobroObligatorio === "boolean") {
+    settings.citas = { ...(settings.citas ?? {}), cobroObligatorio: body.cobroObligatorio };
+  }
   // Cuarta puerta (05/08/2026): sin cuenta no se reserva. Es la más básica de
   // las cuatro —antes de preguntar si está admitida o si ha firmado, hay que
   // saber quién es— y la única que hasta ahora era decorativa: el widget
@@ -999,6 +1012,7 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
     formularioObligatorio: settings.citas?.formularioObligatorio === true,
     contratoObligatorio: settings.citas?.contratoObligatorio === true,
     soloConPago: settings.citas?.soloConPago === true,
+    cobroObligatorio: settings.citas?.cobroObligatorio === true,
     identidadObligatoria: exigeIdentidad({ settings }),
     // Los datos del centro TIENEN que volver aquí por lo mismo que las cuatro
     // puertas: la pantalla hace `setCfg({...c, ...data})`, así que lo que no

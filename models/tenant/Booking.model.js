@@ -293,6 +293,50 @@ export function defineBooking(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      /*
+       * ── EL DINERO AL QUE VA ATADA LA CITA (04/09/2026, Aumenta) ──────────
+       *
+       * Rodrigo: «para crear una cita tiene que estar asociada a una cuota o a
+       * un cobro de texto libre… y nunca se crean citas gratuitas sin
+       * quererlo». Los tres modos y por qué son tres, en
+       * `lib/citas/dineroDeLaCita.js`.
+       *
+       * NO se reutiliza `amount`: ese es el precio del tipo copiado para
+       * COBRAR CON TARJETA (retenciones, Stripe, `paymentStatus`). Escribir
+       * ahí la cuota mensual de una familia dispararía media capa de pagos
+       * online sobre una cita que se cobra por transferencia a fin de mes.
+       *
+       * `cobroTexto` guarda el nombre del concepto, el texto del cobro libre o
+       * el MOTIVO de que no se cobre, según el modo. Es una foto: si la tarifa
+       * sube en enero, la cita de octubre sigue diciendo lo que se cobró.
+       *
+       * Null en las 13.408 de Aumenta y en las de todos los demás: una cita
+       * sin esto se comporta exactamente como antes de que existiera.
+       */
+      cobroModo: {
+        type: DataTypes.STRING(16),
+        allowNull: true,
+        field: "cobro_modo",
+      },
+      // Qué concepto del catálogo la cubre. Sin FK a `billing_concepts` a
+      // propósito: hay schemas con `bookings` y sin módulo de facturación, y
+      // ahí esa tabla ni existe (igual que `taller_grupo_id`).
+      cobroConceptId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: "cobro_concept_id",
+      },
+      cobroTexto: {
+        type: DataTypes.STRING(200),
+        allowNull: true,
+        field: "cobro_texto",
+      },
+      // En CÉNTIMOS, como `amount`. 0 en las de sin coste.
+      cobroImporte: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: "cobro_importe",
+      },
       // Notas internas (no visibles al cliente)
       notes: {
         type: DataTypes.TEXT,

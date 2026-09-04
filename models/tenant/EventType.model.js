@@ -241,6 +241,24 @@ export function defineEventType(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      /*
+       * El concepto del catálogo —lo que Aumenta llama «la cuota»— que cubre
+       * las citas de este tipo (04/09/2026). Se pone UNA vez aquí y baja solo
+       * a cada cita nueva, que es lo que hace que la regla no cueste un clic
+       * más en las ~250 citas que se apuntan al día. En el alta se puede
+       * cambiar. Ver `lib/citas/dineroDeLaCita.js`.
+       *
+       * No confundir con `price`, que es el precio para COBRAR CON TARJETA en
+       * el widget público: ponerlo ahí abriría la caja a las familias.
+       *
+       * Sin FK, por lo mismo que `tallerGrupoId`: hay schemas con
+       * `event_types` y sin módulo de facturación.
+       */
+      conceptId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: "concept_id",
+      },
       active: {
         type: DataTypes.BOOLEAN,
         allowNull: false,

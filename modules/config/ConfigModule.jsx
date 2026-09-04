@@ -30,6 +30,7 @@ import {
 } from "./tarjetas/Conexiones.jsx";
 import {
   AgendaCompartidaCard,
+  CobroDeLaCitaCard,
   SemanaLaboralCard,
   IncidenciaPorFaltaCard,
   AvisosWhatsappCard,
@@ -1064,6 +1065,25 @@ export default function ConfigModule({ modulos = null }) {
                 }
               />
             )
+          )}
+
+          {enZona(
+            "cobroCita",
+             isAdmin && (
+              <CobroDeLaCitaCard
+                activo={!!cfg.cobroObligatorio}
+                readOnly={!!cfg.readOnly}
+                onChange={(v) =>
+                  patchTenant(
+                    { cobroObligatorio: v },
+                    v
+                      ? "Ahora toda cita nueva tiene que decir de qué se cobra"
+                      : "Las citas vuelven a poderse apuntar sin cobro"
+                  )
+                }
+              />
+            ) 
+
           )}
 
           {enZona(

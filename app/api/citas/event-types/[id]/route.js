@@ -214,6 +214,18 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
       updates.isInitialAssessment = marcar;
       desmarcarOtras = marcar && !row.isInitialAssessment;
     }
+    /*
+     * La CUOTA del tipo (04/09/2026): el concepto del catálogo que cubre sus
+     * citas. Vacío o null lo quita. No se comprueba contra `billing_concepts`
+     * —hay centros con citas y sin facturación— pero sí que sea un UUID.
+     */
+    if ("conceptId" in body) {
+      const v = typeof body.conceptId === "string" ? body.conceptId.trim() : "";
+      if (v && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)) {
+        return error("conceptId inválido");
+      }
+      updates.conceptId = v || null;
+    }
     if ("active" in body) updates.active = Boolean(body.active);
     // Oculto: fuera de la agenda pública, visible solo para quien tenga bono
     // activo de este tipo (`lib/citas/tiposVisibles.js`).

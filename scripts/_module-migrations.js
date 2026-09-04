@@ -431,6 +431,16 @@ export const MODULES = {
      * `talleres`. VA ANTES del despliegue.
      */
     "migrate-talleres-grupos",
+    /*
+     * El DINERO al que va atada cada cita (04/09/2026, Aumenta por Rodrigo):
+     * `event_types.concept_id` —la «cuota» que cubre las citas de ese tipo— y
+     * las cuatro de `bookings` (`cobro_modo`, `cobro_concept_id`,
+     * `cobro_texto`, `cobro_importe`). Los dos modelos las declaran, así que
+     * sin ellas la agenda y el catálogo de tipos dan 42703: VA ANTES del
+     * despliegue. Todo NULL, sin backfill: nada cambia hasta que un centro
+     * rellene los conceptos de sus tipos. Ver `lib/citas/dineroDeLaCita.js`.
+     */
+    "migrate-citas-cobro-de-la-cita",
   ],
 
   calendar: ["migrate-calendar-citas-fks"],
