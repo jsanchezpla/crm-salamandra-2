@@ -71,6 +71,31 @@ describe("qué cuotas entran", () => {
     assert.equal(cuotasQueEntran(cuotas, "nino-a").length, 2);
   });
 
+  /*
+   * 04/09/2026, Rodrigo con una captura: «me saltan todas las cuotas sin
+   * dividirlas por hijo aunque yo solo ponga que voy a cobrar a uno de los
+   * pacientes». El respaldo «si no hay ninguna suya, todas» colaba la del
+   * hermano, y ese importe se cobra sin que nadie sospeche.
+   */
+  it("la cuota de un HERMANO no entra nunca, aunque el elegido no tenga la suya", () => {
+    const cuotas = [cuota({ conceptIds: [PSICO], patientId: "nino-b" })];
+    assert.deepEqual(cuotasQueEntran(cuotas, "nino-a"), []);
+  });
+
+  it("lo suyo y lo de la familia entran juntos; lo del hermano se queda fuera", () => {
+    const cuotas = [
+      cuota({ conceptIds: [LOGO], patientId: "nino-a" }),
+      cuota({ conceptIds: [DTO], patientId: null }),
+      cuota({ conceptIds: [PSICO], patientId: "nino-b" }),
+    ];
+    assert.deepEqual(conceptosDeCuotas(cuotasQueEntran(cuotas, "nino-a")), [LOGO, DTO]);
+  });
+
+  it("sin paciente elegido siguen entrando todas: el cobro es de la familia", () => {
+    const cuotas = [cuota({ patientId: "nino-a" }), cuota({ conceptIds: [PSICO], patientId: "nino-b" })];
+    assert.equal(cuotasQueEntran(cuotas, null).length, 2);
+  });
+
   it("familia sin cuotas: ni una, sin reventar", () => {
     assert.deepEqual(cuotasQueEntran([], "nino-a"), []);
     assert.deepEqual(cuotasQueEntran(null, null), []);

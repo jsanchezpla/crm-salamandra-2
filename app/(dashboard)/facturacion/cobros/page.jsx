@@ -253,6 +253,13 @@ export default function CobrosPage() {
           // Si se ha dejado fuera alguna cuota de la familia, decirlo: es lo que
           // explica por qué no sale lo del hermano.
           delPaciente: Boolean(form.patientId) && cuotas.length < todas.length,
+          /*
+           * Y si con un paciente elegido lo que sale es la cuota SIN paciente
+           * —la de la familia entera, 35 de las 279 de Aumenta—, también hay
+           * que decirlo (04/09/2026): si no, se lee como «esta es la cuota de
+           * este niño» y puede llevar dentro las terapias de sus hermanos.
+           */
+          deLaFamiliaEntera: Boolean(form.patientId) && cuotas.every((c) => !c.patientId),
         });
       }
     })();
@@ -859,8 +866,26 @@ export default function CobrosPage() {
                                 <span className="text-neutral-700 truncate">{c.name}</span>
                                 <span className="flex items-center gap-2 shrink-0">
                                   <span className="text-neutral-500">{fmtMoney(parte.importe)}</span>
-                                  <button type="button" onClick={() => quitarConceptoCuota(i)}
-                                    className="text-neutral-300 hover:text-red-500 transition-colors" aria-label="Quitar concepto">✕</button>
+                                  {/*
+                                   * QUITAR ESTA CUOTA DEL COBRO (visible desde el
+                                   * 04/09/2026, Rodrigo: «no me deja eliminar una
+                                   * cuota del cobro, estaría bien que hubiera una X
+                                   * al lado por si el niño solo va a pagar una de
+                                   * las dos terapias»). El botón ya estaba, pero en
+                                   * `text-neutral-300` sobre blanco no se veía: una
+                                   * acción que existe y no se ve es una que no
+                                   * existe. Ahora lleva su círculo, su tamaño de
+                                   * dedo y dice lo que hace al pasar por encima.
+                                   */}
+                                  <button
+                                    type="button"
+                                    onClick={() => quitarConceptoCuota(i)}
+                                    title="Quitar esta cuota del cobro"
+                                    className="shrink-0 grid place-items-center w-5 h-5 rounded-full border border-neutral-200 text-neutral-500 text-[10px] leading-none hover:border-red-300 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                    aria-label="Quitar esta cuota del cobro"
+                                  >
+                                    ✕
+                                  </button>
                                 </span>
                               </div>
                               {/* Cada servicio con SU fecha: empezó el 13 con logopedia,
@@ -907,6 +932,9 @@ export default function CobrosPage() {
                             : cuotaDeLaFamilia.n === 1
                               ? "Tiene 1 cuota asignada"
                               : `Tiene ${cuotaDeLaFamilia.n} cuotas asignadas y se han sumado todas`}
+                          {cuotaDeLaFamilia.deLaFamiliaEntera && (
+                            <> · está a nombre de la <strong className="text-neutral-600">familia</strong>, no de ese paciente: repásala y quita con la ✕ lo que no se cobre</>
+                          )}
                           {cuotaDeLaFamilia.pactado !== null
                             ? <> · importe <strong className="text-neutral-600">pactado con la familia</strong>, no la tarifa del catálogo.</>
                             : "."}{" "}
