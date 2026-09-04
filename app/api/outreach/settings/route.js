@@ -49,6 +49,7 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   }
   if ("companyContext" in body) patch.companyContext = body.companyContext ?? null;
   if ("chainingRule" in body) patch.chainingRule = body.chainingRule ?? null;
+  if ("emailTemplate" in body) patch.emailTemplate = body.emailTemplate ?? null;
 
   if (Object.keys(patch).length === 0) throw new ValidationError("Nada que actualizar");
 

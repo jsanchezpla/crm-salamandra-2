@@ -708,6 +708,10 @@ export const MODULES = {
     "migrate-outreach-google-usage",
     "migrate-outreach-convert",
     "migrate-outreach-website-text",
+    // Plantilla del correo en frío por tenant (04/09/2026): las instrucciones
+    // de redacción estaban a fuego e iguales para todos. Columna vacía = el
+    // prompt de siempre, así que no cambia el correo de nadie.
+    "migrate-outreach-email-template",
   ],
 
   // Formularios públicos → bandeja en el CRM → ficha de cliente al aceptar.

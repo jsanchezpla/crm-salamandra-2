@@ -39,6 +39,14 @@ export function defineOutreachSettings(sequelize) {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      // Cómo se escribe el correo en frío de esta casa: estructura, tono,
+      // longitud y frases vetadas. Sustituye las instrucciones de redacción
+      // por defecto del prompt; vacío, el prompt se comporta como siempre.
+      // Es un dato del tenant porque cada empresa escribe a los suyos distinto.
+      emailTemplate: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
       // ── Contador mensual de peticiones a Google Places ──────────────────────
       // El tope y el aviso los gestiona el CRM (no la cuota de Google), para
       // poder cortar a 999/mes y avisar por email. Se resetea al cambiar de mes.

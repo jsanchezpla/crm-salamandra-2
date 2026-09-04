@@ -109,6 +109,8 @@
     "db:migrate:outreach:convert:prod": "node --env-file=.env.production scripts/migrate-outreach-convert.js",
     "db:migrate:outreach:website": "node --env-file=.env.local scripts/migrate-outreach-website-text.js",
     "db:migrate:outreach:website:prod": "node --env-file=.env.production scripts/migrate-outreach-website-text.js",
+    "db:migrate:outreach:plantilla": "node --env-file=.env.local scripts/migrate-outreach-email-template.js",
+    "db:migrate:outreach:plantilla:prod": "node --env-file=.env.production scripts/migrate-outreach-email-template.js",
     "db:seed:outreach": "node --env-file=.env.local scripts/seed-outreach.js",
     "db:ensure-schema": "node --env-file=.env.local scripts/ensure-tenant-schema.js",
     "db:enable-module": "node --env-file=.env.local scripts/enable-module.js",

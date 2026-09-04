@@ -480,6 +480,24 @@ export default function OutreachSettingsModule() {
               />
             </div>
 
+            <div>
+              <label className="block text-xs font-medium text-neutral-600 mb-1">
+                Cómo se escribe el correo{" "}
+                <span className="text-neutral-400">
+                  (opcional: estructura, tono y frases vetadas. Vacío, se usa la redacción por defecto)
+                </span>
+              </label>
+              <textarea
+                className={inputCls}
+                rows={12}
+                defaultValue={settings.emailTemplate ?? ""}
+                onBlur={(e) => e.target.value !== (settings.emailTemplate ?? "") && saveSettings({ emailTemplate: e.target.value })}
+              />
+              <p className="text-xs text-neutral-400 mt-1.5">
+                Es la forma del correo, no el correo: la IA rellena los huecos con los datos de cada lead.
+              </p>
+            </div>
+
             {savingSettings && <p className="text-xs text-neutral-400">Guardando...</p>}
           </div>
         </section>
