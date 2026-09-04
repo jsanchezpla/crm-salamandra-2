@@ -304,6 +304,20 @@ export const CORE = [
   // existencia de `incidencias` (fotos doradas incluidas); reconoce como faltas
   // las automáticas de antes por su título. Idempotente y aditiva.
   "migrate-incidencias-faltas",
+
+  // El «Visto» por responsable (04/09/2026): `incidencia_assignees.visto_at`.
+  // CORE por el mismo criterio que la falta: el modelo IncidenciaAssignee la
+  // declara para TODOS los tenants y Sequelize la pide en cada SELECT de la
+  // pivote. Decide por existencia de `incidencia_assignees`. Aditiva, sin
+  // backfill (NULL = pendiente, que es donde están todas hoy) e idempotente.
+  "migrate-incidencias-visto",
+
+  // La razón social por defecto de una familia (04/09/2026):
+  // `clients.fiscal_guardian_id`, el tutor a cuyo nombre se factura. CORE: el
+  // modelo Client la declara para TODOS los tenants y `clients` la lee todo el
+  // CRM. Decide por existencia de `clients`. Aditiva, sin backfill (NULL = a
+  // nombre de la ficha, que es lo que hacen hoy todas) e idempotente.
+  "migrate-client-razon-social-tutor",
 ];
 
 export const MODULES = {

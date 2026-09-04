@@ -19,6 +19,8 @@ import {
   setPrimaryContactValue,
   isMissingTable,
 } from "../../../../lib/clients/contactMethods.js";
+import { normalizeGuardians } from "../../../../lib/clients/guardians.js";
+import { limpiarRazonSocialPorDefecto } from "../../../../lib/billing/razonSocial.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -176,6 +178,17 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
       const v = body[k];
       fiscalUpdates[k] = typeof v === "string" ? (v.trim() || null) : v;
     }
+  }
+
+  /*
+   * La razón social POR DEFECTO de la familia (04/09/2026, Rodrigo): un tutor
+   * de ESTA ficha, o null para facturar a nombre de la ficha. Se sanea contra
+   * sus propios tutores —los que vengan en este mismo guardado, si vienen— para
+   * que no quede apuntando a nadie. Reglas en `lib/billing/razonSocial.js`.
+   */
+  if ("fiscalGuardianId" in body) {
+    const tutores = Array.isArray(body.guardians) ? normalizeGuardians(body.guardians) : client.guardians;
+    fiscalUpdates.fiscalGuardianId = limpiarRazonSocialPorDefecto(body.fiscalGuardianId, tutores);
   }
 
   // El campo email/teléfono único de la ficha edita el CONTACTO PRINCIPAL: sólo

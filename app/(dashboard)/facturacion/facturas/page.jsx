@@ -8,6 +8,7 @@ import { fmtMoney, fmtDate } from "../_components/Kpi.jsx";
 import { useSortState, SortableTh } from "../_components/tableSort.jsx";
 import Select from "@/components/ui/Select.jsx";
 import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
+import { LA_FICHA } from "@/lib/billing/razonSocial.js";
 
 import { nifDeCliente } from "../../../../lib/billing/nifCliente.js";
 import { ivaPorDefecto } from "../../../../lib/billing/ivaPorDefecto.js";
@@ -37,6 +38,10 @@ function emptyForm(defaultVat = 21, termsDays = 30, defaultIrpf = 0) {
   const issueDate = new Date().toISOString().slice(0, 10);
   return {
     clientId: "",
+    // A nombre de quién se emite (04/09/2026): un tutor de la familia, o "" =
+    // la ficha. Se hereda de la ficha al elegirla y se puede cambiar aquí sin
+    // tocarla. Ver `lib/billing/razonSocial.js`.
+    guardianId: "",
     employeeId: "",
     partnerId: "",
     issueDate,
@@ -136,6 +141,26 @@ export default function FacturasPage() {
   // La ficha del pagador, tal y como la resuelve SelectorCliente: se usa para
   // avisar de que le faltan razón social o NIF antes de emitir.
   const [clienteElegido, setClienteElegido] = useState(null);
+  /*
+   * ── LA RAZÓN SOCIAL SE HEREDA DE LA FICHA (04/09/2026, Rodrigo) ───────────
+   * «Que se ponga por defecto la seleccionada en el cliente pero que se pueda
+   * cambiar en el desplegable». Al elegir familia se pone la suya; a partir de
+   * ahí manda lo que se elija aquí, y cambiar de familia vuelve a proponer la
+   * de la nueva (la del pagador anterior no tiene ningún sentido).
+   *
+   * Solo en facturas NUEVAS: una que ya existe lleva la suya, y `startEdit` la
+   * carga arriba. La ficha llega por `onFicha` del selector, que es quien la
+   * tiene: por eso es un efecto y no el `onChange`.
+   */
+  const fichaConRazonSocial = useRef(null);
+  useEffect(() => {
+    if (openInvoice) return;
+    const id = clienteElegido?.id ?? null;
+    if (!id || String(id) !== String(form.clientId)) return;
+    if (fichaConRazonSocial.current === id) return;
+    fichaConRazonSocial.current = id;
+    setForm((f) => ({ ...f, guardianId: clienteElegido.razonSocial ?? LA_FICHA }));
+  }, [clienteElegido, form.clientId, openInvoice]);
   // Alta rápida de cliente sin salir del editor.
   const [showNewClient, setShowNewClient] = useState(false);
   const [newClient, setNewClient] = useState({ name: "", taxId: "" });
@@ -387,6 +412,9 @@ export default function FacturasPage() {
     setForm({
       clientId: openInvoice.clientId ?? "",
       patientId: openInvoice.patientId ?? "",
+      // La suya, no la de la ficha: una factura emitida a nombre del padre no
+      // cambia de nombre porque la familia haya cambiado su defecto después.
+      guardianId: openInvoice.guardianId ?? "",
       employeeId: openInvoice.employeeId ?? "",
       partnerId: openInvoice.partnerId ?? "",
       irpfRate: openInvoice.irpfRate ?? settings?.defaultIrpfRate ?? 0,
@@ -472,6 +500,7 @@ export default function FacturasPage() {
       const payload = {
         clientId: form.clientId,
         patientId: form.patientId || null,
+        guardianId: form.guardianId || null,
         employeeId: form.employeeId || null,
         partnerId: form.partnerId || null,
         issueDate: form.issueDate,
@@ -898,6 +927,30 @@ export default function FacturasPage() {
                         </div>
                       )}
                     </FormRow>
+                    {/* LA RAZÓN SOCIAL DE ESTA FACTURA (04/09/2026, Rodrigo):
+                        con padres separados cada uno quiere la suya a su
+                        nombre. Sale la elegida en la ficha y se puede cambiar
+                        aquí sin tocarla. Solo aparece si la familia tiene
+                        tutores; en una empresa no hay nada que elegir. */}
+                    {clienteElegido && String(clienteElegido.id) === String(form.clientId)
+                      && (clienteElegido.razonesSociales?.length ?? 0) > 1 ? (
+                      <FormRow label="Razón social (a nombre de)">
+                        <Select
+                          value={form.guardianId ?? LA_FICHA}
+                          onChange={(v) => setForm((f) => ({ ...f, guardianId: v }))}
+                          className={inputCls}
+                          options={clienteElegido.razonesSociales.map((o) => ({
+                            value: o.value,
+                            label: o.value === LA_FICHA ? `${o.label} (la ficha)` : o.label,
+                          }))}
+                        />
+                        {clienteElegido.razonesSociales.find((o) => o.value === form.guardianId)?.sinDni && (
+                          <p className="text-[11px] text-amber-700 mt-1">
+                            Sin DNI en la ficha de tutores no se podrá emitir a su nombre (guardar como borrador sí).
+                          </p>
+                        )}
+                      </FormRow>
+                    ) : null}
     {/* El paciente ya se ELIGE (31/08/2026): una factura a una fundación
         o a un tutor dice de qué niño es. El pagador sigue siendo el
         cliente de al lado. Sin módulo de pacientes, el buscador se esconde

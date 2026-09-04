@@ -41,6 +41,16 @@ export function defineClient(sequelize) {
         type: DataTypes.STRING(50),
         allowNull: true,
       },
+      // La razón social POR DEFECTO de esta familia (04/09/2026, Rodrigo):
+      // apunta a una entrada de `guardians`, o NULL = a nombre de la ficha.
+      // Se guarda quién y no un nombre copiado: un id sigue a la persona
+      // cuando se corrige su apellido o se rellena su DNI. La factura la
+      // hereda al crearse y puede desviarse (`invoices.guardian_id`).
+      // Reglas en `lib/billing/razonSocial.js`.
+      fiscalGuardianId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       fiscalAddress: {
         type: DataTypes.STRING,
         allowNull: true,

@@ -3,6 +3,7 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, forbidden, notFound, serverError } from "../../../../lib/utils/apiResponse.js";
 import { filtroPorNombre } from "../../../../lib/utils/busquedaDb.js";
 import { pacientesQueCasan } from "../../../../lib/clients/familiasPorPaciente.js";
+import { opcionesDeRazonSocial, razonSocialPorDefecto } from "../../../../lib/billing/razonSocial.js";
 
 /**
  * El buscador de fichas DE FACTURACIÓN (31/08/2026).
@@ -24,7 +25,27 @@ const ATRIBUTOS = [
   "id", "name", "email", "taxId",
   "fiscalName", "fiscalTaxId", "fiscalAddress", "fiscalCity", "fiscalZip",
   "cuotaConceptIds",
+  // Para poder ofrecer «a nombre de quién» se factura (04/09/2026). Los
+  // tutores se leen aquí pero NO salen de aquí: `paraPantalla` los convierte
+  // en la lista de nombres y quita el JSONB, que lleva DNI y teléfono.
+  "guardians", "fiscalGuardianId",
 ];
+
+/**
+ * La ficha tal y como la ve una pantalla de dinero: sin los tutores en crudo y
+ * con las opciones de razón social ya resueltas (nombre, parentesco y si le
+ * falta DNI). Misma regla del 02/09/2026 por la que `ATRIBUTOS_CLIENTE_FACTURA`
+ * deja `guardians` fuera: elegir un nombre no necesita datos personales.
+ */
+function paraPantalla(fila) {
+  const ficha = fila.toJSON ? fila.toJSON() : fila;
+  const { guardians, ...resto } = ficha;
+  return {
+    ...resto,
+    razonesSociales: opcionesDeRazonSocial(ficha),
+    razonSocial: razonSocialPorDefecto(ficha),
+  };
+}
 
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   try {
@@ -36,7 +57,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     const id = searchParams.get("id");
     if (id) {
       const ficha = await Client.findByPk(id, { attributes: ATRIBUTOS });
-      return ficha ? ok(ficha) : notFound("Ficha no encontrada");
+      return ficha ? ok(paraPantalla(ficha)) : notFound("Ficha no encontrada");
     }
 
     const search = (searchParams.get("search") ?? "").trim();
@@ -64,7 +85,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
 
     const porPaciente = new Map(casan.map((x) => [String(x.clientId), x.nombre]));
     return ok({
-      clients: rows.map((r) => ({ ...r.toJSON(), porPaciente: porPaciente.get(String(r.id)) ?? null })),
+      clients: rows.map((r) => ({ ...paraPantalla(r), porPaciente: porPaciente.get(String(r.id)) ?? null })),
       total: count,
     });
   } catch (err) {

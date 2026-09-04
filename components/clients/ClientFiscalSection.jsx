@@ -24,6 +24,8 @@ import HelpTooltip from "../ui/HelpTooltip.jsx";
 // La lista de campos vive en lib/ y la comparte el panel «Editar ficha» del
 // listado (31/08/2026): así los dos sitios enseñan y guardan LO MISMO.
 import { CAMPOS_FISCALES as CAMPOS } from "../../lib/clients/camposFiscales.js";
+// A nombre de cuál de sus tutores se factura por defecto (04/09/2026).
+import { opcionesDeRazonSocial, razonSocialPorDefecto, nombreDeRazonSocial, LA_FICHA } from "../../lib/billing/razonSocial.js";
 
 export default function ClientFiscalSection({ clientId }) {
   const [datos, setDatos] = useState(null);
@@ -51,7 +53,10 @@ export default function ClientFiscalSection({ clientId }) {
   useEffect(() => cargar(), [cargar]);
 
   function abrir() {
-    setBorrador(Object.fromEntries(CAMPOS.map((c) => [c.key, datos?.[c.key] || ""])));
+    setBorrador({
+      ...Object.fromEntries(CAMPOS.map((c) => [c.key, datos?.[c.key] || ""])),
+      fiscalGuardianId: razonSocialPorDefecto(datos),
+    });
     setError(null);
     setEditando(true);
   }
@@ -117,6 +122,12 @@ export default function ClientFiscalSection({ clientId }) {
                 guardar como borrador pero no emitir.
               </div>
             )}
+            {razonSocialPorDefecto(datos) !== LA_FICHA && (
+              <div className="text-[13px] text-gray-700">
+                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block">A nombre de</span>
+                {nombreDeRazonSocial(datos, razonSocialPorDefecto(datos))}
+              </div>
+            )}
             {rellenos.length === 0 ? (
               <div className="text-sm text-gray-400 italic">
                 Sin datos propios de facturación. Las facturas saldrán a nombre de{" "}
@@ -137,6 +148,34 @@ export default function ClientFiscalSection({ clientId }) {
           </>
         ) : (
           <>
+            {/* A NOMBRE DE QUIÉN (04/09/2026, Rodrigo): un desplegable con los
+                tutores en vez de reescribir el nombre a mano. Se guarda QUIÉN
+                y no el texto, así que corregir su apellido o rellenar su DNI en
+                la pestaña de tutores arregla también las facturas siguientes.
+                Cada factura puede desviarse de este defecto sin tocar la ficha.
+                Solo sale si la familia tiene tutores: en una empresa sobra. */}
+            {opcionesDeRazonSocial(datos).length > 1 && (
+              <div>
+                <label className={labelCls}>A nombre de</label>
+                <select
+                  className={inputCls}
+                  value={borrador.fiscalGuardianId ?? LA_FICHA}
+                  onChange={(e) => setBorrador((b) => ({ ...b, fiscalGuardianId: e.target.value }))}
+                >
+                  {opcionesDeRazonSocial(datos).map((o) => (
+                    <option key={o.value || "ficha"} value={o.value}>
+                      {o.value === LA_FICHA ? `${o.label} (la ficha)` : o.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-gray-400 mt-1">
+                  Sale por defecto en sus facturas nuevas, y en cada una se puede cambiar.
+                  {opcionesDeRazonSocial(datos).find((o) => o.value === borrador.fiscalGuardianId)?.sinDni
+                    ? " Ojo: sin DNI en la ficha de tutores no se podrá emitir a su nombre."
+                    : ""}
+                </p>
+              </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {CAMPOS.map((c) => (
                 <div key={c.key}>
