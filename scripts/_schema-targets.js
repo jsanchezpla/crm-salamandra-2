@@ -60,8 +60,14 @@
  *
  * Ambos respetan las variables de entorno que ya usaba Jorge en
  * migrate-nutricion-recipes.js:
- *   ONLY_SCHEMAS=crm_a,crm_b   modo EXCLUSIVO: ignora la lista calculada
+ *   ONLY_SCHEMAS=crm_a,crm_b   modo EXCLUSIVO: sustituye la lista calculada
  *                              (y entonces los dorados tampoco se añaden solos).
+ *                              En `byTable` ACOTA pero no exime: de los schemas
+ *                              pedidos siguen entrando solo los que tienen la
+ *                              tabla, y el resto salen por `skipped` (ver el
+ *                              porqué, con su incidente, dentro de byTable).
+ *                              En `byModule` sí manda sola: crear las tablas de
+ *                              un módulo recién comprado es su trabajo.
  *   EXTRA_SCHEMAS=crm_staging  modo ADITIVO: añade schemas a la lista.
  *
  * Devuelven siempre nombres de schema completos (`crm_<slug>`), sin duplicados.
@@ -151,7 +157,35 @@ export async function byTable(s, table) {
   // restore ya tolera tablas que le falten y el deploy avisa de la deriva).
   withTable.push(...(await doradosQueAcompanan(withTable, (g) => tableExists(s, g, table))));
   const { schemas, exclusive } = applyEnvOverrides(withTable);
-  return { schemas, skipped: exclusive ? [] : skipped, exclusive };
+
+  // ── ONLY_SCHEMAS ACOTA, PERO NO CONVIERTE byTable EN «TODOS» (04/09/2026) ──
+  // `applyEnvOverrides` devuelve la lista pedida TAL CUAL, y eso se saltaba la
+  // única pregunta que hace este modo: ¿tiene ese schema la tabla? Como
+  // `ensure-tenant-schema.js` acota cada alta con ONLY_SCHEMAS, toda migración
+  // aditiva sobre una tabla que ese tenant no tiene reventaba con 42P01 y el
+  // alta terminaba con «✗ las migraciones fallaron · el schema puede estar
+  // incompleto» — un aviso que asusta y que además es falso.
+  //
+  // Se vio al activar Documentos en salamandra_solutions (04/09/2026): 1 de 79
+  // fallaba, `migrate-incidencias-faltas`, porque ese tenant no tiene
+  // Incidencias. Nada que ver con el módulo que se estaba dando de alta.
+  //
+  // Los dos filtros son independientes y se aplican los dos: ONLY_SCHEMAS dice
+  // A QUIÉN se puede tocar, y `byTable` sigue diciendo A QUIÉN tiene sentido.
+  // Un schema pedido que no tiene la tabla sale por `skipped`, no por una
+  // excepción. (En `byModule` NO se hace: ahí ONLY_SCHEMAS sí manda solo,
+  // porque crear las tablas de un módulo recién comprado es justo su trabajo.)
+  if (exclusive) {
+    const conTabla = [];
+    const sinTabla = [];
+    for (const schema of schemas) {
+      if (await tableExists(s, schema, table)) conTabla.push(schema);
+      else sinTabla.push(schema);
+    }
+    return { schemas: conTabla, skipped: sinTabla, exclusive: true };
+  }
+
+  return { schemas, skipped, exclusive };
 }
 
 /**

@@ -87,13 +87,36 @@ test("ONLY_SCHEMAS sigue siendo exclusivo: tampoco añade dorados", async () => 
   try {
     const s = fakeDb({
       tenants: ["demo"],
-      tablas: new Set(["crm_demo.bookings", "crm_demo_golden.bookings"]),
+      // crm_staging TIENE la tabla: lo que se mira aquí es que no se cuele el
+      // dorado de la demo, no el filtro por tabla (eso es _smoke-schema-targets).
+      tablas: new Set(["crm_staging.bookings", "crm_demo.bookings", "crm_demo_golden.bookings"]),
       schemas: new Set(),
       modulos: [],
     });
     const { schemas, exclusive } = await byTable(s, "bookings");
     assert.equal(exclusive, true);
     assert.deepEqual(schemas, ["crm_staging"]);
+  } finally {
+    sinOverrides();
+  }
+});
+
+// Desde el 04/09/2026 ONLY_SCHEMAS acota pero no exime del filtro por tabla, y
+// eso vale también para los dorados: pedir uno que no tiene la tabla no lo
+// cuela. (El porqué, con su incidente, en _smoke-schema-targets.mjs.)
+test("ONLY_SCHEMAS con un dorado SIN la tabla no lo mete a la fuerza", async () => {
+  sinOverrides();
+  process.env.ONLY_SCHEMAS = "crm_demo_golden";
+  try {
+    const s = fakeDb({
+      tenants: ["demo"],
+      tablas: new Set(["crm_demo.bookings"]), // el dorado aún no la tiene
+      schemas: new Set(),
+      modulos: [],
+    });
+    const { schemas, skipped } = await byTable(s, "bookings");
+    assert.deepEqual(schemas, []);
+    assert.deepEqual(skipped, ["crm_demo_golden"]);
   } finally {
     sinOverrides();
   }
