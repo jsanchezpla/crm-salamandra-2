@@ -14,6 +14,7 @@ import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 import { useDialogo } from "@/components/ui/Dialogo.jsx";
 import { partesConProrrateo } from "../../../../lib/billing/prorrateo.js";
 import { cuotasQueEntran, conceptosDeCuotas, importePactado } from "../../../../lib/billing/cuotaParaRellenar.js";
+import { restoDelMes } from "../../../../lib/billing/restoDelMes.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -98,15 +99,23 @@ export default function CobrosPage() {
   // El importe se rellena solo al tocar conceptos o fecha de inicio, desde el
   // HANDLER (no un efecto): así un importe retocado a mano solo se pisa cuando
   // el usuario vuelve a tocar la composición de la cuota.
-  function aplicarImporteCuota(items) {
-    const partes = items
+  // Devuelve el total además de escribirlo: el efecto de abajo necesita el
+  // importe ESPERADO del mes para restarle lo que ya se cobró (04/09/2026).
+  function totalDeItems(items) {
+    const partes = (items ?? [])
       .map(({ id, inicio }) => {
         const c = conceptosCatalogo.find((c2) => String(c2.id) === String(id));
         return c ? { importe: Number(c.unitPrice || 0), inicio } : null;
       })
       .filter(Boolean);
-    if (!partes.length) return;
-    setForm((f) => ({ ...f, amount: String(partesConProrrateo(partes).total) }));
+    if (!partes.length) return null;
+    return partesConProrrateo(partes).total;
+  }
+  function aplicarImporteCuota(items) {
+    const total = totalDeItems(items);
+    if (total === null) return null;
+    setForm((f) => ({ ...f, amount: String(total) }));
+    return total;
   }
   // Recomponer a mano vuelve al cálculo por catálogo: si venía un importe
   // pactado con la familia, deja de mandar (y el aviso de pantalla se va).
@@ -156,6 +165,20 @@ export default function CobrosPage() {
   const [cuotaDeLaFamilia, setCuotaDeLaFamilia] = useState(null); // { n, pactado, delPaciente }
 
   /*
+   * ── LO QUE YA SE COBRÓ DE ESTE MES (04/09/2026, Rodrigo) ──────────────────
+   * «Si alguien hace un pago parcial y se registra el cobro del pago parcial,
+   * cuando se vuelva a registrar un cobro suyo en ese mismo mes debe salir el
+   * resto del dinero automáticamente que debe.»
+   *
+   * El drawer rellenaba la cuota ENTERA mirara o no lo ya cobrado, así que con
+   * los pagos partidos —constantes: la familia deja 50 € y trae el resto la
+   * semana siguiente— había que restar a mano contra la lista de Cobros, y
+   * cuando no se restaba se cobraba el mes dos veces. Qué cobros cuentan y por
+   * qué el resto nunca es negativo, en `lib/billing/restoDelMes.js`.
+   */
+  const [parcialDelMes, setParcialDelMes] = useState(null); // { yaCobrado, resto, hayParcial, completo }
+
+  /*
    * Los pacientes de la familia elegida (01/09/2026, Rodrigo: «cuando un tutor
    * tiene dos pacientes y cada uno está en una cuota distinta, al poner a uno
    * me salen las dos»). Se piden aparte de las cuotas porque contestan a
@@ -181,6 +204,7 @@ export default function CobrosPage() {
     setLineasCuota([]);
     setCuotaDeLaFamilia(null);
     setOrigenCuota(null);
+    setParcialDelMes(null);
     setForm((f) => (f.amount === "" ? f : { ...f, amount: "" }));
     if (!form.clientId || !conceptosCatalogo.length) return;
 
@@ -244,8 +268,29 @@ export default function CobrosPage() {
       // digan sus conceptos» no se puede sumar sin mentir, y ahí manda el
       // catálogo — que es lo que el usuario ve línea a línea.
       const pactado = importePactado(cuotas);
-      if (pactado !== null) setForm((f) => ({ ...f, amount: String(pactado) }));
-      else aplicarImporteCuota(items);
+      let esperado;
+      if (pactado !== null) { esperado = pactado; setForm((f) => ({ ...f, amount: String(pactado) })); }
+      else esperado = aplicarImporteCuota(items);
+
+      /*
+       * Y AHORA SE LE RESTA LO QUE YA ENTRÓ ESTE MES. Va al final a propósito:
+       * primero se sabe cuánto es la cuota (pactada o de catálogo) y solo
+       * entonces se puede decir qué falta. Best-effort — si la consulta falla,
+       * queda el importe entero, que es lo que había antes de hoy.
+       */
+      const jMes = await pedir(
+        `/api/billing/payments/mes?clientId=${encodeURIComponent(form.clientId)}` +
+          `&mes=${encodeURIComponent(form.periodMonth)}`
+      );
+      if (turno !== turnoCuota.current) return;
+      const cobrosDelMes = jMes?.data?.cobros ?? [];
+      const parcial = restoDelMes({ esperado, cobros: cobrosDelMes, patientId: form.patientId || null });
+      setParcialDelMes(parcial.yaCobrado > 0 ? parcial : null);
+      // Solo se pisa el importe cuando hay algo que restar. Si el mes ya está
+      // cubierto NO se rellena un 0 —el formulario no lo aceptaría y no se
+      // entendería—: se deja vacío y el aviso de abajo lo explica.
+      if (parcial.hayParcial) setForm((f) => ({ ...f, amount: String(parcial.resto) }));
+      else if (parcial.completo) setForm((f) => ({ ...f, amount: "" }));
       if (cuotas.length) {
         setCuotaDeLaFamilia({
           n: cuotas.length,
@@ -990,6 +1035,26 @@ export default function CobrosPage() {
               <FormRow label="Importe (€) *">
                 <input required type="number" min="0.01" step="0.01" value={form.amount}
                   onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} className={inputCls} />
+                {/* Lo que ya entró de este mes (04/09/2026, Rodrigo): con un
+                    pago parcial detrás, el importe que sale es EL RESTO, y hay
+                    que decir de dónde sale o parece que la cuota ha cambiado.
+                    Ver `lib/billing/restoDelMes.js`. */}
+                {form.modo === "cuota" && parcialDelMes && (
+                  <p className={`text-[11px] mt-1.5 ${parcialDelMes.completo ? "text-amber-700" : "text-neutral-500"}`}>
+                    {parcialDelMes.completo ? (
+                      <>
+                        Este mes ya está cobrado entero ({fmtMoney(parcialDelMes.yaCobrado)}). Si aun así hay que
+                        apuntar otro cobro, escribe el importe a mano.
+                      </>
+                    ) : (
+                      <>
+                        Ya cobrado este mes: <span className="tabular">{fmtMoney(parcialDelMes.yaCobrado)}</span>.
+                        Queda <span className="tabular font-medium text-neutral-700">{fmtMoney(parcialDelMes.resto)}</span>,
+                        que es lo que se ha puesto arriba.
+                      </>
+                    )}
+                  </p>
+                )}
               </FormRow>
               <FormRow label="Método de pago">
                 <Select value={form.method} onChange={(v) => setForm((f) => ({ ...f, method: v }))}
