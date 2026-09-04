@@ -179,6 +179,11 @@ export default async function HomePage() {
   const hayTrabajo = !hayNegocio && Boolean(trabajo);
   const hayDerecha = hayNegocio || hayTrabajo;
 
+  // «Cobrado» es de admin (magnitud sensible) y sale de los cobros del mes:
+  // sin cobros que leer llega en null y la fila se queda en dos columnas, no en
+  // tres con un hueco.
+  const conCobrado = admin && finance?.collected != null;
+
   // La gráfica NO manda sobre el reparto: si hay tarjetas, comparte rejilla con
   // ellas; si es lo único, se queda con el ancho, que entonces sí es suyo.
   // Cuando no hay mitad izquierda, la derecha se queda con las doce columnas:
@@ -242,17 +247,17 @@ export default async function HomePage() {
             <section className={`${hayHoy ? "lg:col-span-7" : "lg:col-span-12"} flex flex-col gap-2.5 min-h-0`}>
               <Rotulo>El negocio</Rotulo>
               {finance && (
-                <div className={`grid gap-2.5 ${admin ? "grid-cols-3" : "grid-cols-2"}`}>
+                <div className={`grid gap-2.5 ${conCobrado ? "grid-cols-3" : "grid-cols-2"}`}>
                   <Kpi
                     label={`Facturado · ${mes}`}
                     value={eur(finance.month.billed)}
                     sub={`${finance.month.invoices} ${finance.month.invoices === 1 ? "factura" : "facturas"}`}
                   />
-                  {admin && finance.collected != null && (
+                  {conCobrado && (
                     <Kpi
                       label={`Cobrado · ${mes}`}
                       value={eur(finance.collected)}
-                      sub={`el ${finance.collectedPct}% de lo facturado`}
+                      sub={`${finance.collectedCount} ${finance.collectedCount === 1 ? "cobro" : "cobros"}`}
                     />
                   )}
                   <Kpi
