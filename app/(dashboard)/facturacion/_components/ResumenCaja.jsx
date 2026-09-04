@@ -17,11 +17,20 @@
  * día, o todos a la vez con la casilla de arriba; y cuando se mira UN SOLO día
  * (mismo desde y hasta, el cierre de caja de hoy) sale ya abierto, porque
  * entonces la lista es justo lo que se ha venido a ver.
+ *
+ * ── Y CADA COBRO SE ABRE, Y EL RESUMEN SE EXPORTA (04/09/2026, Rodrigo) ─────
+ * Pulsar un cobro saca su vista lateral (`CobroDrawer.jsx`): sus datos, los
+ * mismos campos que Cobros para corregirlo, borrarlo, y un ticket para la
+ * familia. Antes había que apuntar el nombre, irse a Cobros y buscarlo entre
+ * cientos. Y «Exportar a Excel» baja el periodo elegido en dos hojas —el día y
+ * el cobro—, con las mismas cifras que la pantalla porque salen de la misma
+ * función de servidor (`lib/billing/resumenCaja.js`).
  */
 
 import { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { fmtMoney, fmtDate } from "./Kpi.jsx";
+import CobroDrawer from "./CobroDrawer.jsx";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition";
@@ -58,6 +67,9 @@ export default function ResumenCaja({ cajaId }) {
   // pedido (desde === hasta) abre el suyo sin que haya que pulsarlo.
   const [abiertos, setAbiertos] = useState(() => new Set());
   const [verTodos, setVerTodos] = useState(false);
+  // El cobro abierto en la vista lateral. Se guarda la fila del resumen además
+  // del id para poner el nombre en la cabecera mientras carga la ficha.
+  const [cobroAbierto, setCobroAbierto] = useState(null);
   const unSoloDia = desde === hasta;
 
   const alternar = useCallback((fecha) => {
@@ -112,6 +124,18 @@ export default function ResumenCaja({ cajaId }) {
           <input type="checkbox" checked={verTodos} onChange={(e) => setVerTodos(e.target.checked)} />
           Ver los cobros de cada día
         </label>
+        {/* El Excel del periodo ELEGIDO (04/09/2026, Rodrigo): las mismas
+            fechas que se están mirando, y las mismas cifras — sale de la misma
+            función de servidor que esta tabla. */}
+        <a
+          href={`/api/arqueo/exports/resumen?desde=${desde}&hasta=${hasta}${cajaId ? `&cajaId=${cajaId}` : ""}`}
+          className="ml-auto inline-flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 rounded-lg border border-neutral-200 text-neutral-600 hover:bg-neutral-50 transition"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3.5 h-3.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+          </svg>
+          Exportar a Excel
+        </a>
       </div>
 
       {errorMsg && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-700">{errorMsg}</div>}
@@ -206,7 +230,16 @@ export default function ResumenCaja({ cajaId }) {
                               </thead>
                               <tbody>
                                 {cobros.map((c) => (
-                                  <tr key={c.id} className="border-t border-neutral-200/70">
+                                  /* Pulsar el cobro abre su vista lateral: sus
+                                     datos, editarlo, borrarlo y el ticket
+                                     (04/09/2026, Rodrigo). El `stopPropagation`
+                                     evita que el clic pliegue el día. */
+                                  <tr
+                                    key={c.id}
+                                    onClick={(e) => { e.stopPropagation(); setCobroAbierto(c); }}
+                                    className="border-t border-neutral-200/70 cursor-pointer hover:bg-white transition-colors"
+                                    title="Ver el cobro, editarlo o sacar su ticket"
+                                  >
                                     <td className="px-2 py-1.5 text-neutral-500 tabular">{fmtHora(c.paidAt)}</td>
                                     {/* El paciente primero y el pagador detrás, como en Cobros
                                         (03/09/2026, Aumenta). Sin paciente queda el cliente solo. */}
@@ -281,6 +314,15 @@ export default function ResumenCaja({ cajaId }) {
           Hay cobros con un método que este resumen no sabe clasificar ({datos.metodosSinCesta.join(", ")}):
           no están sumados en ninguna columna.
         </p>
+      )}
+
+      {cobroAbierto && (
+        <CobroDrawer
+          cobroId={cobroAbierto.id}
+          resumen={cobroAbierto}
+          onClose={() => setCobroAbierto(null)}
+          onCambiado={cargar}
+        />
       )}
     </div>
   );
