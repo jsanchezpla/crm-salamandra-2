@@ -46,11 +46,68 @@ const TONO_BOTON = {
   peligro: "border-rose-200 text-rose-700 hover:bg-rose-50",
 };
 
-export default function CitasDelPaciente({ citas = [], onActualizada, vacio = "Sin citas registradas para este paciente." }) {
+export default function CitasDelPaciente({ citas = [], patientId = null, onActualizada, onDesprogramadas, vacio = "Sin citas registradas para este paciente." }) {
   const [abierta, setAbierta] = useState(null); // id de la cita con los botones desplegados
   const [guardando, setGuardando] = useState(null);
+  const [quitando, setQuitando] = useState(false);
   const [error, setError] = useState(null);
-  const { pedirTexto, dialogo } = useDialogo();
+  const { pedirTexto, confirmar, avisar, dialogo } = useDialogo();
+
+  /*
+   * QUITAR LAS FUTURAS DE UNA VEZ (05/09/2026, AV-0049 de Aumenta: «al querer
+   * desprogramar no podemos hacerlo; tendríamos que eliminar cita por cita
+   * semanalmente»).
+   *
+   * Repetir una cita crea N citas independientes, no una serie, así que no hay
+   * tanda que deshacer — pero sí hay un paciente y una fecha. Se cancelan (se
+   * quedan en el histórico y liberan el hueco), solo de hoy en adelante, y
+   * **sin mandar un solo correo**: cuarenta avisos de golpe por una baja ya
+   * hablada serían cuarenta llamadas al día siguiente. El diálogo lo dice.
+   *
+   * El recuento lo da el SERVIDOR y no esta lista, que puede venir recortada.
+   */
+  async function quitarFuturas() {
+    setError(null);
+    setQuitando(true);
+    try {
+      const r = await fetch(`/api/pacientes/${patientId}/desprogramar`, { cache: "no-store" });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || "No se pudieron contar las citas");
+      const n = j.data?.futuras ?? 0;
+      if (!n) {
+        await avisar({ titulo: "No hay nada que quitar", texto: "Este paciente no tiene citas de hoy en adelante." });
+        return;
+      }
+      const seguro = await confirmar({
+        titulo: `Quitar ${n} ${n === 1 ? "cita" : "citas"} de la agenda`,
+        texto: `Se cancelan las ${n} ${n === 1 ? "cita" : "citas"} que tiene de hoy en adelante. Quedan en el histórico como canceladas y sus huecos se liberan. Las de antes de hoy no se tocan. NO se avisa a la familia: eso lo haces tú.`,
+        confirmar: "Quitarlas",
+        cancelar: "Volver",
+        tono: "peligro",
+      });
+      if (!seguro) return;
+      const motivo = await pedirTexto({
+        titulo: "¿Por qué se van?",
+        texto: "Queda escrito en cada cita cancelada.",
+        etiqueta: "Motivo",
+        placeholder: "Baja del paciente",
+        valorInicial: "Baja del paciente",
+      });
+      if (motivo === null) return;
+      const res = await fetch(`/api/pacientes/${patientId}/desprogramar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ motivo }),
+      });
+      const jr = await res.json();
+      if (!jr.ok) throw new Error(jr.error || "No se pudieron quitar");
+      onDesprogramadas?.(jr.data);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setQuitando(false);
+    }
+  }
 
   async function poner(cita, clave) {
     const resultado = resultadoPorClave(clave);
@@ -83,10 +140,30 @@ export default function CitasDelPaciente({ citas = [], onActualizada, vacio = "S
 
   if (!citas.length) return <p className="text-[11px] text-neutral-400">{vacio}</p>;
 
+  // ¿Asoma alguna por delante? Basta con lo que hay en pantalla para decidir si
+  // el botón pinta algo; el número de verdad lo da el servidor al pulsarlo.
+  const ahora = Date.now();
+  const hayFuturas = citas.some(
+    (c) => (c.status === "pending" || c.status === "confirmed") && new Date(c.scheduledAt).getTime() >= ahora
+  );
+
   return (
     <div className="space-y-2">
       {error && (
         <p className="text-[11px] text-rose-600 bg-rose-50 border border-rose-100 rounded-lg px-2.5 py-1.5">{error}</p>
+      )}
+      {patientId && hayFuturas && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={quitarFuturas}
+            disabled={quitando}
+            title="Cancela de una vez las citas que tiene de hoy en adelante"
+            className="text-[11px] px-2.5 py-1 rounded-md border border-neutral-200 bg-white text-neutral-600 hover:border-rose-300 hover:text-rose-700 transition-colors disabled:opacity-40"
+          >
+            {quitando ? "Quitando…" : "Quitar las futuras"}
+          </button>
+        </div>
       )}
       {[...citas]
         .sort((a, b) => new Date(b.scheduledAt) - new Date(a.scheduledAt))

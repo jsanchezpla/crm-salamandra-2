@@ -1050,13 +1050,20 @@ export default function PacienteFichaPage() {
                   {" "}
                   <strong className="text-white">En «Cambiar» se pone cómo acabó</strong>: completada,
                   falta justificada, falta injustificada o cancelada — lo mismo que en la Agenda.
+                  {" "}
+                  Y con <strong className="text-white">«Quitar las futuras»</strong> se cancelan de una
+                  vez todas las que tenga de hoy en adelante, para dar de baja sin ir cita a cita.
                 </HelpTooltip>
               </div>
               <CitasDelPaciente
                 citas={citas}
+                patientId={patient.id}
                 onActualizada={(cita) =>
                   setCitas((prev) => prev.map((c) => (c.id === cita.id ? { ...c, ...cita } : c)))
                 }
+                // Tras una baja en bloque la lista de la ficha ya no dice la
+                // verdad: se vuelve a pedir en vez de adivinar cuáles cayeron.
+                onDesprogramadas={() => load()}
               />
             </div>
             <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">

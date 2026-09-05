@@ -1819,6 +1819,46 @@ Tanda de Aumenta (Isa, por Rodrigo), toda en el base:
   mismo).
 - Los talleres se abren por su registro desde la agenda: ver `clinica.md`.
 
+## Desprogramar: quitarle a un paciente sus citas futuras de una vez (05/09/2026)
+
+AV-0049 (Aumenta, Olga García): «al dar de alta en agenda un paciente y
+programar para todas las semanas, al querer desprogramar no podemos hacerlo;
+tendríamos que eliminar cita por cita semanalmente. Queremos poder indicarle, al
+igual que al programar dando de alta, desprogramar para dar de baja».
+
+**No hay serie que deshacer, y es a propósito.** Repetir una cita materializa N
+citas INDEPENDIENTES (`lib/citas/recurrencia.js`): cada una se edita y se
+cancela sola, como se hacía a mano. Lo que sí hay siempre es un PACIENTE y una
+FECHA, y eso es lo que de verdad querían — dar de baja a un niño a mitad de
+curso sin abrir cuarenta citas. Vale además para citas que nunca vinieron de una
+repetición, que una «serie» no habría cubierto. En Aumenta hay 12.236 citas
+futuras vivas.
+
+**Dónde**: ficha del paciente → «Citas del paciente» → **«Quitar las futuras»**
+(`components/citas/CitasDelPaciente.jsx`, solo si asoma alguna por delante). El
+recuento lo da el servidor, no la lista de la pantalla, que puede venir
+recortada a 100.
+
+**Endpoint**: `GET/POST /api/pacientes/[id]/desprogramar`. El GET cuenta; el
+POST cancela. Body opcional: `{ desde: 'AAAA-MM-DD', motivo }`.
+
+**Las cuatro reglas, que son lo que hace que esto se pueda pulsar sin miedo:**
+
+- **Cancela, no borra.** La cita cancelada libera el hueco y se queda en el
+  histórico: es lo que distingue «se dio de baja» de «nunca existió».
+- **Solo hacia adelante**, desde `desde` (por defecto hoy en Madrid). El pasado
+  no se toca ni por un error de dedo.
+- **Solo las vivas** (`pending` y `confirmed`). Una completada, una falta o una
+  ya cancelada se quedan como están.
+- **No manda ni un correo ni un WhatsApp.** Cancelar UNA cita avisa a la
+  familia; cuarenta avisos de golpe por una baja ya hablada en el centro serían
+  cuarenta llamadas al día siguiente. El diálogo lo dice antes de confirmar:
+  avisar a la familia es de quien da la baja. Tampoco abre incidencias por
+  falta: esto no es que nadie viniera, es que la cita ya no toca.
+
+Una línea de auditoría con el recuento (`citas.desprogramadas_en_bloque`), no
+cuarenta, y sin datos de salud. Lo fija `scripts/_smoke-desprogramar-citas.mjs`.
+
 ## Migraciones
 
 Las del módulo están registradas en `MODULES.citas` de
