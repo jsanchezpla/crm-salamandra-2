@@ -144,15 +144,38 @@ function ObjetivosConIa({ patientId, plan, onAnadir }) {
     setIdeas("");
   }
 
+  /*
+   * DICTAR SE VE DESDE FUERA (05/09/2026, AV-0050 de Aumenta: «aún no nos sale
+   * la opción de poder grabar audio en el apartado de plan»).
+   *
+   * Estaba puesto y funcionaba, pero DENTRO de este panel: con el panel plegado
+   * —que es como se abre la pestaña Plan— lo único que se veía era el enlace de
+   * la IA, y «Redactar objetivos con IA» no es donde nadie busca un micrófono.
+   * Así que el botón sale también aquí y hace las dos cosas de una vez: abre el
+   * panel y empieza a grabar. Un botón que aparece y ya está grabando es lo que
+   * ella esperaba encontrar.
+   */
   if (!abierto) {
     return (
-      <button
-        type="button"
-        onClick={() => setAbierto(true)}
-        className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline"
-      >
-        ✨ Redactar objetivos con IA a partir de ideas clave
-      </button>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <button
+          type="button"
+          onClick={() => setAbierto(true)}
+          className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline"
+        >
+          ✨ Redactar objetivos con IA a partir de ideas clave
+        </button>
+        {grabadora.soportado && (
+          <button
+            type="button"
+            onClick={() => { setAbierto(true); grabadora.empezar(); }}
+            title="Dictar las ideas clave con el micrófono"
+            className="px-2.5 py-1 rounded-lg text-[11px] font-medium border border-neutral-200 bg-white text-neutral-700 hover:border-neutral-400"
+          >
+            ● Dictar
+          </button>
+        )}
+      </div>
     );
   }
 

@@ -754,6 +754,18 @@ a `POST /api/pacientes/[id]/plan/transcribir` ⚡ **Whisper** (clave del tenant,
 ideas clave y proponer los objetivos sigue siendo el botón de siempre. No
 guarda nada.
 
+### Y se ve sin abrir el panel de la IA (05/09/2026, AV-0050 de Aumenta)
+
+Silvia Pérez: «aún no nos sale la opción de poder grabar audio en el apartado
+de plan». Salía, pero DENTRO del panel: con «Redactar objetivos con IA»
+plegado —que es como se abre la pestaña Plan— lo único visible era un enlace
+de texto, y ahí nadie busca un micrófono. Ahora la rama plegada de
+`ObjetivosConIa` pinta también un **«● Dictar»** que hace las dos cosas en el
+mismo clic: abre el panel y arranca la grabadora. Sigue saliendo solo donde el
+navegador sabe grabar. Lo fija `scripts/_smoke-dictar-el-plan.mjs`, con regex
+sobre el JSX: si alguien vuelve a meter el micrófono dentro del panel, la
+prueba lo dice.
+
 ### Grabar desde el propio CRM (03/09/2026, AV-0037 de Aumenta)
 
 «Añadir audio» abre un `<input type="file" accept="audio/*">`. Android ofrece la
