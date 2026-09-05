@@ -1,7 +1,8 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, errorConDatos, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { logBillingAudit, datosPeticion } from "../../../../../lib/billing/audit.js";
-import { limpiarCuota, cuadrarBajaYActiva } from "../../../../../lib/billing/cuotas.js";
+import { limpiarCuota, cuadrarBajaYActiva, cobroSePuedeRehacer } from "../../../../../lib/billing/cuotas.js";
+import { sincronizarCobroDelMes } from "../../../../../lib/billing/cobroDeCuota.js";
 
 /**
  * PATCH/DELETE /api/billing/cuotas/[id] — modificar, dar de baja o eliminar una
@@ -55,7 +56,16 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
       after: resumenCuota(cuota),
     });
 
-    return ok(cuota);
+    /*
+     * Y el cobro pendiente del mes en curso se rehace (05/09/2026, AV-0046:
+     * «si un paciente tiene dos terapias en cuotas, eliminas una de ella, sigue
+     * apareciendo en cobros las dos terapias que tenía anteriormente»). Solo
+     * ese cobro y solo si aún no es dinero ni papel; los frenos y el porqué,
+     * en `lib/billing/cobroDeCuota.js`.
+     */
+    const cobro = await sincronizarCobroDelMes({ tenantModels, cuotaId: cuota.id });
+
+    return ok({ ...cuota.toJSON(), cobro });
   } catch (err) {
     return serverError(err);
   }
@@ -82,9 +92,18 @@ export const DELETE = withTenant(async (request, { params }, { tenant, tenantMod
      *
      * Así que la ruta cuenta qué hay detrás y lo devuelve (409 + el desglose)
      * para que la pantalla lo pregunte con esos números en la mano; con
-     * `?confirmar=1` borra. Los cobros NO se tocan: el dinero cobrado no se
-     * borra por detrás de nadie. Se quedan con su `cuotaId` apuntando a una
-     * cuota que ya no existe, que es exactamente lo que pasó.
+     * `?confirmar=1` borra.
+     *
+     * ── QUÉ PASA CON LOS COBROS (cambiado el 05/09/2026) ────────────────────
+     * Hasta hoy no se tocaba ninguno, y tenía sentido porque el cobro solo
+     * nacía si alguien pulsaba «Generar el mes». Desde AV-0048 la cuota genera
+     * SOLA su cobro del mes, así que borrar el alta equivocada de hace cinco
+     * minutos dejaba un cobro pendiente huérfano que nadie iba a pagar y que
+     * ensuciaba la morosidad. Ahora se borran los cobros que todavía NO son
+     * dinero ni papel —pendientes, sin factura, sin Stripe y sin banco, el
+     * mismo criterio de `cobroSePuedeRehacer`—; el dinero cobrado y lo ya
+     * facturado se queda, con su `cuotaId` apuntando a una cuota que ya no
+     * existe, que es exactamente lo que pasó.
      */
     const cobros = await Payment.count({ where: { cuotaId: cuota.id } });
     const pendientes = cobros
@@ -102,6 +121,11 @@ export const DELETE = withTenant(async (request, { params }, { tenant, tenantMod
       );
     }
 
+    // Los que no son dinero ni papel se van con la cuota que los creó.
+    const sueltos = await Payment.findAll({ where: { cuotaId: cuota.id, status: "pending" } });
+    const borrables = sueltos.filter((p) => cobroSePuedeRehacer(p).ok);
+    for (const p of borrables) await p.destroy();
+
     const antes = resumenCuota(cuota);
     await cuota.destroy();
     await logBillingAudit({
@@ -113,11 +137,11 @@ export const DELETE = withTenant(async (request, { params }, { tenant, tenantMod
       // Cuántos cobros se quedan sin cuota que los explique: es LO que hay que
       // poder mirar dentro de un mes, cuando alguien pregunte de dónde salió un
       // cobro cuya cuota no aparece.
-      before: { ...antes, cobros, cobrosPendientes: pendientes },
+      before: { ...antes, cobros, cobrosPendientes: pendientes, cobrosBorrados: borrables.length },
       after: null,
     });
 
-    return ok({ borrada: true, cobros, pendientes });
+    return ok({ borrada: true, cobros, pendientes, cobrosBorrados: borrables.length });
   } catch (err) {
     return serverError(err);
   }

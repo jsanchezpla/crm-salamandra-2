@@ -951,6 +951,58 @@ Configuración → Conceptos y cuotas, además, la fila de alta pasa a dos filas
 cuatro columnas: con siete campos en un renglón los rótulos se quedaban en «Im»
 y «me».
 
+## El cobro del mes en curso sigue a su cuota (05/09/2026)
+
+Dos avisos de Aumenta del 04/09 y el mismo agujero: **el cobro era una foto**.
+Nacía al pulsar «Generar el mes» y ahí se quedaba.
+
+- **AV-0048** (Olga): «hemos asociado una cuota pero no aparece en cobros, ¿nos
+  falta algún paso?». El mes se genera UNA vez —los 274 cobros de septiembre
+  salieron el 01/09— y quien da de alta una cuota el día 4 no ve nada en Cobros
+  hasta que alguien vuelve a generar. Sin error y sin aviso: el proceso clave
+  del centro (dar de alta al paciente → ponerle cuota → cobrarle → facturar) se
+  rompía en el tercer paso.
+- **AV-0046** (Olga): «si un paciente tiene dos terapias en cuotas, eliminas una
+  de ella, sigue apareciendo en cobros las dos terapias que tenía
+  anteriormente». Y relanzar «Generar el mes» tampoco lo arregla: esa cuota ya
+  tiene cobro del mes y sale en «repetidas», nunca en el lote.
+
+**Qué hace ahora.** Crear o editar una cuota deja al día su cobro del **mes en
+curso**: lo crea si falta y lo rehace si cambió (`lib/billing/cobroDeCuota.js`,
+`sincronizarCobroDelMes` / `sincronizarCobrosDelMes`, llamado desde el POST de
+`/api/billing/cuotas` y el PATCH de `/api/billing/cuotas/[id]`). El alta en
+grupo sincroniza las N de una pasada. «Generar el mes» **sigue existiendo** para
+el lote entero y para los meses que no son este.
+
+**Los dos frenos, y son la razón de que esto se pueda hacer solo:**
+
+1. **Solo se toca el cobro que aún no es dinero ni papel**: pendiente, sin
+   factura, sin Stripe, sin banco y sin sesión de pago abierta
+   (`cobroSePuedeRehacer`). Un cobro cobrado o facturado NO se reescribe porque
+   alguien cambie la cuota después: se dice en pantalla y decide quien mande.
+2. **Solo el mes en curso.** Los meses cerrados son historia: si en agosto se
+   cobró 190 €, eso es lo que pasó.
+
+**Lo que cambia además:**
+
+- La **nota escrita a mano** no se pisa. Solo se rehace la que escribe el
+  programa, que se reconoce por su forma (`esNotaAutomatica`: «Cuota septiembre
+  2026 — …»). Si alguien explicó en Cobros por qué ese mes es distinto, ese
+  texto es el único sitio donde vive esa explicación.
+- El **método sí sigue a la cuota**: si la familia pasa de efectivo a
+  domiciliación, el recibo que aún no se ha pasado tiene que salir por donde
+  toca. Una cuota sin método no le impone nada al cobro.
+- **Sin cambios reales no hay `update`**: `cambiosDelCobro` devuelve `null` y no
+  se ensucia ni el rastro ni el `updated_at`.
+- **Borrar la cuota se lleva sus cobros PENDIENTES** sin factura (los crea ella
+  sola: dejarlos era dejar morosidad falsa). El dinero cobrado y lo ya facturado
+  se queda, sin la cuota que lo explica, y el 409 con el desglose sigue igual.
+- **El «sin importe» deja de ser silencioso**: una cuota cuyos conceptos ya no
+  están en el catálogo no genera cobro y ahora lo DICE al guardar. En producción
+  había una así en Aumenta desde el 01/09.
+
+Prueba: `scripts/_smoke-cobro-de-cuota.mjs` (17 casos, sin base de datos).
+
 ## Entradas y salidas de caja (01/09/2026)
 
 Petición de Aumenta: «se necesita poder hacer entradas y salidas de caja (donde

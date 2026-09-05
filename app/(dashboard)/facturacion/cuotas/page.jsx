@@ -258,8 +258,9 @@ export default function CuotasPage() {
    *
    * Dos preguntas y no una: la primera es la de siempre —eliminar es para el
    * alta equivocada— y la segunda solo sale si de verdad hay cobros, diciendo
-   * cuántos y cuántos siguen pendientes. Los cobros se quedan donde están: el
-   * dinero no se borra de paso.
+   * cuántos y cuántos siguen pendientes. Desde el 05/09/2026 los PENDIENTES sin
+   * factura se van con la cuota (los crea ella sola, ver AV-0048); el dinero
+   * cobrado y lo ya facturado no se borra de paso.
    */
   async function borrar(cuota) {
     const quien = cuota.client?.fiscalName || cuota.client?.name || "esta familia";
@@ -284,7 +285,7 @@ export default function CuotasPage() {
       .join(" y ");
     const insiste = await confirmar({
       titulo: "Esta cuota ya ha generado cobros",
-      texto: `Hay ${cobros} cobro${cobros === 1 ? "" : "s"} que nació de esta cuota (${detalle}). Si la eliminas, esos cobros SE QUEDAN —no se borra ningún cobro— pero se quedan sin la cuota que los explica. Si alguno ya no procede, bórralo tú en Cobros.`,
+      texto: `Hay ${cobros} cobro${cobros === 1 ? "" : "s"} que nació de esta cuota (${detalle}). Al eliminarla se borran los que siguen PENDIENTES y no están en ninguna factura; el dinero ya cobrado y lo ya facturado se queda, sin la cuota que lo explica.`,
       confirmar: "Eliminar de todas formas",
       cancelar: "Volver",
       tono: "peligro",
@@ -326,9 +327,11 @@ export default function CuotasPage() {
           <h1 className="font-display text-2xl text-[var(--ink-900)] mt-1 flex items-center gap-2">
             Cuotas mensuales
             <HelpTooltip title="Cuotas mensuales" placement="bottom">
-              Lo que paga cada familia TODOS los meses. Con la cuota puesta, el botón{" "}
-              <strong className="text-white">Generar el mes</strong> crea los cobros de todas de una
-              vez, prorrateando el mes del alta y el de la baja.
+              Lo que paga cada familia TODOS los meses. Al dar de alta o modificar una cuota, su
+              cobro del mes en curso{" "}
+              <strong className="text-white">aparece y se pone al día solo</strong> en Cobros. El botón{" "}
+              <strong className="text-white">Generar el mes</strong> sigue estando para el lote entero y
+              para los meses que no son este, prorrateando el mes del alta y el de la baja.
               {" "}
               Los cobros nacen <strong className="text-white">pendientes</strong>: generar no es
               cobrar. Se pasan a cobrado en Cobros cuando el dinero entra.
@@ -594,6 +597,36 @@ export default function CuotasPage() {
   );
 }
 
+/* ── Qué contar del cobro después de guardar (05/09/2026, AV-0048 y AV-0046) ─
+ *
+ * Desde hoy guardar una cuota deja al día su cobro del mes en curso, así que el
+ * aviso deja de ser «ahora dale a Generar el mes» y pasa a decir qué ha pasado.
+ * Los dos casos que hay que decir sí o sí son los que NO terminan en un cobro:
+ * el que no se puede tocar porque ya está cobrado o facturado, y el que no vale
+ * nada porque sus conceptos ya no están en el catálogo — ese era el agujero
+ * silencioso.
+ */
+function colaDelCobro(cobro) {
+  if (!cobro) return "";
+  const mes = mesLegible(mesActual());
+  if (cobro.estado === "creado") return ` · su cobro de ${mes} ya está en Cobros`;
+  if (cobro.estado === "actualizado") return ` · su cobro de ${mes} se ha puesto al día`;
+  if (cobro.estado === "intocable") return ` · OJO: el cobro de ${mes} no se ha tocado (${cobro.motivo})`;
+  if (cobro.estado === "sin-importe") return ` · OJO: no sale cobro de ${mes} (${cobro.motivo})`;
+  return "";
+}
+
+function colaDelLote(cobros) {
+  if (!cobros) return "";
+  const mes = mesLegible(mesActual());
+  const partes = [];
+  if (cobros.creados) partes.push(`${cobros.creados} ${cobros.creados === 1 ? "cobro" : "cobros"} de ${mes} en Cobros`);
+  if (cobros.actualizados) partes.push(`${cobros.actualizados} al día`);
+  if (cobros.sinImporte) partes.push(`${cobros.sinImporte} sin importe (revisa sus conceptos)`);
+  if (cobros.intocables) partes.push(`${cobros.intocables} ya cobrados o facturados, sin tocar`);
+  return partes.length ? ` · ${partes.join(" · ")}` : "";
+}
+
 /* ── Alta (individual o EN GRUPO) y edición ────────────────────────────────
  * El mismo drawer para las dos cosas: en el alta se eligen destinatarios (uno
  * o cuarenta) y en la edición el destinatario ya está fijado. Lo que se teclea
@@ -673,14 +706,14 @@ function DrawerCuota({ conceptos, cuota = null, inicial = null, ivaSugerido = 21
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || "No se pudo guardar");
 
-      if (editando) { onDone("Cuota actualizada"); return; }
+      if (editando) { onDone(`Cuota actualizada${colaDelCobro(j.data?.cobro)}`); return; }
       // En grupo puede haber saltadas (ya tenían cuota): se enseñan antes de
       // cerrar, que si no nadie se entera de que faltan.
       if (j.data?.omitidas?.length) setResultado(j.data);
-      // Y se dice lo que FALTA: la cuota no llega sola a Cobros, hace falta
-      // generar el mes (04/09/2026, Rodrigo: «en ningún momento pasa a
-      // salirme en los cobros»).
-      else onDone(`${j.data.creadas} ${j.data.creadas === 1 ? "cuota creada" : "cuotas creadas"} · dale a «Generar el mes» para que salga en Cobros`);
+      // Y se dice qué ha pasado con el cobro: desde el 05/09/2026 (AV-0048) la
+      // cuota nueva llega SOLA a Cobros, así que lo que hay que contar ya no es
+      // lo que falta por hacer, sino lo que se ha hecho.
+      else onDone(`${j.data.creadas} ${j.data.creadas === 1 ? "cuota creada" : "cuotas creadas"}${colaDelLote(j.data?.cobros)}`);
     } catch (e) {
       setError(e.message);
     } finally {

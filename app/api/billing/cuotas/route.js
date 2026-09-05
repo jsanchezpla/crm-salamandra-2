@@ -3,6 +3,7 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { logBillingAudit, datosPeticion } from "../../../../lib/billing/audit.js";
 import { limpiarCuota, metodosValidos } from "../../../../lib/billing/cuotas.js";
+import { sincronizarCobrosDelMes } from "../../../../lib/billing/cobroDeCuota.js";
 import { billingHasPatients } from "../../../../lib/billing/patientLink.js";
 
 /**
@@ -140,7 +141,19 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       });
     }
 
-    return created({ creadas: creadas.length, cuotas: creadas, omitidas });
+    /*
+     * Y el cobro del mes en curso, ya (05/09/2026, AV-0048). Asignar la cuota y
+     * que en Cobros no aparezca nada hasta que alguien vuelva a pulsar «Generar
+     * el mes» era el agujero del proceso: se daba de alta al paciente, se le
+     * ponía la cuota, y a la hora de cobrar no había nada que cobrar. Va
+     * DESPUÉS de crear y fuera de la transacción de cada alta: si esto fallara,
+     * las cuotas ya están puestas y el lote mensual las recoge igual.
+     */
+    const cobros = creadas.length
+      ? await sincronizarCobrosDelMes({ tenantModels, cuotaIds: creadas.map((c) => c.id) })
+      : { creados: 0, actualizados: 0, sinImporte: 0, intocables: 0, resultados: [] };
+
+    return created({ creadas: creadas.length, cuotas: creadas, omitidas, cobros });
   } catch (err) {
     return serverError(err);
   }
