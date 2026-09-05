@@ -73,6 +73,26 @@ Se activa con `scripts/enable-module.js <slug> pacientes` (requiere `clients`;
 `aumenta` (la reina), `demo`, `demo_clinica` y `somos` — siempre junto a
 `clinica`: ningún tenant tiene `pacientes` suelto.
 
+## «Padres y tutores» estaba cerrado para quien lo pidió (05/09/2026)
+
+Vuelta de AV-0023. El bloque se entregó el 02/09 y el 04 Isabel volvió: «yo no
+visualizo el apartado que mencionas de padres y tutores». Y era cierto: el
+include del pagador de `GET /api/pacientes/[id]` gateaba con
+`hasModule("clients")`, que en este proyecto es del **usuario**, y en Aumenta
+14 de los 19 usuarios —las terapeutas, rol `user`— no tienen `clients` en su
+`moduleAccess`. Sin el include no viaja `client`, y la ficha esconde el bloque
+entero. Dirección (comodín) sí lo veía, así que parecía entregado.
+
+Era además la petición literal del aviso: «vale que no puedan acceder a
+Clientes, es lo suyo, pero deberían poder ver los contactos de la familia».
+Ahora `payerInclude` gatea con **`tenantHasModule`** —la variante que existe
+justo para esto: ¿tiene el CENTRO el módulo?—. Lo que sale sigue siendo lo
+mínimo y ya recortado (`tutoresParaFicha`: sin DNI ni firmante) y solo de la
+familia del paciente que se abre; entrar en Clientes sigue exigiendo el módulo,
+y el gate de la propia ficha (Clínica o Pacientes) no se toca.
+
+Lo fija `scripts/_smoke-tutores-ficha-paciente.mjs`.
+
 ## Los pacientes se dan de alta desde su familia (05/09/2026, AV-0047)
 
 Petición de Aumenta, Olga García: «en el apartado de Clínica, Pacientes,

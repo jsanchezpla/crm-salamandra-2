@@ -28,7 +28,7 @@ const PATCH_FIELDS = [
 
 // Un tenant con módulo Clínica/Pacientes NO tiene por qué tener el módulo (ni la
 // tabla) de clientes. El modelo Sequelize SIEMPRE está registrado, así que
-// gatear por el modelo no protege: hay que gatear por hasModule("clients") y,
+// gatear por el modelo no protege: hay que gatear por el módulo del CENTRO y,
 // además, degradar si la tabla/columna del pagador no existe (42P01/42703).
 const isMissingRel = (err) => {
   const code = err?.parent?.code || err?.original?.code;
@@ -39,13 +39,32 @@ function therapistInclude(TeamMember) {
   return { model: TeamMember, as: "mainTherapist", attributes: ["id", "displayName", "position", "avatarColor"] };
 }
 
-// Include del cliente pagador + sus contactos (para mostrar en la ficha del
-// paciente los contactos del que paga, sin duplicarlos). Sólo con módulo clients.
-// Desde el 02/09/2026 también sus `guardians`: la ficha del paciente enseña a
-// los padres y tutores de la familia (AV-0023 y AV-0024 de Aumenta), y el
-// serializador los recorta antes de que salgan (sin DNI ni firmante).
-function payerInclude({ Client, ClientContactMethod }, hasModule) {
-  if (!hasModule("clients") || !Client) return [];
+/*
+ * Include del cliente pagador + sus contactos (para mostrar en la ficha del
+ * paciente los contactos del que paga, sin duplicarlos). Desde el 02/09/2026
+ * también sus `guardians`: la ficha del paciente enseña a los padres y tutores
+ * de la familia (AV-0023 y AV-0024 de Aumenta), y el serializador los recorta
+ * antes de que salgan (sin DNI ni firmante).
+ *
+ * ── POR QUÉ MIRA AL TENANT Y NO AL USUARIO (05/09/2026, vuelta de AV-0023) ──
+ * Isabel volvió sobre el aviso ya cerrado: «yo no visualizo el apartado que
+ * mencionas de padres y tutores». Y tenía razón: esto gateaba con `hasModule`,
+ * que es del USUARIO, y en Aumenta 14 de los 19 usuarios —las terapeutas, rol
+ * `user`— NO tienen `clients` en su `moduleAccess`. Sin el include no viaja
+ * `client`, y la ficha esconde el bloque entero. O sea que el arreglo estaba
+ * cerrado con llave justo para quien lo había pedido: dirección (comodín) lo
+ * veía y por eso parecía entregado.
+ *
+ * Era la petición literal: «vale que no puedan acceder a Clientes, es lo suyo,
+ * pero deberían poder ver los contactos de la familia». Así que aquí manda
+ * `tenantHasModule` —la variante que existe justo para esto—: que el CENTRO
+ * tenga Clientes. Lo que sale sigue siendo lo mínimo y ya recortado
+ * (`tutoresParaFicha`: sin DNI y sin quién firma), y solo de la familia del
+ * paciente que se está abriendo. Entrar en Clientes sigue necesitando el
+ * módulo: esto es la ficha del paciente, no la de la familia.
+ */
+function payerInclude({ Client, ClientContactMethod }, tenantHasModule) {
+  if (!tenantHasModule("clients") || !Client) return [];
   const inc = { model: Client, as: "client", attributes: ["id", "name", "separated", "guardians"] };
   if (ClientContactMethod) {
     inc.include = [{ model: ClientContactMethod, as: "contactMethods", attributes: ["id", "kind", "value", "label", "isPrimary"] }];
@@ -56,10 +75,10 @@ function payerInclude({ Client, ClientContactMethod }, hasModule) {
 // Carga el paciente con terapeuta + pagador; si el schema del tenant carece de la
 // tabla/columna del pagador (42P01/42703), reintenta sin ese include (degradado
 // limpio en vez de 500 — patrón exigido por schemas parciales del proyecto).
-async function loadPatient(models, id, hasModule) {
+async function loadPatient(models, id, tenantHasModule) {
   const { Patient, TeamMember, Client, ClientContactMethod } = models;
   const base = [therapistInclude(TeamMember)];
-  const payer = payerInclude({ Client, ClientContactMethod }, hasModule);
+  const payer = payerInclude({ Client, ClientContactMethod }, tenantHasModule);
   try {
     return await Patient.findByPk(id, { include: [...base, ...payer] });
   } catch (err) {
@@ -73,7 +92,7 @@ export const GET = withTenant(async (request, rc, ctx) => {
   const { id } = await rc.params;
   if (!UUID_RE.test(id)) return error("id inválido");
   const { ClinicSession } = ctx.tenantModels;
-  const p = await loadPatient(ctx.tenantModels, id, ctx.hasModule);
+  const p = await loadPatient(ctx.tenantModels, id, ctx.tenantHasModule);
   if (!p) return notFound("Paciente no encontrado");
   const agg = await ClinicSession.findOne({
     attributes: [[fn("COUNT", col("id")), "cnt"], [fn("MAX", col("session_date")), "last"]],
@@ -161,7 +180,7 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
   // Sin cambios: devolver la MISMA forma que el GET (con terapeuta + pagador),
   // no el `p` sin includes (que blanquearía terapeuta/pagador en la respuesta).
   if (Object.keys(updates).length === 0 && !tocaTerapeutas) {
-    const full = await loadPatient(ctx.tenantModels, id, ctx.hasModule);
+    const full = await loadPatient(ctx.tenantModels, id, ctx.tenantHasModule);
     const eq = await listaDe(ctx.tenantModels, ctx.tenantSequelize, [id]);
     return ok(serializePatient(full ?? p, { therapists: terapeutasEfectivos(full ?? p, eq[id]) }));
   }
@@ -211,7 +230,7 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
   });
   // Recarga con terapeuta + pagador para devolver la misma forma que el GET
   // (degrada sin el pagador si el schema del tenant no lo tiene).
-  const full = await loadPatient(ctx.tenantModels, id, ctx.hasModule);
+  const full = await loadPatient(ctx.tenantModels, id, ctx.tenantHasModule);
   const equipo = await listaDe(ctx.tenantModels, ctx.tenantSequelize, [id]);
   return ok(serializePatient(full ?? p, { therapists: terapeutasEfectivos(full ?? p, equipo[id]) }));
 });

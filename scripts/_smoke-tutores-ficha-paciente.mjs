@@ -18,6 +18,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { tutoresParaFicha, GUARDIAN_RELATIONSHIP_LABEL } from "../lib/clients/guardians.js";
 
 describe("tutoresParaFicha", () => {
@@ -77,5 +78,39 @@ describe("tutoresParaFicha", () => {
       lista.map((t) => t.id),
       ["m", "p"]
     );
+  });
+});
+
+/*
+ * Y QUE LLEGUE A QUIEN LO PIDIÓ (05/09/2026, vuelta de AV-0023).
+ *
+ * El bloque se entregó el 02/09 y Isabel volvió el 04: «yo no visualizo el
+ * apartado que mencionas de padres y tutores». Tenía razón. El include del
+ * pagador gateaba con `hasModule("clients")`, que es del USUARIO, y en Aumenta
+ * 14 de los 19 usuarios —las terapeutas— no tienen `clients` en su
+ * `moduleAccess`: sin include no viaja `client`, y la ficha esconde el bloque.
+ * Estaba cerrado con llave justo para quien lo había pedido, y dirección
+ * (comodín) lo veía, así que parecía entregado.
+ *
+ * Se fija por texto, que es lo que es: qué variante de `hasModule` gatea el
+ * include. Si alguien la devuelve a la del usuario, esto lo dice.
+ */
+describe("el include del pagador mira al CENTRO, no al usuario", () => {
+  const RUTA = readFileSync(new URL("../app/api/pacientes/[id]/route.js", import.meta.url), "utf8");
+
+  it("`payerInclude` gatea con `tenantHasModule`", () => {
+    assert.match(RUTA, /function payerInclude\(\{ Client, ClientContactMethod \}, tenantHasModule\)/);
+    assert.match(RUTA, /if \(!tenantHasModule\("clients"\) \|\| !Client\) return \[\]/);
+  });
+
+  it("ninguna carga de la ficha usa el `hasModule` del usuario para el pagador", () => {
+    assert.ok(!/loadPatient\(ctx\.tenantModels, id, ctx\.hasModule\)/.test(RUTA),
+      "una terapeuta sin el módulo Clientes volvería a quedarse sin padres y tutores");
+    assert.match(RUTA, /loadPatient\(ctx\.tenantModels, id, ctx\.tenantHasModule\)/);
+  });
+
+  it("entrar en la ficha sigue exigiendo Clínica o Pacientes", () => {
+    assert.match(RUTA, /return ctx\.hasModule\("clinica"\) \|\| ctx\.hasModule\("pacientes"\)/,
+      "el gate de la pantalla sí es del usuario: esto no abre la ficha a nadie nuevo");
   });
 });
