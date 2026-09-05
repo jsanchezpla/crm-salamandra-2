@@ -57,3 +57,21 @@ test("PARENTESCOS incluye el del propio cliente y `partirNombre` parte nombre y 
   assert.deepEqual(partirNombre("  Ana  "), { firstName: "Ana", lastName: "" });
   assert.deepEqual(partirNombre(""), { firstName: "", lastName: "" });
 });
+
+/*
+ * Y LA OTRA PUERTA SE CERRÓ (05/09/2026, AV-0047 de Aumenta: «en el apartado
+ * de Clínica, Pacientes, eliminar la posibilidad de crear nuevo paciente»).
+ *
+ * Clínica → Pacientes tenía un «Nuevo paciente» que creaba la ficha SUELTA:
+ * el formulario ni siquiera preguntaba por la familia, así que el paciente
+ * nacía sin pagador —y sin cuota, sin cobros y sin tutores—. Con el alta
+ * viviendo en la ficha de la familia (arriba), esa puerta sobraba y hacía
+ * daño: 1 de los 1.183 pacientes de Aumenta se coló por ahí.
+ */
+test("Clínica → Pacientes ya no da de alta: solo enlaza a Clientes", () => {
+  const src = lee("app/(dashboard)/pacientes/page.jsx");
+  assert.ok(!/showCreate/.test(src), "sigue el estado del modal de alta");
+  assert.ok(!/submitCreate/.test(src), "sigue el envío del alta suelta");
+  assert.ok(!/method: "POST"[\s\S]{0,80}\/api\/pacientes/.test(src), "la pantalla sigue creando pacientes por su cuenta");
+  assert.ok(/href="\/clientes"/.test(src), "no queda por dónde ir a dar de alta");
+});

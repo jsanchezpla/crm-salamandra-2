@@ -73,6 +73,29 @@ Se activa con `scripts/enable-module.js <slug> pacientes` (requiere `clients`;
 `aumenta` (la reina), `demo`, `demo_clinica` y `somos` — siempre junto a
 `clinica`: ningún tenant tiene `pacientes` suelto.
 
+## Los pacientes se dan de alta desde su familia (05/09/2026, AV-0047)
+
+Petición de Aumenta, Olga García: «en el apartado de Clínica, Pacientes,
+eliminar la posibilidad de crear nuevo paciente».
+
+**Por qué tienen razón.** El botón «Nuevo paciente» de `/pacientes` creaba la
+ficha SUELTA: el formulario no preguntaba por la familia, así que el paciente
+nacía sin `client_id` y por tanto sin pagador, sin cuota, sin cobros y sin
+«Padres y tutores» en su ficha. El globo de ayuda de la pantalla ya avisaba de
+que había que crearlo desde Clientes, y aun así pasó: el 05/09/2026, 1 de los
+1.183 pacientes de Aumenta no tenía familia enlazada. Un aviso al lado de un
+botón que funciona no frena a nadie.
+
+**Qué queda.** `/pacientes` es solo listado, filtros y buscador; en la cabecera,
+donde estaba el botón, hay un enlace «Dar de alta desde Clientes». El alta vive
+en la ficha de la familia (`components/clients/ClientPatientsSection.jsx`, con
+su «El paciente es el propio cliente» para adultos), que crea al paciente ya
+enganchado y en la misma transacción. **El endpoint `POST /api/pacientes` no se
+toca**: lo usa esa alta y el resto del CRM.
+
+Lo fija `scripts/_smoke-clientes-editar-ficha-pacientes.mjs`, que ya guardaba la
+puerta buena y ahora comprueba también que la otra está cerrada.
+
 ## Decisión arquitectónica: `patients` ≠ `clients`
 
 Aumenta tiene activos los módulos `clients` y `pacientes`

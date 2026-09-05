@@ -5,7 +5,6 @@ import Paginador from "@/components/ui/Paginador.jsx";
 import Link from "next/link";
 import Select from "@/components/ui/Select.jsx";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
-import SpecialtyPicker from "@/components/clinica/SpecialtyPicker.jsx";
 import PreviewBanner from "../clinica/_components/PreviewBanner.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
@@ -17,7 +16,22 @@ const STATUS_STYLES = {
 const statusStyle = (s) => STATUS_STYLES[s] ?? STATUS_STYLES.discharged;
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" }) : "—");
 
-const EMPTY_FORM = { firstName: "", lastName: "", age: "", birthDate: "", educationCenter: "", educationLevel: "", referralReason: "", mainTherapistId: "", status: "active", specialties: [] };
+/*
+ * AQUÍ NO SE DAN DE ALTA PACIENTES (05/09/2026, AV-0047 de Aumenta: «en el
+ * apartado de Clínica, Pacientes, eliminar la posibilidad de crear nuevo
+ * paciente»).
+ *
+ * Había un botón «Nuevo paciente» que creaba la ficha SUELTA, sin cliente
+ * pagador detrás, y el formulario ni siquiera preguntaba por la familia. Sin
+ * familia no hay cuota, ni cobros, ni padres y tutores en la ficha: el paciente
+ * nacía a medias y arreglarlo después es un backfill. El globo de ayuda ya lo
+ * avisaba y aun así pasó (1 paciente de 1.183 en Aumenta el 05/09/2026), que es
+ * lo que pasa siempre con los avisos al lado de un botón que funciona.
+ *
+ * El alta vive donde vive el pagador: la ficha de la familia, en Clientes
+ * (`components/clients/ClientPatientsSection.jsx`), que crea al paciente ya
+ * enganchado y en la misma transacción. Aquí solo queda el enlace.
+ */
 
 export default function PacientesPage() {
   const [patients, setPatients] = useState([]);
@@ -40,11 +54,6 @@ export default function PacientesPage() {
   const [total, setTotal] = useState(0);
   const [resumen, setResumen] = useState({ active: 0, paused: 0, discharged: 0, total: 0 });
   const [busqueda, setBusqueda] = useState("");
-
-  const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -110,29 +119,6 @@ export default function PacientesPage() {
     { label: "Sesiones registradas", value: patients.reduce((s, p) => s + (p.sessionsCount ?? 0), 0), sub: "En esta página" },
   ];
 
-  const submitCreate = async (e) => {
-    e.preventDefault();
-    if (!form.firstName.trim() || !form.lastName.trim()) {
-      setFormError("Nombre y apellidos son obligatorios");
-      return;
-    }
-    setSaving(true);
-    setFormError(null);
-    try {
-      const payload = { ...form, age: form.age ? Number(form.age) : null, birthDate: form.birthDate || null, mainTherapistId: form.mainTherapistId || null };
-      const r = await fetch("/api/pacientes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error || "No se pudo crear");
-      setShowCreate(false);
-      setForm(EMPTY_FORM);
-      load();
-    } catch (e2) {
-      setFormError(e2.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const inputCls = "w-full px-3 py-2 text-xs border border-neutral-200 rounded-lg focus:outline-none focus:border-neutral-400";
 
   return (
@@ -149,26 +135,23 @@ export default function PacientesPage() {
               facturas— es un cliente y vive en Clientes; por eso esta lista no enseña ni contacto
               ni dinero.
               {" "}
-              <strong className="text-white">«Nuevo paciente» crea la ficha suelta</strong>, sin
-              cliente detrás: para que quede unida al suyo, créalo desde la ficha del cliente.
+              <strong className="text-white">Los pacientes se dan de alta desde su familia</strong>,
+              en Clientes: así nacen ya enganchados a quien paga, con su cuota y sus tutores.
             </HelpTooltip>
           </h1>
           <p className="text-xs text-neutral-400 mt-1">Pacientes del centro · {patients.length} en seguimiento</p>
         </div>
-        <button
-          onClick={() => {
-            setForm(EMPTY_FORM);
-            setFormError(null);
-            setShowCreate(true);
-          }}
-          className="self-start lg:self-auto text-xs font-medium px-4 py-2 rounded-lg text-white hover:opacity-90 inline-flex items-center gap-2"
-          style={{ background: "var(--color-primary, #1B3A2D)" }}
+        {/* El alta vive en la ficha de la familia (ver la cabecera del fichero). */}
+        <Link
+          href="/clientes"
+          className="self-start lg:self-auto text-xs font-medium px-4 py-2 rounded-lg border border-neutral-200 text-neutral-700 hover:border-neutral-400 hover:bg-neutral-50 inline-flex items-center gap-2"
+          title="Los pacientes se crean desde la ficha de su familia"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
           </svg>
-          Nuevo paciente
-        </button>
+          Dar de alta desde Clientes
+        </Link>
       </div>
 
       {errorMsg && <div className="px-4 py-3 rounded-lg bg-rose-50 border border-rose-100 text-xs text-rose-700">{errorMsg}</div>}
@@ -312,7 +295,7 @@ export default function PacientesPage() {
                     */}
                     {hayFiltro
                       ? "Sin resultados para esos filtros."
-                      : "Aún no hay pacientes. Crea el primero con «Nuevo paciente»."}
+                      : "Aún no hay pacientes. Se dan de alta desde la ficha de su familia, en Clientes."}
                   </td>
                 </tr>
               )}
@@ -324,56 +307,6 @@ export default function PacientesPage() {
           />
         </div>
       </div>
-
-      {/* Modal alta de paciente */}
-      {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !saving && setShowCreate(false)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-5" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-display text-xl text-[var(--ink-900)] mb-3">Nuevo paciente</h3>
-            <form onSubmit={submitCreate} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <input className={inputCls} placeholder="Nombre *" value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} maxLength={120} />
-                <input className={inputCls} placeholder="Apellidos *" value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} maxLength={120} />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block">
-                  <span className="text-[10px] uppercase tracking-wider text-neutral-400">Fecha de nacimiento</span>
-                  <input className={`${inputCls} mt-0.5`} type="date" value={form.birthDate} onChange={(e) => setForm({ ...form, birthDate: e.target.value })} />
-                </label>
-                <label className="block">
-                  <span className="text-[10px] uppercase tracking-wider text-neutral-400">Edad (si no se sabe la fecha)</span>
-                  <input className={`${inputCls} mt-0.5`} type="number" min={0} max={120} placeholder="Edad" value={form.age} onChange={(e) => setForm({ ...form, age: e.target.value })} />
-                </label>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <input className={inputCls} placeholder="Curso (ej. 3º Primaria)" value={form.educationLevel} onChange={(e) => setForm({ ...form, educationLevel: e.target.value })} />
-              </div>
-              <input className={inputCls} placeholder="Centro escolar" value={form.educationCenter} onChange={(e) => setForm({ ...form, educationCenter: e.target.value })} />
-              <textarea className={inputCls} rows={3} placeholder="Motivo de derivación" value={form.referralReason} onChange={(e) => setForm({ ...form, referralReason: e.target.value })} />
-              <div className="grid grid-cols-2 gap-3">
-                <Select
-                  value={form.mainTherapistId}
-                  onChange={(v) => setForm({ ...form, mainTherapistId: v })}
-                  options={[{ value: "", label: "— Terapeuta —" }, ...therapistOptions.map((t) => ({ value: t.id, label: t.name }))]}
-                  className={inputCls}
-                />
-                <Select
-                  value={form.status}
-                  onChange={(v) => setForm({ ...form, status: v })}
-                  options={[{ value: "active", label: "Activo" }, { value: "paused", label: "En pausa" }, { value: "discharged", label: "Alta" }]}
-                  className={inputCls}
-                />
-              </div>
-              <SpecialtyPicker value={form.specialties} onChange={(v) => setForm({ ...form, specialties: v })} />
-              {formError && <p className="text-xs text-rose-600">{formError}</p>}
-              <div className="flex justify-end gap-2 pt-1">
-                <button type="button" onClick={() => setShowCreate(false)} disabled={saving} className="px-4 py-2 rounded-lg border border-neutral-200 text-xs text-neutral-600 hover:bg-neutral-50 disabled:opacity-50">Cancelar</button>
-                <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg text-white text-xs font-medium disabled:opacity-50" style={{ background: "var(--color-primary, #1B3A2D)" }}>{saving ? "Creando…" : "Crear paciente"}</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
