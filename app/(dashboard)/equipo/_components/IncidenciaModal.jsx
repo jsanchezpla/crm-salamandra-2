@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Select from "@/components/ui/Select.jsx";
 import SelectorPaciente from "@/components/citas/SelectorPaciente.jsx";
 import TextareaCrece from "@/components/ui/TextareaCrece.jsx";
+import { useDialogo } from "@/components/ui/Dialogo.jsx";
 import { INCIDENCIA_CATEGORIES, INCIDENCIA_PRIORITY, INCIDENCIA_VERIFICATIONS, exigeSubcategoria } from "@/lib/clinica/incidencias.js";
 import { RESPUESTAS_FALTA } from "@/lib/clinica/faltas.js";
 import { AYUDA_VISTO } from "@/lib/clinica/vistoIncidencia.js";
@@ -105,6 +106,44 @@ function ResponsablesDropdown({ therapists, assigneeIds, onToggle, inputCls }) {
   );
 }
 
+/*
+ * QUIÉN LA HA REVISADO Y QUIÉN FALTA (05/09/2026, vuelta de AV-0039).
+ *
+ * Olga, por el Buzón: «así podríamos saber en todo momento en qué estado se
+ * encuentra la incidencia y quién la ha revisado». El «Visto» por persona
+ * existía desde el 04/09 y el dato estaba guardado, pero la ficha solo decía si
+ * lo habías marcado TÚ: con tres responsables, dos podían haberla despachado y
+ * la tercera no tenía forma de saberlo.
+ *
+ * El orden lo decide `repasoDelEquipo` (las que faltan primero, que es lo que
+ * se mira); aquí solo se ponen los nombres, que ya vienen en la ficha.
+ */
+function RepasoDelEquipo({ repaso, therapists = [], assignees = [] }) {
+  if (!Array.isArray(repaso) || repaso.length < 2) return null;
+  const nombreDe = (id) =>
+    assignees.find((a) => a?.id === id)?.displayName ||
+    therapists.find((t) => t.id === id)?.name ||
+    "alguien";
+  const vistos = repaso.filter((r) => r.visto);
+  const faltan = repaso.filter((r) => !r.visto);
+  const cuando = (v) =>
+    new Date(v).toLocaleDateString("es-ES", { day: "2-digit", month: "short" });
+  return (
+    <p className="mt-1.5 text-[10px] text-neutral-500 leading-relaxed">
+      <span className="text-neutral-400">Revisada por </span>
+      <span className="tabular">{vistos.length}</span>
+      <span className="text-neutral-400"> de </span>
+      <span className="tabular">{repaso.length}</span>
+      {vistos.length > 0 && (
+        <> · {vistos.map((r) => `${nombreDe(r.teamMemberId)} (${cuando(r.vistoAt)})`).join(", ")}</>
+      )}
+      {faltan.length > 0 && (
+        <span className="text-amber-700"> · falta {faltan.map((r) => nombreDe(r.teamMemberId)).join(", ")}</span>
+      )}
+    </p>
+  );
+}
+
 /**
  * Modal de incidencia — crea una nueva o gestiona una existente
  * (editar campos, cambiar estado, comentar, borrar).
@@ -120,6 +159,11 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
     Boolean(yoSoy) &&
     (inc?.assignedToId === yoSoy || (Array.isArray(inc?.assignees) && inc.assignees.some((a) => a?.id === yoSoy)));
   const puedeBorrar = !isNew && (isAdmin || (Boolean(yoSoy) && (inc?.reportedById === yoSoy || soyResponsable)));
+
+  // Preguntar DENTRO del CRM y no con el diálogo del navegador: Chrome deja
+  // silenciar los `confirm`, y silenciado devuelve `false` siempre — el botón
+  // deja de funcionar sin decir nada.
+  const { elegir, dialogo } = useDialogo();
 
   const [title, setTitle] = useState(inc?.title ?? "");
   const [category, setCategory] = useState(inc?.category ?? "terapeutica");
@@ -366,8 +410,40 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
     }
   };
 
+  /*
+   * BORRAR ES PARA TODAS, Y HAY UNA SALIDA MEJOR (05/09/2026, vuelta de
+   * AV-0039).
+   *
+   * Olga preguntó por el Buzón: «si borramos alguna incidencia para que no nos
+   * aparezca porque ya la hemos leído, ¿le desaparece también a otra compañera
+   * que sea responsable?». Sí: el DELETE quita la fila entera y no hay vuelta
+   * atrás. Pero la pregunta destapa lo otro: estaban usando «eliminar» como
+   * «ya la he leído», y para eso está «Visto» desde el 04/09 — que aparta la
+   * incidencia de TU bandeja sin borrársela a nadie y te la devuelve si alguien
+   * la comenta. En producción, el 05/09, 199 personas asignadas a incidencias y
+   * el visto usado UNA vez: no lo conocían.
+   *
+   * Así que el aviso deja de ser un `window.confirm` de una línea —que además
+   * Chrome deja silenciar, y silenciado devuelve `false` siempre, o sea que el
+   * botón dejaría de funcionar sin decir nada— y pasa a ofrecer las dos salidas
+   * con lo que hace cada una escrito.
+   */
   const delIncidencia = async () => {
-    if (!window.confirm("¿Eliminar esta incidencia del todo? No se puede deshacer.")) return;
+    const puedeVisto = !isNew && (inc?.puedeMarcarVisto ?? soyResponsable) && !inc?.visto;
+    const que = await elegir({
+      titulo: "Eliminar esta incidencia",
+      texto:
+        "Se borra para TODO EL MUNDO —las demás responsables y dirección— y no se puede deshacer." +
+        (puedeVisto
+          ? " Si lo que quieres es que deje de salirte a ti porque ya la has leído, márcala como vista: sigue estando para las demás y te vuelve a aparecer si alguien la comenta o la cambia."
+          : ""),
+      opciones: [
+        ...(puedeVisto ? [{ valor: "visto", label: "Marcarla como vista (solo para mí)" }] : []),
+        { valor: "borrar", label: "Eliminarla para todas", tono: "peligro" },
+      ],
+    });
+    if (!que) return;
+    if (que === "visto") { await patch({ visto: true }); return; }
     setBusy(true); setErr(null);
     try {
       const r = await fetch(`/api/clinica/incidencias/${inc.id}`, { method: "DELETE" });
@@ -467,6 +543,7 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
                   inputCls={inputCls}
                 />
               </div>
+              <RepasoDelEquipo repaso={inc?.repaso} therapists={therapists} assignees={inc?.assignees} />
             </div>
           </div>
 
@@ -791,6 +868,9 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
           </div>
         )}
       </div>
+      {/* El fondo de este modal cierra al hacer clic; el diálogo va encima y no
+          puede heredar ese clic, o elegir una opción cerraría la incidencia. */}
+      {dialogo && <div onClick={(e) => e.stopPropagation()}>{dialogo}</div>}
     </div>
   );
 }

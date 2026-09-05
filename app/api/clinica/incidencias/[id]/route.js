@@ -5,7 +5,7 @@ import { ok, error, forbidden, notFound } from "../../../../../lib/utils/apiResp
 import { resolveCurrentTeamMemberId } from "../../../../../lib/team/currentTeamMember.js";
 import { avisarComentarioIncidencia } from "../../../../../lib/clinica/avisoComentarioIncidencia.js";
 import { incidenciaFueraDeAlcance, puedeBorrarIncidencia, puedeVerIncidencia } from "../../../../../lib/clinica/alcanceIncidencias.js";
-import { esActualizacion, aQuienSeLeReabre, vistoDe } from "../../../../../lib/clinica/vistoIncidencia.js";
+import { esActualizacion, aQuienSeLeReabre, vistoDe, repasoDelEquipo } from "../../../../../lib/clinica/vistoIncidencia.js";
 import { logClinicaAudit, auditSummary } from "../../../../../lib/clinica/audit.js";
 import { fundirFalta, cierrePorRespuesta } from "../../../../../lib/clinica/faltas.js";
 import {
@@ -53,7 +53,7 @@ export const GET = withTenant(async (request, rc, ctx) => {
  * Ver `lib/clinica/vistoIncidencia.js`.
  */
 async function miVisto(request, M, incidenciaId) {
-  if (!M.IncidenciaAssignee) return { puedeMarcarVisto: false, visto: false };
+  if (!M.IncidenciaAssignee) return { puedeMarcarVisto: false, visto: false, repaso: [] };
   const yoSoy = await resolveCurrentTeamMemberId(request, M);
   const filas = await M.IncidenciaAssignee.findAll({
     where: { incidenciaId },
@@ -61,7 +61,11 @@ async function miVisto(request, M, incidenciaId) {
     raw: true,
   });
   const { puedeMarcar, visto } = vistoDe(filas, yoSoy);
-  return { puedeMarcarVisto: puedeMarcar, visto };
+  // Y el repaso del EQUIPO: quién la ha dado por vista y quién falta
+  // (05/09/2026, vuelta de AV-0039). Sin nombres — los pone la pantalla, que ya
+  // trae `assignees` con el suyo.
+  const { repaso, vistos, total } = repasoDelEquipo(filas);
+  return { puedeMarcarVisto: puedeMarcar, visto, repaso, vistos, responsables: total };
 }
 
 /**

@@ -12,13 +12,14 @@
  *     comentario a la bandeja, para siempre.
  */
 
-import test from "node:test";
+import test, { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import {
   esActualizacion,
   aQuienSeLeReabre,
   vistoDe,
+  repasoDelEquipo,
   CAMPOS_QUE_REABREN,
 } from "../lib/clinica/vistoIncidencia.js";
 
@@ -101,5 +102,52 @@ test("vistoDe no revienta sin datos", () => {
     puedeMarcar: false,
     visto: false,
     vistoAt: null,
+  });
+});
+
+/*
+ * QUIÉN LA HA REVISADO (05/09/2026, vuelta de AV-0039).
+ *
+ * Olga: «así podríamos saber en todo momento en qué estado se encuentra la
+ * incidencia y quién la ha revisado». El dato estaba guardado desde el 04/09,
+ * pero la ficha solo decía si lo habías marcado TÚ.
+ *
+ * Lo que se fija: el ORDEN (las que faltan primero: quién falta es lo que se
+ * mira) y el recuento. Los nombres no entran aquí a propósito — los pone la
+ * pantalla, que ya los tiene, y así esto no toca datos de personas.
+ */
+describe("repasoDelEquipo", () => {
+  const ayer = "2026-09-04T10:00:00.000Z";
+  const hoy = "2026-09-05T10:00:00.000Z";
+
+  it("pone primero a quien falta, y entre las vistas la más reciente arriba", () => {
+    const { repaso } = repasoDelEquipo([
+      { teamMemberId: "a", vistoAt: ayer },
+      { teamMemberId: "b", vistoAt: null },
+      { teamMemberId: "c", vistoAt: hoy },
+    ]);
+    assert.deepEqual(repaso.map((r) => r.teamMemberId), ["b", "c", "a"]);
+    assert.equal(repaso[0].visto, false);
+  });
+
+  it("cuenta cuántas la han dado por vista", () => {
+    const r = repasoDelEquipo([
+      { teamMemberId: "a", vistoAt: ayer },
+      { teamMemberId: "b", vistoAt: null },
+    ]);
+    assert.equal(r.vistos, 1);
+    assert.equal(r.total, 2);
+    assert.equal(r.todos, false);
+  });
+
+  it("`todos` solo con al menos una y todas marcadas", () => {
+    assert.equal(repasoDelEquipo([{ teamMemberId: "a", vistoAt: hoy }]).todos, true);
+    assert.equal(repasoDelEquipo([]).todos, false, "sin responsables no están «todas vistas»");
+    assert.equal(repasoDelEquipo(null).todos, false);
+  });
+
+  it("no se inventa filas sin responsable", () => {
+    const { repaso } = repasoDelEquipo([{ teamMemberId: null, vistoAt: hoy }, null, { teamMemberId: "a", vistoAt: null }]);
+    assert.deepEqual(repaso.map((r) => r.teamMemberId), ["a"]);
   });
 });

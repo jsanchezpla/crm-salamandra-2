@@ -375,6 +375,40 @@ El botón solo lo ve quien es responsable, que es quien tiene «su parte»; quie
   incidencia NO borra sus documentos (FK `ON DELETE SET NULL`): pueden estar en
   la ficha de un paciente.
 
+### Quién la ha revisado, y borrar es para todas (05/09/2026, vuelta de AV-0039)
+
+Olga volvió sobre el aviso ya cerrado con dos cosas. Una duda —«si borramos
+alguna incidencia para que no nos aparezca porque ya la hemos leído, ¿le
+desaparece también a otra compañera que sea responsable?»— y una petición: «que
+para que la incidencia desaparezca, todas tengan que poner un tick o marcarla
+como revisada; así podríamos saber en todo momento en qué estado se encuentra y
+quién la ha revisado».
+
+**La duda destapaba el problema de verdad**: estaban usando «eliminar» como «ya
+la he leído». Y borrar quita la fila entera, para todas y sin vuelta atrás. El
+«Visto» del 04/09 hacía justo lo que buscaban, pero no lo conocían: el
+05/09/2026 había en producción 199 responsables asignadas a incidencias y el
+visto usado UNA vez. Así que el botón de eliminar ya no lanza un
+`window.confirm` de una línea —que Chrome deja silenciar, y silenciado devuelve
+`false` siempre, o sea que el botón dejaría de funcionar sin decir nada— sino
+un diálogo del CRM con las dos salidas escritas: «marcarla como vista (solo
+para mí)» y «eliminarla para todas».
+
+**Y la ficha dice quién la ha revisado.** El dato ya estaba guardado
+(`incidencia_assignees.visto_at`), pero la pantalla solo decía si lo habías
+marcado TÚ: con tres responsables, dos podían haberla despachado y la tercera
+no tenía forma de saberlo. Ahora, bajo los responsables, sale «Revisada por 2
+de 3 · Marta (04 sep), Ana (05 sep) · falta Lucía». El orden lo decide
+`repasoDelEquipo` (`lib/clinica/vistoIncidencia.js`): **las que faltan
+primero**, que es lo que se mira. Los nombres los pone la pantalla, que ya los
+trae en `assignees`; el servidor solo manda ids.
+
+**Lo que NO se ha hecho, y espera decisión**: que la incidencia se CIERRE sola
+cuando la marquen todas. Chocaría con la regla del 04/09 —el estado lo gobierna
+la verificación, que es la respuesta del centro; el visto es de cada persona—,
+y son dos diseños defendibles. Está apartado en el Registro con las opciones.
+
+
 ### 4. Bandeja de trabajo
 
 - API `GET /api/clinica/bandeja` (resuelve el TeamMember logueado; admin puede ver
