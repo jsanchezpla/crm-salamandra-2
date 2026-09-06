@@ -20,7 +20,7 @@ import {
   isMissingTable,
 } from "../../../../lib/clients/contactMethods.js";
 import { normalizeGuardians } from "../../../../lib/clients/guardians.js";
-import { limpiarRazonSocialPorDefecto } from "../../../../lib/billing/razonSocial.js";
+import { limpiarRazonSocialPorDefecto, limpiarRepartoEntreTutores } from "../../../../lib/billing/razonSocial.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -189,6 +189,13 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
   if ("fiscalGuardianId" in body) {
     const tutores = Array.isArray(body.guardians) ? normalizeGuardians(body.guardians) : client.guardians;
     fiscalUpdates.fiscalGuardianId = limpiarRazonSocialPorDefecto(body.fiscalGuardianId, tutores);
+  }
+  // Y el reparto entre tutores (06/09/2026): saneado contra los tutores de la
+  // ficha; lo que no cuadra (uno solo, un ajeno, una suma que no es 100) se
+  // guarda como «sin reparto» en vez de dejar una ficha a medias.
+  if ("fiscalSplit" in body) {
+    const tutores = Array.isArray(body.guardians) ? normalizeGuardians(body.guardians) : client.guardians;
+    fiscalUpdates.fiscalSplit = limpiarRepartoEntreTutores(body.fiscalSplit, tutores);
   }
 
   // El campo email/teléfono único de la ficha edita el CONTACTO PRINCIPAL: sólo

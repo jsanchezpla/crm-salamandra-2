@@ -93,3 +93,16 @@ prueba("sin razón social por defecto, todo como siempre: a nombre de la ficha",
   afirma.equal(facturables[0].guardianId, undefined);
   afirma.equal(facturables[0].fotoFiscal, undefined);
 });
+
+prueba("una ficha SIN NIF cuya razón social por defecto es un tutor con DNI sí se factura, a nombre del tutor", () => {
+  const { facturables, sinNif } = agrupar({ cobros: [cobroT], clientes: [fichaCon({ taxId: null, fiscalTaxId: null })] });
+  afirma.equal(sinNif.length, 0);
+  afirma.equal(facturables[0].guardianId, TUTORA.id);
+  afirma.equal(facturables[0].nif, "22222222J");
+});
+
+prueba("sin NIF y sin tutor por defecto, sigue apartada como «sin NIF»", () => {
+  const { facturables, sinNif } = agrupar({ cobros: [cobroT], clientes: [fichaCon({ taxId: null, fiscalTaxId: null, fiscalGuardianId: null })] });
+  afirma.equal(facturables.length, 0);
+  afirma.equal(sinNif[0].motivo, "sin NIF");
+});

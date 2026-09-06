@@ -17,10 +17,11 @@ import { dirname, join } from "node:path";
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), "..");
 const lee = (r) => readFileSync(join(RAIZ, r), "utf8");
 
-test("la migración crea un índice ÚNICO parcial sobre (cuota_id, period_month)", () => {
+test("la migración crea un índice ÚNICO parcial sobre (cuota_id, period_month) de los PENDIENTES", () => {
   const m = lee("scripts/migrate-payments-cuota-unica.js");
-  assert.match(m, /CREATE UNIQUE INDEX IF NOT EXISTS payments_cuota_periodo_unica/);
-  assert.match(m, /\(cuota_id, period_month\)\s*WHERE cuota_id IS NOT NULL/);
+  assert.match(m, /CREATE UNIQUE INDEX IF NOT EXISTS payments_cuota_periodo_pendiente_unica/);
+  assert.match(m, /\(cuota_id, period_month\)\s*WHERE cuota_id IS NOT NULL AND status = 'pending'/, "solo los PENDIENTES: los cobrados se parten por tutor");
+  assert.match(m, /DROP INDEX IF EXISTS/, "el índice de la primera versión estorba al reparto");
   assert.match(m, /HAVING count\(\*\) > 1/, "antes de crearlo tiene que contar los duplicados");
   assert.match(m, /byTable\(s, "payments"\)/, "recorre los schemas por la tabla, doradas incluidas");
 });

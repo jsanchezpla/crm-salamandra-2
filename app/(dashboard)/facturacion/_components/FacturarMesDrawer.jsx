@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import { mesVigente } from "@/lib/billing/cuotas.js";
 import Link from "next/link";
 import { fmtMoney } from "./Kpi.jsx";
 
@@ -18,7 +19,7 @@ const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition";
 
 export default function FacturarMesDrawer({ open, onClose, onDone }) {
-  const [mes, setMes] = useState(new Date().toISOString().slice(0, 7));
+  const [mes, setMes] = useState(mesVigente());
   const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
@@ -138,6 +139,7 @@ export default function FacturarMesDrawer({ open, onClose, onDone }) {
                     {r.nombre}
                     {r.terapia && <span className="text-neutral-400"> · {r.terapia}</span>}
                     {r.paciente && <span className="text-neutral-400"> · {r.paciente}</span>}
+                    {r.aNombreDe && <span className="text-neutral-400"> · {r.aNombreDe}</span>}
                   </span>
                   {r.resultado === "emitida" ? (
                     <Link href={`/facturacion/facturas?id=${r.invoiceId}`} className="font-mono text-[var(--color-primary,#1B3A2D)] hover:underline">
@@ -236,17 +238,18 @@ export default function FacturarMesDrawer({ open, onClose, onDone }) {
                 {preview.sinNif.length > 0 && (
                   <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
                     <p className="text-xs font-semibold text-amber-800 mb-1.5">
-                      {preview.sinNif.length} {preview.sinNif.length === 1 ? "pagador se queda" : "pagadores se quedan"} fuera (sin NIF en la ficha)
+                      {preview.sinNif.length} {preview.sinNif.length === 1 ? "pagador se queda" : "pagadores se quedan"} fuera (sin NIF, o su tutor sin DNI)
                     </p>
                     <ul className="space-y-1 max-h-36 overflow-y-auto">
                       {preview.sinNif.map((g) => (
                         <li key={g.clientId} className="flex items-center gap-2 text-[11px] text-amber-800">
                           <Link href={`/clientes/${g.clientId}`} className="underline min-w-0 flex-1 truncate">{g.nombre}</Link>
+                          {g.motivo && g.motivo !== "sin NIF" && <span className="text-[10px] text-amber-700 truncate max-w-[45%]" title={g.motivo}>{g.motivo}</span>}
                           <span className="tabular">{fmtMoney(g.importe)}</span>
                         </li>
                       ))}
                     </ul>
-                    <p className="text-[10px] text-amber-700 mt-1.5">Completa el NIF en su ficha y vuelve a lanzar el mes: sus cobros siguen aquí esperando.</p>
+                    <p className="text-[10px] text-amber-700 mt-1.5">Completa el NIF de la ficha (o el DNI del tutor a cuyo nombre va) y vuelve a lanzar el mes: sus cobros siguen aquí esperando.</p>
                   </div>
                 )}
 
@@ -274,6 +277,9 @@ export default function FacturarMesDrawer({ open, onClose, onDone }) {
                           {g.nombre}
                           {g.terapia && <span className="text-neutral-400"> · {g.terapia}</span>}
                           {g.paciente && <span className="text-neutral-400"> · {g.paciente}</span>}
+                          {g.aNombreDe && (
+                            <span className="text-neutral-400"> · a nombre de {g.aNombreDe}{g.parteDe ? ` (${g.parteDe.pct} %)` : ""}</span>
+                          )}
                         </span>
                         {g.facturaPrevia && (
                           <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100"

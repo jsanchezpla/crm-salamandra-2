@@ -25,7 +25,23 @@ import HelpTooltip from "../ui/HelpTooltip.jsx";
 // listado (31/08/2026): así los dos sitios enseñan y guardan LO MISMO.
 import { CAMPOS_FISCALES as CAMPOS } from "../../lib/clients/camposFiscales.js";
 // A nombre de cuál de sus tutores se factura por defecto (04/09/2026).
-import { opcionesDeRazonSocial, razonSocialPorDefecto, nombreDeRazonSocial, LA_FICHA } from "../../lib/billing/razonSocial.js";
+import { opcionesDeRazonSocial, razonSocialPorDefecto, nombreDeRazonSocial, repartoEntreTutores, LA_FICHA } from "../../lib/billing/razonSocial.js";
+
+// ── El reparto entre tutores, en la pantalla (06/09/2026) ───────────────────
+// Tutores con nombre e id (los que ofrece «A nombre de», menos la ficha).
+const tutoresDe = (datos) => opcionesDeRazonSocial(datos).filter((o) => o.value !== LA_FICHA);
+// A partes iguales, con el pico en el último: 2 → 50/50; 3 → 33,33/33,33/33,34.
+function repartoInicial(datos) {
+  const ts = tutoresDe(datos);
+  const base = Math.floor((100 / ts.length) * 100) / 100;
+  return ts.map((t, i) => ({ guardianId: t.value, pct: i === ts.length - 1 ? Math.round((100 - base * (ts.length - 1)) * 100) / 100 : base }));
+}
+const ponerPct = (lista, id, valor) => {
+  const pct = valor === "" ? 0 : Number(valor);
+  const sin = (lista ?? []).filter((f) => f.guardianId !== id);
+  return [...sin, { guardianId: id, pct }];
+};
+const sumaPct = (lista) => Math.round((lista ?? []).reduce((s, f) => s + (Number(f.pct) || 0), 0) * 100) / 100;
 
 export default function ClientFiscalSection({ clientId }) {
   const [datos, setDatos] = useState(null);
@@ -56,6 +72,7 @@ export default function ClientFiscalSection({ clientId }) {
     setBorrador({
       ...Object.fromEntries(CAMPOS.map((c) => [c.key, datos?.[c.key] || ""])),
       fiscalGuardianId: razonSocialPorDefecto(datos),
+      fiscalSplit: repartoEntreTutores(datos),
     });
     setError(null);
     setEditando(true);
@@ -122,12 +139,20 @@ export default function ClientFiscalSection({ clientId }) {
                 guardar como borrador pero no emitir.
               </div>
             )}
-            {razonSocialPorDefecto(datos) !== LA_FICHA && (
+            {repartoEntreTutores(datos) ? (
+              <div className="text-[13px] text-gray-700">
+                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block">Reparto entre tutores</span>
+                {repartoEntreTutores(datos)
+                  .map((f) => `${nombreDeRazonSocial(datos, f.guardianId)} ${f.pct} %`)
+                  .join(" · ")}
+                <span className="block text-[11px] text-gray-400 mt-0.5">«Facturar el mes» emite una factura por tutor con su parte.</span>
+              </div>
+            ) : razonSocialPorDefecto(datos) !== LA_FICHA ? (
               <div className="text-[13px] text-gray-700">
                 <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block">A nombre de</span>
                 {nombreDeRazonSocial(datos, razonSocialPorDefecto(datos))}
               </div>
-            )}
+            ) : null}
             {rellenos.length === 0 ? (
               <div className="text-sm text-gray-400 italic">
                 Sin datos propios de facturación. Las facturas saldrán a nombre de{" "}
@@ -176,6 +201,47 @@ export default function ClientFiscalSection({ clientId }) {
                 </p>
               </div>
             )}
+            {/* REPARTO ENTRE TUTORES (06/09/2026, Rodrigo: «padres juntos pero
+                cada uno con su factura»): una factura por tutor con su parte,
+                que «Facturar el mes» aplica sola cada mes. Manda sobre «A
+                nombre de» mientras esté puesto. Solo con dos o más tutores. */}
+            {tutoresDe(datos).length > 1 && (
+              <div className="rounded-lg border border-gray-200 p-3 space-y-2">
+                <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={Array.isArray(borrador.fiscalSplit)}
+                    onChange={(e) => setBorrador((b) => ({ ...b, fiscalSplit: e.target.checked ? repartoInicial(datos) : null }))}
+                  />
+                  Repartir cada factura entre los tutores (una factura por tutor, con su parte)
+                </label>
+                {Array.isArray(borrador.fiscalSplit) && (
+                  <>
+                    {tutoresDe(datos).map((o) => {
+                      const fila = borrador.fiscalSplit.find((f) => f.guardianId === o.value);
+                      return (
+                        <div key={o.value} className="flex items-center gap-2 text-sm">
+                          <span className="flex-1 min-w-0 truncate text-gray-700">{o.label}</span>
+                          <input
+                            type="number" min="0" max="100" step="0.01"
+                            className="w-24 rounded-md border border-gray-300 px-2 py-1 text-sm text-right"
+                            value={fila?.pct ?? ""}
+                            placeholder="0"
+                            onChange={(e) => setBorrador((b) => ({ ...b, fiscalSplit: ponerPct(b.fiscalSplit, o.value, e.target.value) }))}
+                          />
+                          <span className="text-xs text-gray-400">%</span>
+                        </div>
+                      );
+                    })}
+                    <p className={`text-[11px] ${sumaPct(borrador.fiscalSplit) === 100 ? "text-gray-400" : "text-amber-700"}`}>
+                      Suma: {sumaPct(borrador.fiscalSplit)} %{sumaPct(borrador.fiscalSplit) === 100 ? "" : " (tiene que ser 100)"}.
+                      Cada tutor necesita su DNI en «Padres y tutores». Los cobros del mes se parten igual, y cada
+                      factura sale a nombre y DNI de su tutor.
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {CAMPOS.map((c) => (
                 <div key={c.key}>
@@ -193,7 +259,7 @@ export default function ClientFiscalSection({ clientId }) {
             <div className="flex items-center gap-2 pt-1">
               <button
                 onClick={guardar}
-                disabled={guardando}
+                disabled={guardando || (Array.isArray(borrador.fiscalSplit) && sumaPct(borrador.fiscalSplit) !== 100)}
                 className="text-sm font-medium px-3 py-1.5 rounded-md bg-[var(--color-primary)] text-white disabled:opacity-40"
               >
                 {guardando ? "Guardando…" : "Guardar"}

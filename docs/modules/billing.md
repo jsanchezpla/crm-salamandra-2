@@ -523,10 +523,10 @@ Quién dispara cada transición:
 - **`draft` → `issued`**: `POST /api/billing/invoices/[id]/issue`. Asigna
   número correlativo en transacción con `FOR UPDATE`. Rechaza con `422` si
   el cliente no tiene `fiscalName`/`name` o `taxId`. Rechaza con `400` si
-  no hay líneas o `total <= 0`. Solo admin/superadmin.
+  no hay líneas o `total <= 0`. Quien tenga el módulo de Facturación (`hasModule("billing")`, nunca por rol: en Aumenta facturan Olga y Rosa con rol `user`; ver `lib/auth/permisos.js`).
 - **`issued` → `sent`**: `POST /api/billing/invoices/[id]/send`. Solo
   permitido si el estado actual es `issued`; rechaza con `422` en cualquier
-  otro caso. Solo admin/superadmin. Sin `?via` o con `?via=email` **envía el
+  otro caso. Quien tenga el módulo de Facturación (`hasModule("billing")`, nunca por rol: en Aumenta facturan Olga y Rosa con rol `user`; ver `lib/auth/permisos.js`). Sin `?via` o con `?via=email` **envía el
   PDF por correo** al email del cliente (Resend del tenant; ver «Envío de
   facturas por email» arriba); `?via=whatsapp|other` solo anota el canal.
   Se persiste en `customFields.sentVia`/`sentAt`/`sentTo`. La distinción
@@ -556,15 +556,14 @@ Quién dispara cada transición:
   **texto** («2026-08-20») se toma tal cual, porque un texto no es un instante y
   no tiene zona que convertir: es un día que ya decidió quien llama.
 - **`draft`/`issued`/`sent` → `cancelled`**: `POST /invoices/[id]/cancel`.
-  `409` si `paidAmount > 0` (refunde primero o emite rectificativa). Solo
-  admin/superadmin.
+  `409` si `paidAmount > 0` (refunde primero o emite rectificativa). Quien tenga el módulo de Facturación (`hasModule("billing")`, nunca por rol).
 - **`issued`/`sent`/`paid`/`partially_paid`/`overdue` → `rectified`**:
   `POST /invoices/[id]/rectify`. Crea una factura nueva en serie `R` con
   cantidades invertidas (negativas), la marca `issued`, enlaza ambas
   (`rectifiesInvoiceId` ↔ `rectifiedByInvoiceId`) y deja la original como
-  `rectified`. Rechaza si ya hay `rectifiedByInvoiceId`. Solo admin/superadmin.
+  `rectified`. Rechaza si ya hay `rectifiedByInvoiceId`. Quien tenga el módulo de Facturación (`hasModule("billing")`, nunca por rol: en Aumenta facturan Olga y Rosa con rol `user`; ver `lib/auth/permisos.js`).
 - **`draft` → eliminable**: `DELETE /api/billing/invoices/[id]` (`409` si
-  no es draft). Solo admin/superadmin.
+  no es draft). Quien tenga el módulo de Facturación (`hasModule("billing")`, nunca por rol: en Aumenta facturan Olga y Rosa con rol `user`; ver `lib/auth/permisos.js`).
 
 `PATCH /invoices/[id]` solo acepta cambios cuando el estado es `draft`.
 Para cualquier modificación posterior se usa rectificativa.
@@ -1328,12 +1327,12 @@ pasan por `withTenant` y validan `hasModule("billing")`.
 | `GET /invoices` | Listado paginado con filtros (`status`, `clientId`, `employeeId`, `series`, `from`, `to`, `q`) y orden whitelisted. | — |
 | `POST /invoices` | Crea borrador (sin número, sin emitir). Aplica `defaultVatRate` a líneas sin `vatRate`. | — |
 | `GET /invoices/[id]` | Detalle con `payments`, `client`, `employee`, `rectifies`, `rectifiedBy`. | — |
-| `PATCH /invoices/[id]` | Edita un borrador. Recalcula totales si cambian las líneas. | Solo admin/superadmin. |
-| `DELETE /invoices/[id]` | Borra borrador (`409` si no es draft). | Solo admin/superadmin. |
-| `POST /invoices/[id]/issue` | draft → issued con número correlativo en transacción. Aplica `dueDate` por defecto si el borrador no lo tenía. | Solo admin/superadmin. |
-| `POST /invoices/[id]/send` | issued → sent **y envía el PDF por correo** (Resend del tenant; best-effort: la factura queda `sent` aunque el correo falle, y la respuesta trae `emailEnviado`/`emailError`). `?via=whatsapp\|other` solo anota el canal. `422` si el estado no es `issued`. No envía desde la demo (`isDemoTenant`). | Solo admin/superadmin. |
-| `POST /invoices/[id]/cancel` | issued/sent → cancelled (`409` si tiene cobros). | Solo admin/superadmin. |
-| `POST /invoices/[id]/rectify` | Crea factura R- (anulación total o por diferencias con `correctBase`), marca la original como `rectified` solo en la anulación total. | Solo admin/superadmin. |
+| `PATCH /invoices/[id]` | Edita un borrador. Recalcula totales si cambian las líneas. | Módulo `billing` (nunca por rol; `lib/auth/permisos.js`). |
+| `DELETE /invoices/[id]` | Borra borrador (`409` si no es draft). | Módulo `billing` (nunca por rol; `lib/auth/permisos.js`). |
+| `POST /invoices/[id]/issue` | draft → issued con número correlativo en transacción. Aplica `dueDate` por defecto si el borrador no lo tenía. | Módulo `billing` (nunca por rol; `lib/auth/permisos.js`). |
+| `POST /invoices/[id]/send` | issued → sent **y envía el PDF por correo** (Resend del tenant; best-effort: la factura queda `sent` aunque el correo falle, y la respuesta trae `emailEnviado`/`emailError`). `?via=whatsapp\|other` solo anota el canal. `422` si el estado no es `issued`. No envía desde la demo (`isDemoTenant`). | Módulo `billing` (nunca por rol; `lib/auth/permisos.js`). |
+| `POST /invoices/[id]/cancel` | issued/sent → cancelled (`409` si tiene cobros). | Módulo `billing` (nunca por rol; `lib/auth/permisos.js`). |
+| `POST /invoices/[id]/rectify` | Crea factura R- (anulación total o por diferencias con `correctBase`), marca la original como `rectified` solo en la anulación total. | Módulo `billing` (nunca por rol; `lib/auth/permisos.js`). |
 | `GET /invoices/[id]/pdf` | Descarga el PDF (`lib/billing/invoicePdf.js`, pdfkit) de una factura emitida. `409` si es borrador. | — |
 | `POST /invoices/bulk-pdf?from=&to=` | ZIP en streaming con los PDF de todas las emitidas del rango. `404` si no hay ninguna. Lo usa el botón «Descargar facturas» de `components/billing/ExportButtons.jsx`. | — |
 | `GET /invoices/bulk-issue?mes=AAAA-MM` | Vista previa de la Facturación del mes: el lote agrupado por pagador, los sin NIF apartados, el estado del emisor y la fecha mínima de la serie. | `422` si el mes no es `AAAA-MM`. |
@@ -1770,3 +1769,13 @@ pagador» desde el 01/09.
 - **La pantalla de Facturas caía entera** desde el 04/09 (un `useEffect` leía `form.clientId` antes del `useState`): `_smoke-facturas-orden-hooks.mjs` vigila el orden.
 - **La factura por correo va también a los tutores cuando la ficha no tiene correo** (06/09/2026, Rodrigo, mismo criterio que el registro de sesión): `send/route.js` usa `correosParaAvisar`, manda uno por destinatario y guarda `sentTo` con todos.
 - **Un solo cobro por cuota y mes** (06/09/2026): índice único parcial `payments_cuota_periodo_unica (cuota_id, period_month) WHERE cuota_id IS NOT NULL` (`scripts/migrate-payments-cuota-unica.js`, ANTES del despliegue, y cuenta los duplicados antes de crearlo); `esCobroRepetido(err)` (23505) lo capturan `sincronizarCobroDelMes` («al día») y el lote («repetida»). Y «Cobrado» de la portada corta el mes en hora de Madrid (`paid_at AT TIME ZONE 'Europe/Madrid'`), como Caja. `_smoke-cobro-cuota-unico.mjs`.
+
+## El reparto de las facturas entre tutores (06/09/2026)
+
+Rodrigo: «padres juntos pero cada uno con su factura». Hasta hoy eso era un reparto a mano cada mes desde la ficha del paciente (`PatientReparto`, modo B) y los cobros de cuota se quedaban sueltos. Ahora la FICHA lo guarda una vez y el lote lo aplica solo:
+
+- `clients.fiscal_split` (JSONB, `migrate-clients-fiscal-split`): `[{ guardianId, pct }]` que suma 100, dos o más tutores DE ESA ficha; reglas en `lib/billing/razonSocial.js` (`limpiarRepartoEntreTutores`, `repartoEntreTutores`, `partirImporteEntreTutores`: céntimos exactos, lo que sobra al último). Se edita en «Datos de facturación» de la ficha (`ClientFiscalSection`): casilla «Repartir cada factura entre los tutores» + un % por tutor. Con reparto, manda sobre «A nombre de».
+- `agruparLoteCuotas` convierte el grupo de la familia en uno POR TUTOR (`grupoId` `<clave>:t:<guardianId>`, `repartoDe`, `parteDe`, `aNombreDe`, `fotoFiscal` del tutor); cada cobro viaja partido (`amount` = su parte, `parteDe` = el cobro original, `importeEntero`). Si a un tutor le falta el DNI, la familia entera se aparta con el motivo. `partirFactura.js` pasa `repartoTutores: false`: una factura que ya es de un tutor se parte por paciente o terapia, a nombre de quien iba.
+- `bulk-issue` emite los grupos de una misma familia JUNTOS en una transacción: bloquea cada cobro original, lo deja con la primera parte y crea filas nuevas (misma cuota, mismo mes, `completed`) para las demás; después una factura por tutor (`guardianId`, foto del tutor, `customFields.repartoTutores = pct`) enganchando sus partes. Excluir a un tutor excluye a la familia entera. Morosidad, portal y «Cobrar mes» siguen viendo cobros completados del mes: la suma no cambia.
+- Por eso el índice único de `payments` pasa a ser SOLO de pendientes (`payments_cuota_periodo_pendiente_unica`, `migrate-payments-cuota-unica` v2 quita el viejo): los cobrados se parten legítimamente.
+- `_smoke-reparto-tutores.mjs` (reglas, céntimos, lote y Partir).

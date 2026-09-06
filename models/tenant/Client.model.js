@@ -51,6 +51,14 @@ export function defineClient(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      // El REPARTO por defecto entre tutores (06/09/2026, Rodrigo: «padres
+      // juntos pero cada uno con su factura»): [{ guardianId, pct }] que suma
+      // 100, o NULL. Con reparto, «Facturar el mes» emite una factura por tutor
+      // con su parte y parte los cobros igual. Reglas en lib/billing/razonSocial.js.
+      fiscalSplit: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+      },
       fiscalAddress: {
         type: DataTypes.STRING,
         allowNull: true,

@@ -37,7 +37,6 @@ import { madridToday } from "../../../../../../lib/utils/madridDate.js";
  * Solo dirección, como emitir y rectificar.
  */
 
-const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 class PartirConflicto extends Error {}
 
@@ -84,7 +83,8 @@ const vistaGrupo = (g) => ({
 export const GET = withTenant(async (request, { params }, ctx) => {
   try {
     if (!ctx.hasModule("billing")) return forbidden("Módulo billing no activo");
-    if (!ADMIN_ROLES.has(ctx.user?.role)) return forbidden("Solo dirección puede partir una factura");
+    // El dinero se gatea por el MÓDULO, nunca por el rol (lib/auth/permisos.js):
+    // en Aumenta facturan Olga y Rosa con rol `user`. Partir es como Rectificar.
     const { id } = await params;
     const por = criterioValido(new URL(request.url).searchParams.get("por"));
     const r = await recoger({ tenantModels: ctx.tenantModels, id, por });
@@ -107,7 +107,8 @@ export const GET = withTenant(async (request, { params }, ctx) => {
 export const POST = withTenant(async (request, { params }, ctx) => {
   try {
     if (!ctx.hasModule("billing")) return forbidden("Módulo billing no activo");
-    if (!ADMIN_ROLES.has(ctx.user?.role)) return forbidden("Solo dirección puede partir una factura");
+    // El dinero se gatea por el MÓDULO, nunca por el rol (lib/auth/permisos.js):
+    // en Aumenta facturan Olga y Rosa con rol `user`. Partir es como Rectificar.
     const { tenant, tenantModels } = ctx;
     const { Invoice, Payment, InvoiceSeries, TenantBillingSettings } = tenantModels;
     const { id } = await params;
@@ -190,7 +191,7 @@ export const POST = withTenant(async (request, { params }, ctx) => {
           status: "issued",
           notes: `Anulación de ${locked.number} para partirla por ${por}`,
           correctionReason: reason,
-          customFields: {},
+          customFields: locked.customFields?.vatExemptNote ? { vatExemptNote: locked.customFields.vatExemptNote } : {},
           subtotal: calcR.taxBase,
           vatRate: 0,
           rectifiesInvoiceId: locked.id,

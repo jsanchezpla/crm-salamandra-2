@@ -318,6 +318,9 @@ export const CORE = [
   // CRM. Decide por existencia de `clients`. Aditiva, sin backfill (NULL = a
   // nombre de la ficha, que es lo que hacen hoy todas) e idempotente.
   "migrate-client-razon-social-tutor",
+  // El reparto de las facturas entre tutores (06/09/2026): clients.fiscal_split.
+  // ANTES del despliegue: el modelo pide la columna por nombre.
+  "migrate-clients-fiscal-split",
 ];
 
 export const MODULES = {
