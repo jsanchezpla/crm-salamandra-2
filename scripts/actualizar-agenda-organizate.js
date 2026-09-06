@@ -114,6 +114,9 @@ const ALTAS_POSTERIORES = {
   1269: { nombre: "Leo", apellidos: "Machio Díez de Baldeón" },
   1270: { nombre: "GUILLERMO", apellidos: "Muñoz Nieto" },
   1271: { nombre: "Lucas", apellidos: "Herranz Fernández" }, // 02/09/2026
+  // 06/09/2026: el planning solo trae «LUCAS GABRIEL»; el centro completó los
+  // apellidos en el CRM (misma entrada que volcar-cobros-organizate.js).
+  1266: { nombre: "Lucas Gabriel", apellidos: "Ginghina Gorga" },
 };
 
 /** Estado en Organízate → estado de la cita. «- Sin estado -» no dice nada. */
@@ -204,7 +207,10 @@ async function main() {
     return destino ? (equipoPorNombre.get(norm(destino)) ?? null) : null;
   };
   const pacienteDe = (c) => {
-    const src = srcPorId.get(DOBLES[Number(c.idPac)] ?? Number(c.idPac)) ?? ALTAS_POSTERIORES[Number(c.idPac)];
+    // La tabla de altas manda sobre el volcado del 02/08: el 1266 estaba allí
+    // solo con el nombre de pila y el centro le completó los apellidos en el CRM.
+    const idPac = DOBLES[Number(c.idPac)] ?? Number(c.idPac);
+    const src = ALTAS_POSTERIORES[idPac] ?? srcPorId.get(idPac);
     if (src) return porNombre.get(norm(`${src.nombre} ${src.apellidos}`)) ?? null;
     // Alta hecha en Organízate después del volcado de fichas: el planning trae el nombre completo.
     return c.nombreCompleto ? (porNombre.get(norm(c.nombreCompleto)) ?? null) : null;
