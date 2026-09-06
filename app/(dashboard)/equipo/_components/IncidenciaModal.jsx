@@ -120,10 +120,13 @@ function ResponsablesDropdown({ therapists, assigneeIds, onToggle, inputCls }) {
  */
 function RepasoDelEquipo({ repaso, therapists = [], assignees = [] }) {
   if (!Array.isArray(repaso) || repaso.length < 2) return null;
-  const nombreDe = (id) =>
-    assignees.find((a) => a?.id === id)?.displayName ||
-    therapists.find((t) => t.id === id)?.name ||
-    "alguien";
+  // `assignees` viene serializada con `name` (miniMember); `displayName` es el
+  // atributo del modelo y aquí no llega. Sin esto, quien ya no está en la
+  // lista de terapeutas activas salía como «alguien».
+  const nombreDe = (id) => {
+    const a = assignees.find((x) => x?.id === id);
+    return a?.name || a?.displayName || therapists.find((t) => t.id === id)?.name || "alguien";
+  };
   const vistos = repaso.filter((r) => r.visto);
   const faltan = repaso.filter((r) => !r.visto);
   const cuando = (v) =>
@@ -340,6 +343,14 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "No se pudo actualizar");
       setInc(j.data);
+      // Lo que decide el servidor por su cuenta —cerrarla al último visto, o
+      // al aceptar una falta— tiene que verse aquí: si no, el siguiente
+      // «Guardar cambios» mandaba la verificación vieja y la reabría para
+      // todas (revisión del 06/09/2026).
+      if (j.data && typeof j.data === "object") {
+        setVerification(j.data.verification ?? "");
+        setFalta(j.data.falta ?? null);
+      }
       onSaved?.();
       return true;
     } catch (e) {
@@ -430,15 +441,23 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
    */
   const delIncidencia = async () => {
     const puedeVisto = !isNew && (inc?.puedeMarcarVisto ?? soyResponsable) && !inc?.visto;
+    // Si eres la última que falta, «solo para mí» no es verdad: con tu visto se
+    // cierra como resuelta para todas (regla del 05/09). Se dice antes de pulsar.
+    const ultima =
+      puedeVisto && Number(inc?.responsables) > 0 && Number(inc?.vistos ?? 0) + 1 >= Number(inc?.responsables);
     const que = await elegir({
       titulo: "Eliminar esta incidencia",
       texto:
         "Se borra para TODO EL MUNDO —las demás responsables y dirección— y no se puede deshacer." +
         (puedeVisto
-          ? " Si lo que quieres es que deje de salirte a ti porque ya la has leído, márcala como vista: sigue estando para las demás y te vuelve a aparecer si alguien la comenta o la cambia."
+          ? ultima
+            ? " Si lo que quieres es darla por leída, márcala como vista: eres la última responsable que falta, así que con tu visto queda cerrada como resuelta para todas, sin borrar nada."
+            : " Si lo que quieres es que deje de salirte a ti porque ya la has leído, márcala como vista: sigue estando para las demás y te vuelve a aparecer si alguien la comenta o la cambia."
           : ""),
       opciones: [
-        ...(puedeVisto ? [{ valor: "visto", label: "Marcarla como vista (solo para mí)" }] : []),
+        ...(puedeVisto
+          ? [{ valor: "visto", label: ultima ? "Darla por vista (eres la última: se cierra como resuelta)" : "Marcarla como vista (solo para mí)" }]
+          : []),
         { valor: "borrar", label: "Eliminarla para todas", tono: "peligro" },
       ],
     });

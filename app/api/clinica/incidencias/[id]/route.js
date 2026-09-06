@@ -55,17 +55,52 @@ export const GET = withTenant(async (request, rc, ctx) => {
 async function miVisto(request, M, incidenciaId) {
   if (!M.IncidenciaAssignee) return { puedeMarcarVisto: false, visto: false, repaso: [] };
   const yoSoy = await resolveCurrentTeamMemberId(request, M);
-  const filas = await M.IncidenciaAssignee.findAll({
-    where: { incidenciaId },
-    attributes: ["teamMemberId", "vistoAt"],
-    raw: true,
-  });
+  const filas = await filasQueCuentan(M, incidenciaId);
   const { puedeMarcar, visto } = vistoDe(filas, yoSoy);
   // Y el repaso del EQUIPO: quién la ha dado por vista y quién falta
   // (05/09/2026, vuelta de AV-0039). Sin nombres — los pone la pantalla, que ya
   // trae `assignees` con el suyo.
   const { repaso, vistos, total } = repasoDelEquipo(filas);
   return { puedeMarcarVisto: puedeMarcar, visto, repaso, vistos, responsables: total };
+}
+
+/**
+ * Las filas de la pivote que CUENTAN para el repaso y el cierre: las de quien
+ * sigue en el centro. Una responsable dada de baja conserva su fila (el borrado
+ * físico está frenado a propósito en lib/team/rastro.js) y, contada, bloqueaba
+ * el cierre por vistos para siempre y salía como «falta alguien» (revisión del
+ * 06/09/2026). Quien está de baja temporal sí cuenta: vuelve.
+ */
+async function filasQueCuentan(M, incidenciaId) {
+  const filas = await M.IncidenciaAssignee.findAll({
+    where: { incidenciaId },
+    attributes: ["teamMemberId", "vistoAt"],
+    raw: true,
+  });
+  if (!filas.length || !M.TeamMember) return filas;
+  const fuera = new Set(
+    (
+      await M.TeamMember.findAll({
+        where: { id: filas.map((f) => f.teamMemberId), status: "inactive" },
+        attributes: ["id"],
+        raw: true,
+      })
+    ).map((t) => String(t.id))
+  );
+  return fuera.size ? filas.filter((f) => !fuera.has(String(f.teamMemberId))) : filas;
+}
+
+/** ¿Lo que se pide es lo que ya hay? Fechas por su ISO, JSON por su texto, el resto como cadena. */
+function mismoValor(a, b) {
+  const n = (v) => (v instanceof Date ? v.toISOString() : v == null ? null : typeof v === "object" ? JSON.stringify(v) : String(v));
+  return n(a) === n(b);
+}
+
+/** La misma lista de responsables, dé igual el orden y los repetidos. */
+function mismaLista(a, b) {
+  const x = [...new Set((a || []).map(String))].sort();
+  const y = [...new Set((b || []).map(String))].sort();
+  return x.length === y.length && x.every((v, i) => v === y[i]);
 }
 
 /**
@@ -161,10 +196,15 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
   if (body.verification !== undefined) {
     const v = body.verification === null || body.verification === "" ? null : body.verification;
     if (v !== null && !isValidVerification(v)) return error("Verificación inválida");
-    changes.verification = v;
-    changes.status = statusDeVerificacion(v);
-    changes.resolvedAt = v === "resuelta" ? new Date() : null;
-  } else if (body.status !== undefined) {
+    // Solo si cambia de verdad: el formulario manda siempre la que tiene, y
+    // volver a escribir «resuelta» sobre «resuelta» no es una novedad que haya
+    // que devolverle a nadie a la bandeja (ni mueve `resolvedAt`).
+    if (v !== (row.verification ?? null)) {
+      changes.verification = v;
+      changes.status = statusDeVerificacion(v);
+      changes.resolvedAt = v === "resuelta" ? new Date() : null;
+    }
+  } else if (body.status !== undefined && body.status !== row.status) {
     // Compatibilidad: quien siga mandando `status` a pelo (o un cliente viejo)
     // sigue funcionando, y la verificación se mantiene coherente con él.
     if (!isValidStatus(body.status)) return error("Estado inválido");
@@ -206,11 +246,47 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
    */
   const vistoPedido = typeof body.visto === "boolean" ? body.visto : null;
 
-  // `responsables` NO va en `changes` (vive en la tabla pivote), así que hay
-  // que contarlo aparte: si no, cambiar solo los responsables se rechazaba con
-  // "Nada que cambiar".
-  if (Object.keys(changes).length === 0 && !commentEntry && !responsables && vistoPedido === null) {
-    return error("Nada que cambiar", 422);
+  /*
+   * LO QUE YA ESTÁ ASÍ NO ES UN CAMBIO (revisión del 06/09/2026). El modal
+   * manda el formulario ENTERO en cada «Guardar cambios» —responsables
+   * incluidos—, y hasta hoy cada pulsación, sin tocar nada, contaba como
+   * novedad: les borraba el visto a las demás responsables y les devolvía la
+   * incidencia a la bandeja. Se compara con la fila y se queda solo lo distinto.
+   */
+  const algoPedido = Object.keys(changes).length > 0 || !!commentEntry || !!responsables;
+  for (const campo of Object.keys(changes)) {
+    if (mismoValor(row.get(campo), changes[campo])) delete changes[campo];
+  }
+  // `responsables` NO va en `changes` (vive en la tabla pivote), así que se
+  // cuenta aparte; y la misma lista no es «cambiar los responsables».
+  let cambiaronResponsables = false;
+  if (responsables) {
+    const actuales = M.IncidenciaAssignee
+      ? (await M.IncidenciaAssignee.findAll({ where: { incidenciaId: id }, attributes: ["teamMemberId"], raw: true })).map((f) => String(f.teamMemberId))
+      : [];
+    cambiaronResponsables = !mismaLista(actuales, responsables);
+  }
+
+  if (Object.keys(changes).length === 0 && !commentEntry && !cambiaronResponsables && vistoPedido === null) {
+    // Sin nada reconocible en el body sigue siendo un error; con el formulario
+    // igual que estaba, no: se devuelve la ficha tal cual y en paz.
+    if (!algoPedido) return error("Nada que cambiar", 422);
+    const igual = await Incidencia.findByPk(id, { include: INCLUDES(M) });
+    return ok({ ...serializeIncidencia(igual), ...(await miVisto(request, M, id)) });
+  }
+
+  // Quien llama se resuelve UNA vez y ANTES de escribir nada: el visto solo lo
+  // tienen los responsables, y comprobarlo después de guardar los campos
+  // dejaba la fila cambiada y contestaba 422 (revisión del 06/09/2026).
+  const hayNovedad = esActualizacion({ cambios: changes, hayComentario: !!commentEntry, cambiaronResponsables });
+  const quienLlama =
+    vistoPedido !== null || hayNovedad ? (commentEntry?.authorId ?? (await resolveCurrentTeamMemberId(request, M))) : null;
+  if (vistoPedido !== null) {
+    const soyResponsable =
+      M.IncidenciaAssignee && quienLlama
+        ? await M.IncidenciaAssignee.count({ where: { incidenciaId: id, teamMemberId: quienLlama } })
+        : 0;
+    if (!soyResponsable) return error("Solo quien es responsable de la incidencia puede marcarla como vista", 422);
   }
 
   if (Object.keys(changes).length > 0) await row.update(changes);
@@ -235,7 +311,7 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
       { replacements: { entry: JSON.stringify([commentEntry]), id } }
     );
   }
-  if (responsables) await sincronizarResponsables(row, responsables, M);
+  if (cambiaronResponsables) await sincronizarResponsables(row, responsables, M);
 
   /*
    * ── EL VISTO, Y A QUIÉN SE LE REABRE ──────────────────────────────────────
@@ -243,23 +319,21 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
    * para saber a quién NO reabrírselo (si Ana comenta después de darla por
    * vista, no se le devuelve a Ana).
    */
-  if (M.IncidenciaAssignee && (vistoPedido !== null || esActualizacion({ cambios: changes, hayComentario: !!commentEntry, cambiaronResponsables: !!responsables }))) {
-    const quienLlama = commentEntry?.authorId ?? (await resolveCurrentTeamMemberId(request, M));
-
+  if (M.IncidenciaAssignee && (vistoPedido !== null || hayNovedad)) {
     if (vistoPedido !== null) {
-      // Solo los RESPONSABLES tienen «su parte» que dar por hecha. A quien solo
-      // registró la incidencia no se le inventa una fila en la pivote.
-      const [tocadas] = await M.IncidenciaAssignee.update(
+      // Solo los RESPONSABLES tienen «su parte» que dar por hecha (comprobado
+      // arriba, antes de escribir nada). A quien solo registró la incidencia
+      // no se le inventa una fila en la pivote.
+      await M.IncidenciaAssignee.update(
         { vistoAt: vistoPedido ? new Date() : null },
-        { where: { incidenciaId: id, teamMemberId: quienLlama ?? null } }
+        { where: { incidenciaId: id, teamMemberId: quienLlama } }
       );
-      if (!tocadas) return error("Solo quien es responsable de la incidencia puede marcarla como vista", 422);
     }
 
     // Cualquier novedad se la devuelve a quien la había dado por vista. Va
     // DESPUÉS de escribir el visto propio y excluye a quien la provoca, así
     // que marcar visto y comentar a la vez no se pisa a sí mismo.
-    if (esActualizacion({ cambios: changes, hayComentario: !!commentEntry, cambiaronResponsables: !!responsables })) {
+    if (hayNovedad) {
       await M.IncidenciaAssignee.update(
         { vistoAt: null },
         { where: aQuienSeLeReabre(id, quienLlama, Op) }
@@ -280,11 +354,7 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
    */
   let cerradaPorVistos = false;
   if (M.IncidenciaAssignee && vistoPedido === true && row.status !== "resolved") {
-    const filas = await M.IncidenciaAssignee.findAll({
-      where: { incidenciaId: id },
-      attributes: ["teamMemberId", "vistoAt"],
-      raw: true,
-    });
+    const filas = await filasQueCuentan(M, id);
     if (cierraAlMarcarTodas(filas)) {
       await row.update({ verification: "resuelta", status: "resolved", resolvedAt: new Date() });
       cerradaPorVistos = true;
