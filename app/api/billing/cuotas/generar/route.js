@@ -12,6 +12,7 @@ import {
   metodoValido,
 } from "../../../../../lib/billing/cuotas.js";
 import { madridToday } from "../../../../../lib/utils/madridDate.js";
+import { esCobroRepetido } from "../../../../../lib/billing/cobroDeCuota.js";
 
 /**
  * La generación mensual de cuotas (01/09/2026, petición de Aumenta:
@@ -234,6 +235,12 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
          * producción (depurar a ciegas «error inesperado» cuesta una tarde) y
          * en producción, con la frase de siempre.
          */
+        // La carrera que el findOne no ve la para el índice único de
+        // (cuota_id, period_month): otra petición ya creó ese cobro (06/09/2026).
+        if (esCobroRepetido(err)) {
+          saltados.push({ ...vista(fila), resultado: "repetida", motivo: "ya tenía cobro de este mes" });
+          continue;
+        }
         const detalle = process.env.NODE_ENV === "production" ? null : err?.parent?.message || err?.message;
         saltados.push({
           ...vista(fila),

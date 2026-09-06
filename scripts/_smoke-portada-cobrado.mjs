@@ -87,13 +87,22 @@ test("el mes que se pide es el mes ENTERO, como el Panel operativo", async () =>
   const mods = modelos();
   mods.Payment = {
     findAll: async ({ where }) => {
-      rangoCobros = where.paidAt;
+      rangoCobros = where; // el rango vive en where[Op.and] desde el 06/09/2026
       return [{ n: 1, sum: 50 }];
     },
   };
   await buildPortada(ctxDe({ role: "admin", tenantModels: mods }));
-  const valores = Object.getOwnPropertySymbols(rangoCobros).map((s) => rangoCobros[s]);
-  const [desde, hasta] = valores.map((v) => String(v).slice(0, 10));
+  // Desde el 06/09/2026 el rango va en dos literales `paid_at AT TIME ZONE
+  // 'Europe/Madrid'` dentro de un Op.and (antes era un paidAt entre dos
+  // literales UTC): se leen las fechas de los dos SQL, [desde, hasta).
+  const ands = Object.getOwnPropertySymbols(rangoCobros)
+    .map((s) => rangoCobros[s])
+    .find(Array.isArray);
+  assert.ok(Array.isArray(ands) && ands.length === 2, "el rango tiene que ser un Op.and con dos literales");
+  const sql = ands.map((l) => String(l.val ?? l));
+  assert.ok(sql.every((s) => s.includes("AT TIME ZONE 'Europe/Madrid'")), "el corte va en hora de Madrid: " + sql.join(" | "));
+  const [desde, hastaExclusivo] = sql.map((s) => s.match(/'(\d{4}-\d{2}-\d{2})'/)[1]);
+  const hasta = new Date(new Date(hastaExclusivo + "T00:00:00Z").getTime() - 86400000).toISOString().slice(0, 10);
   const hoy = new Date().toISOString().slice(0, 10);
   assert.equal(desde.slice(8), "01", "arranca el día 1: " + desde);
   assert.ok(hasta >= hoy, "llega al final del mes, no se corta hoy: " + hasta);

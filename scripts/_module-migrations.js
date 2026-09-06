@@ -621,6 +621,9 @@ export const MODULES = {
     // Las cuotas asignadas (quien paga que todos los meses) y payments.cuota_id.
     // 01/09/2026, ANTES del despliegue: el modelo pide las columnas por nombre.
     "migrate-billing-cuotas",
+    // Un solo cobro por cuota y mes: índice único parcial sobre payments
+    // (06/09/2026). ANTES del despliegue: el código cuenta con que exista.
+    "migrate-payments-cuota-unica",
     // Entradas y salidas de caja: lo que pasa por el cajon y no es un cobro.
     // 01/09/2026, ANTES del despliegue.
     "migrate-arqueo-movimientos",
