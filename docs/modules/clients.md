@@ -564,6 +564,31 @@ pregunta, y una familia puede estar en las dos. Las bajas se esconden con la
 misma regla que el resto. Si algún curso se repite la reserva, se vuelve a
 lanzar el cotejo con la lista nueva y la clave se pisa.
 
+## Los problemas de cuotas y fichas viven en «Fichas a completar» (06/09/2026)
+
+Rodrigo, la noche del 06/09, tras atar cada cita importada de Organízate a la
+cuota de su familia (`scripts/atar-citas-organizate-a-cuota.js`): «pon todos
+los problemas en Fichas a completar». Cinco carpetas nuevas en
+`lib/clients/urgentes.js`, y a diferencia de la de reservas de plaza NO son una
+marca escrita: se **calculan** en cada carga, así que cuando el centro da de
+alta la cuota o funde las fichas, la fila desaparece sola.
+
+| Carpeta | Bloque | Quién sale |
+| --- | --- | --- |
+| `citas_sin_cuota` | rojo | Familias con citas cobrables (no anuladas, no de taller, de este mes o del anterior) que no dicen de qué se cobran (`cobro_modo IS NULL`) y sin ninguna cuota viva en `billing_cuotas`. Chip «paciente en pausa» si alguno de sus hijos lo está. |
+| `citas_sin_cobro` | gris | Lo mismo pero la familia SÍ tiene cuota: la cita es de otra terapia (logopedia con cuota de psicología), de un bono, un informe o un programa. |
+| `cuota_no_cuadra` | gris | Familias con citas importadas cuyo curso de Organízate es de unos minutos (45) y el concepto al que quedó atada de otros (60x1): o la cuota está mal, o la cita. El detalle dice «C_T.O. 45 → Cuota T.O. 60x1». |
+| `paciente_sin_familia` | rojo | Pacientes con hora cogida y `client_id` a NULL: nadie a quien cobrar ni avisar. |
+| `ficha_duplicada` | gris | Pacientes con otra ficha del mismo nombre (sin tildes ni espacios dobles); chip «sin familia» en la que no cuelga de nadie. |
+
+El detalle de las tres de cuotas enseña cuántas citas y de qué curso de
+Organízate (o de qué tipo, si la cita nació en el CRM). Las tres llevan
+`requiere: "cuotas"`: `tablasDe()` sonda también `billing_cuotas` y un centro
+sin Facturación no las ve, ni a cero. Y `carpetasCon()` envuelve cada carpeta
+en un `try`: una consulta que no pueda correr en un schema (una columna que
+aún no tiene) se apunta en stderr y se salta, en vez de tumbar la pantalla.
+Prueba: `scripts/_smoke-clients-urgentes-cuotas.mjs`.
+
 ## «Fichas a completar» no reclama datos de fichas archivadas (25/08/2026)
 
 Lo pidió Lau (Aumenta) el 14/08: la pantalla le sacaba una y otra vez gente que

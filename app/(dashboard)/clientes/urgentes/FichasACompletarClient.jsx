@@ -118,7 +118,7 @@ function Carpeta({ carpeta, abierta, onToggle, onRevisar, onNoVino, conEstado, m
                     {f.aviso && (
                       <span
                         className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-800 align-middle"
-                        title="Hay algo que revisar en esta familia. El detalle está en la columna de al lado y en la nota de su cobro de septiembre."
+                        title="Hay algo que revisar en esta ficha. El detalle está en la columna de al lado."
                       >
                         {f.aviso}
                       </span>

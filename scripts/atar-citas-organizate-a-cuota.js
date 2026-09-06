@@ -102,9 +102,18 @@ const CURSOS_ESPECIALES = {
 };
 
 /** Qué dice el curso de una cita: cuota (terapia+dosis), especial, bono, o nada. */
-function cursoDe(servicio) {
+function cursoDe(servicio, tipoNombre = null) {
   const s = String(servicio ?? "").trim();
-  if (!s) return null;
+  if (!s) {
+    // Cita nacida en el CRM: su tipo hace de curso.
+    const n = norm(tipoNombre);
+    if (!n) return null;
+    if (n === "ENTREVISTA INICIAL") return { clase: "especial", ...CURSOS_ESPECIALES.ENTREVINIC, texto: tipoNombre };
+    if (!n.startsWith("CUOTA ") || /FAMILIAR/.test(n)) return { clase: "otro", texto: tipoNombre };
+    const terapia = terapiaDe(n), dosis = dosisDe(n.replace(/^CUOTA /, ""));
+    if (!terapia || !dosis) return { clase: "otro", texto: tipoNombre };
+    return { clase: "cuota", terapia, min: dosis.mins[0], veces: dosis.veces, texto: tipoNombre };
+  }
   if (CURSOS_ESPECIALES[s]) return { clase: "especial", ...CURSOS_ESPECIALES[s], texto: s };
   const bono = s.match(/^(PSICOLOGIA|LOGOPEDIA|PEDAGOGIA|TERAPIA OCUPACIONAL)\s+(\d{2})\s*\(B-\d+\)$/i);
   if (bono) return { clase: "bono", tipo: `${bono[1].toUpperCase()} ${bono[2]}`, texto: s };
@@ -132,12 +141,20 @@ async function main() {
   const tipos = await q(`SELECT id, name, concept_id FROM "${S}".event_types`);
   const conceptos = await q(`SELECT id, name, unit_price FROM "${S}".billing_concepts WHERE active`);
   const cuotas = await q(`SELECT id, client_id, patient_id, concept_ids FROM "${S}".billing_cuotas WHERE active`);
+  // Las importadas llevan su curso de Organízate; las nacidas en el CRM no,
+  // pero su TIPO de cita dice lo mismo («CUOTA LOGOPEDIA 45», «ENTREVISTA
+  // INICIAL»): se lee como si fuera el curso. Una cita de un tipo que no es
+  // cuota ni entrevista se deja como está.
   const citas = await q(
     `SELECT b.id, b.patient_id, b.client_id, b.duration, b.status, b.event_type_id, b.cobro_modo, b.cobro_concept_id,
             substring(b.additional_data from '· (.*)$') AS servicio,
+            (b.additional_data LIKE 'Importada de Organízate%') AS importada,
+            et.name AS tipo_nombre,
             p.first_name || ' ' || p.last_name AS paciente
-       FROM "${S}".bookings b LEFT JOIN "${S}".patients p ON p.id = b.patient_id
-      WHERE b.additional_data LIKE 'Importada de Organízate%' AND b.scheduled_at >= $1 AND b.taller_grupo_id IS NULL`,
+       FROM "${S}".bookings b
+       LEFT JOIN "${S}".patients p ON p.id = b.patient_id
+       LEFT JOIN "${S}".event_types et ON et.id = b.event_type_id
+      WHERE b.scheduled_at >= $1 AND b.taller_grupo_id IS NULL AND b.status <> 'cancelled'`,
     [DESDE]
   );
 
@@ -199,7 +216,7 @@ async function main() {
   const cambiosTipo = []; // { id, tipoId }
   const cambiosCobro = []; // { id, concepto }
   const cuenta = {
-    citas: citas.length, servicioDesconocido: 0, tipoCambia: 0, tipoYaEstaba: 0, tipoSinDestino: 0,
+    citas: citas.length, servicioDesconocido: 0, otroTipo: 0, tipoCambia: 0, tipoYaEstaba: 0, tipoSinDestino: 0,
     cobroNuevo: 0, cobroYaIgual: 0, cobroDistinto: 0, cobroSinFamilia: 0, cobroSinCuota: 0, cobroSinTerapia: 0, cobroAmbiguo: 0, cobroHermanos: 0, cobroNoCuota: 0,
   };
   const porConcepto = new Map(), porTipo = new Map(), porComo = new Map();
@@ -207,8 +224,9 @@ async function main() {
   const suma = (m, k) => m.set(k, (m.get(k) ?? 0) + 1);
 
   for (const cita of citas) {
-    const curso = cursoDe(cita.servicio);
-    if (!curso || curso.clase === "desconocido") { cuenta.servicioDesconocido++; suma(desconocidos, cita.servicio ?? "(vacío)"); continue; }
+    const curso = cursoDe(cita.servicio, cita.tipo_nombre);
+    if (curso?.clase === "otro") { cuenta.otroTipo++; continue; } // nacida en el CRM con un tipo que no es cuota
+    if (!curso || curso.clase === "desconocido") { cuenta.servicioDesconocido++; suma(desconocidos, cita.servicio ?? cita.tipo_nombre ?? "(vacío)"); continue; }
 
     // 1. El tipo
     let tipoDestino = null;
@@ -262,11 +280,16 @@ async function main() {
       if (t.concept_id) continue; // ya lo tiene: no se pisa
       enlaces.push({ tipo: t, concepto: c });
     }
+    const tipoEntrevista = tipoPorNombre.get(norm("ENTREVISTA INICIAL"));
+    if (tipoEntrevista && !tipoEntrevista.concept_id && conceptoEntrevista) {
+      enlaces.push({ tipo: tipoEntrevista, concepto: conceptoPorId.get(String(conceptoEntrevista.id)) });
+    }
   }
 
   // ── Informe ──────────────────────────────────────────────────────────────
-  log(`  Citas importadas desde ${DESDE}:        ${n6(cuenta.citas)}`);
+  log(`  Citas vivas desde ${DESDE} (sin taller):  ${n6(cuenta.citas)}`);
   log(`  · curso que no se reconoce:            ${n6(cuenta.servicioDesconocido)}`);
+  log(`  · nacidas en el CRM con otro tipo:     ${n6(cuenta.otroTipo)}`);
   log(`\n  TIPO DE CITA`);
   log(`  · pasan de «${TIPO_IMPORTADO}» a su tipo: ${n6(cuenta.tipoCambia)}`);
   log(`  · ya tenían otro tipo:                 ${n6(cuenta.tipoYaEstaba)}`);

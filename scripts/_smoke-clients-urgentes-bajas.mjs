@@ -53,7 +53,7 @@ function fakeSequelize({ filas = [], cuenta = 0 } = {}) {
       if (/to_regclass/.test(sql)) {
         // Se guarda con qué se preguntó: el schema tiene que ir DENTRO.
         this.sondas = [...(this.sondas ?? []), opciones?.replacements];
-        return [[{ con_pacientes: true, con_citas: true }]];
+        return [[{ con_pacientes: true, con_citas: true, con_cuotas: true }]];
       }
       if (/count\(\*\)/.test(sql)) return [[{ n: cuenta }]];
       return [filas];
@@ -212,6 +212,9 @@ describe("la excepción: de baja pero con hora cogida sí sale", () => {
     for (const key of DE_FAMILIA_EXCLUYEN) {
       const s = fakeSequelize();
       await filasDe(s, ESQUEMA, key, { conCitas: false });
+      // Las carpetas de cuotas (06/09/2026) no tienen sentido sin agenda y no
+      // preguntan nada: sin SQL no hay nada que comprobar.
+      if (!s.sqls[0]) continue;
       const where = whereDe(s.sqls[0]);
       assert.doesNotMatch(where, /bookings/, `${key}: pregunta por bookings sin tener agenda`);
       assert.match(where, /NOT \(coalesce\(c\.status::text,''\) IN \([^)]*'inactive'[^)]*\)\)/,
@@ -348,7 +351,8 @@ describe("las carpetas no se solapan (25/08/2026)", () => {
     for (const key of TODAS) {
       const s = fakeSequelize();
       await filasDe(s, ESQUEMA, key, { conCitas: false, conPacientes: true });
-      assert.doesNotMatch(s.sqls[0], /crm_x\.bookings/, `${key}: pregunta por bookings sin tener agenda`);
+      // Las carpetas de cuotas no tienen sentido sin agenda: no preguntan nada.
+      assert.doesNotMatch(s.sqls[0] ?? "", /crm_x\.bookings/, `${key}: pregunta por bookings sin tener agenda`);
     }
   });
 });
@@ -374,12 +378,13 @@ describe("cómo se averigua qué tablas tiene el schema", () => {
     assert.deepEqual(s.sondas?.[0], {
       pacientes: `"${ESQUEMA}"."patients"`,
       citas: `"${ESQUEMA}"."bookings"`,
+      cuotas: `"${ESQUEMA}"."billing_cuotas"`,
     });
   });
 });
 
 describe("lo que NO se ha cambiado sin querer", () => {
-  it("las nueve carpetas siguen siendo las mismas, con su bloque (la de reservas de plaza es opcional)", async () => {
+  it("las catorce carpetas siguen siendo las mismas, con su bloque (la de reservas de plaza es opcional)", async () => {
     assert.deepEqual(
       CARPETAS.map((c) => [c.key, c.bloquea, c.entidad, !!c.opcional]),
       [
@@ -394,6 +399,13 @@ describe("lo que NO se ha cambiado sin querer", () => {
         // 02/09/2026: la lista de revisión de las reservas de plaza, que vive en
         // custom_fields.reservaPlaza y solo se enseña donde hay marca.
         ["reserva_plaza", false, "client", true],
+        // 06/09/2026: las cinco de cuotas y fichas (Rodrigo: «pon todos los
+        // problemas en Fichas a completar»). Se calculan; no son opcionales.
+        ["citas_sin_cuota", true, "client", false],
+        ["citas_sin_cobro", false, "client", false],
+        ["cuota_no_cuadra", false, "client", false],
+        ["paciente_sin_familia", true, "patient", false],
+        ["ficha_duplicada", false, "patient", false],
       ]
     );
   });
