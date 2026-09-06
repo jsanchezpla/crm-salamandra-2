@@ -142,26 +142,6 @@ export default function FacturasPage() {
   // La ficha del pagador, tal y como la resuelve SelectorCliente: se usa para
   // avisar de que le faltan razón social o NIF antes de emitir.
   const [clienteElegido, setClienteElegido] = useState(null);
-  /*
-   * ── LA RAZÓN SOCIAL SE HEREDA DE LA FICHA (04/09/2026, Rodrigo) ───────────
-   * «Que se ponga por defecto la seleccionada en el cliente pero que se pueda
-   * cambiar en el desplegable». Al elegir familia se pone la suya; a partir de
-   * ahí manda lo que se elija aquí, y cambiar de familia vuelve a proponer la
-   * de la nueva (la del pagador anterior no tiene ningún sentido).
-   *
-   * Solo en facturas NUEVAS: una que ya existe lleva la suya, y `startEdit` la
-   * carga arriba. La ficha llega por `onFicha` del selector, que es quien la
-   * tiene: por eso es un efecto y no el `onChange`.
-   */
-  const fichaConRazonSocial = useRef(null);
-  useEffect(() => {
-    if (openInvoice) return;
-    const id = clienteElegido?.id ?? null;
-    if (!id || String(id) !== String(form.clientId)) return;
-    if (fichaConRazonSocial.current === id) return;
-    fichaConRazonSocial.current = id;
-    setForm((f) => ({ ...f, guardianId: clienteElegido.razonSocial ?? LA_FICHA }));
-  }, [clienteElegido, form.clientId, openInvoice]);
   // Alta rápida de cliente sin salir del editor.
   const [showNewClient, setShowNewClient] = useState(false);
   const [newClient, setNewClient] = useState({ name: "", taxId: "" });
@@ -199,6 +179,32 @@ export default function FacturasPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState(() => emptyForm(21, 30));
+  /*
+   * ── LA RAZÓN SOCIAL SE HEREDA DE LA FICHA (04/09/2026, Rodrigo) ───────────
+   * «Que se ponga por defecto la seleccionada en el cliente pero que se pueda
+   * cambiar en el desplegable». Al elegir familia se pone la suya; a partir de
+   * ahí manda lo que se elija aquí, y cambiar de familia vuelve a proponer la
+   * de la nueva (la del pagador anterior no tiene ningún sentido).
+   *
+   * Solo en facturas NUEVAS: una que ya existe lleva la suya, y `startEdit` la
+   * carga arriba. La ficha llega por `onFicha` del selector, que es quien la
+   * tiene: por eso es un efecto y no el `onChange`.
+   *
+   * VA DESPUÉS de declarar `openInvoice` y `form`, como el efecto de los
+   * terapeutas de abajo: sus dependencias los leen en cada render, y leídos
+   * antes de su `useState` la página entera cae con «Cannot access before
+   * initialization». Nació encima (04/09/2026) y tumbó Facturas en
+   * producción hasta el 06/09.
+   */
+  const fichaConRazonSocial = useRef(null);
+  useEffect(() => {
+    if (openInvoice) return;
+    const id = clienteElegido?.id ?? null;
+    if (!id || String(id) !== String(form.clientId)) return;
+    if (fichaConRazonSocial.current === id) return;
+    fichaConRazonSocial.current = id;
+    setForm((f) => ({ ...f, guardianId: clienteElegido.razonSocial ?? LA_FICHA }));
+  }, [clienteElegido, form.clientId, openInvoice]);
   // Los terapeutas del paciente elegido, para sugerirlos arriba en «Empleado»
   // (31/08/2026). VA DESPUÉS de declarar `form`: leerlo antes tumba la página
   // entera con «Cannot access before initialization» (pasó en el primer
