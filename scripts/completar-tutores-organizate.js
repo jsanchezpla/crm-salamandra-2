@@ -80,11 +80,19 @@ async function main() {
   const { Client, Patient } = models;
 
   const pacientes = await Patient.findAll({ attributes: ["id", "clientId", "firstName", "lastName"], raw: true });
+  // Un nombre que se repite en dos familias distintas NO cruza (revisión del
+  // 06/09/2026): hasta hoy ganaba el primero y los tutores de la segunda ficha
+  // de Organízate se colgaban de la familia equivocada sin decir nada.
   const clientePorNombre = new Map();
+  const repetidos = new Set();
   for (const p of pacientes) {
     const k = norm(`${p.firstName ?? ""} ${p.lastName ?? ""}`);
-    if (k && !clientePorNombre.has(k)) clientePorNombre.set(k, String(p.clientId));
+    if (!k) continue;
+    const ya = clientePorNombre.get(k);
+    if (ya && ya !== String(p.clientId)) repetidos.add(k);
+    if (!ya) clientePorNombre.set(k, String(p.clientId));
   }
+  for (const k of repetidos) clientePorNombre.delete(k);
   const clientes = await Client.findAll({ attributes: ["id", "name", "email", "phone", "guardians"] });
   const porId = new Map(clientes.map((c) => [String(c.id), c]));
 
@@ -102,7 +110,14 @@ async function main() {
       : `${datos[idReal]?.nombre ?? ficha.nombre ?? ""} ${datos[idReal]?.apellidos ?? ficha.apellidos ?? ""}`;
     const clienteId = clientePorNombre.get(norm(nombreFicha));
     const cliente = clienteId ? porId.get(clienteId) : null;
-    if (!cliente) { sinCruce.push({ id: ficha.id, nombre: limpio(nombreFicha) }); continue; }
+    if (!cliente) {
+      sinCruce.push({
+        id: ficha.id,
+        nombre: limpio(nombreFicha),
+        motivo: repetidos.has(norm(nombreFicha)) ? "nombre repetido en dos familias del CRM" : "sin paciente con ese nombre",
+      });
+      continue;
+    }
 
     if (!plan.has(clienteId)) {
       plan.set(clienteId, {
