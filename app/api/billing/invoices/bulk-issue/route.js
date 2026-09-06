@@ -5,7 +5,7 @@ import { logBillingAudit, resumenFactura, datosPeticion } from "../../../../../l
 import { assignInvoiceNumber } from "../../../../../lib/billing/generateInvoiceNumber.js";
 import { calculateInvoice } from "../../../../../lib/billing/calculateInvoice.js";
 import { fotoFiscalDe, ATRIBUTOS_PARA_CONGELAR } from "../../../../../lib/billing/datosFiscales.js";
-import { agruparLoteCuotas, lineasDeCuota, mesValido, finExclusivoDe } from "../../../../../lib/billing/lotesCuotas.js";
+import { agruparLoteCuotas, agrupacionValida, lineasDeCuota, mesValido, finExclusivoDe } from "../../../../../lib/billing/lotesCuotas.js";
 import { madridToday } from "../../../../../lib/utils/madridDate.js";
 import { metodosValidos } from "../../../../../lib/billing/caja.js";
 
@@ -27,16 +27,14 @@ import { metodosValidos } from "../../../../../lib/billing/caja.js";
  * Aumenta no pueden tumbar a las demás); la lista es el trabajo de recepción.
  */
 
-// `agrupacion`: "pagador" (una factura por cliente, lo de siempre) o
-// "terapia" (31/08/2026: una por concepto del catálogo; los cobros sin
-// concepto van juntos en un grupo «resto» del mismo pagador). La regla vive
-// en lib/billing/lotesCuotas.js.
-function agrupacionValida(v) {
-  return v === "terapia" ? "terapia" : "pagador";
-}
+// `agrupacion`: "pagador" (una factura por cliente, lo de siempre), "terapia"
+// (31/08/2026: una por concepto del catálogo; los cobros sin concepto van
+// juntos en un grupo «resto» del mismo pagador) o "paciente" (06/09/2026,
+// Rodrigo: una por hijo, para que una familia con dos no haya que partirla
+// después). La regla —y `agrupacionValida`— vive en lib/billing/lotesCuotas.js.
 
 async function recogerLote({ tenantModels, mes, agrupacion = "pagador", metodos = [] }) {
-  const { Payment, Client, Invoice, BillingConcept } = tenantModels;
+  const { Payment, Client, Invoice, BillingConcept, Patient } = tenantModels;
 
   const cobros = await Payment.findAll({
     where: {
@@ -48,13 +46,21 @@ async function recogerLote({ tenantModels, mes, agrupacion = "pagador", metodos 
       // Sin métodos elegidos entran todos, que es lo de siempre.
       ...(metodos.length ? { method: { [Op.in]: metodos } } : {}),
     },
-    attributes: ["id", "clientId", "amount", "method", "paidAt", "notes", "conceptId"],
+    attributes: ["id", "clientId", "amount", "method", "paidAt", "notes", "conceptId", "patientId"],
     order: [["paidAt", "ASC"]],
   });
 
   const conceptos =
     agrupacion === "terapia" && BillingConcept
       ? await BillingConcept.findAll({ attributes: ["id", "name"] })
+      : [];
+  // Los nombres de los pacientes, solo cuando se agrupa por paciente: son el
+  // rótulo de cada factura en la vista previa y en el resultado.
+  const idsPacientes = agrupacion === "paciente" ? [...new Set(cobros.map((c) => c.patientId).filter(Boolean))] : [];
+  const pacientes =
+    idsPacientes.length && Patient
+      ? (await Patient.findAll({ where: { id: { [Op.in]: idsPacientes } }, attributes: ["id", "firstName", "lastName"] }))
+          .map((p) => ({ id: p.id, name: `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim() }))
       : [];
 
   const ids = [...new Set(cobros.map((c) => String(c.clientId)).filter(Boolean))];
@@ -81,6 +87,7 @@ async function recogerLote({ tenantModels, mes, agrupacion = "pagador", metodos 
     clientesConFacturaDelMes: facturasMes.map((f) => String(f.clientId)),
     agrupacion,
     conceptos: conceptos.map((c) => ({ id: c.id, name: c.name })),
+    pacientes,
   });
   return { ...lote, fichas: new Map(clientes.map((c) => [String(c.id), c])) };
 }
@@ -110,6 +117,7 @@ const vistaGrupo = (g) => ({
   grupoId: g.grupoId,
   clientId: g.clientId,
   terapia: g.terapia ?? null,
+  paciente: g.paciente ?? null,
   nombre: g.nombre,
   nif: g.nif,
   importe: g.importe,
@@ -203,7 +211,7 @@ export const POST = withTenant(async (request, _rc, { tenant, tenantModels, hasM
     const auditoria = [];
 
     for (const grupo of sinNif) {
-      resultados.push({ grupoId: grupo.grupoId, clientId: grupo.clientId, terapia: grupo.terapia ?? null, nombre: grupo.nombre, importe: grupo.importe, resultado: "saltada", motivo: grupo.motivo });
+      resultados.push({ grupoId: grupo.grupoId, clientId: grupo.clientId, terapia: grupo.terapia ?? null, paciente: grupo.paciente ?? null, nombre: grupo.nombre, importe: grupo.importe, resultado: "saltada", motivo: grupo.motivo });
     }
 
     // EN SERIE a propósito: el número correlativo bloquea la fila de la serie
@@ -214,7 +222,7 @@ export const POST = withTenant(async (request, _rc, { tenant, tenantModels, hasM
       // Excluir a mano va por `grupoId`: con agrupación por pagador es el
       // clientId de siempre; por terapia, cliente:concepto.
       if (excluidos.has(grupo.grupoId) || excluidos.has(grupo.clientId)) {
-        resultados.push({ grupoId: grupo.grupoId, clientId: grupo.clientId, terapia: grupo.terapia ?? null, nombre: grupo.nombre, importe: grupo.importe, resultado: "excluida", motivo: "excluida a mano" });
+        resultados.push({ grupoId: grupo.grupoId, clientId: grupo.clientId, terapia: grupo.terapia ?? null, paciente: grupo.paciente ?? null, nombre: grupo.nombre, importe: grupo.importe, resultado: "excluida", motivo: "excluida a mano" });
         continue;
       }
       try {
@@ -231,6 +239,9 @@ export const POST = withTenant(async (request, _rc, { tenant, tenantModels, hasM
           const factura = await Invoice.create(
             {
               clientId: grupo.clientId,
+              // Por paciente, la factura sabe de qué hijo es (trazabilidad, no
+              // el destinatario: el pagador sigue siendo la familia).
+              patientId: grupo.patientId ?? null,
               issueDate: fecha,
               dueDate: fecha,
               lines: calc.lines,
@@ -264,7 +275,7 @@ export const POST = withTenant(async (request, _rc, { tenant, tenantModels, hasM
           }
           return factura;
         });
-        resultados.push({ grupoId: grupo.grupoId, clientId: grupo.clientId, terapia: grupo.terapia ?? null, nombre: grupo.nombre, importe: grupo.importe, resultado: "emitida", numero: invoice.number, invoiceId: invoice.id });
+        resultados.push({ grupoId: grupo.grupoId, clientId: grupo.clientId, terapia: grupo.terapia ?? null, paciente: grupo.paciente ?? null, nombre: grupo.nombre, importe: grupo.importe, resultado: "emitida", numero: invoice.number, invoiceId: invoice.id });
         auditoria.push(invoice);
       } catch (err) {
         resultados.push({

@@ -951,6 +951,52 @@ Configuración → Conceptos y cuotas, además, la fila de alta pasa a dos filas
 cuatro columnas: con siete campos en un renglón los rótulos se quedaban en «Im»
 y «me».
 
+## Una factura por paciente, y partir la de la familia (06/09/2026)
+
+Rodrigo: «es importante que se pueda editar una factura por si se le ha
+aplicado a toda la familia y a posteriori quieren revisarla para partirla en
+varias facturas; debería dar a elegir si poner las extras respetando la
+numeración o si mover el número de todas las siguientes».
+
+**Lo segundo no se hace, y no es una limitación nuestra**: la numeración es
+correlativa y una factura emitida no cambia de número jamás (Reglamento de
+facturación; con Verifactu cada una va encadenada a la anterior). Renumerar
+las siguientes sería alterar documentos ya emitidos y ya enviados. El único
+camino legal es el que se ha construido, en dos mitades:
+
+**1. «Una factura por paciente» en el lote** (`FacturarMesDrawer`, tercera
+agrupación junto a pagador y terapia). Una familia con dos hijos sale con dos
+facturas desde el principio, cada una con los cobros de su cuota y con
+`patientId` puesto; los cobros sin paciente van juntos en un grupo «resto» del
+mismo pagador, como los sin concepto cuando se agrupa por terapia. La regla y
+`agrupacionValida` viven en `lib/billing/lotesCuotas.js` (`AGRUPACIONES`).
+
+**2. «Partir»** en una factura del lote (botón junto a «Rectificar», solo en las
+que llevan `customFields.loteCuotas`; solo dirección). `GET/POST
+/api/billing/invoices/[id]/partir?por=paciente|terapia`: el GET enseña el
+reparto o por qué no se puede; el POST, en UNA transacción:
+
+- anula la original con una rectificativa TOTAL (serie R, cada línea en
+  negativo con su IVA: `lineasDeAnulacion`, lo mismo que «Rectificar» con base
+  0) y la deja en `rectified`, enlazadas;
+- emite N facturas nuevas en la serie F —una por paciente o por terapia— que
+  cogen **los siguientes números libres**, nacen cobradas (`paid`,
+  `paidAmount = total`) con la foto fiscal del pagador y `customFields.partidaDe`;
+- cambia los MISMOS cobros de factura (`payments.invoice_id`): ni un euro ni
+  una fecha de cobro se toca.
+
+Qué se puede partir lo decide `planDePartir` (`lib/billing/partirFactura.js`):
+solo una factura viva del lote (con cobros enganchados y cobrados), que no sea
+ni esté rectificada, cuyo pagador tenga NIF, y solo si el criterio la parte de
+verdad en dos o más; y las partes tienen que sumar la original al céntimo o no
+se emite nada. Para los KPI, el par (original anulada, R) desaparece limpio
+—`invoiceScope.js` ya excluía a los dos— y solo cuentan las nuevas, que suman
+lo mismo. Auditoría: `invoice.rectified` + un `invoice.issued` por nueva +
+`invoice.split` con el conjunto.
+
+Pruebas: `scripts/_smoke-partir-factura.mjs` (12 casos) y los de agrupación
+por paciente ahí mismo.
+
 ## El cobro del mes en curso sigue a su cuota (05/09/2026)
 
 Dos avisos de Aumenta del 04/09 y el mismo agujero: **el cobro era una foto**.

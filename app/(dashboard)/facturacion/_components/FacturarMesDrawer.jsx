@@ -137,6 +137,7 @@ export default function FacturarMesDrawer({ open, onClose, onDone }) {
                   <span className="min-w-0 flex-1 truncate text-neutral-800">
                     {r.nombre}
                     {r.terapia && <span className="text-neutral-400"> · {r.terapia}</span>}
+                    {r.paciente && <span className="text-neutral-400"> · {r.paciente}</span>}
                   </span>
                   {r.resultado === "emitida" ? (
                     <Link href={`/facturacion/facturas/${r.invoiceId}`} className="font-mono text-[var(--color-primary,#1B3A2D)] hover:underline">
@@ -165,7 +166,7 @@ export default function FacturarMesDrawer({ open, onClose, onDone }) {
             <div className="flex flex-col gap-1">
               <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Cómo agrupar</label>
               <div className="flex gap-2">
-                {[["pagador", "Todo junto por pagador"], ["terapia", "Una factura por terapia"]].map(([k, lbl]) => (
+                {[["pagador", "Todo junto por pagador"], ["paciente", "Una factura por paciente"], ["terapia", "Una factura por terapia"]].map(([k, lbl]) => (
                   <button
                     key={k}
                     type="button"
@@ -181,6 +182,12 @@ export default function FacturarMesDrawer({ open, onClose, onDone }) {
                 <p className="text-[10px] text-neutral-400">
                   La terapia sale del concepto del cobro. Los cobros sin concepto (o compuestos de
                   varios) no se pueden partir: van juntos en una factura del mismo pagador.
+                </p>
+              )}
+              {agrupacion === "paciente" && (
+                <p className="text-[10px] text-neutral-400">
+                  Una familia con dos hijos sale con dos facturas, cada una con los cobros de su
+                  cuota. Los cobros sin paciente van juntos en una factura del mismo pagador.
                 </p>
               )}
             </div>
@@ -266,6 +273,7 @@ export default function FacturarMesDrawer({ open, onClose, onDone }) {
                         <span className="min-w-0 flex-1 truncate text-neutral-800">
                           {g.nombre}
                           {g.terapia && <span className="text-neutral-400"> · {g.terapia}</span>}
+                          {g.paciente && <span className="text-neutral-400"> · {g.paciente}</span>}
                         </span>
                         {g.facturaPrevia && (
                           <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100"

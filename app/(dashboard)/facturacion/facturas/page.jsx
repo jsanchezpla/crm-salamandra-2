@@ -13,6 +13,7 @@ import { LA_FICHA } from "@/lib/billing/razonSocial.js";
 import { nifDeCliente } from "../../../../lib/billing/nifCliente.js";
 import { ivaPorDefecto } from "../../../../lib/billing/ivaPorDefecto.js";
 import PatientReparto from "@/components/billing/PatientReparto.jsx";
+import PartirFacturaModal from "../_components/PartirFacturaModal.jsx";
 import { ordenarConSugeridos } from "../../../../lib/billing/empleadosSugeridos.js";
 import { lineaDesdeConcepto } from "../../../../lib/billing/conceptosCatalogo.js";
 import { cuotasQueEntran, conceptosDeCuotas, huellaLineas, sePuedeRellenar } from "../../../../lib/billing/cuotaParaRellenar.js";
@@ -221,6 +222,7 @@ export default function FacturasPage() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
   const [rectifyOpen, setRectifyOpen] = useState(false); // modal de rectificación
+  const [partirOpen, setPartirOpen] = useState(false); // partir una factura del lote (06/09/2026)
 
   /*
    * LA CUOTA DE LA FAMILIA RELLENA LAS LÍNEAS (01/09/2026, petición de Aumenta:
@@ -552,6 +554,7 @@ export default function FacturasPage() {
     if (!openInvoice) return;
     // Rectificar abre un modal con edición de importe (no es un POST directo).
     if (action === "rectify") { setRectifyOpen(true); return; }
+    if (action === "partir") { setPartirOpen(true); return; }
     if (action === "delete" && !confirm("¿Eliminar este borrador?")) return;
     if (action === "cancel" && !confirm("¿Cancelar la factura? Solo permitido sin cobros.")) return;
     if (action === "send") {
@@ -1288,6 +1291,19 @@ export default function FacturasPage() {
         />
       )}
 
+      {/* MODAL PARTIR FACTURA (06/09/2026): la del lote se anula con una R y se
+          reemite en varias, por paciente o por terapia, sin renumerar nada. */}
+      {partirOpen && openInvoice && (
+        <PartirFacturaModal
+          invoice={openInvoice}
+          onClose={() => setPartirOpen(false)}
+          onDone={async (r) => {
+            await load();
+            if (r?.nuevas?.[0]?.id) await openDetailById(r.nuevas[0].id);
+          }}
+        />
+      )}
+
       {/* MODAL REPARTO ENTRE PAGADORES (31/08/2026) */}
       {showReparto && form.patientId && (
         <PatientReparto
@@ -1600,6 +1616,14 @@ function DetailView({ invoice, puedeFacturar, onAction, onEdit, onOpenLinked, sa
           {["issued", "sent", "paid", "partially_paid", "overdue"].includes(invoice.status) && !invoice.rectifiedByInvoiceId && !invoice.rectifiesInvoiceId && (
             <button onClick={() => onAction("rectify")} disabled={saving}
               className="px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide text-purple-700 border border-purple-200 hover:bg-purple-50 disabled:opacity-40">Rectificar</button>
+          )}
+          {/* Partir (06/09/2026): solo las del lote de cuotas, que son las que
+              se hicieron «a toda la familia» y luego quieren por hijo o por
+              terapia. Anula con una R y reemite; nunca renumera. */}
+          {["issued", "sent", "paid", "partially_paid", "overdue"].includes(invoice.status) && !invoice.rectifiedByInvoiceId && !invoice.rectifiesInvoiceId && invoice.customFields?.loteCuotas && (
+            <button onClick={() => onAction("partir")} disabled={saving}
+              title="Anula esta factura con una rectificativa y la reemite en varias, por paciente o por terapia, con los números siguientes"
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide text-purple-700 border border-purple-200 hover:bg-purple-50 disabled:opacity-40">Partir</button>
           )}
           {(invoice.status === "issued" || invoice.status === "sent") && Number(invoice.paidAmount || 0) === 0 && (
             <button onClick={() => onAction("cancel")} disabled={saving}
