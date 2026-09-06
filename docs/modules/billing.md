@@ -1785,7 +1785,11 @@ pagador» desde el 01/09.
   en modo cuota, dice debajo del importe «Este mes ya tiene su cobro pendiente
   (X €): al registrar, ese cobro pasa a cobrado… No se crea otra fila» (o, con
   varios, que solo se cobran todos si el importe es exactamente la suma). Misma
-  regla de paciente que el POST: con paciente elegido, solo los suyos.
+  regla de paciente que el POST: con paciente elegido, solo los suyos. Y con
+  pendientes **el importe propuesto es el suyo (o su suma)**, no la resta de
+  `restoDelMes` contra la cuota entera: el cobro pendiente ya lleva su importe
+  de verdad (prorrateado, pactado o de tarifa) y la resta daba 127,50 € para un
+  pendiente de 120 € cuando el taller había empezado a mitad de mes.
 - **Las filas de la tabla de endpoints que decían «Solo admin/superadmin»**
   (costs, payments, series, settings) estaban mal desde el 04/09: ninguno gatea
   por rol.

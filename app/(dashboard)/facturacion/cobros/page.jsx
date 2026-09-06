@@ -292,10 +292,22 @@ export default function CobrosPage() {
       const cobrosDelMes = jMes?.data?.cobros ?? [];
       // La misma regla que el POST de payments: con paciente elegido, solo los
       // pendientes de ese paciente; sin él, todos los de la familia.
-      setPendientesDelMes(
-        (jMes?.data?.pendientes ?? []).filter((p) => !form.patientId || String(p.patientId || "") === String(form.patientId))
+      const pendientes = (jMes?.data?.pendientes ?? []).filter(
+        (p) => !form.patientId || String(p.patientId || "") === String(form.patientId)
       );
+      setPendientesDelMes(pendientes);
       const parcial = restoDelMes({ esperado, cobros: cobrosDelMes, patientId: form.patientId || null });
+      if (pendientes.length) {
+        // EL PENDIENTE MANDA (06/09/2026). Ese cobro ya lleva su importe de
+        // verdad —prorrateado, pactado o el de la tarifa—, así que se propone
+        // él (o la suma, que es lo único que cobra varios a la vez) y no la
+        // resta contra la cuota entera, que con un taller empezado a mitad de
+        // mes daba 127,50 € para un pendiente de 120 €.
+        const suma = Math.round(pendientes.reduce((s, p) => s + Number(p.amount || 0), 0) * 100) / 100;
+        setParcialDelMes(null);
+        setForm((f) => ({ ...f, amount: String(suma) }));
+        return;
+      }
       // Solo con una cuota conocida (06/09/2026): sin importe esperado, «queda
       // 0,00 €» con el campo en blanco era un aviso que mentía.
       setParcialDelMes(Number(esperado) > 0 && parcial.yaCobrado > 0 ? parcial : null);
@@ -1056,14 +1068,15 @@ export default function CobrosPage() {
                   <p className="text-[11px] mt-1.5 text-neutral-500">
                     {pendientesDelMes.length === 1 ? (
                       <>
-                        Este mes ya tiene su cobro pendiente en Cobros ({fmtMoney(pendientesDelMes[0].amount)}):
-                        al registrar, ese cobro pasa a cobrado con el importe de arriba. No se crea otra fila.
+                        Este mes ya tiene su cobro pendiente en Cobros ({fmtMoney(pendientesDelMes[0].amount)}), y es lo
+                        que se ha puesto arriba: al registrar, ese cobro pasa a cobrado con el importe de arriba. No se crea otra fila.
                       </>
                     ) : (
                       <>
                         Este mes tiene {pendientesDelMes.length} cobros pendientes en Cobros (suman{" "}
-                        {fmtMoney(pendientesDelMes.reduce((s, p) => s + Number(p.amount || 0), 0))}): si el importe es
-                        exactamente esa suma se cobran todos; si no, se apunta un cobro nuevo y los pendientes se quedan.
+                        {fmtMoney(pendientesDelMes.reduce((s, p) => s + Number(p.amount || 0), 0))}, que es lo que se ha
+                        puesto arriba): con esa suma exacta se cobran todos; con otro importe se apunta un cobro nuevo y los
+                        pendientes se quedan.
                       </>
                     )}
                   </p>

@@ -48,7 +48,9 @@ test("el botón Enviar de la ficha enseña los mismos estados que la ruta", () =
 
 test("Registrar cobro avisa del cobro pendiente que va a cobrar en vez de duplicar", () => {
   const src = lee("app/(dashboard)/facturacion/cobros/page.jsx");
-  assert.match(src, /setPendientesDelMes\(\s*\(jMes\?\.data\?\.pendientes \?\? \[\]\)\.filter/, "lee `pendientes` de /payments/mes con la regla del paciente");
+  assert.match(src, /const pendientes = \(jMes\?\.data\?\.pendientes \?\? \[\]\)\.filter\(/, "lee `pendientes` de /payments/mes con la regla del paciente");
+  assert.match(src, /setPendientesDelMes\(pendientes\);/);
+  assert.match(src, /if \(pendientes\.length\) \{[\s\S]{0,900}setForm\(\(f\) => \(\{ \.\.\.f, amount: String\(suma\) \}\)\);/, "con pendientes, el importe propuesto es el suyo (o su suma), no la resta contra la cuota entera");
   assert.match(src, /Este mes ya tiene su cobro pendiente en Cobros/);
   assert.match(src, /No se crea otra fila/);
 });
