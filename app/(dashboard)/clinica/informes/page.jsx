@@ -32,6 +32,7 @@ const TYPE_STYLES = {
   referral: { bg: "bg-amber-50", text: "text-amber-700" },
   beca: { bg: "bg-rose-50", text: "text-rose-700" },
   asesoramiento: { bg: "bg-teal-50", text: "text-teal-700" },
+  diagnostico: { bg: "bg-indigo-50", text: "text-indigo-700" },
 };
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" }) : "—");
 

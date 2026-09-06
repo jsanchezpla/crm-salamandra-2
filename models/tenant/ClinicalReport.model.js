@@ -47,8 +47,12 @@ export function defineClinicalReport(sequelize) {
       // regla es la beca, porque sus apartados los manda la convocatoria. El
       // valor lo añade al enum de cada schema
       // scripts/migrate-informe-asesoramiento.js, que va ANTES del despliegue.
+      // 'diagnostico' (05/09/2026, AV-0045 de Aumenta): el informe de valoración
+      // diagnóstica. Trae su plantilla de fábrica de 25 apartados y el bloque de
+      // pruebas con puntuaciones (lib/clinica/pruebasDiagnosticas.js); el valor
+      // lo añade al enum scripts/migrate-informe-diagnostico.js, ANTES del despliegue.
       reportType: {
-        type: DataTypes.ENUM("evolution", "admission", "discharge", "referral", "beca", "asesoramiento"),
+        type: DataTypes.ENUM("evolution", "admission", "discharge", "referral", "beca", "asesoramiento", "diagnostico"),
         allowNull: false,
         defaultValue: "evolution",
       },

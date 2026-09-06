@@ -63,6 +63,8 @@ import {
 import { cabenNuevos } from "@/lib/clinica/apartadosPropuestos.js";
 import { MAX_AUDIOS } from "@/lib/clinica/audios.js";
 import { SECCIONES_BECA } from "@/lib/clinica/beca.js";
+import { CLAVE_PRUEBAS, TIPO_DIAGNOSTICO, normalizarPruebas } from "@/lib/clinica/pruebasDiagnosticas.js";
+import PruebasDiagnosticas from "@/components/clinica/PruebasDiagnosticas.jsx";
 import { REPORT_TYPES_NUEVOS, REPORT_TYPE_LABEL, nombreDelInforme } from "@/lib/clinica/serialize.js";
 import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 
@@ -118,6 +120,9 @@ export default function InformeEditor({ reportId }) {
   const [apartados, setApartados] = useState([]);
   const [form, setForm] = useState({});
   const [extra, setExtra] = useState({ referralSpecialty: "", anexarRegistros: false });
+  // Las pruebas con puntuaciones del informe de diagnóstico (05/09/2026,
+  // AV-0045): viven en `contentSections.pruebas`, aparte de los apartados.
+  const [pruebas, setPruebas] = useState([]);
   const [sesiones, setSesiones] = useState([]);
   const [elegidas, setElegidas] = useState(new Set());
   const [derivaciones, setDerivaciones] = useState([]);
@@ -201,6 +206,7 @@ export default function InformeEditor({ reportId }) {
       anexarRegistros: cs.anexarRegistros === true,
     });
     setElegidas(new Set(cs.sourceSessionIds ?? []));
+    setPruebas(normalizarPruebas(cs[CLAVE_PRUEBAS]));
   }
 
   useEffect(() => {
@@ -301,6 +307,7 @@ export default function InformeEditor({ reportId }) {
             referralSpecialty: extra.referralSpecialty || "",
             anexarRegistros: !!extra.anexarRegistros,
             sourceSessionIds: [...elegidas],
+            [CLAVE_PRUEBAS]: pruebas,
           },
         }),
       });
@@ -869,6 +876,14 @@ export default function InformeEditor({ reportId }) {
               ))}
             </select>
           </div>
+        )}
+
+        {/* Las pruebas con sus puntuaciones: solo en el informe de diagnóstico
+            (o si este informe ya las trae). Van ANTES de los apartados porque
+            en el PDF salen detrás de «Pruebas administradas», a mitad del
+            documento; aquí, arriba, para que se vea que existen. */}
+        {(tipo === TIPO_DIAGNOSTICO || pruebas.length > 0) && (
+          <PruebasDiagnosticas pruebas={pruebas} onChange={setPruebas} disabled={entregado} />
         )}
 
         <ApartadosEditor

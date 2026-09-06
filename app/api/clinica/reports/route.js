@@ -2,6 +2,8 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { clientIdOfPatient } from "../../../../lib/clinica/patientClient.js";
 import { ok, created, error, forbidden } from "../../../../lib/utils/apiResponse.js";
 import { serializeReport, REPORT_TYPES, REPORT_TYPES_NUEVOS } from "../../../../lib/clinica/serialize.js";
+import { CLAVE_PLANTILLA } from "../../../../lib/clinica/plantillas.js";
+import { TIPO_DIAGNOSTICO } from "../../../../lib/clinica/pruebasDiagnosticas.js";
 import { logClinicaAudit, auditSummary } from "../../../../lib/clinica/audit.js";
 
 function gate(ctx) {
@@ -57,6 +59,10 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     );
   }
   const cs = body.contentSections && typeof body.contentSections === "object" && !Array.isArray(body.contentSections) ? body.contentSections : {};
+  // El informe de valoración diagnóstica nace con SU plantilla puesta
+  // (05/09/2026, AV-0045): si no, se abriría con los siete apartados de
+  // siempre y habría que ir a buscarla en el desplegable.
+  if (body.reportType === TIPO_DIAGNOSTICO && !cs[CLAVE_PLANTILLA]) cs[CLAVE_PLANTILLA] = TIPO_DIAGNOSTICO;
   const payload = {
     patientId: body.patientId,
     therapistId: body.therapistId,

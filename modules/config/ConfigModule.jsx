@@ -51,6 +51,7 @@ import {
 } from "./tarjetas/Reservas.jsx";
 import { AreaPrivadaCard, BloqueoImpagoCard } from "./tarjetas/Portal.jsx";
 import { AiPermissionsCard, CategoriasExternasCard, CoordinadorasCard, DerivacionesCard, PlantillasClinicaCard } from "./tarjetas/Modulos.jsx";
+import PruebasDiagnosticasCard from "./tarjetas/PruebasDiagnosticas.jsx";
 import { ContrasenaCard, CorreoCuentaCard } from "./tarjetas/Cuenta.jsx";
 
 /**
@@ -1032,7 +1033,14 @@ export default function ConfigModule({ modulos = null }) {
 
           {enZona(
             "plantillasClinica",
-            isAdmin && <PlantillasClinicaCard />
+            isAdmin && (
+              <>
+                <PlantillasClinicaCard />
+                {/* El catálogo de pruebas del informe de diagnóstico va con las
+                    plantillas: es la misma casa (05/09/2026, AV-0045). */}
+                <PruebasDiagnosticasCard />
+              </>
+            )
           )}
 
           {enZona(

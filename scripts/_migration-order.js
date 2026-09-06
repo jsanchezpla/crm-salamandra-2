@@ -139,6 +139,12 @@ export const EXTRA_EDGES = [
     after: "migrate-informe-asesoramiento",
     why: "mismo caso que informe-beca: solo hace ALTER TYPE sobre enum_clinical_reports_report_type, que nace con la tabla clinical_reports de clinica-module, y el analizador no le lee nada.",
   },
+  // ── Clínica: el enum del informe de valoración diagnóstica (05/09/2026) ───
+  {
+    before: "migrate-clinica-module",
+    after: "migrate-informe-diagnostico",
+    why: "mismo caso que informe-beca y informe-asesoramiento: solo un ALTER TYPE sobre enum_clinical_reports_report_type, que el analizador no lee.",
+  },
   // ── Las FKs de equipo se alinean DESPUÉS de que existan sus tablas ────────
   // fks-equipo-alineadas no tiene un solo SQL estático (recorre OBJETIVO y
   // construye los ALTER con variables), así que el analizador no ve nada. Y

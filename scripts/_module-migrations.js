@@ -547,6 +547,11 @@ export const MODULES = {
     // que no hay nada más que migrar. VA ANTES del despliegue: el modelo lo
     // declara y la UI lo ofrece al crear.
     "migrate-informe-asesoramiento",
+    // El informe de valoración diagnóstica (05/09/2026, AV-0045 de Aumenta):
+    // añade 'diagnostico' al mismo enum. Su plantilla es de fábrica en el
+    // código y lo escrito va en contentSections (JSONB). VA ANTES del
+    // despliegue, por lo mismo que los dos anteriores.
+    "migrate-informe-diagnostico",
     // Apartados del registro de sesión (29/08/2026, Aumenta): content_sections
     // JSONB en clinic_sessions, el mismo cajón que ya tenían los informes. El
     // MODELO lo declara, así que sin esta migración el primer SELECT de
