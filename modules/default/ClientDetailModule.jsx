@@ -26,6 +26,7 @@ import ClientPortalMonthsSection from "../../components/clients/ClientPortalMont
 import ClientComunicacionesSection from "../../components/clients/ClientComunicacionesSection.jsx";
 import ClientCitasSection from "../../components/clients/ClientCitasSection.jsx";
 import ClientWhatsappSection from "../../components/clients/ClientWhatsappSection.jsx";
+import ClientMailingSection from "../../components/clients/ClientMailingSection.jsx";
 import ClientBonosSection from "../../components/clients/ClientBonosSection.jsx";
 import ClientConsultaExternaSection from "../../components/clients/ClientConsultaExternaSection.jsx";
 import ClientProfesionalSection from "../../components/clients/ClientProfesionalSection.jsx";
@@ -91,6 +92,10 @@ function pestanasDe(textos) {
     // conectado WhatsApp la pestaña no existe — y no hace falta gatearla por
     // módulo, que WhatsApp es una integración universal (regla #14).
     { key: "whatsapp", label: "WhatsApp" },
+    // Las campañas de mailing recibidas (sprint 2 del módulo, 06/09/2026),
+    // pegadas a WhatsApp por el mismo criterio: lo que el centro le ha contado.
+    // Se esconde sola sin módulo o sin envíos (la sección devuelve null).
+    { key: "mailing", label: "Mailing" },
     // Notas / Historia clínica: el diario de esta persona. Detrás de
     // Interacciones, que es el diario de lo que se ha hablado CON ella.
     { key: "notas", label: textos.notas.pestana },
@@ -924,6 +929,10 @@ export default function ClientDetailModule({
             conectar mañana (regla #14). */}
         <PanelPestana clave="whatsapp" activo={tab === "whatsapp"} onEstado={marcarPanel}>
           <ClientWhatsappSection clientId={id} />
+        </PanelPestana>
+
+        <PanelPestana clave="mailing" activo={tab === "mailing"} onEstado={marcarPanel}>
+          {piezas.mailing && <ClientMailingSection clientId={id} />}
         </PanelPestana>
 
         {/* Notas / Historia clínica (`client_notes`). Solo si la página lo

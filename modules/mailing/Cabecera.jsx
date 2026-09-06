@@ -13,6 +13,7 @@ const PESTANAS = [
   { href: "/mailing", label: "Campañas" },
   { href: "/mailing/lista", label: "Lista" },
   { href: "/mailing/segmentos", label: "Segmentos" },
+  { href: "/mailing/secuencias", label: "Secuencias" },
   { href: "/mailing/bajas", label: "Bajas" },
 ];
 

@@ -66,6 +66,7 @@ import ClientPlansPanel from "../../nutricion/ClientPlansPanel.jsx";
 import ClientModulesSection from "../../../components/clients/ClientModulesSection.jsx";
 import ClientCitasSection from "../../../components/clients/ClientCitasSection.jsx";
 import ClientWhatsappSection from "../../../components/clients/ClientWhatsappSection.jsx";
+import ClientMailingSection from "../../../components/clients/ClientMailingSection.jsx";
 import ClientBonosSection from "../../../components/clients/ClientBonosSection.jsx";
 import ClientConsultaExternaSection from "../../../components/clients/ClientConsultaExternaSection.jsx";
 import ClientCuentaWebSection from "../../../components/clients/ClientCuentaWebSection.jsx";
@@ -90,6 +91,8 @@ const TABS = [
   // de otra forma: lo que se ha hablado con la paciente. A diferencia del resto,
   // esta pestaña SOLO sale si hay mensajes (ver `hayWhatsapp` más abajo).
   { key: "whatsapp", label: "WhatsApp" },
+  // Mailing recibido (sprint 2, 06/09/2026): igual que WhatsApp, solo sale si hay algo.
+  { key: "mailing", label: "Mailing" },
   { key: "attachments", label: "Documentos" },
   // "Sesiones", no "Citas": en la consulta cada cita ES una sesión de
   // seguimiento. Sigue siendo la agenda del módulo `citas` por debajo.
@@ -175,7 +178,8 @@ export default function NutriLauraClientDetailModule({ perfil }) {
   // no sale: una consulta que aún no ha conectado WhatsApp no debe ver una
   // pestaña vacía en todas las fichas.
   const [hayWhatsapp, setHayWhatsapp] = useState(false);
-  const pestanas = TABS.filter((t) => t.key !== "whatsapp" || hayWhatsapp);
+  const [hayMailing, setHayMailing] = useState(false);
+  const pestanas = TABS.filter((t) => (t.key !== "whatsapp" || hayWhatsapp) && (t.key !== "mailing" || hayMailing));
 
   // Edición inline en el padre — preserva state al cambiar tabs.
   const [editMode, setEditMode] = useState(false);
@@ -461,6 +465,9 @@ export default function NutriLauraClientDetailModule({ perfil }) {
             la pestaña no aparecería nunca — no se puede abrir lo que no está. */}
         <div className={tab === "whatsapp" ? undefined : "hidden"}>
           <ClientWhatsappSection clientId={id} onEstado={setHayWhatsapp} />
+        </div>
+        <div className={tab === "mailing" ? undefined : "hidden"}>
+          <ClientMailingSection clientId={id} onEstado={setHayMailing} />
         </div>
 
         {tab === "attachments" && <ClientAttachmentsPanel clientId={id} textos={TEXTOS_LAURA.documentos} />}

@@ -3,7 +3,7 @@ import { ok } from "../../../../../../lib/utils/apiResponse.js";
 import { ValidationError } from "../../../../../../lib/utils/errors.js";
 import { auditar, datosPeticion } from "../../../../../../lib/utils/auditoria.js";
 import { buscarOFallar, exigirMailing, idDeRuta, leerBody, serializarCampana } from "../../../../../../lib/mailing/comun.js";
-import { recalcularContadores } from "../../../../../../lib/mailing/envio.js";
+import { decidirGanadorAB, recalcularContadores } from "../../../../../../lib/mailing/envio.js";
 import { assertNotDemoPaidCall } from "../../../../../../lib/demo/isDemo.js";
 
 /**
@@ -13,12 +13,15 @@ import { assertNotDemoPaidCall } from "../../../../../../lib/demo/isDemo.js";
  *             espera. Nadie recibe dos veces al reanudar (UNIQUE).
  *   reanudar  pausada → enviando. La pantalla y el temporizador siguen.
  *   cancelar  borrador/programada/pausada → cancelada. Lo pendiente no sale.
+ *   decidir_ab { variante? }  (sprint 2) elige ya el asunto ganador del A/B
+ *             sin esperar: con `variante` a mano, sin ella por los clics.
  */
 export const POST = withTenant(async (request, rc, ctx) => {
   exigirMailing(ctx);
   const id = await idDeRuta(rc);
   const campana = await buscarOFallar(ctx.tenantModels.MailingCampaign, id, "Esa campaña");
-  const { accion } = await leerBody(request);
+  const body = await leerBody(request);
+  const { accion } = body;
 
   if (accion === "pausar") {
     if (campana.estado !== "enviando") throw new ValidationError("Solo se pausa una campaña que se está enviando");
@@ -32,6 +35,22 @@ export const POST = withTenant(async (request, rc, ctx) => {
       throw new ValidationError(campana.estado === "enviando" ? "Páusala primero" : "Ya no se puede cancelar");
     }
     await campana.update({ estado: "cancelada", programadaPara: null });
+  } else if (accion === "decidir_ab") {
+    if (!campana.asuntoB || campana.abGanador) throw new ValidationError("Esta campaña no tiene un A/B pendiente de decidir");
+    if (!["enviando", "pausada"].includes(campana.estado)) throw new ValidationError("El A/B se decide con la campaña en marcha");
+    const forzar = body?.variante === "a" || body?.variante === "b" ? body.variante : null;
+    const r = await decidirGanadorAB(ctx, campana, { forzar });
+    await recalcularContadores(ctx, campana);
+    await campana.reload();
+    await auditar({
+      tenantId: ctx.tenant.id,
+      ...datosPeticion(request),
+      action: "mailing.campana.ab_decidido",
+      entity: "mailing_campaign",
+      entityId: campana.id,
+      after: { nombre: campana.nombre, ganador: r.ganador, aMano: !!forzar },
+    });
+    return ok({ campana: serializarCampana(campana), ab: r });
   } else {
     throw new ValidationError("Acción desconocida");
   }

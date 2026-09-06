@@ -2,8 +2,8 @@
 
 ## Mapa
 
-> Verificado contra el código el 06/09/2026 (sprint 1, primer commit del
-> módulo). Si algo no cuadra, manda el código: corrige esta tabla. **Quién
+> Verificado contra el código el 06/09/2026 (sprint 1 por la mañana, sprint 2
+> por la tarde). Si algo no cuadra, manda el código: corrige esta tabla. **Quién
 > tiene el módulo NO se lista aquí** (una lista a mano se queda vieja):
 > `/admin/modulos` en el back-office o `node scripts/inspect-tenant-modules.js <slug>`.
 
@@ -11,17 +11,17 @@
 | --- | --- |
 | **moduleKey** | `mailing` · requiere — (nada obligatorio en `lib/provisioning/catalogo.js`; `dependencias.js` declara dos parciales: sin `clients` solo quedan los correos sueltos, sin `citas` el filtro de última cita se ignora). Aviso del catálogo: necesita una cuenta de Amazon SES del propio cliente y sacarla del sandbox. |
 | **Reina** | — · ninguna todavía. Nació del plan «Módulo de Mailing — Sprint 1» (Jorge, 23/08/2026). Se probó en local contra `demo` con `scripts/seed-mailing-demo.js`. |
-| **Pantallas** | `app/(dashboard)/mailing/` (5 páginas, todas con `notFound()` en el servidor vía `_pagina.js`): `/mailing` (campañas + contador de cuota), `/mailing/[id]` (editor por bloques, vista previa, prueba, programación, envío con progreso y métricas), `/mailing/lista` (fichas con la casilla + correos sueltos + importar CSV), `/mailing/segmentos`, `/mailing/bajas` (supresión). Entrada «Mailing» en `components/layout/Sidebar.jsx` (área Comercial, después de Correo). |
-| **Endpoints** | `app/api/mailing/**` (21 `route.js`, todos con `exigirMailing` = `hasModule("mailing")`): `estado`, `uso`, `audiencia` (GET lista / POST recuento), `contactos` (+`[id]`, `[id]/confirmar` ✉, `importar` ✉ si modo confirmar), `segmentos` (+`[id]`, `previsualizar`), `campanas` (+`[id]`, `[id]/prueba` ✉, `[id]/enviar` ✉, `[id]/avanzar` ✉, `[id]/programar`, `[id]/estado`, `[id]/vista`, `[id]/metricas`, `[id]/duplicar`), `plantillas` (+`[id]`), `supresiones`, `imagenes` (multipart). Los ✉ pasan por `assertNotDemoPaidCall`. **Públicos** (sin login, `withPublicTenant`, todos con `hasModule` y rate limit): `app/api/public/c/[tenantSlug]/mailing/{baja,confirmar,clic,abierto,ver}/[token]` y `imagen/[nombre]`. **Webhook**: `app/api/webhooks/ses/[tenantSlug]` (rebotes y quejas por SNS, firma de Amazon obligatoria). |
-| **Lógica** | `lib/mailing/` (17): `ses.js` (cliente SES v2 con credenciales BYOK del tenant: `getTenantSesConfig`, `enviarSes`, `cuentaSes`, `identidadDelRemitente`, `costeEstimado`), `sigv4.js` (firma AWS a mano, sin SDK), `bloques.js` (catálogo de 6 bloques, saneado por lista blanca, `htmlATexto`, `personalizar`), `render.js` (`renderCorreo`: bloques → HTML de tablas + texto; exige enlace de baja), `audiencia.js` (**el único sitio que decide a quién se escribe**: casilla `novedades` + contactos activos − supresión; reglas de segmento), `envio.js` (`prepararCampana`, `avanzarCampana` con `FOR UPDATE SKIP LOCKED`, `enviarPrueba`, `campanaLista`, `centroDe`), `bajaToken.js` (tokens HMAC de baja/confirmación/clic/apertura, sin tabla), `enlaces.js` (URL públicas, `urlBase`), `supresion.js` (`suprimirEmail`: supresión + contacto a baja + casilla de la ficha a no + envíos pendientes), `avisosSes.js` (qué hacer con Bounce/Complaint), `snsFirma.js` (verificar la firma de SNS), `eventos.js` (clics/aperturas, índice → URL), `confirmacion.js` (correo de doble opt-in), `csv.js` (lector sin librerías), `imagenStorage.js` (`uploads/mailing/{slug}/{uuid}.{ext}`, magic bytes, 2 MB), `paginaPublica.js`, `comun.js` (puerta, validación, serializado). |
-| **UI** | `modules/mailing/` (9): `MailingModule.jsx`, `CampanaEditor.jsx`, `ListaModule.jsx`, `SegmentosModule.jsx`, `BajasModule.jsx`, `Bloques.jsx` (lista de bloques y el formulario de cada tipo, subida de imagen), `EditorTexto.jsx` (contentEditable con 6 botones), `Cabecera.jsx` (pestañas y avisos: sin SES, demo, sandbox, remitente sin verificar), `api.js`. Configuración: tarjeta «Amazon SES» en `modules/config/tarjetas/Conexiones.jsx` (`AI_PROVIDERS.amazonSes` + `SesCamposField`), colocada en `ConfigModule.jsx` y registrada en `lib/configuracion/pestanas.js` (`amazonSes`, requiere `mailing`). |
-| **Modelos** | `models/tenant/`: `MailingContact` (`mailing_contacts`), `MailingSegment` (`mailing_segments`), `MailingCampaign` (`mailing_campaigns`), `MailingSend` (`mailing_sends`, **UNIQUE campaign_id+email**), `MailingSuppression` (`mailing_suppressions`, UNIQUE email, sin DELETE), `MailingTemplate` (`mailing_templates`), `MailingEvent` (`mailing_events`). Registrados para todos los tenants en `lib/db/tenantDb.js`; las tablas las crea `migrate-mailing-sprint-1` (`MODULES.mailing`) solo donde el módulo está activo. |
-| **Interruptores y parámetros** | `featureFlags`/`logicOverrides`: ninguno. Por cliente, en `tenant.settings.integrations`: `sesSecretAccessKey` (cifrada), `sesAccessKeyId`, `sesRegion`, `sesFromEmail`, `sesFromName`, `sesConfigurationSet` (`PATCH /api/tenant/settings`). Entorno: `MAILING_TOKEN_SECRET` (cae a `SETTINGS_ENCRYPTION_KEY`), `APP_PUBLIC_URL` (base de los enlaces desde el temporizador). |
+| **Pantallas** | `app/(dashboard)/mailing/` (6 páginas, todas con `notFound()` en el servidor vía `_pagina.js`): `/mailing` (campañas + contador de cuota), `/mailing/[id]` (editor por bloques, vista previa, **redactar con IA**, **A/B de asunto y ritmo**, prueba, programación, envío con progreso y métricas), `/mailing/lista` (fichas con la casilla + correos sueltos + importar CSV), `/mailing/segmentos`, `/mailing/secuencias` (**sprint 2**: correos automáticos por eventos), `/mailing/bajas` (supresión). Entrada «Mailing» en `components/layout/Sidebar.jsx` (área Comercial, después de Correo). En la FICHA de cliente, pestaña «Mailing» (`components/clients/ClientMailingSection.jsx`, montada en `modules/default/ClientDetailModule.jsx` y en el override de nutri_laura; `piezasFicha.js` → `mailing`; se esconde sola sin envíos). |
+| **Endpoints** | `app/api/mailing/**` (27 `route.js`, todos con `exigirMailing` = `hasModule("mailing")`): `estado`, `uso`, `audiencia` (GET lista / POST recuento), `contactos` (+`[id]`, `[id]/confirmar` ✉, `importar` ✉ si modo confirmar), `segmentos` (+`[id]`, `previsualizar`), `campanas` (+`[id]`, `[id]/prueba` ✉, `[id]/enviar` ✉, `[id]/avanzar` ✉, `[id]/programar`, `[id]/estado` —con `decidir_ab`—, `[id]/vista`, `[id]/metricas` —con variantes—, `[id]/duplicar`, **`[id]/ia`** 🤖 con `vetoAi` + `demoForcesFakeAi`), **`secuencias`** (+`[id]`, `[id]/vista`, `[id]/previsualizar`; encender exige contenido y SES y pasa por el guard de demo), **`historial?clientId=`** (lo que ha recibido una ficha), `plantillas` (+`[id]`), `supresiones`, `imagenes` (multipart). Los ✉ pasan por `assertNotDemoPaidCall`. **Públicos** (sin login, `withPublicTenant`, todos con `hasModule` y rate limit): `app/api/public/c/[tenantSlug]/mailing/{baja,confirmar,clic,abierto,ver}/[token]` y `imagen/[nombre]`. **Webhook**: `app/api/webhooks/ses/[tenantSlug]` (rebotes y quejas por SNS, firma de Amazon obligatoria). |
+| **Lógica** | `lib/mailing/` (19; las dos del sprint 2 son `secuencias.js` —catálogo de eventos `EVENTOS`, `cumpleEvento`, `candidatosDeSecuencia`, `campanaDeSecuencia`, `procesarSecuencias`— e `ia.js` —`promptRedaccion`, `parsearPropuesta`, `redactarConIa`, `asuntosAlternativos` y sus `fake*`—; en `envio.js` entran `repartoAB`, `debeDecidirAB`, `decidirGanadorAB`, `asuntoDe` y el tope `ritmoPorHora`): `ses.js` (cliente SES v2 con credenciales BYOK del tenant: `getTenantSesConfig`, `enviarSes`, `cuentaSes`, `identidadDelRemitente`, `costeEstimado`), `sigv4.js` (firma AWS a mano, sin SDK), `bloques.js` (catálogo de 6 bloques, saneado por lista blanca, `htmlATexto`, `personalizar`), `render.js` (`renderCorreo`: bloques → HTML de tablas + texto; exige enlace de baja), `audiencia.js` (**el único sitio que decide a quién se escribe**: casilla `novedades` + contactos activos − supresión; reglas de segmento), `envio.js` (`prepararCampana`, `avanzarCampana` con `FOR UPDATE SKIP LOCKED`, `enviarPrueba`, `campanaLista`, `centroDe`), `bajaToken.js` (tokens HMAC de baja/confirmación/clic/apertura, sin tabla), `enlaces.js` (URL públicas, `urlBase`), `supresion.js` (`suprimirEmail`: supresión + contacto a baja + casilla de la ficha a no + envíos pendientes), `avisosSes.js` (qué hacer con Bounce/Complaint), `snsFirma.js` (verificar la firma de SNS), `eventos.js` (clics/aperturas, índice → URL), `confirmacion.js` (correo de doble opt-in), `csv.js` (lector sin librerías), `imagenStorage.js` (`uploads/mailing/{slug}/{uuid}.{ext}`, magic bytes, 2 MB), `paginaPublica.js`, `comun.js` (puerta, validación, serializado). |
+| **UI** | `modules/mailing/` (10; el sprint 2 añade `SecuenciasModule.jsx` y, dentro de `CampanaEditor.jsx`, el panel «Redactar con IA», el A/B con «Pedir alternativas a la IA», el ritmo y la tabla por variante): `MailingModule.jsx`, `CampanaEditor.jsx`, `ListaModule.jsx`, `SegmentosModule.jsx`, `BajasModule.jsx`, `Bloques.jsx` (lista de bloques y el formulario de cada tipo, subida de imagen), `EditorTexto.jsx` (contentEditable con 6 botones), `Cabecera.jsx` (pestañas y avisos: sin SES, demo, sandbox, remitente sin verificar), `api.js`. Configuración: tarjeta «Amazon SES» en `modules/config/tarjetas/Conexiones.jsx` (`AI_PROVIDERS.amazonSes` + `SesCamposField`), colocada en `ConfigModule.jsx` y registrada en `lib/configuracion/pestanas.js` (`amazonSes`, requiere `mailing`). |
+| **Modelos** | `models/tenant/`: `MailingContact` (`mailing_contacts`), `MailingSegment` (`mailing_segments`), `MailingCampaign` (`mailing_campaigns`; sprint 2: `tipo`, `sequence_id`+`periodo` UNIQUE, `asunto_b`, `ab_porcentaje`, `ab_espera_horas`, `ab_ganador`, `ab_decidido_at`, `ritmo_por_hora`), `MailingSend` (`mailing_sends`, **UNIQUE campaign_id+email**; sprint 2: `variante` y el estado `esperando`), `MailingSuppression` (`mailing_suppressions`, UNIQUE email, sin DELETE), `MailingTemplate` (`mailing_templates`), `MailingEvent` (`mailing_events`), **`MailingSequence`** (`mailing_sequences`, sprint 2). Registrados para todos los tenants en `lib/db/tenantDb.js`; las tablas las crean `migrate-mailing-sprint-1` y `migrate-mailing-sprint-2` (`MODULES.mailing`) solo donde el módulo está activo. |
+| **Interruptores y parámetros** | `featureFlags`/`logicOverrides`: ninguno. Por cliente, en `tenant.settings.integrations`: `sesSecretAccessKey` (cifrada), `sesAccessKeyId`, `sesRegion`, `sesFromEmail`, `sesFromName`, `sesConfigurationSet` (`PATCH /api/tenant/settings`); la IA usa la clave de Anthropic de siempre (`lib/ai/anthropicKey.js`) y respeta `settings.aiAccess = "restringido"` (`vetoAi`). Entorno: `MAILING_TOKEN_SECRET` (cae a `SETTINGS_ENCRYPTION_KEY`), `APP_PUBLIC_URL` (base de los enlaces desde el temporizador). |
 | **Pantallas propias** | ninguna. |
-| **Scripts** | Migración: `scripts/migrate-mailing-sprint-1.js` (`npm run db:migrate:mailing`; la lanza sola `enable-module.js <slug> mailing`). Temporizador: `scripts/enviar-mailing.js` cada minuto (`scripts/deploy/crm-mailing.{service,timer}`; `--simular` no toca nada). Demo: `scripts/seed-mailing-demo.js <demo>` y después `demo-golden-snapshot.js <demo>`. |
-| **Pruebas** | En `npm test` (todas `node:test`, ligeras): `_smoke-mailing-sigv4.mjs` (la firma contra los vectores oficiales de AWS), `_smoke-mailing-bloques-render.mjs` (lista blanca del HTML, render con marca, enlaces medidos con índices, texto plano), `_smoke-mailing-tokens-sns.mjs` (tokens HMAC, firma de SNS con un par RSA propio), `_smoke-mailing-audiencia-csv.mjs` (reglas, casilla, última cita, CSV, clasificación de rebotes). Con base y servidor: ninguna todavía. |
+| **Scripts** | Migraciones: `scripts/migrate-mailing-sprint-1.js` y `migrate-mailing-sprint-2.js` (`npm run db:migrate:mailing`, `db:migrate:mailing-2`; las lanza solas `enable-module.js <slug> mailing`). Temporizador: `scripts/enviar-mailing.js` cada minuto (`scripts/deploy/crm-mailing.{service,timer}`; desde el sprint 2 también dispara las secuencias; `--simular` no toca nada). Demo: `scripts/seed-mailing-demo.js <demo>` y después `demo-golden-snapshot.js <demo>`. |
+| **Pruebas** | En `npm test` (todas `node:test`, ligeras): `_smoke-mailing-sigv4.mjs` (la firma contra los vectores oficiales de AWS), `_smoke-mailing-bloques-render.mjs` (lista blanca del HTML, render con marca, enlaces medidos con índices, texto plano), `_smoke-mailing-tokens-sns.mjs` (tokens HMAC, firma de SNS con un par RSA propio), `_smoke-mailing-audiencia-csv.mjs` (reglas, casilla, última cita, CSV, clasificación de rebotes), `_smoke-mailing-sprint2.mjs` (reparto A/B, decisión del ganador, eventos de las secuencias con el 29 de febrero, parseo y prompt de la IA). Con base y servidor: ninguna todavía. |
 | **Decisiones** | `../decisions/2026-09-06-mailing-por-ses-y-no-por-resend.md` · plan original: `C:\Users\rodri\Desktop\Modulo-Mailing-Sprint-1.pdf` (Jorge, 23/08/2026). |
-| **En este doc** | Qué hace · Decisiones de arquitectura · De dónde sale la lista · El envío · Bajas y supresión · Métricas · Modelo de datos · API · Puesta en marcha en un cliente (AWS) · Reglas que no se rompen · Pendiente (sprint 2) |
+| **En este doc** | Qué hace · Decisiones de arquitectura · De dónde sale la lista · El envío · Bajas y supresión · Métricas · Sprint 2: IA, secuencias, historial en la ficha, A/B y ritmo · Modelo de datos · API · Puesta en marcha en un cliente (AWS) · Reglas que no se rompen · Pendiente |
 
 `moduleKey`: `mailing` · Ruta: `/mailing` · API: `/api/mailing/*`
 
@@ -51,8 +51,9 @@ clic, lista de supresión, contador de cuota y métricas de clic.
 | Contador de cuota (mes, coste, tasa de quejas, estado de la cuenta de AWS) | `/mailing` |
 | Métricas: clics (principal), aperturas (orientativas), por enlace, por destinatario | `/mailing/[id]` |
 
-Fuera del sprint 1, a propósito: generación con IA, secuencias automáticas,
-A/B de asunto e historial de campañas en la ficha del cliente.
+El sprint 2 (misma tarde) añadió: redacción con IA, secuencias por eventos del
+CRM, historial en la ficha del cliente y A/B de asunto con envío escalonado.
+Ver su sección más abajo.
 
 ---
 
@@ -182,6 +183,70 @@ lo pinchado por enlace y la lista de destinatarios con su estado.
 
 ---
 
+## Sprint 2: IA, secuencias, historial en la ficha, A/B y ritmo
+
+### Redactar con IA (`lib/mailing/ia.js`, `POST /api/mailing/campanas/[id]/ia`)
+
+- **La IA rellena bloques, nunca HTML** (decisión 1.3): se le pide un JSON con
+  asunto, preheader y bloques del catálogo; lo que devuelve pasa por
+  `normalizarBloques`, la misma lista blanca que lo que teclea una persona.
+- **Prohibido inventar**: el prompt lo dice con todas las letras (fechas,
+  precios, direcciones, nombres, testimonios, enlaces) y le manda dejar
+  `[corchetes]` donde falte un dato. Botón solo si la instrucción trae URL.
+  Es la lección de la IA de Captación.
+- Clave BYOK del tenant (`getTenantAnthropicKey`, sin clave → 503), modelo del
+  tenant, `vetoAi` para los empleados de un tenant restringido, y en las
+  cuatro demos `demoForcesFakeAi` → `fakeRedaccion` (sin coste). `accion:
+  "asuntos"` propone tres alternativas para el A/B.
+- No se guarda sola: la pantalla aplica la propuesta al editor y el guardado
+  automático la persiste, así que quien envía la revisa.
+
+### Secuencias por eventos (`lib/mailing/secuencias.js`, `/mailing/secuencias`)
+
+| Evento | Cuándo sale | Periodo de la campaña automática |
+| --- | --- | --- |
+| `alta` | `clients.created_at` + `dias` (0 = el mismo día); ventana de 30 días | `unica` (una vez por ficha, para siempre) |
+| `cumpleanos` | `clients.birth_date` cumple hoy (Madrid); el 29/02 se felicita el 28 en años no bisiestos | el año |
+| `sin_cita` | última cita pasada (no cancelada ni falta) + `dias`, cruzado en los últimos 30 días | el año (como mucho una vez al año por persona) |
+
+- `activada_desde` se sella al encender: **no se barre el histórico** (la
+  bienvenida no llega a las 1.083 familias de siempre).
+- Cada pasada del temporizador (`procesarSecuencias`, dentro de
+  `enviar-mailing.js`) copia el contenido de la secuencia a su campaña
+  automática (`tipo = "secuencia"`, `sequence_id` + `periodo` UNIQUE), mete a
+  los candidatos con `ignoreDuplicates` y llama a `avanzarCampana`. Mismo
+  motor, mismos enlaces de baja, misma supresión, mismas métricas.
+- Solo fichas (casilla de novedades): los correos sueltos no tienen alta ni
+  citas. `hora` (Madrid) es a partir de cuándo sale ese día.
+- Encender exige asunto, contenido y SES configurado, y pasa por el guard de
+  demo; `previsualizar` enseña a quién le tocaría hoy con el mismo cálculo.
+
+### Historial en la ficha (`GET /api/mailing/historial?clientId=`)
+
+`ClientMailingSection.jsx`, pestaña «Mailing» de la ficha al lado de WhatsApp:
+qué campañas y secuencias recibió (casadas por `origen_id` y por su correo
+actual), si abrió, cuántos clics, y arriba si hoy puede recibir (casilla) o
+está de baja (supresión). Sin módulo el endpoint da 403 y la pestaña no sale;
+sin envíos tampoco.
+
+### A/B de asunto y envío escalonado (`lib/mailing/envio.js`)
+
+- `asuntoB` + `abPorcentaje` (10–50 %) + `abEsperaHoras` (1–72). Al preparar,
+  `repartoAB` coge la muestra **a intervalos regulares** de la lista (no los N
+  primeros, que van por apellido), la alterna A/B y deja al resto en estado
+  `esperando`. Con menos de 20 destinatarios no hay prueba: todo con A y queda
+  escrito (`abGanador = "a"`).
+- Pasada la espera, `decidirGanadorAB` (lo dispara `avanzarCampana`, o sea la
+  pantalla o el temporizador) compara tasas de clic, si empatan aperturas, si
+  siguen igual A; libera a los que esperaban con el asunto ganador. Desde la
+  pantalla se puede decidir antes (`estado` → `decidir_ab`, con o sin variante
+  forzada). `metricas` devuelve la tabla por variante.
+- `ritmoPorHora`: `avanzarCampana` cuenta los enviados en los últimos 60 min y
+  no pasa de ahí; devuelve `limitado: true` y el temporizador la retoma al
+  minuto. La pantalla deja de insistir cuando un lote no procesa nada.
+
+---
+
 ## Modelo de datos
 
 | Tabla | Para qué | Detalle que importa |
@@ -193,6 +258,7 @@ lo pinchado por enlace y la lista de destinatarios con su estado.
 | `mailing_suppressions` | de aquí no sale nadie | UNIQUE email; sin FK; sin DELETE |
 | `mailing_templates` | firmas y campañas guardadas | mismo formato de bloques |
 | `mailing_events` | clics y aperturas | FK CASCADE a sends |
+| `mailing_sequences` | secuencias por eventos (sprint 2) | `activa`, `activada_desde`, `dias`, `hora`, contenido como una campaña |
 
 Imágenes: `uploads/mailing/{slug}/{uuid}.{ext}` (volumen de Docker, 2 MB,
 tipo por magic bytes), servidas públicamente por `/imagen/[nombre]` con caché
@@ -212,6 +278,9 @@ larga.
 | `GET/POST campanas` · `GET/PATCH/DELETE campanas/[id]` | campañas (PATCH solo en borrador/programada/pausada/cancelada) |
 | `POST campanas/[id]/prueba {emails}` · `enviar` · `avanzar` · `programar {fecha}` / `DELETE programar` · `estado {accion}` · `duplicar` | acciones |
 | `GET campanas/[id]/vista[?formato=texto]` · `GET campanas/[id]/metricas[?q=]` | vista previa (HTML aparte, para el iframe) y métricas |
+| `POST campanas/[id]/ia {accion: redactar|asuntos}` | redactar con IA / tres asuntos alternativos (sprint 2) |
+| `GET/POST secuencias` · `GET/PATCH/DELETE secuencias/[id]` · `GET secuencias/[id]/vista` · `GET secuencias/[id]/previsualizar` | secuencias por eventos (sprint 2) |
+| `GET historial?clientId=` | lo que ha recibido una ficha, para su pestaña (sprint 2) |
 | `GET/POST plantillas` · `PATCH/DELETE plantillas/[id]` | firmas (`tipo=firma`) y campañas guardadas |
 | `GET/POST supresiones` | la lista de bajas |
 | `POST imagenes` (multipart `fichero`) | sube una imagen y devuelve su URL pública |
@@ -255,12 +324,11 @@ Está paso a paso en la tarjeta de Configuración («Cómo conseguirla») y en
 
 ---
 
-## Pendiente (sprint 2, del plan)
+## Pendiente
 
-- Generación con IA de asunto y bloques (rellena bloques, no escribe HTML).
-- Secuencias por eventos del CRM (bienvenida al alta, cumpleaños, «hace seis
-  meses de tu última cita»).
-- Historial de campañas en la ficha del cliente, junto al hilo de WhatsApp.
-- A/B de asunto y envío escalonado.
-- Medir el consumo transaccional de Resend por cliente (100/día del plan
-  gratis), que no es de este módulo pero el plan pedía mirarlo antes.
+- Cumpleaños de los PACIENTES (hijos) en los centros clínicos: hoy la secuencia
+  mira la fecha de nacimiento de la ficha (la familia), que es donde está el
+  correo y el consentimiento. Si un centro lo pide, es un evento nuevo en
+  `EVENTOS` que lee `patients.birth_date` y escribe a la familia.
+- Ningún cliente real tiene el módulo todavía: falta su cuenta de AWS y salir
+  del sandbox.

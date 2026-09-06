@@ -767,7 +767,11 @@ export const MODULES = {
 
   // Email marketing por Amazon SES (06/09/2026): las siete tablas del sprint 1.
   // Aparte del correo transaccional (Resend) a propósito: docs/modules/mailing.md.
-  mailing: ["migrate-mailing-sprint-1"],
+  mailing: [
+    "migrate-mailing-sprint-1",
+    // Sprint 2 (06/09/2026): secuencias por eventos, A/B de asunto y ritmo.
+    "migrate-mailing-sprint-2",
+  ],
 };
 
 /**

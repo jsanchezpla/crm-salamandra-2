@@ -8,6 +8,7 @@ import { DataTypes } from "sequelize";
  *
  * `estado`:
  *   pendiente    en cola
+ *   esperando    (A/B de asunto) espera a que se decida el asunto ganador
  *   procesando   un lote la ha cogido (si el proceso muere, el temporizador
  *                la recupera pasados diez minutos)
  *   enviado      SES la aceptó (`sesMessageId`)
@@ -42,6 +43,8 @@ export function defineMailingSend(sequelize) {
       primerClicAt: { type: DataTypes.DATE, allowNull: true },
       aperturas: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
       clics: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+      // 'a' | 'b' en una campaña con A/B de asunto; NULL en el resto.
+      variante: { type: DataTypes.STRING(1), allowNull: true },
     },
     {
       tableName: "mailing_sends",
@@ -49,6 +52,8 @@ export function defineMailingSend(sequelize) {
         { unique: true, fields: ["campaign_id", "email"], name: "mailing_sends_campaign_email_uq" },
         { fields: ["campaign_id", "estado"], name: "mailing_sends_campaign_estado_idx" },
         { fields: ["ses_message_id"], name: "mailing_sends_ses_message_id_idx" },
+        { fields: ["campaign_id", "enviado_at"], name: "mailing_sends_campaign_enviado_idx" },
+        { fields: ["origen_id"], name: "mailing_sends_origen_idx" },
       ],
     }
   );

@@ -24,7 +24,7 @@ import { useRouter } from "next/navigation";
 import Select from "@/components/ui/Select.jsx";
 import { useDialogo } from "@/components/ui/Dialogo.jsx";
 import Cabecera from "./Cabecera.jsx";
-import { ListaDeBloques } from "./Bloques.jsx";
+import { ListaDeBloques, SubidaImagen } from "./Bloques.jsx";
 import { api, botonPrimario, botonSecundario, Chip, estiloPrimario, fecha, inputCls, num } from "./api.js";
 
 const EDITABLES = new Set(["borrador", "programada", "pausada", "cancelada"]);
@@ -73,6 +73,10 @@ export default function CampanaEditor({ id, vocab }) {
   const [ocupado, setOcupado] = useState(false);
   const [metricas, setMetricas] = useState(null);
   const [busquedaEnvios, setBusquedaEnvios] = useState("");
+  // Sprint 2: IA, A/B y ritmo.
+  const [ia, setIa] = useState({ abierto: false, instruccion: "", tono: "cercano", imagenUrl: "", ocupado: false, aviso: null });
+  const [asuntosIa, setAsuntosIa] = useState(null);
+  const [conAB, setConAB] = useState(false);
 
   // Lo que está en pantalla (puede ir por delante de lo guardado).
   const [form, setForm] = useState(null);
@@ -94,7 +98,12 @@ export default function CampanaEditor({ id, vocab }) {
         audiencia: c.campana.audiencia,
         segmentId: c.campana.segmentId ?? "",
         bloques: c.campana.bloques,
+        asuntoB: c.campana.asuntoB ?? "",
+        abPorcentaje: c.campana.abPorcentaje ?? 20,
+        abEsperaHoras: c.campana.abEsperaHoras ?? 4,
+        ritmoPorHora: c.campana.ritmoPorHora ?? "",
       });
+      setConAB(!!c.campana.asuntoB);
       setSegmentos(s.segmentos);
       setFirmas(f.plantillas);
     } catch (err) {
@@ -201,6 +210,36 @@ export default function CampanaEditor({ id, vocab }) {
     }
   };
 
+  const redactarConIa = () =>
+    accion(async () => {
+      setIa((x) => ({ ...x, ocupado: true, aviso: null }));
+      try {
+        const r = await api(`/campanas/${id}/ia`, { metodo: "POST", body: { accion: "redactar", instruccion: ia.instruccion, tono: ia.tono, imagenUrl: ia.imagenUrl || null } });
+        const p = r.propuesta;
+        cambiar({ asunto: p.asunto || form.asunto, preheader: p.preheader || form.preheader, bloques: p.bloques.length ? p.bloques : form.bloques });
+        setIa((x) => ({ ...x, aviso: r.simulado ? "Propuesta de ejemplo (en la demo la IA no gasta tokens). Revísala: la IA nunca tiene la última palabra." : "Propuesta aplicada. Revísala antes de enviar: la IA no inventa datos, pero tampoco los conoce; donde falte uno verás [corchetes]." }));
+      } finally {
+        setIa((x) => ({ ...x, ocupado: false }));
+      }
+    });
+
+  const proponerAsuntos = () =>
+    accion(async () => {
+      const r = await api(`/campanas/${id}/ia`, { metodo: "POST", body: { accion: "asuntos", asunto: form.asunto } });
+      setAsuntosIa(r.asuntos);
+    });
+
+  const decidirAB = (variante) =>
+    accion(async () => {
+      const ok = await confirmar({
+        titulo: variante ? `¿Mandar el resto con el asunto ${variante.toUpperCase()}?` : "¿Decidir ya el ganador?",
+        texto: variante ? "Se deja de esperar y el resto de la lista sale con ese asunto." : "Se elige por los clics que haya ahora mismo (si empatan, por aperturas) y sale el resto.",
+      });
+      if (!ok) return;
+      const r = await api(`/campanas/${id}/estado`, { metodo: "POST", body: { accion: "decidir_ab", variante } });
+      setCampana(r.campana);
+    });
+
   const enviarPrueba = () =>
     accion(async () => {
       const r = await api(`/campanas/${id}/prueba`, { metodo: "POST", body: { emails: emailPrueba.split(/[,\s;]+/).filter(Boolean) } });
@@ -216,7 +255,13 @@ export default function CampanaEditor({ id, vocab }) {
       while (seguir) {
         const r = await api(`/campanas/${id}/avanzar`, { metodo: "POST" });
         setCampana(r.campana);
-        seguir = r.campana.estado === "enviando" && r.lote && (r.lote.pendientes ?? 0) > 0 && !r.lote.pausada;
+        seguir =
+          r.campana.estado === "enviando" &&
+          r.lote &&
+          (r.lote.pendientes ?? 0) > 0 &&
+          !r.lote.pausada &&
+          !r.lote.limitado &&
+          (r.lote.procesados ?? 0) > 0; // sin nada que procesar ahora (A/B esperando, ritmo) sigue el temporizador
       }
     } catch (err) {
       setError(err.message);
@@ -356,7 +401,95 @@ export default function CampanaEditor({ id, vocab }) {
             <Campo label="Texto de previsualización" ayuda="Lo que el buzón enseña debajo del asunto. Si se deja vacío, coge las primeras palabras del correo.">
               <input className={inputCls} value={form.preheader} maxLength={200} disabled={!editable} onChange={(e) => cambiar({ preheader: e.target.value })} />
             </Campo>
+
+            {/* ── A/B de asunto y ritmo (sprint 2) ── */}
+            <div className="border-t border-gray-100 pt-3 space-y-3">
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={conAB}
+                  disabled={!editable}
+                  onChange={(e) => {
+                    setConAB(e.target.checked);
+                    if (!e.target.checked) cambiar({ asuntoB: "" });
+                  }}
+                />
+                Probar dos asuntos (A/B)
+                <span className="text-[11px] text-gray-400">· una parte de la lista recibe cada uno; el resto espera al que más clics tenga</span>
+              </label>
+              {conAB && (
+                <div className="grid gap-3 sm:grid-cols-[1fr_140px_140px]">
+                  <Campo label="Asunto B">
+                    <input className={inputCls} value={form.asuntoB} maxLength={200} disabled={!editable} onChange={(e) => cambiar({ asuntoB: e.target.value })} placeholder="La otra forma de decirlo" />
+                    {editable && estadoModulo?.ia?.disponible && (
+                      <button type="button" className="text-[11px] underline text-gray-500 hover:text-gray-800 mt-1" disabled={ocupado || !form.asunto} onClick={proponerAsuntos}>
+                        Pedir alternativas a la IA
+                      </button>
+                    )}
+                    {asuntosIa && (
+                      <ul className="mt-1 space-y-0.5">
+                        {asuntosIa.map((a) => (
+                          <li key={a}>
+                            <button type="button" className="text-xs text-left underline text-sky-700 hover:text-sky-900" onClick={() => { cambiar({ asuntoB: a }); setAsuntosIa(null); }}>{a}</button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </Campo>
+                  <Campo label="Muestra" ayuda="Parte de la lista que prueba (mitad A, mitad B).">
+                    <Select value={String(form.abPorcentaje)} disabled={!editable} onChange={(v) => cambiar({ abPorcentaje: Number(v) })} options={[10, 20, 30, 50].map((p) => ({ value: String(p), label: `${p} %` }))} />
+                  </Campo>
+                  <Campo label="Espera" ayuda="Antes de decidir el ganador.">
+                    <Select value={String(form.abEsperaHoras)} disabled={!editable} onChange={(v) => cambiar({ abEsperaHoras: Number(v) })} options={[1, 2, 4, 8, 24, 48].map((h) => ({ value: String(h), label: `${h} h` }))} />
+                  </Campo>
+                </div>
+              )}
+              <div className="grid gap-3 sm:grid-cols-[220px_1fr] items-end">
+                <Campo label="Ritmo de envío" ayuda="Escalonar protege la reputación de un dominio nuevo.">
+                  <Select
+                    value={String(form.ritmoPorHora || "")}
+                    disabled={!editable}
+                    onChange={(v) => cambiar({ ritmoPorHora: v ? Number(v) : null })}
+                    options={[{ value: "", label: "Tan rápido como deje AWS" }, ...[50, 100, 300, 1000, 3000].map((r) => ({ value: String(r), label: `${num(r)} por hora` }))]}
+                  />
+                </Campo>
+              </div>
+            </div>
           </div>
+
+          {/* ── Redactar con IA (sprint 2) ── */}
+          {editable && (
+            <div className="rounded-xl border border-gray-200 bg-white p-4">
+              <button type="button" className="flex w-full items-center justify-between text-left" onClick={() => setIa((x) => ({ ...x, abierto: !x.abierto }))}>
+                <span className="text-sm font-semibold text-gray-800">Redactar con IA</span>
+                <span className="text-xs text-gray-500">{ia.abierto ? "Ocultar" : estadoModulo?.ia?.disponible ? "Abrir" : "Sin clave de IA"}</span>
+              </button>
+              {ia.abierto && (
+                <div className="mt-3 space-y-3">
+                  {!estadoModulo?.ia?.disponible && (
+                    <p className="text-xs text-amber-700">Hace falta la clave de Anthropic del centro en Configuración → Conexiones. La IA es de pago por uso y sale de la cuenta del centro.</p>
+                  )}
+                  <Campo label="Qué quieres contar" ayuda="Cuanto más concreto, mejor: qué, para quién, fechas, enlaces. La IA no inventa lo que no le digas; donde falte un dato dejará [corchetes].">
+                    <textarea className={`${inputCls} h-24`} value={ia.instruccion} maxLength={3000} onChange={(e) => setIa((x) => ({ ...x, instruccion: e.target.value }))} placeholder="Abrimos plazas para el taller de gestión emocional: 4 martes de octubre a las 18:00, 60 € el ciclo, inscripción en https://…" />
+                  </Campo>
+                  <div className="grid gap-3 sm:grid-cols-[200px_1fr] items-start">
+                    <Campo label="Tono">
+                      <Select value={ia.tono} onChange={(v) => setIa((x) => ({ ...x, tono: v }))} options={[{ value: "cercano", label: "Cercano" }, { value: "profesional", label: "Profesional" }, { value: "entusiasta", label: "Entusiasta" }]} />
+                    </Campo>
+                    <Campo label="Imagen destacada (opcional)">
+                      <SubidaImagen url={ia.imagenUrl} onUrl={(u) => setIa((x) => ({ ...x, imagenUrl: u }))} disabled={ia.ocupado} />
+                    </Campo>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button type="button" className={botonPrimario} style={estiloPrimario} disabled={ia.ocupado || ocupado || !ia.instruccion.trim() || !estadoModulo?.ia?.disponible} onClick={redactarConIa}>
+                      {ia.ocupado ? "Redactando…" : form.bloques?.length ? "Redactar (sustituye el contenido)" : "Redactar"}
+                    </button>
+                    {ia.aviso && <span className="text-xs text-emerald-700">{ia.aviso}</span>}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           <ListaDeBloques
             bloques={form.bloques}
@@ -470,6 +603,19 @@ export default function CampanaEditor({ id, vocab }) {
                   <div className="text-[11px] text-gray-500 mt-1">{num(campana.fallidos)} fallidos · {num(campana.suprimidos)} suprimidos</div>
                 )}
                 {campana.ultimoError && <div className="text-[11px] text-red-600 mt-1">{campana.ultimoError}</div>}
+                {campana.asuntoB && !campana.abGanador && ["enviando", "pausada"].includes(campana.estado) && (
+                  <div className="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 space-y-1">
+                    <div><strong>Probando los dos asuntos.</strong> El resto espera al ganador{campana.empezadaAt ? `, que se decide hacia las ${fecha(new Date(new Date(campana.empezadaAt).getTime() + (campana.abEsperaHoras || 4) * 3600000))}` : ""}.</div>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <button type="button" className="underline" disabled={ocupado} onClick={() => decidirAB(null)}>Decidir ya por los clics</button>
+                      <button type="button" className="underline" disabled={ocupado} onClick={() => decidirAB("a")}>Mandar el resto con A</button>
+                      <button type="button" className="underline" disabled={ocupado} onClick={() => decidirAB("b")}>Mandar el resto con B</button>
+                    </div>
+                  </div>
+                )}
+                {campana.asuntoB && campana.abGanador && (
+                  <div className="text-[11px] text-gray-500 mt-1">Asunto ganador: <strong>{campana.abGanador.toUpperCase()}</strong> ({campana.abGanador === "b" ? campana.asuntoB : campana.asunto}){campana.abDecididoAt ? ` · decidido el ${fecha(campana.abDecididoAt)}` : ""}</div>
+                )}
                 <div className="flex flex-wrap gap-2 mt-3">
                   {campana.estado === "enviando" && <button type="button" className={botonSecundario} disabled={ocupado} onClick={() => cambiarEstado("pausar")}>Pausar</button>}
                   {campana.estado === "pausada" && (
@@ -533,6 +679,26 @@ export default function CampanaEditor({ id, vocab }) {
               </div>
             ))}
           </div>
+
+          {metricas.variantes && (
+            <div className="mt-5">
+              <h3 className="text-sm font-semibold text-gray-800 mb-2">A/B de asunto</h3>
+              <table className="w-full text-sm">
+                <tbody>
+                  {["a", "b"].map((v) => (
+                    <tr key={v} className={`border-t border-gray-100 ${metricas.campana.abGanador === v ? "bg-emerald-50" : ""}`}>
+                      <td className="py-1.5 pr-3 font-semibold text-gray-700 w-8">{v.toUpperCase()}</td>
+                      <td className="py-1.5 pr-3 text-gray-700 truncate max-w-[420px]">{metricas.variantes[v].asunto}</td>
+                      <td className="py-1.5 text-right tabular-nums text-gray-500">{num(metricas.variantes[v].enviados)} enviados</td>
+                      <td className="py-1.5 pl-3 text-right tabular-nums text-gray-900 font-medium">{metricas.variantes[v].tasaClics} % clics</td>
+                      <td className="py-1.5 pl-3 text-right tabular-nums text-gray-500">{metricas.variantes[v].tasaAperturas} % aperturas</td>
+                      <td className="py-1.5 pl-3 text-right text-xs text-emerald-700">{metricas.campana.abGanador === v ? "ganador" : ""}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {metricas.porEnlace.length > 0 && (
             <div className="mt-5">

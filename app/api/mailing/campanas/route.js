@@ -16,7 +16,10 @@ import { normalizarBloques } from "../../../../lib/mailing/bloques.js";
 export const GET = withTenant(async (_request, _rc, ctx) => {
   exigirMailing(ctx);
   const { MailingCampaign, MailingSegment } = ctx.tenantModels;
+  // Las campañas AUTOMÁTICAS de las secuencias (tipo "secuencia") viven en su
+  // pantalla; aquí saldrían como una campaña «Cumpleaños · 2026» sin botón.
   const filas = await MailingCampaign.findAll({
+    where: { tipo: "campana" },
     include: [{ model: MailingSegment, as: "segment", attributes: ["id", "nombre"], required: false }],
     order: [["updatedAt", "DESC"]],
     limit: 300,

@@ -56,6 +56,23 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
   if ("preheader" in body) cambios.preheader = texto(body.preheader, 200);
   if ("bloques" in body) cambios.bloques = normalizarBloques(body.bloques);
   if ("replyTo" in body) cambios.replyTo = body.replyTo ? emailValido(body.replyTo, "El correo de respuesta") : null;
+  // ── Sprint 2: A/B de asunto y envío escalonado ──
+  if ("asuntoB" in body) cambios.asuntoB = texto(body.asuntoB, 200);
+  if ("abPorcentaje" in body) {
+    const p = body.abPorcentaje == null || body.abPorcentaje === "" ? null : Math.round(Number(body.abPorcentaje));
+    if (p != null && (!Number.isFinite(p) || p < 10 || p > 50)) throw new ValidationError("La muestra del A/B va del 10 % al 50 %");
+    cambios.abPorcentaje = p;
+  }
+  if ("abEsperaHoras" in body) {
+    const h = body.abEsperaHoras == null || body.abEsperaHoras === "" ? null : Math.round(Number(body.abEsperaHoras));
+    if (h != null && (!Number.isFinite(h) || h < 1 || h > 72)) throw new ValidationError("La espera del A/B va de 1 a 72 horas");
+    cambios.abEsperaHoras = h;
+  }
+  if ("ritmoPorHora" in body) {
+    const r = body.ritmoPorHora == null || body.ritmoPorHora === "" ? null : Math.round(Number(body.ritmoPorHora));
+    if (r != null && (!Number.isFinite(r) || r < 10 || r > 100000)) throw new ValidationError("El ritmo por hora tiene que ser al menos 10");
+    cambios.ritmoPorHora = r;
+  }
   if ("audiencia" in body || "segmentId" in body) {
     const audiencia = body.audiencia ?? campana.audiencia;
     if (audiencia === "segmento") {

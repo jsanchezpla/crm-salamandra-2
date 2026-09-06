@@ -57,7 +57,7 @@ function Campo({ label, children, ayuda }) {
   );
 }
 
-function SubidaImagen({ url, onUrl, disabled }) {
+export function SubidaImagen({ url, onUrl, disabled }) {
   const [subiendo, setSubiendo] = useState(false);
   const [error, setError] = useState(null);
   const subir = async (fichero) => {

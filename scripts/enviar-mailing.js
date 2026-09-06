@@ -9,6 +9,8 @@
  * petición web»).
  *
  * Qué hace, por cada tenant ACTIVO con el módulo `mailing`:
+ *   0. Las SECUENCIAS activas (sprint 2): mete en su campaña automática a
+ *      quien le toque hoy (alta, cumpleaños, sin cita) y la avanza.
  *   1. Las campañas `programada` con `programada_para <= ahora` se PREPARAN
  *      (audiencia → filas de mailing_sends) y pasan a `enviando`.
  *   2. Las campañas `enviando` avanzan por lotes hasta agotar el presupuesto
@@ -29,6 +31,7 @@
 import { getMasterModels } from "../lib/db/masterDb.js";
 import { getTenantContextPorSlug } from "../lib/tenant/tenantResolver.js";
 import { avanzarCampana, campanasPendientesDeEnvio, prepararCampana } from "../lib/mailing/envio.js";
+import { procesarSecuencias } from "../lib/mailing/secuencias.js";
 import { getTenantSesConfig } from "../lib/mailing/ses.js";
 import { esSlugDemo } from "../lib/demo/demos.js";
 
@@ -64,6 +67,19 @@ async function main() {
       continue;
     }
     if (!getTenantSesConfig(ctx).configurado) continue;
+
+    // ── 0. Secuencias ──
+    if (!SIMULAR) {
+      try {
+        const r = await procesarSecuencias(ctx, { presupuestoMs: Math.max(5000, PRESUPUESTO_MS - (Date.now() - inicio) - 10000) });
+        for (const x of r) {
+          if (x.nuevos || x.enviados) log(`${tenant.slug}: secuencia «${x.nombre}» +${x.nuevos} nuevos, ${x.enviados} enviados`);
+          total += x.enviados;
+        }
+      } catch (err) {
+        log(`${tenant.slug}: ERROR en secuencias: ${err.message}`);
+      }
+    }
 
     let campanas;
     try {

@@ -19,6 +19,17 @@ import { DataTypes } from "sequelize";
  *
  * `audiencia`: "todos" (todo el que ha dicho que sí) o "segmento" (`segmentId`).
  *
+ * ── SPRINT 2 (06/09/2026) ─────────────────────────────────────────────────
+ * `tipo`: "campana" (la de siempre) o "secuencia" (contenedor AUTOMÁTICO que
+ * crea una secuencia por periodo: `sequenceId` + `periodo`, p. ej. el año de
+ * los cumpleaños). Las de tipo secuencia no salen en la lista de campañas.
+ *
+ * A/B de asunto: `asuntoB` + `abPorcentaje` (qué parte de la audiencia hace de
+ * prueba, mitad A y mitad B) + `abEsperaHoras`; pasado el tiempo,
+ * `decidirGanadorAB` apunta `abGanador` y libera al resto (que esperaba con
+ * estado `esperando` en `mailing_sends`). Envío escalonado: `ritmoPorHora`
+ * (NULL = tan rápido como deje AWS).
+ *
  * Los contadores (`totalDestinatarios`, `enviados`, `fallidos`, `suprimidos`)
  * son un RESUMEN que se recalcula desde `mailing_sends` al avanzar: la verdad
  * está en las filas.
@@ -45,12 +56,23 @@ export function defineMailingCampaign(sequelize) {
       suprimidos: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
       ultimoError: { type: DataTypes.TEXT, allowNull: true },
       createdBy: { type: DataTypes.STRING(255), allowNull: true },
+      // ── Sprint 2 ──
+      tipo: { type: DataTypes.STRING(20), allowNull: false, defaultValue: "campana" },
+      sequenceId: { type: DataTypes.UUID, allowNull: true },
+      periodo: { type: DataTypes.STRING(20), allowNull: true },
+      asuntoB: { type: DataTypes.STRING(200), allowNull: true },
+      abPorcentaje: { type: DataTypes.INTEGER, allowNull: true },
+      abEsperaHoras: { type: DataTypes.INTEGER, allowNull: true },
+      abGanador: { type: DataTypes.STRING(1), allowNull: true },
+      abDecididoAt: { type: DataTypes.DATE, allowNull: true },
+      ritmoPorHora: { type: DataTypes.INTEGER, allowNull: true },
     },
     {
       tableName: "mailing_campaigns",
       indexes: [
         { fields: ["estado"], name: "mailing_campaigns_estado_idx" },
         { fields: ["programada_para"], name: "mailing_campaigns_programada_idx" },
+        { fields: ["tipo"], name: "mailing_campaigns_tipo_idx" },
       ],
     }
   );

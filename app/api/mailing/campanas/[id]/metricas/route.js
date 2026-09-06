@@ -37,18 +37,43 @@ export const GET = withTenant(async (request, rc, ctx) => {
     raw: true,
   });
 
+  // A/B de asunto (sprint 2): cómo fue cada variante.
+  let variantes = null;
+  if (campana.asuntoB) {
+    const filasV = await MailingSend.findAll({
+      attributes: [
+        "variante",
+        [fn("count", col("id")), "enviados"],
+        [fn("sum", ctx.tenantSequelize.literal("CASE WHEN clics > 0 THEN 1 ELSE 0 END")), "clicaron"],
+        [fn("sum", ctx.tenantSequelize.literal("CASE WHEN aperturas > 0 THEN 1 ELSE 0 END")), "abrieron"],
+      ],
+      where: { campaignId: id, variante: { [Op.in]: ["a", "b"] }, estado: { [Op.in]: ["enviado", "rebotado", "queja"] } },
+      group: ["variante"],
+      raw: true,
+    });
+    variantes = { a: { asunto: campana.asunto, enviados: 0, clicaron: 0, abrieron: 0 }, b: { asunto: campana.asuntoB, enviados: 0, clicaron: 0, abrieron: 0 } };
+    for (const f of filasV) {
+      if (variantes[f.variante]) variantes[f.variante] = { ...variantes[f.variante], enviados: Number(f.enviados), clicaron: Number(f.clicaron), abrieron: Number(f.abrieron) };
+    }
+    for (const v of ["a", "b"]) {
+      variantes[v].tasaClics = variantes[v].enviados ? Math.round((variantes[v].clicaron / variantes[v].enviados) * 1000) / 10 : 0;
+      variantes[v].tasaAperturas = variantes[v].enviados ? Math.round((variantes[v].abrieron / variantes[v].enviados) * 1000) / 10 : 0;
+    }
+  }
+
   const q = (new URL(request.url).searchParams.get("q") || "").trim().toLowerCase();
   const where = { campaignId: id };
   if (q) where[Op.or] = [{ email: { [Op.iLike]: `%${q}%` } }, { nombre: { [Op.iLike]: `%${q}%` } }];
   const envios = await MailingSend.findAll({
     where,
-    attributes: ["id", "email", "nombre", "origen", "estado", "error", "enviadoAt", "abiertoAt", "primerClicAt", "aperturas", "clics"],
+    attributes: ["id", "email", "nombre", "origen", "estado", "error", "enviadoAt", "abiertoAt", "primerClicAt", "aperturas", "clics", "variante"],
     order: [["estado", "ASC"], ["email", "ASC"]],
     limit: 1000,
   });
 
   return ok({
-    campana: { id: campana.id, nombre: campana.nombre, estado: campana.estado, enviados: campana.enviados },
+    campana: { id: campana.id, nombre: campana.nombre, estado: campana.estado, enviados: campana.enviados, abGanador: campana.abGanador ?? null, abDecididoAt: campana.abDecididoAt ?? null },
+    variantes,
     resumen: {
       total: Object.values(porEstado).reduce((a, b) => a + b, 0),
       porEstado,
