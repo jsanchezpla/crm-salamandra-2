@@ -1637,7 +1637,10 @@ function DetailView({ invoice, puedeFacturar, onAction, onEdit, onOpenLinked, sa
                 className="px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide text-red-600 border border-red-200 hover:bg-red-50 disabled:opacity-40">Eliminar</button>
             </>
           )}
-          {invoice.status === "issued" && (
+          {/* Enviar (06/09/2026): cualquier factura emitida y viva, no solo la
+              recién emitida — las del lote de cuotas nacen cobradas y son
+              justo las que la contable quiere mandar. */}
+          {["issued", "sent", "paid", "partially_paid", "overdue"].includes(invoice.status) && !invoice.rectifiedByInvoiceId && !invoice.rectifiesInvoiceId && (
             <button onClick={() => onAction("send")} disabled={saving}
               title="Enviar la factura al cliente por email, con el PDF adjunto"
               aria-label="Enviar factura al cliente por email"

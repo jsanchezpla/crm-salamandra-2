@@ -14,6 +14,17 @@ import { isDemoTenant } from "../../../../../../lib/demo/isDemo.js";
 
 const VALID_VIA = new Set(["email", "whatsapp", "other"]);
 
+/*
+ * Qué facturas se pueden mandar (06/09/2026). Hasta hoy solo las `issued`, y
+ * las del lote de cuotas NACEN cobradas (`paid`): la contable no podía mandar
+ * por correo ni una sola factura del mes desde el CRM. Se manda cualquier
+ * factura emitida y viva —emitida, enviada, cobrada, a medias o vencida—; lo
+ * que no se manda es un borrador ni una anulada/rectificativa. El estado solo
+ * pasa a `sent` desde `issued`: una cobrada sigue cobrada, y el canal y la
+ * fecha del envío quedan en `customFields` como siempre.
+ */
+export const ESTADOS_ENVIABLES = ["issued", "sent", "paid", "partially_paid", "overdue"];
+
 /**
  * POST /api/billing/invoices/[id]/send
  *
@@ -51,9 +62,10 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       include: [...invoicePatientInclude(tenantModels, hasModule)],
     });
     if (!invoice) return notFound("Factura no encontrada");
-    if (invoice.status !== "issued") {
-      return error(`Solo se pueden marcar como enviadas las facturas en estado 'issued'. Estado actual: '${invoice.status}'.`, 422);
+    if (!ESTADOS_ENVIABLES.includes(invoice.status) || invoice.rectifiedByInvoiceId || invoice.rectifiesInvoiceId) {
+      return error(`Solo se pueden enviar facturas emitidas y vivas (emitida, enviada, cobrada o vencida). Estado actual: '${invoice.status}'.`, 422);
     }
+    const estadoAntes = invoice.status;
 
     // ── Envío real por email (con el PDF adjunto) ──────────────────────────
     // Se manda salvo que se pida explícitamente otro canal. Si no hay correo
@@ -142,7 +154,9 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       emailError = "El cliente no tiene correo ni en su ficha ni en sus tutores";
     }
 
-    const updates = { status: "sent" };
+    // Solo una factura recién emitida cambia de estado al mandarla: una cobrada
+    // sigue cobrada (el estado lo manda el dinero, no el correo).
+    const updates = estadoAntes === "issued" ? { status: "sent" } : {};
     updates.customFields = {
       ...(invoice.customFields || {}),
       sentVia: via || (emailEnviado ? "email" : "other"),
@@ -157,8 +171,8 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       action: "invoice.sent",
       entity: "Invoice",
       entityId: invoice.id,
-      before: { status: "issued" },
-      after: { status: "sent", via: via || (emailEnviado ? "email" : "other"), emailEnviado },
+      before: { status: estadoAntes },
+      after: { status: updates.status ?? estadoAntes, via: via || (emailEnviado ? "email" : "other"), emailEnviado },
       ip: request.headers.get("x-forwarded-for"),
     });
 

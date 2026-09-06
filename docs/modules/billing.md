@@ -1386,34 +1386,34 @@ explícitas.
 | `GET /costs` | Listado con filtros (`type`, `category`, `employeeId`, `partnerId`, `clientId`, `supplierId`, `from`, `to`) y orden whitelisted (incluye `supplier.name`). Devuelve `employee`, `client` y `supplier`. | — |
 | `POST /costs` | Crea coste; recalcula `taxAmount`/`total` desde `taxBase × vatRate` (`lib/billing/totalesGasto.js`, la misma función que el PATCH). Si no se indica `employeeId`, usa el `TeamMember` cuyo `userId` coincide con el del solicitante. Campos aceptados en `lib/billing/camposGasto.js`; `supplierId` opcional y comprobado contra `Supplier` del tenant (404 si no existe). | — |
 | `GET /costs/[id]` | Detalle con `employee`, `client` y `supplier`. | — |
-| `PATCH /costs/[id]` | Edita (mismos campos aceptados que el POST, con la misma comprobación del proveedor) y recalcula totales si cambian `taxBase`/`vatRate`. | Solo admin/superadmin. |
-| `DELETE /costs/[id]` | Borra. | Solo admin/superadmin. |
+| `PATCH /costs/[id]` | Edita (mismos campos aceptados que el POST, con la misma comprobación del proveedor) y recalcula totales si cambian `taxBase`/`vatRate`. | Con `billing`; el rol no gatea (`lib/auth/permisos.js`: el dinero se gatea por módulo, nunca por rol). |
+| `DELETE /costs/[id]` | Borra. | Con `billing`; el rol no gatea (`lib/auth/permisos.js`: el dinero se gatea por módulo, nunca por rol). |
 
 ### Payments
 
 | Método y ruta | Propósito | Restricciones |
 | --- | --- | --- |
 | `GET /payments` | Listado paginado con filtros (`invoiceId`, `status`, `method`, `from`, `to`) y orden whitelisted. | — |
-| `POST /payments` | Registra cobro y dispara `updateInvoiceStatus`. Rechaza si excede el pendiente. | Solo admin/superadmin. |
+| `POST /payments` | Registra cobro y dispara `updateInvoiceStatus`. Rechaza si excede el pendiente. | Con `billing`; el rol no gatea (`lib/auth/permisos.js`: el dinero se gatea por módulo, nunca por rol). |
 | `GET /payments/[id]` | Detalle con `invoice`. | — |
-| `PATCH /payments/[id]` | Cambia `status`/`amount`/`method`/`paidAt`/`notes` y, desde el 31/08/2026, `invoiceId`: asocia un cobro suelto a una factura (viva, del mismo cliente, sin exceder el pendiente) o lo desasocia (`null`; rechaza si el cobro quedaría sin cliente). Recalcula las DOS facturas tocadas. `periodMonth` no se toca. | Solo admin/superadmin. |
-| `DELETE /payments/[id]` | Borra y recalcula la factura. | Solo admin/superadmin. |
+| `PATCH /payments/[id]` | Cambia `status`/`amount`/`method`/`paidAt`/`notes` y, desde el 31/08/2026, `invoiceId`: asocia un cobro suelto a una factura (viva, del mismo cliente, sin exceder el pendiente) o lo desasocia (`null`; rechaza si el cobro quedaría sin cliente). Recalcula las DOS facturas tocadas. `periodMonth` no se toca. | Con `billing`; el rol no gatea (`lib/auth/permisos.js`: el dinero se gatea por módulo, nunca por rol). |
+| `DELETE /payments/[id]` | Borra y recalcula la factura. | Con `billing`; el rol no gatea (`lib/auth/permisos.js`: el dinero se gatea por módulo, nunca por rol). |
 
 ### Series
 
 | Método y ruta | Propósito | Restricciones |
 | --- | --- | --- |
 | `GET /series` | Lista todas, ordenadas por `isDefault`/`code`. | — |
-| `POST /series` | Crea serie nueva. Valida `code` (`^[A-Z0-9]{1,8}$`) y `year`. | Solo admin/superadmin. |
-| `PATCH /series/[id]` | Cambia `name`, `prefix`, `isDefault`. **No permite editar `nextNumber`**. | Solo admin/superadmin. |
-| `DELETE /series/[id]` | Borra serie. `409` si hay facturas usándola. | Solo admin/superadmin. |
+| `POST /series` | Crea serie nueva. Valida `code` (`^[A-Z0-9]{1,8}$`) y `year`. | Con `billing`; el rol no gatea (`lib/auth/permisos.js`: el dinero se gatea por módulo, nunca por rol). |
+| `PATCH /series/[id]` | Cambia `name`, `prefix`, `isDefault`. **No permite editar `nextNumber`**. | Con `billing`; el rol no gatea (`lib/auth/permisos.js`: el dinero se gatea por módulo, nunca por rol). |
+| `DELETE /series/[id]` | Borra serie. `409` si hay facturas usándola. | Con `billing`; el rol no gatea (`lib/auth/permisos.js`: el dinero se gatea por módulo, nunca por rol). |
 
 ### Settings
 
 | Método y ruta | Propósito | Restricciones |
 | --- | --- | --- |
 | `GET /settings` | Devuelve la fila única (la crea vacía si no existe). | — |
-| `PUT /settings` | Actualiza datos fiscales, IVA, términos de pago, branding. Valida `availableVatRates` como array de números 0-100. | Solo admin/superadmin. |
+| `PUT /settings` | Actualiza datos fiscales, IVA, términos de pago, branding. Valida `availableVatRates` como array de números 0-100. | Con `billing`; el rol no gatea (`lib/auth/permisos.js`: el dinero se gatea por módulo, nunca por rol). |
 
 ### Recurring
 
@@ -1423,11 +1423,11 @@ admin/superadmin.
 | Método y ruta | Propósito | Restricciones |
 | --- | --- | --- |
 | `GET /recurring` | Lista con filtros `active`, `clientId` y orden whitelisted. | — |
-| `POST /recurring` | Crea recurrencia. | Solo admin/superadmin. |
+| `POST /recurring` | Crea recurrencia. | Con `billing`; el rol no gatea (`lib/auth/permisos.js`: el dinero se gatea por módulo, nunca por rol). |
 | `GET /recurring/[id]` | Detalle. | — |
-| `PATCH /recurring/[id]` | Activa/desactiva, cambia frecuencia/`nextRunAt`/template. | Solo admin/superadmin. |
-| `POST /recurring/[id]` | Genera **un borrador** desde el template y avanza `nextRunAt`. | Solo admin/superadmin. |
-| `DELETE /recurring/[id]` | Borra recurrencia. | Solo admin/superadmin. |
+| `PATCH /recurring/[id]` | Activa/desactiva, cambia frecuencia/`nextRunAt`/template. | Con `billing`; el rol no gatea (`lib/auth/permisos.js`: el dinero se gatea por módulo, nunca por rol). |
+| `POST /recurring/[id]` | Genera **un borrador** desde el template y avanza `nextRunAt`. | Con `billing`; el rol no gatea (`lib/auth/permisos.js`: el dinero se gatea por módulo, nunca por rol). |
+| `DELETE /recurring/[id]` | Borra recurrencia. | Con `billing`; el rol no gatea (`lib/auth/permisos.js`: el dinero se gatea por módulo, nunca por rol). |
 
 ### Analytics
 
@@ -1769,6 +1769,26 @@ pagador» desde el 01/09.
 - **La pantalla de Facturas caía entera** desde el 04/09 (un `useEffect` leía `form.clientId` antes del `useState`): `_smoke-facturas-orden-hooks.mjs` vigila el orden.
 - **La factura por correo va también a los tutores cuando la ficha no tiene correo** (06/09/2026, Rodrigo, mismo criterio que el registro de sesión): `send/route.js` usa `correosParaAvisar`, manda uno por destinatario y guarda `sentTo` con todos.
 - **Un solo cobro por cuota y mes** (06/09/2026): índice único parcial `payments_cuota_periodo_unica (cuota_id, period_month) WHERE cuota_id IS NOT NULL` (`scripts/migrate-payments-cuota-unica.js`, ANTES del despliegue, y cuenta los duplicados antes de crearlo); `esCobroRepetido(err)` (23505) lo capturan `sincronizarCobroDelMes` («al día») y el lote («repetida»). Y «Cobrado» de la portada corta el mes en hora de Madrid (`paid_at AT TIME ZONE 'Europe/Madrid'`), como Caja. `_smoke-cobro-cuota-unico.mjs`.
+
+### Lo que salió por la tarde, al escribir la guía para la contable (06/09/2026)
+
+- **«Enviar» en cualquier factura emitida y viva.** `POST /invoices/[id]/send`
+  solo aceptaba `issued`, y el botón de la ficha también: las facturas del lote
+  de cuotas NACEN `paid`, así que no se podía mandar por correo ni una del mes.
+  Ahora (`ESTADOS_ENVIABLES` en la ruta: emitida, enviada, cobrada, a medias o
+  vencida; nunca borrador, anulada ni rectificativa) se manda cualquiera, y el
+  estado solo pasa a `sent` desde `issued`: una cobrada sigue cobrada, el
+  canal y la fecha quedan en `customFields.sentVia/sentAt` como siempre.
+  `_smoke-enviar-factura-estados.mjs`.
+- **El drawer de «Registrar cobro» avisa del cobro pendiente que va a cobrar.**
+  `GET /payments/mes` ya devolvía `pendientes`; ahora la pantalla lo lee y,
+  en modo cuota, dice debajo del importe «Este mes ya tiene su cobro pendiente
+  (X €): al registrar, ese cobro pasa a cobrado… No se crea otra fila» (o, con
+  varios, que solo se cobran todos si el importe es exactamente la suma). Misma
+  regla de paciente que el POST: con paciente elegido, solo los suyos.
+- **Las filas de la tabla de endpoints que decían «Solo admin/superadmin»**
+  (costs, payments, series, settings) estaban mal desde el 04/09: ninguno gatea
+  por rol.
 
 ## El reparto de las facturas entre tutores (06/09/2026)
 
