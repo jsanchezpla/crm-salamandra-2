@@ -113,6 +113,9 @@ const PIERDEN_ALGO = [
   // `inventory` estuvo aquí hasta el 03/09/2026 (ver NO_SE_VENDEN_SOLOS).
   "calendar",
   "analytics",
+  // Mailing (06/09/2026): sin Clientes manda igual a los correos sueltos; sin
+  // Citas pierde el filtro de «última cita». Dos parciales, ninguna obligatoria.
+  "mailing",
 ];
 
 /** Lo que funciona solo al 100 %. */
@@ -886,7 +889,7 @@ describe("matrizCompleta / sinEstudiar: la tabla del back-office, lo más roto a
       // 16 rojos desde el 03/09/2026: `productos_avanzado` (exige el básico)
       // e `inventory` (que sube de ámbar al colgar de Productos) sobre los 14
       // del 29/08. Un ámbar menos por eso, y un verde más: `productos`.
-      [16, 6, 5]
+      [16, 7, 5]
     );
   });
 

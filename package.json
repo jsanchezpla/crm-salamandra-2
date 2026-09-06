@@ -24,6 +24,8 @@
     "db:migrate:correo-cuenta": "node --env-file=.env.local scripts/migrate-users-email-contacto.js",
     "db:migrate:recuperacion": "node --env-file=.env.local scripts/migrate-users-recuperacion.js",
     "db:migrate:calendario-global": "node --env-file=.env.local scripts/migrate-calendario-global.js",
+    "db:migrate:mailing": "node --env-file=.env.local scripts/migrate-mailing-sprint-1.js",
+    "db:migrate:mailing:prod": "node --env-file=.env.production scripts/migrate-mailing-sprint-1.js",
     "db:migrate:team": "node --env-file=.env.local scripts/migrate-team-fields.js",
     "db:migrate:team:prod": "node --env-file=.env.production scripts/migrate-team-fields.js",
     "db:seed:team": "node --env-file=.env.local scripts/seed-team-demo.js",

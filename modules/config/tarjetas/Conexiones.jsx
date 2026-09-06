@@ -149,6 +149,24 @@ export const AI_PROVIDERS = {
     ],
     note: "El acceso es de SOLO LECTURA (PSD2): con estas claves no se puede mover dinero. El consentimiento del banco dura 90 días y se renueva desde la pantalla de Banco.",
   },
+  amazonSes: {
+    title: "Amazon SES — Secret Access Key",
+    subtitle:
+      "El correo del módulo Mailing (campañas y newsletters). Sale de TU cuenta de AWS, a 0,10 $ por cada 1.000 correos y sin cuota mensual. Aparte de Resend a propósito: una campaña con quejas no puede arrastrar los recordatorios de cita.",
+    field: "sesSecretAccessKey",
+    prefix: "",
+    platformUrl: "https://console.aws.amazon.com/ses/home",
+    platformLabel: "Abrir la consola de Amazon SES",
+    steps: [
+      "Crea una cuenta en aws.amazon.com (o usa la de tu empresa) y entra en Amazon SES eligiendo una región europea (p. ej. eu-west-1, Irlanda).",
+      "En SES → Identities, verifica el dominio desde el que vas a enviar (SES te da los registros DNS: DKIM y, si quieres, MAIL FROM). Un dominio verificado vale para cualquier remitente de ese dominio.",
+      "En IAM → Users, crea un usuario solo para el CRM con la política AmazonSESFullAccess (o una que permita ses:SendEmail y ses:GetAccount) y genera una Access Key. Copia el Access Key ID y la Secret Access Key: la secreta solo se enseña una vez.",
+      "Pega aquí la Secret Access Key y, abajo, el Access Key ID, la región y el remitente. Guarda.",
+      "Pide a AWS salir del modo de pruebas (SES → Account dashboard → Request production access). En el sandbox solo se puede escribir a direcciones verificadas y 200 correos al día; suelen contestar en un día.",
+      "Opcional pero recomendado: crea un Configuration set con destino SNS (eventos Bounce y Complaint), suscribe a ese tema la URL del webhook de abajo y escribe aquí el nombre del set. Así los rebotes y las quejas entran solos en la lista de supresión.",
+    ],
+    note: "El envío desde el CRM cuesta lo que cobra AWS: 0,10 $ por cada 1.000 correos (una campaña de 340 correos son 3 céntimos). El módulo enseña lo gastado en el mes.",
+  },
   googleCalendar: {
     title: "Google Calendar",
     subtitle:
@@ -698,6 +716,118 @@ export function CloudflareIdsField({ accountId, siteTag, ready, isAdmin, onSaveA
         {ready
           ? "Listo: el módulo Analíticas ya puede leer las visitas."
           : "Faltan datos: hacen falta el token y el identificador de cuenta para que Analíticas funcione."}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Los datos NO secretos de Amazon SES (módulo Mailing, 06/09/2026): Access Key
+ * ID, región, remitente, nombre del remitente y configuration set. Se guardan
+ * de una vez. Debajo, la URL del webhook que hay que suscribir en SNS.
+ */
+export function SesCamposField({ valores, ready, isAdmin, slug, onSave }) {
+  const inicial = {
+    sesAccessKeyId: valores?.accessKeyId ?? "",
+    sesRegion: valores?.region ?? "",
+    sesFromEmail: valores?.fromEmail ?? "",
+    sesFromName: valores?.fromName ?? "",
+    sesConfigurationSet: valores?.configurationSet ?? "",
+  };
+  const [v, setV] = useState(inicial);
+  const [busy, setBusy] = useState(false);
+  const [copiado, setCopiado] = useState(false);
+  useEffect(() => {
+    setV({
+      sesAccessKeyId: valores?.accessKeyId ?? "",
+      sesRegion: valores?.region ?? "",
+      sesFromEmail: valores?.fromEmail ?? "",
+      sesFromName: valores?.fromName ?? "",
+      sesConfigurationSet: valores?.configurationSet ?? "",
+    });
+  }, [valores?.accessKeyId, valores?.region, valores?.fromEmail, valores?.fromName, valores?.configurationSet]);
+  const sucio = Object.keys(inicial).some((k) => (v[k] ?? "").trim() !== (inicial[k] ?? ""));
+  const urlWebhook = typeof window !== "undefined" && slug ? `${window.location.origin}/api/webhooks/ses/${slug}` : "";
+
+  async function copiar() {
+    try {
+      await navigator.clipboard.writeText(urlWebhook);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2000);
+    } catch {
+      /* sin portapapeles: queda visible para copiar a mano */
+    }
+  }
+  async function guardar() {
+    setBusy(true);
+    try {
+      const campos = {};
+      for (const k of Object.keys(inicial)) campos[k] = (v[k] ?? "").trim() || null;
+      await onSave(campos);
+    } finally {
+      setBusy(false);
+    }
+  }
+  const campo = (k, etiqueta, placeholder, ayuda, mono = true) => (
+    <div>
+      <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">{etiqueta}</label>
+      {ayuda && <p className="text-[11px] text-neutral-400 mt-0.5 mb-1">{ayuda}</p>}
+      <input
+        disabled={!isAdmin}
+        value={v[k]}
+        onChange={(e) => setV((p) => ({ ...p, [k]: e.target.value }))}
+        placeholder={placeholder}
+        className={inputCls + (mono ? " font-mono" : "")}
+      />
+    </div>
+  );
+
+  return (
+    <div className="mt-4 pt-4 border-t border-neutral-100 space-y-3">
+      {campo("sesAccessKeyId", "Access Key ID", "AKIA…", "La pareja de la clave secreta: IAM las da juntas.")}
+      <div className="grid gap-3 sm:grid-cols-2">
+        {campo("sesRegion", "Región", "eu-west-1", "La región de SES donde verificaste el dominio.")}
+        {campo("sesConfigurationSet", "Configuration set (opcional)", "crm-mailing", "El que manda rebotes y quejas al webhook.")}
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {campo("sesFromEmail", "Remitente", "novedades@tucentro.com", "De un dominio verificado en TU cuenta de SES.")}
+        {campo("sesFromName", "Nombre del remitente", "Centro Ejemplo", "Lo que se lee delante del correo.", false)}
+      </div>
+      {isAdmin && sucio && (
+        <button
+          onClick={guardar}
+          disabled={busy}
+          className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white disabled:opacity-40"
+          style={{ background: "var(--color-primary, #1B3A2D)" }}
+        >
+          {busy ? "..." : "Guardar datos de SES"}
+        </button>
+      )}
+
+      {urlWebhook && (
+        <div className="mt-2">
+          <div className="text-xs text-neutral-500 mb-2">
+            URL del webhook de rebotes y quejas (suscríbela por HTTPS al tema de SNS del configuration set):
+          </div>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 min-w-0 truncate text-[12px] bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-700">
+              {urlWebhook}
+            </code>
+            <button
+              type="button"
+              onClick={copiar}
+              className="shrink-0 text-xs px-3 py-2 rounded-lg border border-neutral-200 text-neutral-600 hover:border-neutral-400 transition"
+            >
+              {copiado ? "Copiada" : "Copiar"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <p className={`text-[11px] ${ready ? "text-emerald-600" : "text-amber-600"}`}>
+        {ready
+          ? "Credenciales listas: el módulo Mailing puede enviar. Comprueba en /mailing si la cuenta sigue en el modo de pruebas."
+          : "Faltan datos: hacen falta la clave secreta, el Access Key ID, la región y el remitente."}
       </p>
     </div>
   );

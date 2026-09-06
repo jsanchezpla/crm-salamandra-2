@@ -1,4 +1,4 @@
-# Cuentas externas que hay que dar de alta (Resend y Google)
+# Cuentas externas que hay que dar de alta (Resend, Google y Amazon SES)
 
 Guía práctica para Jorge/Rodrigo. Son los dos trámites que hoy bloquean
 funciones ya construidas del CRM. Ninguno lo puede hacer Claude: implican crear
@@ -107,6 +107,68 @@ cancelarla.
 
 **Mientras tanto** el enlace de videollamada se pega a mano y se manda con
 «Guardar y enviar», que cubre el día a día.
+
+---
+
+## 3. Amazon SES — el correo del módulo Mailing (06/09/2026)
+
+Es **por cliente**: cada centro que compre Mailing necesita su cuenta de AWS
+(la decisión y el porqué, en
+`decisions/2026-09-06-mailing-por-ses-y-no-por-resend.md`). Lo puede hacer el
+cliente o nosotros con sus credenciales; los pasos también salen en
+Configuración → Conexiones → Amazon SES → «Cómo conseguirla».
+
+### Pasos
+
+1. **Cuenta de AWS** en <https://aws.amazon.com> (tarjeta obligatoria; el
+   gasto real son céntimos: 0,10 $ por cada 1.000 correos).
+2. En la consola, **Amazon SES**, eligiendo una región europea (recomendado
+   `eu-west-1`, Irlanda). Anotar la región.
+3. **SES → Identities → Create identity → Domain**: el dominio desde el que va
+   a enviar (`tucentro.com`). SES da 3 registros CNAME de DKIM para añadir en
+   el DNS del cliente. Verificado el dominio, vale cualquier remitente suyo
+   (`novedades@tucentro.com`).
+4. **IAM → Users → Create user**: un usuario solo para el CRM (p. ej.
+   `crm-mailing`), sin acceso a la consola, con la política
+   `AmazonSESFullAccess` (o una a medida con `ses:SendEmail`, `ses:GetAccount`
+   y `ses:GetEmailIdentity`). Después **Security credentials → Create access
+   key** (tipo «Application running outside AWS»). Copiar Access Key ID y
+   Secret Access Key: la secreta solo se enseña una vez.
+5. Pegar en el CRM, **Configuración → Conexiones → Amazon SES**: la secreta en
+   la tarjeta, y debajo el Access Key ID, la región y el remitente (con su
+   nombre). Guardar. La tarjeta dice «Credenciales listas» y `/mailing`
+   comprueba la cuenta al abrirse.
+6. **Salir del modo de pruebas**: SES → Account dashboard → *Request
+   production access*. Rellenar el formulario (uso: newsletters a clientes que
+   han aceptado; volumen estimado; cómo se gestionan bajas y rebotes: enlace de
+   baja de un clic en cada correo y supresión automática). Suelen contestar en
+   24 h. Hasta entonces: 200 correos/día y solo a direcciones verificadas.
+7. **Rebotes y quejas al CRM** (recomendado): SES → Configuration sets →
+   Create (`crm-mailing`) → Event destinations → Add: eventos *Bounce* y
+   *Complaint*, destino **Amazon SNS**, crear un tema. En SNS, en ese tema,
+   **Create subscription → HTTPS** con la URL que enseña la tarjeta:
+   `https://crm.salamandrasolutions.com/api/webhooks/ses/<slug>`. El CRM
+   confirma la suscripción solo. Escribir `crm-mailing` en el campo
+   *Configuration set* de la tarjeta.
+8. En el VPS, si es el primer cliente con Mailing, instalar el temporizador
+   una vez:
+
+   ```
+   cp /opt/crm-salamandra/scripts/deploy/crm-mailing.{service,timer} /etc/systemd/system/
+   systemctl daemon-reload && systemctl enable --now crm-mailing.timer
+   systemctl list-timers | grep crm-mailing
+   ```
+
+⚠️ **Las claves de AWS NO se pegan en un chat.** Se pegan en la tarjeta de
+Configuración (cifradas en reposo) o las pone el cliente.
+
+### Después de eso
+
+- Activar el módulo: `docker exec crm-salamandra-app-1 node scripts/enable-module.js <slug> mailing`.
+- Mandar una **prueba** desde `/mailing/[campaña]` a una dirección del equipo
+  antes de la primera campaña real: si la cuenta sigue en sandbox, esa
+  dirección tiene que estar verificada en SES.
+- Vigilar la **tasa de quejas** en `/mailing`: AWS revisa al 0,1 % y para al 0,5 %.
 
 ---
 

@@ -25,6 +25,7 @@ import {
   EstadoCobro,
   EventosWebhook,
   GoogleCalendarIdField,
+  SesCamposField,
   UrlWebhook,
   WhatsappPhoneField,
 } from "./tarjetas/Conexiones.jsx";
@@ -744,6 +745,30 @@ export default function ConfigModule({ modulos = null }) {
                   ready={!!cfg.integrations?.googleCalendar?.ready}
                   isAdmin={isAdmin}
                   onSave={(v) => patchTenant({ googleCalendarClientId: v }, "ID de cliente de Google guardado")}
+                />
+              }
+            />
+          )}
+
+          {/* ── Amazon SES (06/09/2026) ──────────────────────────────────────
+              Credenciales del módulo Mailing. Aparte de Resend A PROPÓSITO:
+              el marketing sale por SES y los recordatorios por Resend, para
+              que una campaña con quejas no arrastre las citas. */}
+          {enZona(
+            "amazonSes",
+            <ApiKeyCard
+              provider={AI_PROVIDERS.amazonSes}
+              status={cfg.integrations?.ses}
+              isAdmin={isAdmin}
+              onSave={(value) => patchTenant({ sesSecretAccessKey: value }, "Clave secreta de Amazon SES guardada")}
+              onClear={() => patchTenant({ sesSecretAccessKey: null }, "Clave secreta de Amazon SES eliminada")}
+              extra={
+                <SesCamposField
+                  valores={cfg.integrations?.ses ?? {}}
+                  ready={!!cfg.integrations?.ses?.ready}
+                  isAdmin={isAdmin}
+                  slug={cfg.slug}
+                  onSave={(campos) => patchTenant(campos, "Datos de Amazon SES guardados")}
                 />
               }
             />

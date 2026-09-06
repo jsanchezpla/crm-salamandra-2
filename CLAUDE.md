@@ -34,7 +34,7 @@ actualiza el doc.
 | `booking.md` | `booking` | `tienda.md` | `tienda` |
 | `fichaje.md` | `fichaje` | `configuracion.md` | — (siempre visible) |
 | `emails.md` | — (infra transversal) | `buzon.md` | — (todos, `/ayuda`) |
-| `banco.md` | `billing_banco` | | |
+| `banco.md` | `billing_banco` | `mailing.md` | `mailing` |
 
 Sin doc dedicado: `calendar`, `provisioning` (`lib/provisioning/`).
 `docs/base/` es una foto técnica del 07/08/2026 (léela con su aviso);
@@ -240,6 +240,7 @@ comercial es `leads`), `referidos` (12/08), `cuestionarios` (10/08: pantalla de
 | `booking` | Contratación de actuaciones (agencias de management y artistas) | **No trae pantallas: cambia las que hay.** Embudo de Leads → `EMBUDO_BOOKING` (`lib/leads/embudos.js`), `/leads` se rotula «Propuestas» y Clientes «Contratantes» (`lib/clients/vocabulario.js`). Requiere `clients` + `leads`. Es el primer módulo que decide vocabulario y embudo, y **se pregunta por módulo, nunca por slug**. Reina: `laura_ubeda`. |
 | — | **Correo** (`/correo`): un mensaje a muchos, eligiendo remitente | Sin `moduleKey`: se ve con `clients` **o** `outreach`. Manda UNO POR DESTINATARIO (nadie ve la lista de los demás). Remitentes en `settings.integrations.remitentes` (`lib/email/remitentes.js`), con caída al `resendFromEmail` de siempre. El dry-run se cuenta como «simulado», nunca como enviado. Desde el 26/08/2026 habla el idioma del centro (`vocabulario.js`, nada de «Contratantes» en una clínica), con `pacientes` lista tutores+pacientes y filtra por profesional/terapia, y tiene listas guardadas, plantillas ilimitadas, adjuntos (imagen/PDF) y pies de firma por persona (tablas `correo_*`, `lib/correo/`). |
 | `support` | Helpdesk hacia SUS clientes: nº correlativo, SLA, portal público | Correo ENTRANTE aún sin dar de alta en Resend. |
+| `mailing` | Email marketing (06/09/2026): campañas y newsletters a quien ya es cliente y ha marcado la casilla «novedades» (`lib/clients/comunicaciones.js`) + correos sueltos con consentimiento; editor por bloques, segmentos, envío por lotes reanudable, bajas de un clic, supresión, cuota y métricas de clic | **Sale por Amazon SES (BYOK, una cuenta por cliente), NUNCA por Resend**: el marketing no comparte cuenta con los recordatorios (`docs/decisions/2026-09-06-mailing-por-ses-y-no-por-resend.md`). Sin SDK de AWS (`lib/mailing/sigv4.js`). No requiere `clients` (sin él, solo correos sueltos). Temporizador `crm-mailing.timer` cada minuto. Pantalla `/mailing`. |
 | `analytics` | Visitas web (Cloudflare) | Credenciales POR CLIENTE; sin ellas, «sin configurar». Vive en el área Comercial del menú. |
 | `fichaje` | Control horario desde el Excel del reloj | Universal por dentro; cada cliente = un lector en `lib/fichaje/parsers/` + línea en `POR_TENANT`. Requiere `team`, NO `team_avanzado`. |
 | `provisioning` | Back-office: alta, edición, suspensión, credenciales y baja de clientes | Solo `salamandra_solutions`. Piezas: `altaTenant.js`, `cicloVida.js`, `credencialesCliente.js` (solo escribe), `bajaTenant.js`. **La baja aparta** (`zzz_baja_<slug>_<fecha>` + `.rollback.sql`); destruir es SSH: `scripts/borrar-tenant.js <slug> --purgar`; la red caduca con `podar-bajas.js`. |

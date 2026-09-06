@@ -1,0 +1,13 @@
+[Unit]
+Description=Campañas de mailing del CRM, cada minuto
+
+[Timer]
+# Cada minuto: una campaña programada arranca como mucho un minuto tarde y
+# una que está saliendo avanza aunque se cierre el navegador. Cada pasada se
+# limita a 50 s (scripts/enviar-mailing.js), así que nunca se solapan.
+OnCalendar=*-*-* *:*:00
+AccuracySec=5s
+Persistent=false
+
+[Install]
+WantedBy=timers.target

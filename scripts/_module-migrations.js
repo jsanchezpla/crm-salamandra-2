@@ -764,6 +764,10 @@ export const MODULES = {
   // Helpdesk del tenant hacia SUS clientes: tickets numerados, hilo con notas
   // internas, adjuntos, SLA y portal público de seguimiento.
   support: ["migrate-support-module"],
+
+  // Email marketing por Amazon SES (06/09/2026): las siete tablas del sprint 1.
+  // Aparte del correo transaccional (Resend) a propósito: docs/modules/mailing.md.
+  mailing: ["migrate-mailing-sprint-1"],
 };
 
 /**

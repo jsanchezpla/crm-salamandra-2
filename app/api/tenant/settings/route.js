@@ -10,6 +10,7 @@ import { isAllowedAnthropicModel, DEFAULT_ANTHROPIC_MODEL } from "../../../../li
 import { getTenantStripeConfig } from "../../../../lib/payments/stripeConfig.js";
 import { getTenantCloudflareConfig } from "../../../../lib/analytics/cloudflareConfig.js";
 import { getTenantGocardlessConfig } from "../../../../lib/banco/gocardlessConfig.js";
+import { getTenantSesConfig } from "../../../../lib/mailing/ses.js";
 import { getTenantGoogleCalendarConfig } from "../../../../lib/calendar/googleCalendar.js";
 import { auditar, datosPeticion } from "../../../../lib/utils/auditoria.js";
 import { avisarCambioDeConfiguracion } from "../../../../lib/configuracion/avisoCambio.js";
@@ -99,6 +100,7 @@ const CAMPOS_SECRETOS_AUDIT = [
   "googlePlacesApiKey",
   "openaiApiKey",
   "resendApiKey",
+  "sesSecretAccessKey",
   "stripeSecretKey",
   "stripeWebhookSecret",
   "whatsappToken",
@@ -113,6 +115,11 @@ const CAMPOS_ABIERTOS_AUDIT = [
   "googleCalendarClientId",
   "resendFromEmail",
   "resendReplyTo",
+  "sesAccessKeyId",
+  "sesConfigurationSet",
+  "sesFromEmail",
+  "sesFromName",
+  "sesRegion",
   "stripePublishableKey",
   "whatsappPhoneNumberId",
 ];
@@ -529,6 +536,18 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
         clientId: integ.googleCalendarClientId ?? null,
         ready: getTenantGoogleCalendarConfig({ tenant: t }).configured,
       },
+      // Amazon SES del módulo Mailing (06/09/2026). La clave secreta va con
+      // pista; el ID de la clave, la región, el remitente y el configuration
+      // set no son secretos. `ready` = se puede enviar de verdad (descifra).
+      ses: {
+        ...ks(integ.sesSecretAccessKey),
+        accessKeyId: integ.sesAccessKeyId ?? null,
+        region: integ.sesRegion ?? null,
+        fromEmail: integ.sesFromEmail ?? null,
+        fromName: integ.sesFromName ?? null,
+        configurationSet: integ.sesConfigurationSet ?? null,
+        ready: getTenantSesConfig({ tenant: t }).configurado,
+      },
     },
   });
 });
@@ -574,6 +593,7 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
     "googlePlacesApiKey",
     "openaiApiKey",
     "resendApiKey",
+    "sesSecretAccessKey",
     "stripeSecretKey",
     "stripeWebhookSecret",
   ];
@@ -652,6 +672,23 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   // OAuth es SECRETO; el ID de cliente va a la vista, como el par de GoCardless.
   applyKey(settings.integrations, "googleCalendarClientSecret", body.googleCalendarClientSecret);
   applyPlain(settings.integrations, "googleCalendarClientId", body.googleCalendarClientId);
+
+  // Amazon SES (módulo Mailing, 06/09/2026). La Secret Access Key es SECRETO;
+  // el Access Key ID, la región, el remitente, su nombre y el configuration
+  // set van a la vista. La región y el remitente se validan: una región mal
+  // escrita no da error hasta el primer envío, y para entonces es tarde.
+  if (typeof body.sesRegion === "string" && body.sesRegion.trim() && !/^[a-z]{2}(-gov)?-[a-z]+-\d$/.test(body.sesRegion.trim())) {
+    throw new ValidationError("La región de AWS tiene la forma «eu-west-1»");
+  }
+  if (typeof body.sesFromEmail === "string" && body.sesFromEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(body.sesFromEmail.trim())) {
+    throw new ValidationError("El remitente de SES tiene que ser un correo");
+  }
+  applyKey(settings.integrations, "sesSecretAccessKey", body.sesSecretAccessKey);
+  applyPlain(settings.integrations, "sesAccessKeyId", body.sesAccessKeyId);
+  applyPlain(settings.integrations, "sesRegion", body.sesRegion);
+  applyPlain(settings.integrations, "sesFromEmail", body.sesFromEmail);
+  applyPlain(settings.integrations, "sesFromName", body.sesFromName);
+  applyPlain(settings.integrations, "sesConfigurationSet", body.sesConfigurationSet);
 
   // Modelo de Claude (no es un secreto). Solo se guarda si es un id válido.
   if (typeof body.anthropicModel === "string" && isAllowedAnthropicModel(body.anthropicModel)) {
@@ -1076,6 +1113,15 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
         ...keyStatus(settings.integrations.googleCalendarClientSecret),
         clientId: settings.integrations.googleCalendarClientId ?? null,
         ready: getTenantGoogleCalendarConfig({ tenant: { settings } }).configured,
+      },
+      ses: {
+        ...keyStatus(settings.integrations.sesSecretAccessKey),
+        accessKeyId: settings.integrations.sesAccessKeyId ?? null,
+        region: settings.integrations.sesRegion ?? null,
+        fromEmail: settings.integrations.sesFromEmail ?? null,
+        fromName: settings.integrations.sesFromName ?? null,
+        configurationSet: settings.integrations.sesConfigurationSet ?? null,
+        ready: getTenantSesConfig({ tenant: { settings } }).configurado,
       },
     },
   });
