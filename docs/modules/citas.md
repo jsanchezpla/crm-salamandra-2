@@ -1899,3 +1899,7 @@ idempotente).
 
 Hechos y quitados de aquí: el correo «tu cita ha sido cancelada» (27/07) y
 la FK `Booking.clientId → clients.id` (22/07).
+
+## Revisión del 06/09/2026
+
+- «Quitar las futuras» (`/api/pacientes/[id]/desprogramar`) corta en este mismo instante, nunca antes (la sesión de esta mañana no se cancela), y va cita a cita: retira el borrador de registro (`retirarBorradoresDeLaCita`) y devuelve el dinero si estaba cobrada (`reembolsarCitaSiProcede`), como el PATCH de una cita. Devuelve `reembolsadas`.

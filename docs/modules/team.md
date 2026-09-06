@@ -699,3 +699,7 @@ de clients/leads/billing-pagos/inventario/orders/tickets no audita todavía.
   incluye un input numérico gated a admin/superadmin con helper text;
   la columna y el `DetailRow` correspondientes también se mostraron
   para admin. La API ya lo aceptaba; lo único que faltaba era la UI.
+
+## Revisión del 06/09/2026 (incidencias)
+
+- El PATCH de una incidencia solo cuenta lo que de verdad cambia (campos comparados con la fila; responsables por conjunto): «Guardar cambios» sin tocar nada ya no borra el visto de las demás. El modal sincroniza `verification`/`falta` con lo que devuelve el servidor (antes reabría la que se había cerrado sola). El visto de quien no es responsable se rechaza antes de escribir. Una responsable `inactive` no cuenta para el repaso ni para el cierre (`filasQueCuentan`). El diálogo de eliminar dice cuando tu visto cierra la incidencia.

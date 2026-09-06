@@ -2015,3 +2015,11 @@ clinica`, que abre las dos puertas (`tenant_modules` y `users.module_access`).
 - **El apartado privado de cada asistente se llama «Observaciones»**
   (`ETIQUETA_NOTA_POR_DEFECTO`, `lib/clinica/tallerSesion.js`): un comentario
   para ESA familia que las demás no ven. Lo ya escrito conserva su título.
+
+## Revisión del 06/09/2026
+
+- Guards de demo con `return forbidden(...)` en `sessions/[id]/enviar`, `sessions/[id]/completar` y `clinica/pruebas` (el `assert` que lanza, dentro de un `try`, salía como 500 mudo).
+- `tablaDePuntuaciones` (`documentoPdf.js`) mide la cabecera —los rótulos pueden ir en dos líneas— y pide hueco antes de pintarla: sin eso «Clasificación» salía cortado y una cabecera al pie metía páginas en blanco.
+- `apartadosPropuestos` no puede proponer una clave reservada de `contentSections` (`pruebas`, `apartados`, `plantilla`…): `CLAVES_RESERVADAS` se exporta de `plantillas.js`.
+- `InformeEditor`: lo que «Redactar el volcado» propone para un apartado que el informe no tiene entra como apartado nuevo (no se tira); las pruebas siguen editables en un informe entregado, como el resto.
+- `useAudios.duracionAhora()`: la duración tal como se sabe en el mismo clic que transcribió; el registro de un solo clic ya no se guardaba sin duración ni decía «de tus notas».

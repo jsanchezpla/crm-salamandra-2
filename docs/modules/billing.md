@@ -1761,3 +1761,10 @@ buscador de paciente va PRIMERO y al elegirlo pone su familia como pagador si
 aún no hay ninguno (`PacientePicker` devuelve la ficha entera). El buscador
 compartido (`SelectorCliente` con `fuente="billing"`) ya rotulaba «paciente —
 pagador» desde el 01/09.
+
+## Revisión del 06/09/2026 (bugs del trabajo del 04 al 06)
+
+- **El cobro del mes sigue a la cuota también en el paciente y el pagador** (`cambiosDelCobro`): ponerle el hijo a una cuota de la familia se lo pone al cobro pendiente. Y una cuota que deja de tocar el mes (pausa, baja anterior, importe 0, conceptos borrados) **retira** su cobro pendiente si aún no es dinero ni papel (`sincronizarCobroDelMes` → `retirado`), como ya hacía borrarla.
+- **El lote y «Partir» respetan la razón social por defecto de la ficha** (`agruparLoteCuotas`): el grupo sale a nombre del tutor (`guardianId`, `fotoFiscal`, `aNombreDe`) y, si al tutor le falta el DNI, se aparta a `sinNif` con el motivo. `fiscalGuardianId` está en `ATRIBUTOS_PARA_CONGELAR`. «Partir» emite en la serie de la original y solo parte lo que salió del lote (`customFields.loteCuotas`).
+- La segunda factura nueva a la misma familia ya hereda su razón social (`openCreate` resetea `fichaConRazonSocial`). `cobro-del-mes` solo exige `billing` (lo consume Cobros, con rol `user`). El aviso de «queda X» del cajón de Cobros solo sale con una cuota conocida. Servicios cuenta solo las cuotas que tocan el mes.
+- **La pantalla de Facturas caía entera** desde el 04/09 (un `useEffect` leía `form.clientId` antes del `useState`): `_smoke-facturas-orden-hooks.mjs` vigila el orden.
