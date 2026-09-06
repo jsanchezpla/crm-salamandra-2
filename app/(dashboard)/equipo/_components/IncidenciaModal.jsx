@@ -804,9 +804,11 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
             )}
           </div>
           <div className="flex gap-2">
-            {/* «Visto»: he hecho MI parte (04/09/2026, Rodrigo). No cierra la
-                incidencia —eso es la verificación, y es de todas—: la aparta
-                de mi bandeja, mi campana y mi portada. Solo sale para quien es
+            {/* «Visto»: he hecho MI parte (04/09/2026, Rodrigo). La aparta de
+                mi bandeja, mi campana y mi portada sin cerrarla para las
+                demás; y desde el 05/09/2026 (vuelta de AV-0039, Rodrigo: «sí»),
+                cuando la marca la ÚLTIMA responsable, el servidor la cierra
+                como resuelta (`cierraAlMarcarTodas`). Solo sale para quien es
                 responsable, que es quien tiene parte que dar por hecha, y lo
                 dice el SERVIDOR (`puedeMarcarVisto`); la lectura del listado
                 queda de respaldo mientras llega la ficha fresca. */}

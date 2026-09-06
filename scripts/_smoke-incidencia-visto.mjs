@@ -20,6 +20,7 @@ import {
   aQuienSeLeReabre,
   vistoDe,
   repasoDelEquipo,
+  cierraAlMarcarTodas,
   CAMPOS_QUE_REABREN,
 } from "../lib/clinica/vistoIncidencia.js";
 
@@ -149,5 +150,34 @@ describe("repasoDelEquipo", () => {
   it("no se inventa filas sin responsable", () => {
     const { repaso } = repasoDelEquipo([{ teamMemberId: null, vistoAt: hoy }, null, { teamMemberId: "a", vistoAt: null }]);
     assert.deepEqual(repaso.map((r) => r.teamMemberId), ["a"]);
+  });
+});
+
+/*
+ * SE CIERRA SOLA CUANDO LA MARCAN TODAS (05/09/2026, Rodrigo: «sí»).
+ *
+ * Olga: «que para que la incidencia desaparezca, todas tengan que poner un
+ * tick». Lo que duele si se rompe: cerrar con una responsable que aún no la ha
+ * visto (le desaparece a quien no ha hecho su parte), o cerrar una incidencia
+ * sin nadie al cargo (que no está vista, está huérfana).
+ */
+describe("cierraAlMarcarTodas", () => {
+  const hoy = "2026-09-05T10:00:00.000Z";
+
+  it("con la última marcada, cierra", () => {
+    assert.equal(cierraAlMarcarTodas([{ teamMemberId: "a", vistoAt: hoy }, { teamMemberId: "b", vistoAt: hoy }]), true);
+  });
+
+  it("con una sin marcar, NO cierra", () => {
+    assert.equal(cierraAlMarcarTodas([{ teamMemberId: "a", vistoAt: hoy }, { teamMemberId: "b", vistoAt: null }]), false);
+  });
+
+  it("una sola responsable cierra al marcar la suya", () => {
+    assert.equal(cierraAlMarcarTodas([{ teamMemberId: "a", vistoAt: hoy }]), true);
+  });
+
+  it("sin responsables nunca cierra: está huérfana, no vista", () => {
+    assert.equal(cierraAlMarcarTodas([]), false);
+    assert.equal(cierraAlMarcarTodas(null), false);
   });
 });

@@ -403,10 +403,18 @@ de 3 · Marta (04 sep), Ana (05 sep) · falta Lucía». El orden lo decide
 primero**, que es lo que se mira. Los nombres los pone la pantalla, que ya los
 trae en `assignees`; el servidor solo manda ids.
 
-**Lo que NO se ha hecho, y espera decisión**: que la incidencia se CIERRE sola
-cuando la marquen todas. Chocaría con la regla del 04/09 —el estado lo gobierna
-la verificación, que es la respuesta del centro; el visto es de cada persona—,
-y son dos diseños defendibles. Está apartado en el Registro con las opciones.
+**Y se cierra sola cuando la marcan todas** (Rodrigo, 05/09/2026: «sí»). La
+regla del 04/09 decía que el estado lo gobierna la verificación —la respuesta
+del centro— y el visto es de cada persona; Rodrigo decidió que cuando la última
+responsable da la suya, esa ES la respuesta del centro. El PATCH de
+`{ visto: true }` relee la pivote después de escribir y, si `cierraAlMarcarTodas`
+dice que sí, escribe la misma tripleta que la verificación «resuelta»
+(`verification`, `status`, `resolvedAt`) directamente sobre la fila, no por
+`changes`: cerrar por vistos no es una novedad que haya que devolverle a nadie a
+la bandeja. Solo cierra, nunca reabre (quitar un visto después no la devuelve a
+pendiente: para eso está la verificación), y nunca sin responsables (una
+incidencia sin nadie al cargo está huérfana, no vista). La respuesta lleva
+`cerradaPorVistos`. `AYUDA_VISTO` lo dice.
 
 
 ### 4. Bandeja de trabajo

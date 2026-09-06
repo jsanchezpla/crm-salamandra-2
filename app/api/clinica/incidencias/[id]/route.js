@@ -267,6 +267,30 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
     }
   }
 
+  /*
+   * ── Y SE CIERRA SOLA CUANDO LA MARCAN TODAS (05/09/2026, vuelta de AV-0039,
+   *    Rodrigo: «la incidencia se cierra sola cuando todo el mundo da el visto,
+   *    sí») ──────────────────────────────────────────────────────────────────
+   * Se mira DESPUÉS de escribir este visto y con las filas frescas: el último
+   * en marcar es el que cierra. Se escribe con la misma tripleta que la
+   * verificación «resuelta» —que es lo que significa—, y directamente sobre la
+   * fila, no por `changes`: cerrar por vistos no es una novedad que haya que
+   * devolverle a nadie a la bandeja. La regla, con nombre y prueba, en
+   * `lib/clinica/vistoIncidencia.js` (`cierraAlMarcarTodas`).
+   */
+  let cerradaPorVistos = false;
+  if (M.IncidenciaAssignee && vistoPedido === true && row.status !== "resolved") {
+    const filas = await M.IncidenciaAssignee.findAll({
+      where: { incidenciaId: id },
+      attributes: ["teamMemberId", "vistoAt"],
+      raw: true,
+    });
+    if (cierraAlMarcarTodas(filas)) {
+      await row.update({ verification: "resuelta", status: "resolved", resolvedAt: new Date() });
+      cerradaPorVistos = true;
+    }
+  }
+
   const full = await Incidencia.findByPk(id, { include: INCLUDES(M) });
   if (commentEntry) {
     // Que los compañeros se enteren (02/09/2026): hasta hoy el comentario se
@@ -280,7 +304,7 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
       autorUserId: request.headers.get("x-user-id"),
     });
   }
-  return ok({ ...serializeIncidencia(full), ...(await miVisto(request, M, id)) });
+  return ok({ ...serializeIncidencia(full), ...(await miVisto(request, M, id)), cerradaPorVistos });
 });
 
 // DELETE — borrado físico. Solo dirección.
