@@ -401,6 +401,9 @@ export default function FacturasPage() {
   }
   function openCreate() {
     setOpenInvoice(null);
+    // La razón social se vuelve a proponer en cada factura nueva (06/09/2026):
+    // sin esto, la segunda a la misma familia salía «a nombre de la ficha».
+    fichaConRazonSocial.current = null;
     setForm(emptyForm(
       ivaPorDefecto(settings),
       Number(settings?.defaultPaymentTermsDays ?? 30),

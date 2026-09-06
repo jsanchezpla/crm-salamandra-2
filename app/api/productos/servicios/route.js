@@ -2,6 +2,7 @@ import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { componerServicios } from "../../../../lib/productos/servicios.js";
+import { mesVigente, ultimoDiaDe } from "../../../../lib/billing/cuotas.js";
 
 /**
  * GET /api/productos/servicios[?mes=AAAA-MM]
@@ -32,7 +33,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     const { BillingConcept, Cuota, EventType, Booking } = tenantModels;
 
     const sp = new URL(request.url).searchParams;
-    const mes = /^\d{4}-\d{2}$/.test(sp.get("mes") ?? "") ? sp.get("mes") : new Date().toISOString().slice(0, 7);
+    const mes = /^\d{4}-\d{2}$/.test(sp.get("mes") ?? "") ? sp.get("mes") : mesVigente();
     const [anio, m] = mes.split("-").map(Number);
     // El mes, en la hora del centro (el contenedor corre en Europe/Madrid).
     const desde = new Date(anio, m - 1, 1, 0, 0, 0, 0);
@@ -40,7 +41,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
 
     const [conceptos, cuotas, tipos] = await Promise.all([
       BillingConcept.findAll({ where: { active: true }, attributes: ["id", "name", "unitPrice"] }),
-      Cuota.findAll({ where: { active: true }, attributes: ["id", "clientId", "patientId", "conceptIds", "amount"] }),
+      Cuota.findAll({ where: { active: true }, attributes: ["id", "clientId", "patientId", "conceptIds", "amount", "startDate", "endDate"] }),
       // Los tipos de cita solo tienen sentido con el módulo; sin él, ninguno.
       tenantHasModule("citas") && EventType
         ? EventType.findAll({ where: { active: true }, attributes: ["id", "name", "conceptId"] })
@@ -68,7 +69,15 @@ export const GET = withTenant(async (request, _rc, ctx) => {
       }
     }
 
-    return ok({ disponible: true, mes, ...componerServicios({ conceptos, cuotas, tipos, citasPorConcepto }) });
+    // Solo las cuotas que TOCAN este mes (revisión del 06/09/2026): una «durante
+    // N meses» se queda activa con su fecha de fin pasada —caducan solas— y una
+    // con alta el mes que viene aún no está apuntada; las dos sumaban aquí.
+    const primerDia = `${mes}-01`;
+    const ultimoDia = ultimoDiaDe(mes);
+    const cuotasDelMes = cuotas.filter(
+      (c) => (!c.startDate || String(c.startDate) <= ultimoDia) && (!c.endDate || String(c.endDate) >= primerDia)
+    );
+    return ok({ disponible: true, mes, ...componerServicios({ conceptos, cuotas: cuotasDelMes, tipos, citasPorConcepto }) });
   } catch (err) {
     // Un centro con `billing` recién activado puede no tener aún la tabla de
     // cuotas: se dice que no hay datos, no se rompe la pantalla de Productos.

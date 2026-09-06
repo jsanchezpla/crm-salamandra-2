@@ -64,3 +64,32 @@ test("sin NIF se aparta por grupo, y un concepto borrado no revienta el rótulo"
   assert.equal(facturables.length, 1);
   assert.equal(facturables[0].terapia, "(concepto borrado)");
 });
+
+// ── Revisión del 06/09/2026: la razón social por defecto de la ficha ────────
+import { test as prueba } from "node:test";
+import { strict as afirma } from "node:assert";
+import { agruparLoteCuotas as agrupar } from "../lib/billing/lotesCuotas.js";
+
+const TUTORA = { id: "a1b2c3d4-0000-4000-8000-000000000001", name: "Marta Pérez", relationship: "madre", dni: "22222222J" };
+const fichaCon = (extra = {}) => ({ id: "famT", name: "Familia Tutora", taxId: "11111111H", guardians: [TUTORA], fiscalGuardianId: TUTORA.id, ...extra });
+const cobroT = { id: "ct", clientId: "famT", amount: 80, status: "completed", paidAt: "2026-09-03", periodMonth: "2026-09-01" };
+
+prueba("con tutora por defecto y DNI, el grupo sale a su nombre y con su foto", () => {
+  const { facturables, sinNif } = agrupar({ cobros: [cobroT], clientes: [fichaCon()] });
+  afirma.equal(sinNif.length, 0);
+  afirma.equal(facturables[0].guardianId, TUTORA.id);
+  afirma.equal(facturables[0].aNombreDe, "Marta Pérez");
+  afirma.equal(facturables[0].fotoFiscal.nif, "22222222J");
+});
+
+prueba("sin DNI en la tutora, el grupo se aparta con el motivo en vez de salir a nombre de la ficha", () => {
+  const { facturables, sinNif } = agrupar({ cobros: [cobroT], clientes: [fichaCon({ guardians: [{ ...TUTORA, dni: "" }] })] });
+  afirma.equal(facturables.length, 0);
+  afirma.match(sinNif[0].motivo, /no tiene DNI/);
+});
+
+prueba("sin razón social por defecto, todo como siempre: a nombre de la ficha", () => {
+  const { facturables } = agrupar({ cobros: [cobroT], clientes: [fichaCon({ fiscalGuardianId: null })] });
+  afirma.equal(facturables[0].guardianId, undefined);
+  afirma.equal(facturables[0].fotoFiscal, undefined);
+});

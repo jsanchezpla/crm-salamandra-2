@@ -120,6 +120,7 @@ const vistaGrupo = (g) => ({
   paciente: g.paciente ?? null,
   nombre: g.nombre,
   nif: g.nif,
+  aNombreDe: g.aNombreDe ?? null,
   importe: g.importe,
   facturaPrevia: g.facturaPrevia,
   motivo: g.motivo ?? null,
@@ -255,7 +256,10 @@ export const POST = withTenant(async (request, _rc, { tenant, tenantModels, hasM
               number,
               status: "paid",
               paidAt: ultimo?.paidAt ?? new Date(),
-              fiscalSnapshot: fotoFiscalDe(fichas.get(grupo.clientId)),
+              // A nombre del tutor por defecto de la ficha si lo tiene (con su
+              // DNI), y si no de la ficha, como siempre (06/09/2026).
+              guardianId: grupo.guardianId ?? null,
+              fiscalSnapshot: grupo.fotoFiscal ?? fotoFiscalDe(fichas.get(grupo.clientId)),
               customFields: { loteCuotas: mes, ...(vatExemptNote ? { vatExemptNote } : {}) },
               // legacy neutros, como POST /invoices
               subtotal: calc.taxBase,

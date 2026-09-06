@@ -285,7 +285,9 @@ export default function CobrosPage() {
       if (turno !== turnoCuota.current) return;
       const cobrosDelMes = jMes?.data?.cobros ?? [];
       const parcial = restoDelMes({ esperado, cobros: cobrosDelMes, patientId: form.patientId || null });
-      setParcialDelMes(parcial.yaCobrado > 0 ? parcial : null);
+      // Solo con una cuota conocida (06/09/2026): sin importe esperado, «queda
+      // 0,00 €» con el campo en blanco era un aviso que mentía.
+      setParcialDelMes(Number(esperado) > 0 && parcial.yaCobrado > 0 ? parcial : null);
       // Solo se pisa el importe cuando hay algo que restar. Si el mes ya está
       // cubierto NO se rellena un 0 —el formulario no lo aceptaría y no se
       // entendería—: se deja vacío y el aviso de abajo lo explica.

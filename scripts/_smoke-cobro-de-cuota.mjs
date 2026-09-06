@@ -165,3 +165,19 @@ describe("cambiosDelCobro — qué habría que cambiarle", () => {
     assert.equal(cambiosDelCobro(cobroLimpio(), null), null);
   });
 });
+
+// ── Revisión del 06/09/2026: el paciente y el pagador también siguen a la cuota ─
+describe("cambiosDelCobro — el paciente de la cuota manda en el cobro", () => {
+  it("ponerle el hijo a una cuota de la familia se lo pone al cobro pendiente", () => {
+    const cambios = cambiosDelCobro(cobroLimpio({ patientId: null, clientId: "fam1" }), filaDelPlan({ patientId: "pac1", clientId: "fam1" }));
+    assert.deepEqual(cambios, { patientId: "pac1" });
+  });
+  it("quitárselo también, y con el mismo paciente no hay nada que cambiar", () => {
+    assert.deepEqual(cambiosDelCobro(cobroLimpio({ patientId: "pac1", clientId: "fam1" }), filaDelPlan({ patientId: null, clientId: "fam1" })), { patientId: null });
+    assert.equal(cambiosDelCobro(cobroLimpio({ patientId: "pac1", clientId: "fam1" }), filaDelPlan({ patientId: "pac1", clientId: "fam1" })), null);
+  });
+  it("cambiar de pagador cambia el cobro; sin pagador en la fila no se toca", () => {
+    assert.deepEqual(cambiosDelCobro(cobroLimpio({ clientId: "fam1" }), filaDelPlan({ clientId: "fam2" })), { clientId: "fam2" });
+    assert.equal(cambiosDelCobro(cobroLimpio({ clientId: "fam1" }), filaDelPlan({ clientId: null })), null);
+  });
+});

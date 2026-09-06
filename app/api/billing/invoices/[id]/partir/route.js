@@ -155,6 +155,9 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       if (!["issued", "sent", "paid", "partially_paid", "overdue"].includes(locked.status)) {
         throw new PartirConflicto(`No se puede partir una factura en estado '${locked.status}'`);
       }
+      // Las nuevas salen en la serie de la original (06/09/2026): «F» a pelo
+      // daba «Serie 'F' no encontrada» en un centro con otro código.
+      const serieF = locked.series || "F";
 
       /* 1. La anulación: el mismo documento que «Rectificar» con base 0
             (rectify/route.js), campo a campo. Si allí se añade uno, aquí también. */
@@ -204,13 +207,15 @@ export const POST = withTenant(async (request, { params }, ctx) => {
         if (calc.total !== grupo.importe) {
           throw new PartirConflicto(`El total (${calc.total}) no cuadra con lo cobrado (${grupo.importe}) en ${grupo.paciente ?? grupo.terapia ?? "un grupo"}`);
         }
-        const number = await assignInvoiceNumber({ sequelize, models: tenantModels, seriesCode: "F", date: issueDate, t });
+        const number = await assignInvoiceNumber({ sequelize, models: tenantModels, seriesCode: serieF, date: issueDate, t });
         const ultimo = grupo.cobros[grupo.cobros.length - 1];
         const nueva = await Invoice.create(
           {
             clientId: locked.clientId,
             patientId: grupo.patientId ?? locked.patientId ?? null,
-            guardianId: locked.guardianId ?? null,
+            // A nombre de quien iba la original; si iba a nombre de la ficha,
+            // el tutor por defecto de la familia, como en el lote (06/09/2026).
+            guardianId: locked.guardianId ?? grupo.guardianId ?? null,
             employeeId: locked.employeeId,
             partnerId: locked.partnerId,
             issueDate,
@@ -222,11 +227,13 @@ export const POST = withTenant(async (request, { params }, ctx) => {
             irpfAmount: 0,
             total: calc.total,
             paidAmount: calc.total,
-            series: "F",
+            series: serieF,
             number,
             status: "paid",
             paidAt: ultimo?.paidAt ?? new Date(),
-            fiscalSnapshot: fotoFiscalDe(ficha),
+            fiscalSnapshot: locked.guardianId
+              ? (locked.fiscalSnapshot ?? fotoFiscalDe(ficha))
+              : (grupo.fotoFiscal ?? fotoFiscalDe(ficha)),
             customFields: {
               loteCuotas: plan.mes,
               partidaDe: locked.number,

@@ -35,6 +35,7 @@ const cobro = (id, extra = {}) => ({
 const factura = (extra = {}) => ({
   id: "f1", number: "F-2026-0128", status: "paid", total: 200, taxBase: 200, irpfRate: 0,
   rectifiesInvoiceId: null, rectifiedByInvoiceId: null,
+  customFields: { loteCuotas: "2026-09" },
   lines: [
     { description: "Cuota septiembre 2026 — A", lineBase: 100, vatRate: 0 },
     { description: "Cuota septiembre 2026 — B", lineBase: 100, vatRate: 0 },
@@ -155,4 +156,12 @@ describe("agruparLoteCuotas por paciente (la otra mitad del encargo)", () => {
     assert.equal(agrupacionValida("paciente"), "paciente");
     assert.equal(agrupacionValida("nada"), "pagador");
   });
+});
+
+// ── Revisión del 06/09/2026 ─────────────────────────────────────────────────
+it("solo se parte lo que salió del lote de cuotas (o de un partir anterior)", () => {
+  const base = { cobros: [cobro("a", { patientId: "p1" }), cobro("b", { patientId: "p2" })], ficha: FICHA, por: "paciente", pacientes: PACIENTES };
+  assert.match(planDePartir({ ...base, factura: factura({ customFields: null }) }).motivo, /lote de cuotas/);
+  assert.match(planDePartir({ ...base, factura: factura({ customFields: {} }) }).motivo, /lote de cuotas/);
+  assert.equal(planDePartir({ ...base, factura: factura({ customFields: { loteCuotas: "2026-09", partidaDe: "F-2026-0001" } }) }).ok, true);
 });

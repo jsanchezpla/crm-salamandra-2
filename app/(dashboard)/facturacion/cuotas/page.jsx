@@ -613,6 +613,7 @@ function colaDelCobro(cobro) {
   if (cobro.estado === "actualizado") return ` · su cobro de ${mes} se ha puesto al día`;
   if (cobro.estado === "intocable") return ` · OJO: el cobro de ${mes} no se ha tocado (${cobro.motivo})`;
   if (cobro.estado === "sin-importe") return ` · OJO: no sale cobro de ${mes} (${cobro.motivo})`;
+  if (cobro.estado === "retirado") return ` · su cobro de ${mes} se ha retirado de Cobros (${cobro.motivo})`;
   return "";
 }
 
@@ -624,6 +625,7 @@ function colaDelLote(cobros) {
   if (cobros.actualizados) partes.push(`${cobros.actualizados} al día`);
   if (cobros.sinImporte) partes.push(`${cobros.sinImporte} sin importe (revisa sus conceptos)`);
   if (cobros.intocables) partes.push(`${cobros.intocables} ya cobrados o facturados, sin tocar`);
+  if (cobros.retirados) partes.push(`${cobros.retirados} ${cobros.retirados === 1 ? "cobro retirado" : "cobros retirados"} (ya no tocan este mes)`);
   return partes.length ? ` · ${partes.join(" · ")}` : "";
 }
 

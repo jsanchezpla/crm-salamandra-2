@@ -1,7 +1,6 @@
 import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
-import { puedeVerDinero } from "../../../../lib/citas/dinero.js";
 import { loQueSeCobraDe } from "../../../../lib/citas/dineroDeLaCita.js";
 
 /**
@@ -31,12 +30,12 @@ import { loQueSeCobraDe } from "../../../../lib/citas/dineroDeLaCita.js";
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   try {
     // Es dinero de una familia: lo pide la pantalla de Cobros, que es de
-    // Facturación. Y solo dirección, como el resto de los importes de la agenda
-    // (`lib/citas/dinero.js`).
+    // Facturación. Sin el filtro de «solo dirección» (revisión del 06/09/2026):
+    // Cobros la llevan en Aumenta Olga y Rosa con rol `user`, y con el 403 la
+    // fuente «lo que dicen sus citas» nunca llegaba a salir. Lo que devuelve
+    // —conceptos y el importe del catálogo— ya lo ve ese rol en
+    // /api/billing/conceptos y en la pantalla de Cuotas.
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
-    if (!puedeVerDinero(request.headers.get("x-user-role"))) {
-      return forbidden("Solo dirección ve los importes");
-    }
 
     const { Booking } = tenantModels;
     if (!Booking) return ok({ cuotas: [], sueltos: [], total: 0, citas: 0 });
