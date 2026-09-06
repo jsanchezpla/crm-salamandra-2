@@ -3,7 +3,7 @@ import { ok, error, forbidden, serverError } from "../../../../lib/utils/apiResp
 import { invalidateTenantCache } from "../../../../lib/tenant/tenantResolver.js";
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
 import { auditar, datosPeticion } from "../../../../lib/utils/auditoria.js";
-import { assertNotDemoMasterWrite } from "../../../../lib/demo/isDemo.js";
+import { isDemoTenant } from "../../../../lib/demo/isDemo.js";
 import { pruebasDe, areasDe, normalizarPruebasDelCentro } from "../../../../lib/clinica/pruebasDiagnosticas.js";
 
 /**
@@ -43,7 +43,9 @@ export const PUT = withTenant(async (request, _rc, ctx) => {
   try {
     if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
     if (!ADMIN_ROLES.has(ctx.user?.role)) return forbidden("Solo admin puede cambiar el catálogo de pruebas");
-    assertNotDemoMasterWrite(ctx);
+    // Con `return`: dentro del `try` el ForbiddenError del assert acababa
+    // como un 500 sin frase (revisión del 06/09/2026).
+    if (isDemoTenant(ctx)) return forbidden("En la demo no se pueden cambiar los ajustes: es de solo lectura.");
 
     let body;
     try {

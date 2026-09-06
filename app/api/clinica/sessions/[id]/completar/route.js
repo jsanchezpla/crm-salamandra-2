@@ -1,6 +1,6 @@
 import { withTenant } from "@/lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "@/lib/utils/apiResponse.js";
-import { assertNotDemoPaidCall } from "@/lib/demo/isDemo.js";
+import { isDemoTenant } from "@/lib/demo/isDemo.js";
 import { vetoAi } from "@/lib/ai/aiAccess.js";
 import { getTenantAnthropicKey } from "@/lib/ai/anthropicKey.js";
 import { getTenantAnthropicModel } from "@/lib/ai/anthropicModel.js";
@@ -56,7 +56,9 @@ export const POST = withTenant(async (request, rc, ctx) => {
     if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
     // La demo pública da sesión de ADMIN a visitantes anónimos: aquí se gasta
     // clave de Anthropic del tenant, así que se corta antes de llamar.
-    assertNotDemoPaidCall(ctx, "Completar un registro con IA");
+    // Con `return`: dentro del `try` el ForbiddenError del assert acababa
+    // como un 500 sin frase (revisión del 06/09/2026).
+    if (isDemoTenant(ctx)) return forbidden("Completar un registro con IA está desactivado en la demo: usa datos de ejemplo.");
 
     const { id } = await rc.params;
     if (!UUID_RE.test(id)) return error("id inválido");

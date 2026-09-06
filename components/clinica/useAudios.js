@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   MAX_AUDIOS,
@@ -89,6 +89,14 @@ export default function useAudios({ onError, onAviso } = {}) {
   const conTexto = useMemo(() => lista.filter((a) => a.texto), [lista]);
   const texto = useMemo(() => juntarTranscripciones(conTexto.map((a) => a.texto)), [conTexto]);
   const duracion = useMemo(() => duracionTotal(conTexto.map((a) => a.durationSec)), [conTexto]);
+  // La duración que se SABE ahora mismo, sin esperar al repintado: quien
+  // encadena «transcribir → IA» en un solo clic la lee justo después de
+  // transcribir, cuando `duracion` aún es la del cierre viejo y decía 0 — el
+  // registro se guardaba como si nunca hubiera habido audio (06/09/2026).
+  const duracionSabida = useRef(0);
+  useEffect(() => {
+    duracionSabida.current = duracion;
+  }, [duracion]);
 
   /**
    * Transcribe los que aún no lo están. En tandas, porque el nginx del CRM
@@ -106,7 +114,10 @@ export default function useAudios({ onError, onAviso } = {}) {
     // transcribir no bloquea la pantalla, en eso está la gracia.
     const sabido = new Map();
     const volcar = () => setLista((prev) => prev.map((a) => (sabido.has(a.id) ? { ...a, ...sabido.get(a.id) } : a)));
-    const juntoLoSabido = () => juntarTranscripciones(lista.map((a) => sabido.get(a.id)?.texto ?? a.texto));
+    const juntoLoSabido = () => {
+      duracionSabida.current = duracionTotal(lista.map((a) => sabido.get(a.id)?.durationSec ?? a.durationSec));
+      return juntarTranscripciones(lista.map((a) => sabido.get(a.id)?.texto ?? a.texto));
+    };
 
     try {
       for (const tanda of repartirEnTandas(pendientes.map((a) => a.file))) {
@@ -162,6 +173,8 @@ export default function useAudios({ onError, onAviso } = {}) {
     hayTexto: conTexto.length > 0,
     texto,
     duracion,
+    /** La duración tal como se sabe en este instante, también dentro del mismo clic que transcribió. */
+    duracionAhora: () => duracionSabida.current,
     hueco: MAX_AUDIOS - lista.length,
   };
 }

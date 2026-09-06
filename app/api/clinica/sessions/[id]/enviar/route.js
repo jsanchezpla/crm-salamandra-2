@@ -11,7 +11,7 @@ import { propuestaDeCorreo, limpiarCorreo, motivoParaNoAvisar } from "@/lib/clin
 import { registroEnviadoTemplate } from "@/lib/email/templates/clinica/registroEnviado.js";
 import { getTenantResendConfig } from "@/lib/outreach/resendConfig.js";
 import { sendEmail, envioRealizado } from "@/lib/email/resendClient.js";
-import { assertNotDemoPaidCall } from "@/lib/demo/isDemo.js";
+import { isDemoTenant } from "@/lib/demo/isDemo.js";
 import {
   quotaBytesDe,
   getTenantStorageUsage,
@@ -113,9 +113,10 @@ export const POST = withTenant(async (request, rc, ctx) => {
     if (request.headers.get("content-type")?.includes("application/json")) {
       const body = await request.json().catch(() => ({}));
       if (body?.correo?.enviar) {
-        // Manda correo: las cuatro demos son públicas con sesión de admin.
-        const noDemo = assertNotDemoPaidCall(ctx, "Avisar por correo");
-        if (noDemo) return noDemo;
+        // Manda correo: las cuatro demos son públicas con sesión de admin. Con
+        // `return`, no con el `assert` que lanza: dentro de este `try` el
+        // ForbiddenError acababa en el `catch` como un 500 mudo (06/09/2026).
+        if (isDemoTenant(ctx)) return forbidden("Avisar por correo está desactivado en la demo: usa datos de ejemplo.");
         const limpio = limpiarCorreo(body.correo);
         if (limpio.error) return error(limpio.error, 422);
         correo = limpio;

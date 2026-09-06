@@ -587,8 +587,16 @@ export default function InformeEditor({ reportId }) {
       const p = Object.fromEntries(
         Object.entries(bruta).map(([k, v]) => [k, Array.isArray(v) ? v.join("\n") : String(v ?? "")])
       );
-      setPropuesta(p);
-      setNuevosIA([]);
+      // Lo que la IA propone para un apartado que ESTE informe no tiene —un
+      // centro con plantilla propia sin «Logros», «Recomendaciones» o
+      // «Propuesta de continuidad»— no se tira: entra como apartado nuevo, a
+      // aceptar uno a uno como los del dictado (revisión del 06/09/2026).
+      const conocidas = new Set(apartados.map((a) => a.key));
+      const sinSitio = Object.entries(p)
+        .filter(([k, v]) => !conocidas.has(k) && v.trim())
+        .map(([k, v]) => ({ key: k, label: NOMBRES_PULIDO[k] ?? k, tipo: "texto", valor: v }));
+      setPropuesta(Object.fromEntries(Object.entries(p).filter(([k]) => conocidas.has(k))));
+      setNuevosIA(sinSitio);
       setMaterialIA("");
       setTituloPropuesta(`Redacción del volcado${j.data.simulado ? " (simulada — demo)" : ""}`);
       setVerPropuesta(true);
@@ -883,7 +891,7 @@ export default function InformeEditor({ reportId }) {
             en el PDF salen detrás de «Pruebas administradas», a mitad del
             documento; aquí, arriba, para que se vea que existen. */}
         {(tipo === TIPO_DIAGNOSTICO || pruebas.length > 0) && (
-          <PruebasDiagnosticas pruebas={pruebas} onChange={setPruebas} disabled={entregado} />
+          <PruebasDiagnosticas pruebas={pruebas} onChange={setPruebas} />
         )}
 
         <ApartadosEditor

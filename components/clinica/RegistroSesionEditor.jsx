@@ -696,12 +696,14 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
       const j = await leerRespuestaApi(r);
       if (!r.ok) throw new Error(j.error || "No se pudo procesar");
       // La duración la mide Whisper al transcribir, así que aquí el servidor no
-      // la manda: se toma la que guarda la lista de audios o el registro se
-      // guardaría como si nunca hubiera habido audio.
+      // la manda: se toma la que sabe la lista de audios AHORA (`duracionAhora`,
+      // no `duracion`: si se transcribió en este mismo clic, `duracion` aún es
+      // la del render anterior y decía 0) o el registro se guardaría como si
+      // nunca hubiera habido audio.
       setResult({
         ...j.data,
         transcription: j.data.transcription || transcrito,
-        audioDurationSec: j.data.audioDurationSec ?? (conAudio ? audios.duracion : null),
+        audioDurationSec: j.data.audioDurationSec ?? (conAudio ? audios.duracionAhora() : null),
       });
       const p = j.data.propuesta ?? {};
       const cuantos = Object.values(p).filter((v) => String(v ?? "").trim()).length;
