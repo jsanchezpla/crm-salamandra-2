@@ -3,6 +3,8 @@ import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { auditar, datosPeticion } from "../../../../../lib/utils/auditoria.js";
 import { madridToday } from "../../../../../lib/utils/madridDate.js";
+import { retirarBorradoresDeLaCita } from "../../../../../lib/clinica/borradorDeCita.js";
+import { reembolsarCitaSiProcede } from "../../../../../lib/citas/reembolsoCita.js";
 
 /**
  * GET/POST /api/pacientes/[id]/desprogramar — quitarle a un paciente sus citas
@@ -25,8 +27,9 @@ import { madridToday } from "../../../../../lib/utils/madridDate.js";
  * ── LO QUE HACE Y LO QUE NO ────────────────────────────────────────────────
  *   · CANCELA, no borra: la cita cancelada libera el hueco y se queda en el
  *     histórico, que es lo que distingue «se dio de baja» de «nunca existió».
- *   · Solo hacia ADELANTE (`desde`, por defecto hoy en Madrid). El pasado es
- *     lo que pasó y no se toca ni por error de dedo.
+ *   · Solo hacia ADELANTE (`desde`, por defecto hoy en Madrid, y nunca antes
+ *     de este mismo instante). El pasado es lo que pasó y no se toca ni por
+ *     error de dedo: la sesión de esta mañana tampoco.
  *   · Solo las que están vivas (`pending` y `confirmed`): una completada, una
  *     falta o una ya cancelada se quedan como están.
  *   · **NO manda ni un correo.** La cancelación de UNA cita avisa a la familia;
@@ -48,10 +51,19 @@ function gate(ctx) {
   return ctx.hasModule("citas") && (ctx.hasModule("clinica") || ctx.hasModule("pacientes"));
 }
 
-/** El instante desde el que se corta: las 00:00 de esa fecha, hora local. */
+/**
+ * El instante desde el que se corta: las 00:00 de esa fecha, hora local, y
+ * NUNCA antes de ahora mismo. Sin esto (revisión del 06/09/2026) la baja dada
+ * por la tarde cancelaba también la sesión de esa misma mañana, que seguía en
+ * `confirmed` porque nadie la había cerrado aún, y con ella se iba del cobro
+ * del mes y de Productividad. La pantalla cuenta con `Date.now()`: ahora los
+ * dos cuentan lo mismo.
+ */
 function desdeDe(valor) {
   const fecha = FECHA_RE.test(String(valor ?? "")) ? String(valor) : madridToday();
-  return { fecha, instante: new Date(`${fecha}T00:00:00`) };
+  const ahora = new Date();
+  const medianoche = new Date(`${fecha}T00:00:00`);
+  return { fecha, instante: medianoche > ahora ? medianoche : ahora };
 }
 
 /** Cuántas citas vivas tiene por delante — para poder decirlo ANTES de tocar nada. */
@@ -92,10 +104,40 @@ export const POST = withTenant(async (request, rc, ctx) => {
       ? body.motivo.trim().slice(0, 500)
       : "Baja del paciente";
 
-    const [quitadas] = await Booking.update(
-      { status: "cancelled", cancelledAt: new Date(), cancellationReason: motivo },
-      { where: { patientId: id, status: { [Op.in]: VIVAS }, scheduledAt: { [Op.gte]: instante } } }
-    );
+    /*
+     * Una a una y no con un UPDATE masivo (revisión del 06/09/2026): cancelar
+     * UNA cita desde la agenda hace dos cosas más que cambiar el estado, y la
+     * baja en bloque se las saltaba. El borrador de registro que la cita dejó
+     * preparado en la ficha («sesión por completar») se retira, y si la cita
+     * estaba cobrada el dinero vuelve (`reembolsarCitaSiProcede`, el mismo
+     * camino que el PATCH de la cita). Las dos son best-effort: la cita YA
+     * está cancelada cuando se intentan, y un fallo ahí no deja la baja a
+     * medias.
+     */
+    const filas = await Booking.findAll({
+      where: { patientId: id, status: { [Op.in]: VIVAS }, scheduledAt: { [Op.gte]: instante } },
+      order: [["scheduledAt", "ASC"]],
+    });
+    const conClinica = ctx.tenantHasModule("clinica") || ctx.tenantHasModule("pacientes");
+    let quitadas = 0;
+    let reembolsadas = 0;
+    for (const cita of filas) {
+      await cita.update({ status: "cancelled", cancelledAt: new Date(), cancellationReason: motivo });
+      quitadas += 1;
+      if (conClinica && tenantModels.ClinicSession) {
+        try {
+          await retirarBorradoresDeLaCita({ ClinicSession: tenantModels.ClinicSession, bookingId: cita.id });
+        } catch (e) {
+          console.warn("[desprogramar] no se pudo retirar el borrador de la cita", e?.message);
+        }
+      }
+      try {
+        const r = await reembolsarCitaSiProcede(ctx, cita, { quienCancela: "profesional", motivo });
+        if (r?.reembolsado) reembolsadas += 1;
+      } catch (e) {
+        console.warn("[desprogramar] no se pudo devolver el cobro de la cita", e?.message);
+      }
+    }
 
     // DESPUÉS de mutar y con el RECUENTO, no la fila entera: son datos de salud.
     if (quitadas) {
@@ -109,7 +151,7 @@ export const POST = withTenant(async (request, rc, ctx) => {
       });
     }
 
-    return ok({ quitadas, desde: fecha, motivo });
+    return ok({ quitadas, reembolsadas, desde: fecha, motivo });
   } catch (err) {
     return serverError(err);
   }

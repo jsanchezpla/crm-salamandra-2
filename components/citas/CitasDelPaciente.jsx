@@ -75,12 +75,12 @@ export default function CitasDelPaciente({ citas = [], patientId = null, onActua
       if (!j.ok) throw new Error(j.error || "No se pudieron contar las citas");
       const n = j.data?.futuras ?? 0;
       if (!n) {
-        await avisar({ titulo: "No hay nada que quitar", texto: "Este paciente no tiene citas de hoy en adelante." });
+        await avisar({ titulo: "No hay nada que quitar", texto: "Este paciente no tiene citas de ahora en adelante." });
         return;
       }
       const seguro = await confirmar({
         titulo: `Quitar ${n} ${n === 1 ? "cita" : "citas"} de la agenda`,
-        texto: `Se cancelan las ${n} ${n === 1 ? "cita" : "citas"} que tiene de hoy en adelante. Quedan en el histórico como canceladas y sus huecos se liberan. Las de antes de hoy no se tocan. NO se avisa a la familia: eso lo haces tú.`,
+        texto: `Se cancelan las ${n} ${n === 1 ? "cita" : "citas"} que tiene de ahora en adelante. Quedan en el histórico como canceladas y sus huecos se liberan. Las de antes de ahora, también las de esta mañana, no se tocan. Si alguna estaba cobrada, el dinero vuelve. NO se avisa a la familia: eso lo haces tú.`,
         confirmar: "Quitarlas",
         cancelar: "Volver",
         tono: "peligro",
@@ -158,7 +158,7 @@ export default function CitasDelPaciente({ citas = [], patientId = null, onActua
             type="button"
             onClick={quitarFuturas}
             disabled={quitando}
-            title="Cancela de una vez las citas que tiene de hoy en adelante"
+            title="Cancela de una vez las citas que tiene de ahora en adelante"
             className="text-[11px] px-2.5 py-1 rounded-md border border-neutral-200 bg-white text-neutral-600 hover:border-rose-300 hover:text-rose-700 transition-colors disabled:opacity-40"
           >
             {quitando ? "Quitando…" : "Quitar las futuras"}

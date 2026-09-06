@@ -71,3 +71,14 @@ test("la pantalla avisa de que la familia NO se entera", () => {
     "quien da la baja tiene que saber que el aviso a la familia es cosa suya");
   assert.match(COMPONENTE, /Quitar las futuras/, "falta el botón");
 });
+
+// ── Revisión del 06/09/2026 ─────────────────────────────────────────────────
+test("nunca corta antes de ahora mismo: la sesión de esta mañana no se cancela", () => {
+  assert.match(RUTA, /medianoche > ahora \? medianoche : ahora/, "el instante tiene que ser max(00:00 de la fecha, ahora)");
+});
+
+test("la baja en bloque hace lo mismo que cancelar UNA cita: retira el borrador y devuelve el dinero", () => {
+  assert.match(RUTA, /retirarBorradoresDeLaCita\(\{/, "tiene que retirar el borrador de registro de cada cita");
+  assert.match(RUTA, /reembolsarCitaSiProcede\(ctx, cita, \{ quienCancela: "profesional"/, "tiene que devolver el cobro como el PATCH de la cita");
+  assert.ok(!/Booking\.update\(/.test(RUTA), "ya no puede ser un UPDATE masivo: las dos piezas van cita a cita");
+});
