@@ -758,7 +758,7 @@ export default function CobrosPage() {
                       registrado antes de facturar todavía no tiene ninguna. */}
                   <td className="px-4 py-3 font-mono text-xs">
                     {p.invoice?.id ? (
-                      <Link href={`/facturacion/facturas/${p.invoice.id}`} className="text-[var(--color-primary,#1B3A2D)] hover:underline">
+                      <Link href={`/facturacion/facturas?id=${p.invoice.id}`} className="text-[var(--color-primary,#1B3A2D)] hover:underline">
                         {p.invoice.number}
                       </Link>
                     ) : (

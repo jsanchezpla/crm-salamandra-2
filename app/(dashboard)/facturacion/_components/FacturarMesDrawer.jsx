@@ -140,7 +140,7 @@ export default function FacturarMesDrawer({ open, onClose, onDone }) {
                     {r.paciente && <span className="text-neutral-400"> · {r.paciente}</span>}
                   </span>
                   {r.resultado === "emitida" ? (
-                    <Link href={`/facturacion/facturas/${r.invoiceId}`} className="font-mono text-[var(--color-primary,#1B3A2D)] hover:underline">
+                    <Link href={`/facturacion/facturas?id=${r.invoiceId}`} className="font-mono text-[var(--color-primary,#1B3A2D)] hover:underline">
                       {r.numero}
                     </Link>
                   ) : (

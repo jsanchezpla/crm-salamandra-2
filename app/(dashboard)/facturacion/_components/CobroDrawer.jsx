@@ -178,7 +178,7 @@ export default function CobroDrawer({ cobroId, resumen, onClose, onCambiado }) {
             <div className="px-6 py-4 border-b border-neutral-100">
               <FilaDato rotulo="Factura">
                 {cobro.invoice?.id ? (
-                  <Link href={`/facturacion/facturas/${cobro.invoice.id}`} className="text-[var(--color-primary,#1B3A2D)] hover:underline font-mono text-[12px]">
+                  <Link href={`/facturacion/facturas?id=${cobro.invoice.id}`} className="text-[var(--color-primary,#1B3A2D)] hover:underline font-mono text-[12px]">
                     {cobro.invoice.number}
                   </Link>
                 ) : (

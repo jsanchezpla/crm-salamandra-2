@@ -257,7 +257,7 @@ export default function ResumenCaja({ cajaId }) {
                                     <td className="px-2 py-1.5 font-mono text-[11.5px]">
                                       {c.invoiceId ? (
                                         <Link
-                                          href={`/facturacion/facturas/${c.invoiceId}`}
+                                          href={`/facturacion/facturas?id=${c.invoiceId}`}
                                           onClick={(e) => e.stopPropagation()}
                                           className="text-[var(--color-primary,#1B3A2D)] hover:underline"
                                         >

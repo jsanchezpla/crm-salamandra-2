@@ -595,6 +595,19 @@ export default function FacturasPage() {
     }
   }
 
+  /*
+   * La URL puede traer una factura (`?id=`): es como llegan los enlaces desde
+   * Cobros, el cajón del cobro, el resultado del lote y el resumen de caja.
+   * Hasta el 06/09/2026 apuntaban a /facturacion/facturas/<id>, una ruta que
+   * no existe, y cada número de factura clicado daba un 404. Se lee del
+   * navegador y no con useSearchParams para no exigir el Suspense del build.
+   */
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("id");
+    if (id) openDetailById(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Abre una factura por id (re-fetch con includes: rectifies/rectifiedBy).
   async function openDetailById(id) {
     try {
