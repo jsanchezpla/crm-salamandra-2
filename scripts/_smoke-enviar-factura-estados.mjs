@@ -51,6 +51,8 @@ test("Registrar cobro avisa del cobro pendiente que va a cobrar en vez de duplic
   assert.match(src, /const pendientes = \(jMes\?\.data\?\.pendientes \?\? \[\]\)\.filter\(/, "lee `pendientes` de /payments/mes con la regla del paciente");
   assert.match(src, /setPendientesDelMes\(pendientes\);/);
   assert.match(src, /if \(pendientes\.length\) \{[\s\S]{0,900}setForm\(\(f\) => \(\{ \.\.\.f, amount: String\(suma\) \}\)\);/, "con pendientes, el importe propuesto es el suyo (o su suma), no la resta contra la cuota entera");
+  assert.match(src, /\} else \{[\s\S]{0,400}setParcialDelMes\(Number\(esperado\)/, "sin `return` temprano: la cuota de la familia se pinta también con pendiente");
+  assert.match(src, /notes: pendientesDelMes\.length\s*\? form\.notes\.trim\(\) \|\| null/, "con pendiente solo viaja la nota escrita a mano");
   assert.match(src, /Este mes ya tiene su cobro pendiente en Cobros/);
   assert.match(src, /No se crea otra fila/);
 });

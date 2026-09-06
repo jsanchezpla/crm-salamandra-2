@@ -306,16 +306,19 @@ export default function CobrosPage() {
         const suma = Math.round(pendientes.reduce((s, p) => s + Number(p.amount || 0), 0) * 100) / 100;
         setParcialDelMes(null);
         setForm((f) => ({ ...f, amount: String(suma) }));
-        return;
+      } else {
+        // Solo con una cuota conocida (06/09/2026): sin importe esperado, «queda
+        // 0,00 €» con el campo en blanco era un aviso que mentía.
+        setParcialDelMes(Number(esperado) > 0 && parcial.yaCobrado > 0 ? parcial : null);
+        // Solo se pisa el importe cuando hay algo que restar. Si el mes ya está
+        // cubierto NO se rellena un 0 —el formulario no lo aceptaría y no se
+        // entendería—: se deja vacío y el aviso de abajo lo explica.
+        if (parcial.hayParcial) setForm((f) => ({ ...f, amount: String(parcial.resto) }));
+        else if (parcial.completo) setForm((f) => ({ ...f, amount: "" }));
       }
-      // Solo con una cuota conocida (06/09/2026): sin importe esperado, «queda
-      // 0,00 €» con el campo en blanco era un aviso que mentía.
-      setParcialDelMes(Number(esperado) > 0 && parcial.yaCobrado > 0 ? parcial : null);
-      // Solo se pisa el importe cuando hay algo que restar. Si el mes ya está
-      // cubierto NO se rellena un 0 —el formulario no lo aceptaría y no se
-      // entendería—: se deja vacío y el aviso de abajo lo explica.
-      if (parcial.hayParcial) setForm((f) => ({ ...f, amount: String(parcial.resto) }));
-      else if (parcial.completo) setForm((f) => ({ ...f, amount: "" }));
+      // (Sin `return` aquí: lo de abajo pinta «la cuota de la familia» y tiene
+      // que correr también con pendiente; un atajo dejó el cajón diciendo
+      // «Sin cuota asignada» a una familia con cuatro cuotas.)
       if (cuotas.length) {
         setCuotaDeLaFamilia({
           n: cuotas.length,
@@ -497,7 +500,12 @@ export default function CobrosPage() {
           amount: Number(form.amount),
           method: form.method,
           paidAt: form.paidAt,
-          notes: [notaConceptos, form.notes].filter(Boolean).join(" — ") || null,
+          // Con un cobro pendiente detrás, ese cobro conserva su propia nota
+          // («Cuota septiembre 2026 — Psicología…»): solo viaja lo escrito a
+          // mano. La composición de conceptos es para el cobro que nace aquí.
+          notes: pendientesDelMes.length
+            ? form.notes.trim() || null
+            : [notaConceptos, form.notes].filter(Boolean).join(" — ") || null,
           // La terapia del cobro, para que «Facturar el mes» pueda agrupar por
           // concepto: solo cuando la cuota es de UN concepto (una compuesta no
           // se puede partir por terapia).
