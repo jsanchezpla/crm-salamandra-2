@@ -8,6 +8,7 @@ import { buildSessionPdfBuffer, sessionPdfFilename } from "@/lib/clinica/session
 import { includesDeLaSesion, argumentosDelPdfDeSesion } from "@/lib/clinica/argumentosDelPdf.js";
 import { documentoDeRegistro, motivoParaNoEnviar } from "@/lib/clinica/envioRegistro.js";
 import { propuestaDeCorreo, limpiarCorreo, motivoParaNoAvisar } from "@/lib/clinica/correoRegistro.js";
+import { correosParaAvisar } from "@/lib/clients/contactoDeFicha.js";
 import { registroEnviadoTemplate } from "@/lib/email/templates/clinica/registroEnviado.js";
 import { getTenantResendConfig } from "@/lib/outreach/resendConfig.js";
 import { sendEmail, envioRealizado } from "@/lib/email/resendClient.js";
@@ -75,7 +76,9 @@ export const GET = withTenant(async (request, rc, ctx) => {
     const argumentos = await argumentosDelPdfDeSesion(session, ctx);
     const clientId =
       session.clientId ?? argumentos.patientClientId ?? (await clientIdOfPatient(ctx.tenantModels, session.patientId));
-    const cliente = clientId && Client ? await Client.findByPk(clientId, { attributes: ["id", "name", "email"] }) : null;
+    const cliente = clientId && Client ? await Client.findByPk(clientId, { attributes: ["id", "name", "email", "guardians"] }) : null;
+    // La ficha, y si no tiene correo, sus tutores (06/09/2026, Rodrigo).
+    const { correos, deTutores } = correosParaAvisar(cliente);
 
     return ok({
       propuesta: propuestaDeCorreo({
@@ -84,9 +87,9 @@ export const GET = withTenant(async (request, rc, ctx) => {
         patientName: argumentos.patientName,
         centro: ctx.tenant?.name ?? null,
       }),
-      destinatario: cliente ? { nombre: cliente.name, email: cliente.email ?? null } : null,
+      destinatario: cliente ? { nombre: cliente.name, email: correos[0] ?? null, correos, deTutores } : null,
       motivoParaNoEnviar: motivoParaNoEnviar({ clientId }),
-      motivoParaNoAvisar: motivoParaNoAvisar({ email: cliente?.email }),
+      motivoParaNoAvisar: motivoParaNoAvisar({ correos }),
     });
   } catch (err) {
     return serverError(err);
@@ -205,8 +208,11 @@ export const POST = withTenant(async (request, rc, ctx) => {
     let correoError = null;
     if (correo) {
       try {
-        const cliente = Client ? await Client.findByPk(clientId, { attributes: ["id", "name", "email"] }) : null;
-        const motivoCorreo = motivoParaNoAvisar({ email: cliente?.email });
+        const cliente = Client ? await Client.findByPk(clientId, { attributes: ["id", "name", "email", "guardians"] }) : null;
+        // La ficha, y si no tiene correo, TODOS sus tutores con uno (06/09/2026,
+        // Rodrigo). Uno por destinatario: nadie ve la lista de los demás.
+        const { correos } = correosParaAvisar(cliente);
+        const motivoCorreo = motivoParaNoAvisar({ correos });
         if (motivoCorreo) {
           correoEnviado = false;
           correoError = motivoCorreo;
@@ -219,18 +225,26 @@ export const POST = withTenant(async (request, rc, ctx) => {
             texto: correo.texto,
             portalUrl: ctx.tenant.settings?.widget?.auth?.loginUrl ?? null,
           });
-          const envio = await sendEmail({
-            to: cliente.email,
-            subject: tpl.subject,
-            html: tpl.html,
-            text: tpl.text,
-            from: resend.fromEmail || undefined,
-            replyTo: resend.replyTo || undefined,
-            apiKey: resend.apiKey || undefined,
-          });
-          const { salio, motivo } = envioRealizado(envio, `clinica:registro ${id}`);
-          correoEnviado = salio;
-          correoError = salio ? null : motivo;
+          const fallos = [];
+          for (const destino of correos) {
+            const envio = await sendEmail({
+              to: destino,
+              subject: tpl.subject,
+              html: tpl.html,
+              text: tpl.text,
+              from: resend.fromEmail || undefined,
+              replyTo: resend.replyTo || undefined,
+              apiKey: resend.apiKey || undefined,
+            });
+            const { salio, motivo } = envioRealizado(envio, `clinica:registro ${id}`);
+            if (!salio) fallos.push(motivo);
+          }
+          correoEnviado = fallos.length < correos.length;
+          correoError = fallos.length
+            ? fallos.length === correos.length
+              ? fallos[0]
+              : `No llegó a ${fallos.length} de ${correos.length} correos`
+            : null;
         }
       } catch (mailErr) {
         process.stderr.write(`[clinica:enviar-registro] correo falló: ${mailErr.message}\n`);

@@ -43,7 +43,8 @@ export default function EnviarRegistroModal({ sessionId, reenvio = false, onCerr
       setDatos(j.data);
       setAsunto(j.data.propuesta?.asunto ?? "");
       setTexto(j.data.propuesta?.texto ?? "");
-      // Sin correo en la ficha no se puede avisar: se desmarca y se dice.
+      // Sin correo en la ficha ni en los tutores no se puede avisar: se
+      // desmarca y se dice.
       setAvisar(!j.data.motivoParaNoAvisar);
     } catch (e) {
       setError(e.message);
@@ -104,7 +105,15 @@ export default function EnviarRegistroModal({ sessionId, reenvio = false, onCerr
               <div className="text-[12px] text-neutral-600">
                 <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest block">Para</span>
                 {datos.destinatario.nombre}
-                {datos.destinatario.email ? <span className="text-neutral-400"> · {datos.destinatario.email}</span> : null}
+                {datos.destinatario.correos?.length ? (
+                  <span className="text-neutral-400">
+                    {" · "}
+                    {datos.destinatario.correos.join(", ")}
+                    {datos.destinatario.deTutores ? " (de sus tutores: la ficha no tiene correo)" : ""}
+                  </span>
+                ) : datos.destinatario.email ? (
+                  <span className="text-neutral-400"> · {datos.destinatario.email}</span>
+                ) : null}
               </div>
             )}
 

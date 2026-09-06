@@ -8,6 +8,7 @@ import { cargarLogo } from "../../../../../../lib/billing/logoMembrete.js";
 import { invoicePatientInclude } from "../../../../../../lib/billing/patientLink.js";
 import { invoiceSentTemplate } from "../../../../../../lib/email/templates/billing/invoiceSent.js";
 import { sendEmail } from "../../../../../../lib/email/resendClient.js";
+import { correosParaAvisar } from "../../../../../../lib/clients/contactoDeFicha.js";
 import { getTenantResendConfig } from "../../../../../../lib/outreach/resendConfig.js";
 import { isDemoTenant } from "../../../../../../lib/demo/isDemo.js";
 
@@ -59,7 +60,10 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     // del cliente, se degrada a simple anotación en vez de fallar.
     const { Client, TenantBillingSettings } = tenantModels;
     const cliente = invoice.clientId && Client ? await Client.findByPk(invoice.clientId) : null;
-    const destino = (cliente?.email || "").trim();
+    // La ficha, y si no tiene correo, sus tutores (06/09/2026, Rodrigo: el
+    // mismo criterio que el aviso del registro de sesión).
+    const { correos: destinos } = correosParaAvisar(cliente);
+    const destino = destinos[0] ?? "";
     const quiereEmail = via === null || via === "email";
 
     let emailEnviado = false;
@@ -100,25 +104,33 @@ export const POST = withTenant(async (request, { params }, ctx) => {
         });
 
         const resend = getTenantResendConfig({ tenant });
-        const envio = await sendEmail({
-          to: destino,
-          subject: tpl.subject,
-          html: tpl.html,
-          text: tpl.text,
-          from: resend.fromEmail || undefined,
-          replyTo: resend.replyTo || undefined,
-          apiKey: resend.apiKey || undefined,
-          attachments: [{ filename: invoicePdfFilename(invoice), content: pdf }],
-        });
-        // sendEmail no lanza: devuelve {ok:false} si Resend rechaza y
-        // {dryRun:true} si no hay correo configurado. Dar por enviado sin
-        // mirarlo era decirle al admin que el cliente tiene la factura.
-        if (!envio.ok) {
-          emailError = envio.error || "Resend rechazó el envío";
-        } else if (envio.dryRun) {
-          emailError = "Correo no configurado: la factura no ha salido (modo simulacro)";
-        } else {
+        // Uno por destinatario (la ficha, o cada tutor con correo): nadie ve
+        // la lista de los demás. sendEmail no lanza: devuelve {ok:false} si
+        // Resend rechaza y {dryRun:true} si no hay correo configurado. Dar por
+        // enviado sin mirarlo era decirle al admin que el cliente tiene la
+        // factura.
+        let llegaron = 0;
+        for (const cadaDestino of destinos) {
+          const envio = await sendEmail({
+            to: cadaDestino,
+            subject: tpl.subject,
+            html: tpl.html,
+            text: tpl.text,
+            from: resend.fromEmail || undefined,
+            replyTo: resend.replyTo || undefined,
+            apiKey: resend.apiKey || undefined,
+            attachments: [{ filename: invoicePdfFilename(invoice), content: pdf }],
+          });
+          if (!envio.ok) emailError = envio.error || "Resend rechazó el envío";
+          else if (envio.dryRun) emailError = "Correo no configurado: la factura no ha salido (modo simulacro)";
+          else llegaron += 1;
+        }
+        if (llegaron > 0) {
           emailEnviado = true;
+          emailError =
+            llegaron < destinos.length && emailError
+              ? `No llegó a ${destinos.length - llegaron} de ${destinos.length} correos: ${emailError}`
+              : null;
         }
         if (emailError) process.stderr.write(`[billing:send] ${invoice.id}: ${emailError}\n`);
       } catch (mailErr) {
@@ -127,7 +139,7 @@ export const POST = withTenant(async (request, { params }, ctx) => {
 `);
       }
     } else if (quiereEmail && !destino) {
-      emailError = "El cliente no tiene email en su ficha";
+      emailError = "El cliente no tiene correo ni en su ficha ni en sus tutores";
     }
 
     const updates = { status: "sent" };
@@ -135,7 +147,7 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       ...(invoice.customFields || {}),
       sentVia: via || (emailEnviado ? "email" : "other"),
       sentAt: new Date().toISOString(),
-      ...(emailEnviado ? { sentTo: destino } : {}),
+      ...(emailEnviado ? { sentTo: destinos.join(", ") } : {}),
     };
     await invoice.update(updates);
 
