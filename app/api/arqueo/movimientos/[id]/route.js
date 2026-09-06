@@ -40,6 +40,12 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
   // La caja no se cambia por PATCH: mover un apunte de cajón descuadra dos
   // arqueos a la vez. Se borra y se apunta en la otra.
   delete valores.cashPointId;
+  // Y tampoco se puede MOVER un apunte a un día ya cerrado (revisión del
+  // 06/09/2026): cambiarle la fecha reescribiría el arqueo de ese día.
+  if (valores.date && String(valores.date) !== String(movimiento.date)) {
+    const destinoCerrado = await frenarSiEstaCerrado(tenantModels, { cashPointId: movimiento.cashPointId, date: valores.date });
+    if (destinoCerrado) return error(destinoCerrado, 409);
+  }
 
   const antes = resumen(movimiento, ["date", "direction", "amount", "concept"]);
   await movimiento.update(valores);

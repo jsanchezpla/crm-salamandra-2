@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { hoyVigente } from "@/lib/billing/cuotas.js";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import MovimientosCaja from "../_components/MovimientosCaja.jsx";
 import ResumenCaja from "../_components/ResumenCaja.jsx";
@@ -11,7 +12,7 @@ const inputCls =
 const fmt = (n) =>
   new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" }).format(Number(n) || 0);
 
-const hoy = () => new Date().toISOString().slice(0, 10);
+const hoy = () => hoyVigente();
 
 export default function ArqueoPage() {
   const [cajas, setCajas] = useState([]);

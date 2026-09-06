@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { hoyVigente, mesVigente } from "@/lib/billing/cuotas.js";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import Link from "next/link";
 import StatusBadge from "../_components/StatusBadge.jsx";
@@ -55,7 +56,7 @@ export default function CobrosPage() {
   // abre los documentos de esa familia en su área privada.
   // `patientId`: de QUIÉN es la cuota que se cobra (01/09/2026, Rodrigo). Vacío
   // = de la familia entera, que es como funcionaba hasta hoy.
-  const [form, setForm] = useState({ modo: "factura", invoiceId: "", clientId: "", patientId: "", periodMonth: new Date().toISOString().slice(0, 7), amount: "", method: "transfer", paidAt: new Date().toISOString().slice(0, 10), notes: "" });
+  const [form, setForm] = useState({ modo: "factura", invoiceId: "", clientId: "", patientId: "", periodMonth: mesVigente(), amount: "", method: "transfer", paidAt: hoyVigente(), notes: "" });
   // Los pacientes de la familia elegida, para poder cobrar lo de UNO. Vacío
   // cuando el centro no tiene módulo asistencial (el endpoint responde 403) o
   // cuando esa ficha no tiene pacientes: entonces el selector no se enseña.
@@ -66,7 +67,7 @@ export default function CobrosPage() {
   const [facturasCliente, setFacturasCliente] = useState([]);
   const [showFacturarMes, setShowFacturarMes] = useState(false);
   const [morosidad, setMorosidad] = useState(null);
-  const [mesMorosidad, setMesMorosidad] = useState(new Date().toISOString().slice(0, 7));
+  const [mesMorosidad, setMesMorosidad] = useState(mesVigente());
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
   // Cuota compuesta desde el catálogo (31/08/2026, formación con Rosa): la

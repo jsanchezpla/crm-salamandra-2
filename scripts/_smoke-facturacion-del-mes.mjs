@@ -202,3 +202,19 @@ describe("lineasDeCuota — cuadre del total con lo cobrado", () => {
     assert.equal(calc.total, 250);
   });
 });
+
+// ── Revisión del 06/09/2026: la etiqueta del mes no se repite ────────────────
+describe("lineasDeCuota — la nota del cobro generado ya lleva «Cuota mes»", () => {
+  it("no antepone la etiqueta cuando la nota ya empieza por ella", () => {
+    const generado = cobro("c1", "fam1", 160, { notes: "Cuota septiembre 2026 — Logopedia · 2 sesiones/semana" });
+    const [linea] = lineasDeCuota({ cobros: [generado], mes: "2026-09", vatRate: 0 });
+    assert.equal(linea.description, "Cuota septiembre 2026 — Logopedia · 2 sesiones/semana");
+  });
+  it("y sí la antepone a una nota escrita a mano, o la pone sola si no hay nota", () => {
+    const manual = cobro("c2", "fam1", 50, { notes: "Pagado en recepción" });
+    const [l1] = lineasDeCuota({ cobros: [manual], mes: "2026-09", vatRate: 0 });
+    assert.equal(l1.description, "Cuota septiembre 2026 — Pagado en recepción");
+    const [l2] = lineasDeCuota({ cobros: [cobro("c3", "fam1", 50, { notes: "" })], mes: "2026-09", vatRate: 0 });
+    assert.equal(l2.description, "Cuota septiembre 2026");
+  });
+});

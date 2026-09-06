@@ -14,6 +14,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import { hoyVigente } from "@/lib/billing/cuotas.js";
 import Select from "@/components/ui/Select.jsx";
 import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
 import { repartoIgual, repartoPorPorcentajes, porcentajesCuadran } from "@/lib/billing/repartoImportes.js";
@@ -146,7 +147,7 @@ export default function PatientReparto({ patientId, defaultPayerClientId, onClos
         patientId,
         // A nombre de un tutor de la familia (02/09/2026), si la fila lo pide.
         ...(guardianId ? { guardianId } : {}),
-        issueDate: new Date().toISOString().slice(0, 10),
+        issueDate: hoyVigente(),
         lines: [{ description: lineDesc(), quantity: 1, unitPrice: Number(amount) }],
         customFields: { source: "reparto", ...(extraCF || {}) },
       }),

@@ -45,8 +45,23 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       order: [["paidAt", "DESC"]],
     });
 
+    // Y los pendientes de cuota del mes (06/09/2026): quien cobra tiene que
+    // saber que el cobro ya existe y que registrar el pago lo marca cobrado.
+    const pendientes = await Payment.findAll({
+      where: {
+        clientId,
+        status: "pending",
+        cuotaId: { [Op.ne]: null },
+        invoiceId: null,
+        periodMonth: { [Op.gte]: `${mes}-01`, [Op.lt]: `${mesSiguiente(mes)}-01` },
+      },
+      attributes: ["id", "patientId", "amount"],
+      order: [["createdAt", "ASC"]],
+    });
+
     return ok({
       mes,
+      pendientes: pendientes.map((p) => ({ id: p.id, patientId: p.patientId ?? null, amount: Number(p.amount) })),
       cobros: filas.map((p) => ({
         id: p.id,
         patientId: p.patientId ?? null,

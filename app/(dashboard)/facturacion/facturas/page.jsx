@@ -10,7 +10,8 @@ import Select from "@/components/ui/Select.jsx";
 import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
 import { LA_FICHA } from "@/lib/billing/razonSocial.js";
 
-import { nifDeCliente } from "../../../../lib/billing/nifCliente.js";
+import { nifDeCliente, nombreFiscalDeCliente } from "../../../../lib/billing/nifCliente.js";
+import { hoyVigente } from "@/lib/billing/cuotas.js";
 import { ivaPorDefecto } from "../../../../lib/billing/ivaPorDefecto.js";
 import PatientReparto from "@/components/billing/PatientReparto.jsx";
 import PartirFacturaModal from "../_components/PartirFacturaModal.jsx";
@@ -36,7 +37,7 @@ function addDaysIso(isoDate, days) {
 }
 
 function emptyForm(defaultVat = 21, termsDays = 30, defaultIrpf = 0) {
-  const issueDate = new Date().toISOString().slice(0, 10);
+  const issueDate = hoyVigente();
   return {
     clientId: "",
     // A nombre de quién se emite (04/09/2026): un tutor de la familia, o "" =
@@ -429,7 +430,7 @@ export default function FacturasPage() {
       employeeId: openInvoice.employeeId ?? "",
       partnerId: openInvoice.partnerId ?? "",
       irpfRate: openInvoice.irpfRate ?? settings?.defaultIrpfRate ?? 0,
-      issueDate: openInvoice.issueDate?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
+      issueDate: openInvoice.issueDate?.slice(0, 10) ?? hoyVigente(),
       dueDate: openInvoice.dueDate?.slice(0, 10) ?? "",
       series: openInvoice.series ?? "F",
       notes: openInvoice.notes ?? "",
@@ -441,6 +442,9 @@ export default function FacturasPage() {
         vatRate: l.vatRate ?? ivaPorDefecto(settings),
         productId: l.productId ?? "",
         kind: l.kind ?? "",
+        // El empleado de cada línea (reparto por terapeuta) también vuelve al
+        // formulario: sin esto, «Guardar cambios» lo borraba en silencio.
+        employeeId: l.employeeId ?? "",
       })),
     });
     setEditing(true);
@@ -568,9 +572,12 @@ export default function FacturasPage() {
     if (action === "cancel" && !confirm("¿Cancelar la factura? Solo permitido sin cobros.")) return;
     if (action === "send") {
       const destino = openInvoice.client?.email;
+      // El listado no trae el correo de la ficha, y desde el 06/09/2026 el
+      // servidor manda también a los tutores cuando la ficha no lo tiene: aquí
+      // no se puede prometer «no se mandará nada».
       const aviso = destino
         ? `Se enviará la factura por email a ${destino}, con el PDF adjunto. ¿Continuar?`
-        : "El cliente no tiene email en su ficha: la factura se marcará como enviada, pero NO se mandará nada. ¿Continuar?";
+        : "Se enviará la factura con el PDF al correo de la ficha o, si no tiene, a los tutores con correo. Si no hay ninguno, quedará marcada como enviada sin mandar nada. ¿Continuar?";
       if (!confirm(aviso)) return;
     }
     setSaving(true);
@@ -899,7 +906,8 @@ export default function FacturasPage() {
                     const sel = clienteElegido;
                     if (!sel || String(sel.id) !== String(form.clientId)) return null;
                     const missing = [];
-                    if (!sel.fiscalName) missing.push("razón social");
+                    // El mismo criterio que el servidor al emitir: razón social o, si no, el nombre.
+                    if (!nombreFiscalDeCliente(sel)) missing.push("razón social");
                     if (!nifDeCliente(sel)) missing.push("NIF/CIF");
                     if (missing.length === 0) return null;
                     return (
@@ -1592,7 +1600,7 @@ function DetailView({ invoice, puedeFacturar, onAction, onEdit, onOpenLinked, sa
         if (invoice.guardianId) {
           if (faltaTutor) fiscalMissing.push(faltaTutor);
         } else {
-          if (!invoice.client?.fiscalName) fiscalMissing.push("razón social");
+          if (!nombreFiscalDeCliente(invoice.client)) fiscalMissing.push("razón social");
           // El mismo criterio que el candado del servidor: con dos columnas
           // en juego, si la pantalla mira una y el servidor la otra, el botón
           // sale deshabilitado en facturas que el servidor sí dejaría emitir.

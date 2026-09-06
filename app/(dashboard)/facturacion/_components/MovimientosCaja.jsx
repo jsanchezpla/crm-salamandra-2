@@ -10,13 +10,14 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { hoyVigente, mesVigente } from "@/lib/billing/cuotas.js";
 import { fmtMoney, fmtDate } from "./Kpi.jsx";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
 
-const hoy = () => new Date().toISOString().slice(0, 10);
-const primeroDeMes = () => `${new Date().toISOString().slice(0, 7)}-01`;
+const hoy = () => hoyVigente();
+const primeroDeMes = () => `${mesVigente()}-01`;
 
 export default function MovimientosCaja({ cajaId, cajas = [] }) {
   const [movimientos, setMovimientos] = useState([]);

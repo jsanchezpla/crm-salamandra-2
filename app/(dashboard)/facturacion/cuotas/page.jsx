@@ -227,7 +227,12 @@ export default function CuotasPage() {
       hoyIso()
     );
     if (!fecha) return;
-    await guardarParcial(cuota.id, { endDate: fecha, active: false }, "Cuota dada de baja");
+    // Acepta 06/09/2026 y 2026-09-06 (revisión del 06/09/2026): antes un
+    // dd/mm/aaaa acababa en un 422 que hablaba de «AAAA-MM-DD».
+    const m = fecha.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    const iso = m ? `${m[3]}-${m[2]}-${m[1]}` : fecha.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) { setError("La fecha de baja tiene que ser dd/mm/aaaa"); return; }
+    await guardarParcial(cuota.id, { endDate: iso, active: false }, "Cuota dada de baja");
   }
 
   async function reactivar(cuota) {
@@ -306,11 +311,20 @@ export default function CuotasPage() {
         if (j.code === "TIENE_COBROS") return j;
         throw new Error(j.error || "No se pudo eliminar");
       }
-      setOkMsg(
-        j.data?.cobros
-          ? `Cuota eliminada. Sus ${j.data.cobros} cobros siguen en Cobros.`
-          : "Cuota eliminada"
-      );
+      {
+        const n = Number(j.data?.cobros ?? 0);
+        const b = Number(j.data?.cobrosBorrados ?? 0);
+        const quedan = Math.max(0, n - b);
+        setOkMsg(
+          b && quedan
+            ? `Cuota eliminada: ${b} ${b === 1 ? "cobro pendiente retirado" : "cobros pendientes retirados"}; ${quedan} ya ${quedan === 1 ? "cobrado o facturado sigue" : "cobrados o facturados siguen"} en Cobros.`
+            : b
+              ? `Cuota eliminada y ${b === 1 ? "su cobro pendiente retirado" : `sus ${b} cobros pendientes retirados`}.`
+              : quedan
+                ? `Cuota eliminada. Sus ${quedan} cobros (ya cobrados o facturados) siguen en Cobros.`
+                : "Cuota eliminada"
+        );
+      }
       await cargar();
       return null;
     } catch (e) {
@@ -649,12 +663,31 @@ function DrawerCuota({ conceptos, cuota = null, inicial = null, ivaSugerido = 21
           startDate: String(cuota.startDate ?? "").slice(0, 10),
           endDate: cuota.endDate ? String(cuota.endDate).slice(0, 10) : "",
           notes: cuota.notes ?? "",
+          // De qué hijo es: editable desde el 06/09/2026 (antes solo se veía).
+          patientId: cuota.patientId ?? "",
         }
       // Desde el filtro de una cuota, el alta nace con ESA cuota puesta:
       // «añadir un paciente al grupo» es abrir y elegirlo.
       : { ...CUOTA_VACIA(), ...(inicial ?? {}) }
   );
   const [destinatarios, setDestinatarios] = useState([]);
+  // Los pacientes de la familia, para poder cambiar de qué hijo es la cuota al
+  // editarla (revisión del 06/09/2026: el filtro «Sin paciente asignado» invitaba
+  // a un repaso que solo se podía hacer borrando y creando de nuevo).
+  const [pacientesFamilia, setPacientesFamilia] = useState([]);
+  useEffect(() => {
+    if (!editando || !cuota?.clientId) return;
+    let vivo = true;
+    fetch(`/api/pacientes?clientId=${encodeURIComponent(cuota.clientId)}&limit=100`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (!vivo || !j?.ok) return;
+        const lista = Array.isArray(j.data) ? j.data : j.data?.items ?? j.data?.patients ?? [];
+        setPacientesFamilia(lista);
+      })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [editando, cuota?.clientId]);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState(null);
   const [resultado, setResultado] = useState(null);
@@ -696,6 +729,7 @@ function DrawerCuota({ conceptos, cuota = null, inicial = null, ivaSugerido = 21
         startDate: form.startDate,
         endDate: form.endDate || null,
         notes: form.notes || null,
+        ...(editando ? { patientId: form.patientId || null } : {}),
       };
       const r = editando
         ? await fetch(`/api/billing/cuotas/${cuota.id}`, {
@@ -774,9 +808,23 @@ function DrawerCuota({ conceptos, cuota = null, inicial = null, ivaSugerido = 21
             {editando ? (
               <div className="rounded-xl border border-neutral-100 bg-neutral-50 px-4 py-3 text-sm">
                 <div className="text-neutral-800">{cuota.client?.fiscalName || cuota.client?.name}</div>
-                {cuota.patient && (
-                  <div className="text-xs text-neutral-500">{cuota.patient.firstName} {cuota.patient.lastName}</div>
-                )}
+                <div className="mt-2">
+                  <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">De qué paciente</label>
+                  <select
+                    value={form.patientId}
+                    onChange={(e) => setForm((f) => ({ ...f, patientId: e.target.value }))}
+                    className="mt-1 w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400"
+                  >
+                    <option value="">Toda la familia (sin paciente)</option>
+                    {pacientesFamilia.map((p) => (
+                      <option key={p.id} value={p.id}>{p.firstName} {p.lastName}</option>
+                    ))}
+                    {form.patientId && !pacientesFamilia.some((p) => String(p.id) === String(form.patientId)) && cuota.patient && (
+                      <option value={form.patientId}>{cuota.patient.firstName} {cuota.patient.lastName}</option>
+                    )}
+                  </select>
+                  <p className="text-[10px] text-neutral-400 mt-1">Cambiarlo aquí pone el paciente también en su cobro pendiente de este mes.</p>
+                </div>
               </div>
             ) : (
               <SelectorDestinatarios valores={destinatarios} onChange={setDestinatarios} />

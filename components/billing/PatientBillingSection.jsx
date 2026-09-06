@@ -14,6 +14,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { hoyVigente } from "@/lib/billing/cuotas.js";
 import { useRouter } from "next/navigation";
 import PatientReparto from "./PatientReparto.jsx";
 
@@ -80,7 +81,7 @@ export default function PatientBillingSection({ patientId, clientId }) {
     setBusy(true);
     setError(null);
     try {
-      const issueDate = new Date().toISOString().slice(0, 10);
+      const issueDate = hoyVigente();
       const r = await fetch(`/api/billing/invoices`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

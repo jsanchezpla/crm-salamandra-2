@@ -28,6 +28,7 @@
  */
 
 import { Fragment, useCallback, useEffect, useState } from "react";
+import { hoyVigente, mesVigente } from "@/lib/billing/cuotas.js";
 import Link from "next/link";
 import { fmtMoney, fmtDate } from "./Kpi.jsx";
 import CobroDrawer from "./CobroDrawer.jsx";
@@ -43,8 +44,8 @@ const METODOS = {
   direct_debit: "Domiciliación",
 };
 
-const hoy = () => new Date().toISOString().slice(0, 10);
-const primeroDeMes = () => `${new Date().toISOString().slice(0, 7)}-01`;
+const hoy = () => hoyVigente();
+const primeroDeMes = () => `${mesVigente()}-01`;
 
 /** La hora del cobro, en Madrid: el servidor va en UTC y el cajón, no. */
 function fmtHora(iso) {

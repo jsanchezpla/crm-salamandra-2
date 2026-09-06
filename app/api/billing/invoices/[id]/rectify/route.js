@@ -4,6 +4,7 @@ import { calculateInvoice } from "../../../../../../lib/billing/calculateInvoice
 import { assignInvoiceNumber } from "../../../../../../lib/billing/generateInvoiceNumber.js";
 import { getMasterModels } from "../../../../../../lib/db/masterDb.js";
 import { withEffectiveStatus } from "../../../../../../lib/billing/invoiceStatus.js";
+import { madridToday } from "../../../../../../lib/utils/madridDate.js";
 
 const round2 = (n) => Math.round(Number(n) * 100) / 100;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -63,7 +64,7 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
 
     // Fecha de la rectificativa: validada (formato + no anterior a la original,
     // para no backdatear el abono a un periodo/año fiscal previo).
-    let issueDate = new Date().toISOString().slice(0, 10);
+    let issueDate = madridToday();
     if (body.issueDate !== undefined && body.issueDate !== null && body.issueDate !== "") {
       if (typeof body.issueDate !== "string" || !DATE_RE.test(body.issueDate) || Number.isNaN(Date.parse(body.issueDate))) {
         return error("issueDate debe tener formato YYYY-MM-DD válido", 400);
@@ -197,7 +198,9 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
           status: "issued",
           notes,
           correctionReason: reason,
-          customFields: {},
+          // La R hereda la nota de exención de IVA de la original (revisión del
+          // 06/09/2026): en un centro exento toda R salía sin el texto legal.
+          customFields: locked.customFields?.vatExemptNote ? { vatExemptNote: locked.customFields.vatExemptNote } : {},
           subtotal: calc.taxBase,
           vatRate: 0,
           rectifiesInvoiceId: locked.id,
@@ -213,6 +216,16 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
       const originalUpdate = { rectifiedByInvoiceId: rect.id };
       if (isFullAnnul) originalUpdate.status = "rectified";
       await locked.update(originalUpdate, { transaction: t });
+
+      // La anulación TOTAL de una factura del lote suelta sus cobros (revisión
+      // del 06/09/2026): enganchados a la anulada, «Facturar el mes» ya no los
+      // recogía y la familia se quedaba sin poder refacturar el mes.
+      if (isFullAnnul && locked.customFields?.loteCuotas && tenantModels.Payment) {
+        await tenantModels.Payment.update(
+          { invoiceId: null },
+          { where: { invoiceId: locked.id, status: "completed" }, transaction: t }
+        );
+      }
 
       return rect;
     });
@@ -246,6 +259,7 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
     return ok(withEffectiveStatus(result));
   } catch (err) {
     if (err instanceof RectifyConflict) return error(err.message, 409);
+    if (err?.code === "OUT_OF_ORDER_DATE") return error(err.message, 422);
     return serverError(err);
   }
 });

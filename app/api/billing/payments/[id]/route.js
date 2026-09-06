@@ -73,6 +73,19 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
       }
     }
 
+    // Cambiar el importe de un cobro ya enganchado tampoco puede pasarse del
+    // pendiente de su factura (revisión del 06/09/2026): 100 € → 150 € dejaba
+    // `paidAmount` por encima del total y «Cobrado 150 €» en el PDF.
+    if (updates.amount != null && !("invoiceId" in body) && payment.invoiceId) {
+      const suya = await Invoice.findByPk(payment.invoiceId);
+      if (suya) {
+        const pendienteSinEste = Number(suya.total) - Number(suya.paidAmount) + Number(payment.amount);
+        if (Number(updates.amount) > pendienteSinEste + 0.0049) {
+          return error(`El importe (${Number(updates.amount)}) excede el pendiente de la factura (${pendienteSinEste.toFixed(2)})`, 400);
+        }
+      }
+    }
+
     const antes = resumenImporte(payment);
     await payment.update(updates);
     await logBillingAudit({

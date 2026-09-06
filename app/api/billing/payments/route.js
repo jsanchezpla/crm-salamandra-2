@@ -162,19 +162,72 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     }
     const pacienteValido = typeof patientId === "string" && UUID_RE.test(patientId) ? patientId : null;
 
-    const payment = await Payment.create({
-      invoiceId: invoiceId || null,
-      // Con factura, el cliente se hereda de ella; sin factura viene en el body.
-      clientId: invoice ? invoice.clientId : clientId,
-      periodMonth: mes,
-      amount: Number(amount),
-      paidAt,
-      method,
-      status: "completed",
-      notes: notes || null,
-      patientId: pacienteValido,
-      conceptId: conceptoValido,
-    });
+    /*
+     * ── EL COBRO PENDIENTE DEL MES SE COBRA, NO SE DUPLICA (revisión del
+     *    06/09/2026) ─────────────────────────────────────────────────────────
+     * Desde el 05/09 la cuota deja su cobro del mes PENDIENTE en Cobros. Si la
+     * contable lo registraba desde «+ Registrar cobro» o desde «Cobrar mes» de
+     * la cita, aquí se creaba OTRO cobro y el pendiente se quedaba para siempre
+     * (190 € pendientes y 190 € cobrados del mismo mes, y Caja contándolo).
+     * Ahora, sin factura y con mes, se busca el pendiente de esa familia (y de
+     * ese paciente, si se dijo) y se pasa a cobrado con lo que se ha tecleado.
+     * Con varios pendientes solo se cobran todos si el importe es exactamente
+     * su suma; si no, se crea el cobro como antes y la respuesta lo dice.
+     */
+    let payment = null;
+    let cobradosPendientes = [];
+    if (!invoiceId && mes && clientId) {
+      const pendientes = await Payment.findAll({
+        where: {
+          clientId,
+          periodMonth: mes,
+          status: "pending",
+          cuotaId: { [Op.ne]: null },
+          invoiceId: null,
+          stripePaymentIntentId: null,
+          bankTransactionId: null,
+          ...(pacienteValido ? { patientId: pacienteValido } : {}),
+        },
+        order: [["createdAt", "ASC"]],
+      });
+      const suma = Math.round(pendientes.reduce((s, p) => s + Number(p.amount || 0), 0) * 100) / 100;
+      const importe = Math.round(Number(amount) * 100) / 100;
+      if (pendientes.length === 1) {
+        const p = pendientes[0];
+        await p.update({
+          status: "completed",
+          amount: importe,
+          paidAt,
+          method,
+          notes: notes || p.notes || null,
+          conceptId: conceptoValido ?? p.conceptId ?? null,
+        });
+        payment = p;
+        cobradosPendientes = [p.id];
+      } else if (pendientes.length > 1 && Math.abs(suma - importe) < 0.005) {
+        for (const p of pendientes) {
+          await p.update({ status: "completed", paidAt, method, notes: notes ? `${p.notes ? `${p.notes} — ` : ""}${notes}` : p.notes });
+        }
+        payment = pendientes[0];
+        cobradosPendientes = pendientes.map((p) => p.id);
+      }
+    }
+
+    if (!payment) {
+      payment = await Payment.create({
+        invoiceId: invoiceId || null,
+        // Con factura, el cliente se hereda de ella; sin factura viene en el body.
+        clientId: invoice ? invoice.clientId : clientId,
+        periodMonth: mes,
+        amount: Number(amount),
+        paidAt,
+        method,
+        status: "completed",
+        notes: notes || null,
+        patientId: pacienteValido,
+        conceptId: conceptoValido,
+      });
+    }
 
     if (invoice) await updateInvoiceStatus(invoice, Payment);
 
@@ -205,7 +258,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       before: null,
       after: resumenImporte(payment),
     });
-    return created(payment);
+    return created({ ...payment.toJSON(), cobradosPendientes });
   } catch (err) {
     return serverError(err);
   }
