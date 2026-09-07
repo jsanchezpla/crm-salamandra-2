@@ -261,7 +261,7 @@ export default function CuotasPage() {
     // dd/mm/aaaa acababa en un 422 que hablaba de «AAAA-MM-DD».
     const m = fecha.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
     const iso = m ? `${m[3]}-${m[2]}-${m[1]}` : fecha.trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) { setError("La fecha de baja tiene que ser dd/mm/aaaa"); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) { setErrorMsg("La fecha de baja tiene que ser dd/mm/aaaa"); return; }
     await guardarParcial(cuota.id, { endDate: iso, active: false }, "Cuota dada de baja");
   }
 

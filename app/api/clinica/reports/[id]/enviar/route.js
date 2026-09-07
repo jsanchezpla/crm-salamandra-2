@@ -135,6 +135,15 @@ export const POST = withTenant(async (request, rc, ctx) => {
       ip: request.headers.get("x-forwarded-for"),
     });
 
+    /*
+     * Los modelos salen del contexto del tenant (08/09/2026): estaban escritos
+     * `Patient` y `TeamMember` a secas, que aquí no existen. Esto va DESPUÉS de
+     * mandar el informe, así que el `ReferenceError` no impedía el envío: el
+     * correo salía y el endpoint contestaba 500, con lo que la pantalla decía
+     * que había fallado algo que sí se había hecho —y quien lo lea así le da
+     * otra vez a enviar—. Lo caza `npm run lint:undef`.
+     */
+    const { Patient, TeamMember } = ctx.tenantModels;
     await report.reload({
       include: [
         { model: Patient, as: "patient", attributes: ["id", "firstName", "lastName", "age", "objectives", "referralReason", "mainTherapistId"] },

@@ -568,6 +568,7 @@ export function NuevaCitaDrawer({
         miFicha={miFichaDeEquipo}
         teamMembers={teamMembers}
         avisar={avisar}
+        confirmar={confirmar}
         onModo={setModo}
         onClose={onClose}
         onCreated={onCreated}
@@ -1185,7 +1186,7 @@ function sumarMinutos(hhmm, minutos) {
  * bloquea a sí mismo (el «Quién» ni se elige), el motivo es opcional, y las
  * citas que ya hubiera dentro no se tocan (se avisa cuántas hay).
  */
-function BloqueoRapido({ inicial, categorias, esAdmin, miFicha, teamMembers, avisar, onModo, onClose, onCreated }) {
+function BloqueoRapido({ inicial, categorias, esAdmin, miFicha, teamMembers, avisar, confirmar, onModo, onClose, onCreated }) {
   const [form, setForm] = useState(() => ({
     teamMemberId: miFicha?.id ?? "",
     categoryKey: "",
