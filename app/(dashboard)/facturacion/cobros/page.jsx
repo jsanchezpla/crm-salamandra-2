@@ -65,6 +65,10 @@ export default function CobrosPage() {
   // Facturas abiertas del cliente del cobro que se edita, para poder ASOCIAR
   // un cobro suelto a la factura que se emitió después (31/08/2026).
   const [facturasCliente, setFacturasCliente] = useState([]);
+  // Los pacientes de la familia del cobro que se edita, para corregir de QUIÉN
+  // es (07/09/2026, Registro: «Editar cobro» no dejaba cambiar ni el mes ni el
+  // hijo). Vacío sin módulo asistencial (403) o sin pacientes.
+  const [pacientesEdicion, setPacientesEdicion] = useState([]);
   const [showFacturarMes, setShowFacturarMes] = useState(false);
   const [morosidad, setMorosidad] = useState(null);
   const [mesMorosidad, setMesMorosidad] = useState(mesVigente());
@@ -446,6 +450,16 @@ export default function CobrosPage() {
     }).catch(() => setFacturasCliente([]));
   }, [editing?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (!editing || editing.invoice?.id || !editing.clientId) { setPacientesEdicion([]); return; }
+    let vivo = true;
+    fetch(`/api/pacientes?clientId=${encodeURIComponent(editing.clientId)}&limit=100`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (vivo) setPacientesEdicion(j?.data?.patients ?? []); })
+      .catch(() => { if (vivo) setPacientesEdicion([]); });
+    return () => { vivo = false; };
+  }, [editing?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // method y status se filtran en backend; aquí solo búsqueda libre por texto
   // La búsqueda ya la hizo el SERVIDOR (31/08/2026, lib/billing/busquedaCobros):
   // volver a filtrar aquí solo podía QUITAR resultados que el servidor sí
@@ -546,6 +560,11 @@ export default function CobrosPage() {
           // La clave solo viaja si se ELIGIÓ factura: mandarla vacía sería
           // pedirle al PATCH que desasocie.
           ...(editing.asociarFacturaId ? { invoiceId: editing.asociarFacturaId } : {}),
+          // El mes y el paciente solo en el cobro de cuota (sin factura); vacío
+          // = quitarlo. La fecha de la devolución solo si está devuelto: el
+          // servidor la borra al salir de ese estado (07/09/2026).
+          ...(editing.invoice?.id ? {} : { periodMonth: editing.periodMonth || null, patientId: editing.patientId || null }),
+          ...(editing.status === "refunded" && editing.refundedAt ? { refundedAt: editing.refundedAt } : {}),
         }),
       });
       const json = await res.json().catch(() => ({}));
@@ -845,7 +864,13 @@ export default function CobrosPage() {
                   {puedeFacturar && (
                     <td className="px-4 py-3 text-right">
                       <button
-                        onClick={() => setEditing({ ...p, paidAt: String(p.paidAt).slice(0, 10) })}
+                        onClick={() => setEditing({
+                          ...p,
+                          paidAt: String(p.paidAt).slice(0, 10),
+                          periodMonth: p.periodMonth ? String(p.periodMonth).slice(0, 7) : "",
+                          patientId: p.patientId ?? "",
+                          refundedAt: p.refundedAt ? String(p.refundedAt).slice(0, 10) : hoyVigente(),
+                        })}
                         className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline"
                       >
                         Editar
@@ -1180,6 +1205,43 @@ export default function CobrosPage() {
                     { value: "refunded", label: "Devuelto" },
                   ]} />
               </FormRow>
+              {/* Un cobro devuelto son dos apuntes: entró el día del cobro y
+                  salió el día de la devolución, que es lo que resta en la caja
+                  de ESE día (07/09/2026). */}
+              {editing.status === "refunded" && (
+                <FormRow label="Devuelto el *">
+                  <input required type="date" value={editing.refundedAt ?? ""}
+                    onChange={(e) => setEditing((p) => ({ ...p, refundedAt: e.target.value }))} className={inputCls} />
+                  <p className="text-[10px] text-neutral-400 mt-1">
+                    El dinero sale de la caja ese día; el cobro sigue contando el día que entró.
+                  </p>
+                </FormRow>
+              )}
+              {/* El mes y el paciente de un cobro de cuota también se corrigen
+                  (07/09/2026): apuntarlo al mes o al hermano equivocado ya no
+                  obliga a revertirlo y registrarlo de nuevo. */}
+              {!editing.invoice?.id && (
+                <FormRow label="Mes que se paga">
+                  <input type="month" value={editing.periodMonth ?? ""}
+                    onChange={(e) => setEditing((p) => ({ ...p, periodMonth: e.target.value }))} className={inputCls} />
+                </FormRow>
+              )}
+              {!editing.invoice?.id && pacientesEdicion.length > 0 && (
+                <FormRow label="¿De qué paciente?">
+                  <Select
+                    value={editing.patientId ?? ""}
+                    onChange={(v) => setEditing((p) => ({ ...p, patientId: v }))}
+                    className={inputCls}
+                    options={[
+                      { value: "", label: "Toda la familia" },
+                      ...pacientesEdicion.map((p) => ({
+                        value: p.id,
+                        label: [p.firstName, p.lastName].filter(Boolean).join(" "),
+                      })),
+                    ]}
+                  />
+                </FormRow>
+              )}
               {/* Un cobro suelto se puede enganchar a la factura que se emitió
                   después (31/08/2026): la factura pasa a cobrada y el cobro
                   deja de salir como «sin factura». El mes de cuota no se toca. */}

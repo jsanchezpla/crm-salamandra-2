@@ -2,8 +2,21 @@ import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { logBillingAudit, resumenImporte, datosPeticion } from "../../../../../lib/billing/audit.js";
 import { ok, noContent, error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { updateInvoiceStatus } from "../../../../../lib/billing/updateInvoiceStatus.js";
+import { billingHasPatients } from "../../../../../lib/billing/patientLink.js";
 
 const VALID_STATUS = new Set(["pending", "completed", "failed", "refunded"]);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * La fecha de una devolución tal y como llega del cajón: un día 'AAAA-MM-DD'
+ * (se guarda a mediodía para que no cambie de día al pasar por UTC — el
+ * resumen de caja agrupa por el día de MADRID) o un instante ISO completo.
+ */
+function fechaDevolucion(v) {
+  const s = String(v ?? "");
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(`${s}T12:00:00`) : new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
 
 export const GET = withTenant(async (_request, { params }, { tenantModels, hasModule }) => {
   try {
@@ -24,7 +37,7 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
 
-    const { Payment, Invoice } = tenantModels;
+    const { Payment, Invoice, Patient } = tenantModels;
     const { id } = await params;
     const body = await request.json();
     const payment = await Payment.findByPk(id);
@@ -73,6 +86,51 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
       }
     }
 
+    // ── El mes y el paciente también se corrigen (07/09/2026, Registro) ────
+    // Un cobro apuntado al mes o al hermano equivocado obligaba a revertirlo y
+    // registrarlo de nuevo, y con el pendiente del mes ya cobrado eso era fácil
+    // de hacer mal. Las mismas reglas que el POST: el mes 'AAAA-MM' → primer
+    // día, y el paciente tiene que existir y ser de la familia del cobro.
+    // Vacío = quitarlo (cobro de toda la familia / sin mes).
+    if ("periodMonth" in body) {
+      if (body.periodMonth == null || body.periodMonth === "") {
+        updates.periodMonth = null;
+      } else {
+        const m = String(body.periodMonth).slice(0, 7);
+        if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(m)) return error("El mes debe ser 'AAAA-MM'");
+        updates.periodMonth = `${m}-01`;
+      }
+    }
+    if ("patientId" in body) {
+      if (body.patientId == null || body.patientId === "") {
+        updates.patientId = null;
+      } else {
+        if (!UUID_RE.test(String(body.patientId))) return error("patientId inválido");
+        if (!billingHasPatients(hasModule) || !Patient) return error("Este centro no lleva pacientes", 409);
+        const paciente = await Patient.findByPk(body.patientId, { attributes: ["id", "clientId"] });
+        if (!paciente) return notFound("Paciente no encontrado");
+        const familia = updates.clientId ?? payment.clientId;
+        if (familia && paciente.clientId && String(paciente.clientId) !== String(familia)) {
+          return error("Ese paciente no es de la familia de este cobro", 409);
+        }
+        updates.patientId = paciente.id;
+      }
+    }
+
+    // ── «Devuelto» apunta CUÁNDO salió el dinero (07/09/2026, Registro) ────
+    // Un cobro devuelto son dos movimientos: entró el día del cobro y salió el
+    // día de la devolución. Sin la fecha, el resumen de caja no tenía dónde
+    // apuntar la salida y el arqueo de ese día cuadraba de menos. Por defecto
+    // hoy; el cajón puede decir otro día. Si deja de estar devuelto, se borra.
+    const estadoFinal = updates.status ?? payment.status;
+    if (estadoFinal === "refunded" && (payment.status !== "refunded" || "refundedAt" in body)) {
+      const f = body.refundedAt ? fechaDevolucion(body.refundedAt) : (payment.refundedAt ?? new Date());
+      if (!f) return error("La fecha de la devolución debe ser 'AAAA-MM-DD'");
+      updates.refundedAt = f;
+    } else if (estadoFinal !== "refunded" && payment.refundedAt) {
+      updates.refundedAt = null;
+    }
+
     // Cambiar el importe de un cobro ya enganchado tampoco puede pasarse del
     // pendiente de su factura (revisión del 06/09/2026): 100 € → 150 € dejaba
     // `paidAmount` por encima del total y «Cobrado 150 €» en el PDF.
@@ -87,7 +145,17 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
     }
 
     const antes = resumenImporte(payment);
-    await payment.update(updates);
+    try {
+      await payment.update(updates);
+    } catch (e) {
+      // El índice único de `migrate-payments-cuota-unica.js`: una cuota solo
+      // puede tener UN cobro pendiente por mes. Mover un pendiente al mes en
+      // el que ya hay otro no es un fallo del servidor, es un aviso.
+      if (e?.name === "SequelizeUniqueConstraintError" || e?.original?.code === "23505") {
+        return error("Esa cuota ya tiene un cobro pendiente en ese mes: cóbralo o revierte uno de los dos", 409);
+      }
+      throw e;
+    }
     await logBillingAudit({
       tenantId: tenant.id,
       ...datosPeticion(request),

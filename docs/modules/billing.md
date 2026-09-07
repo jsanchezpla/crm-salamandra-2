@@ -302,6 +302,7 @@ Fichero: `models/tenant/Payment.model.js`. Tabla: `payments`.
 | `method` | ENUM | `card`, `transfer`, `cash`, `direct_debit`. |
 | `status` | ENUM | `pending`, `completed`, `failed`, `refunded`. Default `completed`. |
 | `notes` | TEXT nullable | |
+| `refundedAt` | DATE nullable | Cuándo se devolvió el dinero (07/09/2026, `migrate-payments-refunded-at`). Un cobro «Devuelto» son DOS apuntes de caja: entró el día `paidAt` y salió el día `refundedAt`. La escribe el PATCH al pasar a `refunded` (hoy, o el día que diga el cajón) y la devolución que llega de Stripe; vuelve a NULL al salir de ese estado. |
 | `patientId` / `conceptId` | UUID nullable | De quién y de qué terapia es la cuota (31/08/2026). `conceptId` apunta al catálogo y solo se rellena cuando la cuota es de UN concepto: una cuota compuesta no se puede partir por terapia. |
 | `cuotaId` | UUID nullable | De qué cuota asignada nació el cobro (01/09/2026, `billing_cuotas`). Lo rellena SOLO la generación mensual; el cobro apuntado a mano sigue naciendo a NULL. Es lo que evita generar dos veces el mismo mes: sin él, «ya generado» habría que adivinarlo por importe y fecha. |
 
@@ -764,6 +765,52 @@ las reciben `planDeCuotasDelMes` por `citasPorClave` desde sus tres llamadores
 (`cobroDeCuota.js`, `cuotas/generar`, `generar-cuotas-del-mes.js`). El cajón
 «Registrar cobro» y las líneas de factura siguen por días (`prorrateo.js`): no
 tienen las citas delante. Prueba: `_smoke-cuotas.mjs`.
+
+## «Devuelto» apunta la salida del dinero en Caja (07/09/2026)
+
+Salió de la revisión de código del 06/09/2026: marcar un cobro como
+**Devuelto** (`refunded`) lo sacaba de lo cobrado —el resumen por día lo
+contaba como «pendiente»— y el dinero que salió del cajón o del banco no
+aparecía en ningún sitio. Dos días descuadrados: el del cobro dejaba de cuadrar
+con lo que se contó entonces, y el de la devolución cuadraba de menos.
+
+- **Un cobro devuelto son dos apuntes.** `Payment.refundedAt` dice cuándo salió
+  el dinero. `lib/billing/caja.js` (`haEntrado`) cuenta el cobro devuelto en su
+  cesta el día que se cobró —el dinero entró— y `resumenDelDia({ devoluciones })`
+  lo RESTA de esa misma cesta el día de la devolución (el efectivo sale del
+  cajón, la tarjeta se abona a la tarjeta): `devuelto` y `devoluciones` van
+  aparte para que un día con 100 cobrados y 100 devueltos no parezca un día sin
+  caja, y `enCaja` ya lleva restado lo devuelto en efectivo.
+- **La lista del día lleva la devolución** como una fila más, en negativo,
+  marcada `devolucion: true` y a la hora en que se devolvió (`cobrosDelDia(cobros,
+  devoluciones)`); sigue sumando exactamente lo que dice la fila del día. Pulsarla
+  abre el mismo cobro. El Excel la saca como «Devolución · Efectivo».
+- **`construirResumenCaja` pide las devoluciones aparte**, por `refundedAt`, que
+  puede caer en otro día u otro mes que el cobro.
+- **El esperado del cierre** (`calcularEsperado`, `/api/arqueo/cierres`) cuenta
+  como entrado también el efectivo devuelto y resta las devoluciones en efectivo
+  del día: `fondo + efectivo − devuelto + entradas − salidas`.
+- **Quién escribe la fecha.** `PATCH /payments/[id]`: al pasar a `refunded` la
+  pone (hoy, o `refundedAt` 'AAAA-MM-DD' del cajón —Cobros y `CobroDrawer`
+  enseñan «Devuelto el» al elegir ese estado—) y la borra al salir del estado;
+  `marcarCobroDevuelto` (Stripe) la pone al recibir la devolución.
+- Fijado en `scripts/_smoke-caja.mjs` («las devoluciones: entró un día, salió
+  otro»). En producción no había ningún cobro en `refunded` cuando se hizo.
+
+## «Editar cobro» corrige el mes y el paciente (07/09/2026)
+
+Del Registro del 06/09/2026: el cajón de editar un cobro cambiaba importe,
+método, fecha, estado, notas y factura, pero no `periodMonth` ni `patientId`;
+un cobro apuntado al mes o al hermano equivocado obligaba a revertirlo y
+registrarlo de nuevo, y con el pendiente del mes ya cobrado eso era fácil de
+hacer mal. Ahora `PATCH /payments/[id]` acepta los dos —con las reglas del
+POST: el mes 'AAAA-MM' → primer día, el paciente tiene que existir y ser de la
+familia del cobro (409 si no), vacío = quitarlo— y los dos cajones (Cobros y
+`CobroDrawer` del arqueo) los enseñan solo en el cobro de cuota (sin factura).
+Mover un pendiente de cuota al mes en el que esa cuota ya tiene otro pendiente
+choca con el índice de `migrate-payments-cuota-unica` y sale como 409 con
+frase, no como 500. La auditoría (`resumenImporte`) lleva desde hoy el mes, el
+paciente, el estado y la fecha de la devolución, que antes cambiaban sin rastro.
 
 ## La factura a mano, a la vista (07/09/2026, AV-0063 de Aumenta)
 

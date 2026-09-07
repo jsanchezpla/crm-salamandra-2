@@ -59,9 +59,15 @@ function FilaDato({ rotulo, children }) {
   );
 }
 
+/** Hoy en Madrid, para el día por defecto de una devolución. */
+const hoyMadrid = () => diaParaInput(new Date().toISOString());
+
 export default function CobroDrawer({ cobroId, resumen, onClose, onCambiado }) {
   const [cobro, setCobro] = useState(null);
   const [form, setForm] = useState(null);
+  // Los pacientes de la familia del cobro, para poder corregir de QUIÉN es
+  // (07/09/2026). Vacío sin módulo asistencial (403) o sin pacientes.
+  const [pacientes, setPacientes] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
@@ -81,6 +87,13 @@ export default function CobroDrawer({ cobroId, resumen, onClose, onCambiado }) {
         paidAt: diaParaInput(j.data.paidAt),
         status: j.data.status ?? "completed",
         notes: j.data.notes ?? "",
+        // El mes y el paciente también se corrigen desde aquí (07/09/2026):
+        // un cobro apuntado al mes o al hermano equivocado ya no obliga a
+        // borrarlo y registrarlo de nuevo.
+        periodMonth: j.data.periodMonth ? String(j.data.periodMonth).slice(0, 7) : "",
+        patientId: j.data.patientId ?? "",
+        // Cuándo salió el dinero, si está devuelto: por defecto hoy.
+        refundedAt: diaParaInput(j.data.refundedAt) || hoyMadrid(),
       });
     } catch (e) {
       setErrorMsg(e.message);
@@ -90,6 +103,17 @@ export default function CobroDrawer({ cobroId, resumen, onClose, onCambiado }) {
   }, [cobroId]);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  useEffect(() => {
+    const clientId = cobro?.clientId;
+    if (!clientId || cobro?.invoice?.id) { setPacientes([]); return; }
+    let vivo = true;
+    fetch(`/api/pacientes?clientId=${encodeURIComponent(clientId)}&limit=100`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (vivo) setPacientes(j?.data?.patients ?? []); })
+      .catch(() => { if (vivo) setPacientes([]); });
+    return () => { vivo = false; };
+  }, [cobro?.clientId, cobro?.invoice?.id]);
 
   async function guardar(e) {
     e.preventDefault();
@@ -107,6 +131,11 @@ export default function CobroDrawer({ cobroId, resumen, onClose, onCambiado }) {
           paidAt: form.paidAt ? `${form.paidAt}T12:00:00` : undefined,
           status: form.status,
           notes: form.notes,
+          // El mes y el paciente solo tienen sentido en el cobro de cuota (sin
+          // factura); vacío = quitarlo. La fecha de la devolución, solo si
+          // está devuelto: el servidor la borra al salir de ese estado.
+          ...(cobro?.invoice?.id ? {} : { periodMonth: form.periodMonth || null, patientId: form.patientId || null }),
+          ...(form.status === "refunded" && form.refundedAt ? { refundedAt: form.refundedAt } : {}),
         }),
       });
       const j = await r.json();
@@ -230,6 +259,37 @@ export default function CobroDrawer({ cobroId, resumen, onClose, onCambiado }) {
                 <Select value={form.status} onChange={(v) => setForm((f) => ({ ...f, status: v }))}
                   className={inputCls} options={ESTADOS} />
               </label>
+              {/* Un cobro devuelto son dos apuntes: entró el día del cobro y
+                  salió el día de la devolución, que es lo que resta en la caja
+                  de ESE día (07/09/2026). */}
+              {form.status === "refunded" && (
+                <label className="block">
+                  <span className="text-[11px] text-neutral-500">Devuelto el *</span>
+                  <input required type="date" value={form.refundedAt}
+                    onChange={(e) => setForm((f) => ({ ...f, refundedAt: e.target.value }))} className={inputCls} />
+                  <span className="block text-[10px] text-neutral-400 mt-1">
+                    El dinero sale de la caja ese día; el cobro sigue contando el día que entró.
+                  </span>
+                </label>
+              )}
+              {!cobro.invoice?.id && (
+                <label className="block">
+                  <span className="text-[11px] text-neutral-500">Mes de la cuota</span>
+                  <input type="month" value={form.periodMonth}
+                    onChange={(e) => setForm((f) => ({ ...f, periodMonth: e.target.value }))} className={inputCls} />
+                </label>
+              )}
+              {!cobro.invoice?.id && pacientes.length > 0 && (
+                <label className="block">
+                  <span className="text-[11px] text-neutral-500">¿De qué paciente?</span>
+                  <Select value={form.patientId} onChange={(v) => setForm((f) => ({ ...f, patientId: v }))}
+                    className={inputCls}
+                    options={[
+                      { value: "", label: "Toda la familia" },
+                      ...pacientes.map((p) => ({ value: p.id, label: [p.firstName, p.lastName].filter(Boolean).join(" ") })),
+                    ]} />
+                </label>
+              )}
               <label className="block">
                 <span className="text-[11px] text-neutral-500">Notas</span>
                 <textarea rows={3} value={form.notes}
