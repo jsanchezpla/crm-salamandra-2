@@ -5,7 +5,7 @@ import { ok, error, forbidden, notFound } from "../../../../../lib/utils/apiResp
 import { resolveCurrentTeamMemberId } from "../../../../../lib/team/currentTeamMember.js";
 import { avisarComentarioIncidencia } from "../../../../../lib/clinica/avisoComentarioIncidencia.js";
 import { incidenciaFueraDeAlcance, puedeBorrarIncidencia, puedeVerIncidencia } from "../../../../../lib/clinica/alcanceIncidencias.js";
-import { esActualizacion, aQuienSeLeReabre, vistoDe, repasoDelEquipo } from "../../../../../lib/clinica/vistoIncidencia.js";
+import { esActualizacion, aQuienSeLeReabre, vistoDe, repasoDelEquipo, cierraAlMarcarTodas } from "../../../../../lib/clinica/vistoIncidencia.js";
 import { logClinicaAudit, auditSummary } from "../../../../../lib/clinica/audit.js";
 import { fundirFalta, cierrePorRespuesta } from "../../../../../lib/clinica/faltas.js";
 import {
