@@ -189,7 +189,20 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     return error(`Esa caja ya se cerró el ${body.closeDate}`, 409, { id: yaCerrado.id });
   }
 
-  const openingAmount = Number(body.openingAmount || 0);
+  /*
+   * El FONDO en blanco no es un cero (07/09/2026). Antes daba casi igual, porque
+   * el fondo se tecleaba siempre y casi siempre era 0; desde que se arrastra el
+   * saldo de un día al siguiente, un fondo vacío vale cientos de euros y
+   * `Number("" || 0)` lo convertía en 0 sin decir nada: el esperado salía corto
+   * justo por el fondo, el arqueo cantaba un descuadre falso de ese importe y
+   * encima pedía un motivo para algo que no había pasado. Se exige igual que el
+   * dinero contado, y un cajón que abre vacío se escribe 0, que es un dato.
+   */
+  if (body.openingAmount === undefined || body.openingAmount === null || body.openingAmount === "") {
+    return error("Falta el fondo inicial: escribe cuánto había en el cajón al abrir (0 si estaba vacío)", 422);
+  }
+  const openingAmount = Number(body.openingAmount);
+  if (Number.isNaN(openingAmount)) return error("El fondo inicial no es un número", 422);
   const countedAmount = Number(body.countedAmount);
   if (Number.isNaN(countedAmount)) return error("El dinero contado no es un número", 422);
 

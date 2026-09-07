@@ -123,3 +123,37 @@ describe("de dónde saca la pantalla ese número", () => {
     assert.match(campo, /setPrevio\(null\)/, "cambiar el fondo tiene que invalidar el esperado ya calculado");
   });
 });
+
+/*
+ * ── EL FONDO EN BLANCO NO ES UN CERO (07/09/2026) ──────────────────────────
+ * `Number(body.openingAmount || 0)` convertía un fondo vacío en 0 sin decir
+ * nada. Mientras el fondo se tecleaba siempre y casi siempre era 0 daba igual;
+ * desde que se arrastra el saldo de un día al siguiente, un fondo en blanco
+ * vale cientos de euros: lo esperado salía corto justo por el fondo, el arqueo
+ * cantaba un descuadre falso de ese importe y encima pedía un motivo para algo
+ * que no había pasado. Y se llega desde la pantalla, no solo por API: el fondo
+ * nace vacío cuando el cierre anterior es importado o no lo hay.
+ */
+describe("el fondo en blanco no puede colarse como cero", () => {
+  const ruta = lee("../app/api/arqueo/cierres/route.js");
+  const pagina = lee("../app/(dashboard)/facturacion/arqueo/page.jsx");
+
+  it("el servidor lo exige, como exige el dinero contado", () => {
+    assert.match(ruta, /body\.openingAmount === undefined \|\| body\.openingAmount === null \|\| body\.openingAmount === ""/);
+    assert.match(ruta, /Falta el fondo inicial/);
+    assert.ok(
+      !/Number\(body\.openingAmount \|\| 0\)/.test(ruta),
+      "el `|| 0` es justo lo que convertía el vacío en cero",
+    );
+  });
+
+  it("y un fondo ilegible tampoco pasa", () => {
+    assert.match(ruta, /Number\.isNaN\(openingAmount\)/);
+  });
+
+  it("la pantalla lo pide antes de dejar comprobar o cerrar", () => {
+    assert.match(pagina, /form\.openingAmount === ""/, "el botón de comprobar tiene que pararlo");
+    const campo = pagina.slice(pagina.indexOf("Fondo inicial"), pagina.indexOf("Dinero contado"));
+    assert.match(campo, /<input required/, "el campo del fondo tiene que ser obligatorio");
+  });
+});

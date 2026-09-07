@@ -144,6 +144,12 @@ export default function ArqueoPage() {
       setFormError("Escribe primero cuánto dinero has contado");
       return;
     }
+    // El fondo en blanco no es un cero: sin él, lo esperado saldría corto justo
+    // por el fondo y el arqueo cantaría un descuadre que no existe.
+    if (form.openingAmount === "") {
+      setFormError("Escribe el fondo inicial: cuánto había en el cajón al abrir (0 si estaba vacío)");
+      return;
+    }
     try {
       const r = await fetch("/api/arqueo/cierres", {
         method: "PATCH",
@@ -372,7 +378,10 @@ export default function ArqueoPage() {
               </label>
               <label className="block">
                 <span className="text-[12px] text-neutral-500">Fondo inicial (lo que había al abrir)</span>
-                <input type="number" step="0.01" value={form.openingAmount} onChange={(e) => { setForm({ ...form, openingAmount: e.target.value }); setPrevio(null); }} className={inputCls} placeholder="0,00" />
+                {/* Obligatorio: en blanco no es un cero, y desde que el fondo se
+                    arrastra de un día a otro, dejarlo vacío cantaba un descuadre
+                    falso por ese importe (07/09/2026). */}
+                <input required type="number" step="0.01" value={form.openingAmount} onChange={(e) => { setForm({ ...form, openingAmount: e.target.value }); setPrevio(null); }} className={inputCls} placeholder="0,00" />
                 {/* De dónde sale el número: sin esto la casilla vuelve a ser un
                     hueco que nadie sabe rellenar, que es el aviso AV-0067. */}
                 {fondoDeAyer ? (
