@@ -68,7 +68,17 @@ async function mesesDeLaFamilia({ tenantModels, clientId, desde }) {
   const { Cuota, Payment, BillingConcept } = tenantModels;
   if (!Cuota || !Payment) return { meses: [], bloqueo: null, cuotas: [] };
 
-  const cuotas = (await Cuota.findAll({ where: { clientId } })).map((c) => c.toJSON());
+  /*
+   * Las cuotas que PAGA esta ficha: las suyas y aquellas en las que es la
+   * pagadora (07/09/2026, `billing_cuotas.payer_client_id`). Una fundación que
+   * paga la cuota de un niño puede adelantar meses igual que una familia, y a
+   * la familia apadrinada no se le pueden cobrar meses que no paga ella.
+   * `planDeCuotasDelMes` ya pone en `fila.clientId` a quien paga, así que el
+   * filtro de abajo se encarga de quedarse solo con lo de esta ficha.
+   */
+  const cuotas = (
+    await Cuota.findAll({ where: { [Op.or]: [{ clientId }, { payerClientId: clientId }] } })
+  ).map((c) => c.toJSON());
   if (!cuotas.length) return { meses: [], bloqueo: null, cuotas: [] };
 
   let conceptos = [];
