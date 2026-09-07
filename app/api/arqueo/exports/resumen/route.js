@@ -50,7 +50,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, tenant, hasM
     // los días sin nada» —marcada de fábrica—, y una hoja de cálculo con 20
     // filas a cero no se lee mejor por tenerlas.
     const conAlgo = data.dias.filter(
-      (d) => d.cobrado !== 0 || d.movimientos.entradas !== 0 || d.movimientos.salidas !== 0
+      (d) => d.cobrado !== 0 || d.devuelto !== 0 || d.movimientos.entradas !== 0 || d.movimientos.salidas !== 0
     );
 
     const columns = [

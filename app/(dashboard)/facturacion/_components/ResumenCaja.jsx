@@ -102,8 +102,10 @@ export default function ResumenCaja({ cajaId }) {
   useEffect(() => { cargar(); }, [cargar]);
   useEffect(() => { setAbiertos(new Set()); }, [desde, hasta, cajaId]);
 
+  // Un día con 50 cobrados y 50 devueltos suma 0 pero NO es un día sin nada:
+  // por eso `devuelto` cuenta como movimiento (07/09/2026).
   const dias = (datos?.dias ?? []).filter(
-    (d) => !soloConMovimiento || d.cobrado !== 0 || d.movimientos.entradas !== 0 || d.movimientos.salidas !== 0
+    (d) => !soloConMovimiento || d.cobrado !== 0 || d.devuelto !== 0 || d.movimientos.entradas !== 0 || d.movimientos.salidas !== 0
   );
 
   return (
