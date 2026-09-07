@@ -92,6 +92,15 @@ export default function CobrosPage() {
    * puede ni confirmar ni corregir.
    */
   const [origenCuota, setOrigenCuota] = useState(null);
+  /*
+   * El reparto de un pago a cuenta (07/09/2026): qué meses cubre el dinero que
+   * traen. Lo calcula el SERVIDOR (`GET /api/billing/payments/a-cuenta`) con la
+   * misma función que luego lo guarda — si la pantalla hiciera su propia cuenta,
+   * la vista previa y lo guardado podrían no coincidir, que es justo lo que no
+   * se puede permitir cuando lo que se enseña es dinero de una familia.
+   */
+  const [reparto, setReparto] = useState(null);
+  const [repartoCargando, setRepartoCargando] = useState(false);
 
   const conceptosElegidos = lineasCuota
     .map(({ id, inicio }) => {
@@ -206,6 +215,24 @@ export default function CobrosPage() {
       .catch(() => { if (vivo) setPacientesFamilia([]); });
     return () => { vivo = false; };
   }, [form.clientId, form.modo]);
+
+  // La vista previa del pago a cuenta, con un respiro para no pedirla en cada
+  // tecla del importe.
+  useEffect(() => {
+    if (form.modo !== "cuenta" || !form.clientId || !(Number(form.amount) > 0)) { setReparto(null); return; }
+    let vivo = true;
+    setRepartoCargando(true);
+    const t = setTimeout(() => {
+      const qs = new URLSearchParams({ clientId: form.clientId, importe: String(Number(form.amount)) });
+      if (/^\d{4}-\d{2}$/.test(form.periodMonth)) qs.set("desde", form.periodMonth);
+      fetch(`/api/billing/payments/a-cuenta?${qs}`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((j) => { if (vivo) setReparto(j?.ok ? j.data : null); })
+        .catch(() => { if (vivo) setReparto(null); })
+        .finally(() => { if (vivo) setRepartoCargando(false); });
+    }, 400);
+    return () => { vivo = false; clearTimeout(t); };
+  }, [form.modo, form.clientId, form.amount, form.periodMonth]);
 
   const turnoCuota = useRef(0);
   useEffect(() => {
@@ -497,6 +524,35 @@ export default function CobrosPage() {
       const porFactura = form.modo === "factura";
       if (porFactura && !form.invoiceId) throw new Error("Selecciona una factura");
       if (!porFactura && !form.clientId) throw new Error("Selecciona el cliente que ha pagado");
+
+      /*
+       * A CUENTA: no es un cobro, son varios —uno por mes—, así que va por su
+       * propia ruta. El servidor rehace el reparto antes de guardar (la vista
+       * previa es de ayuda, no es la orden) y se niega entero si el importe no
+       * cubre meses completos.
+       */
+      if (form.modo === "cuenta") {
+        const res = await fetch("/api/billing/payments/a-cuenta", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            clientId: form.clientId,
+            amount: Number(form.amount),
+            method: form.method,
+            paidAt: form.paidAt,
+            desde: /^\d{4}-\d{2}$/.test(form.periodMonth) ? form.periodMonth : null,
+            notes: form.notes.trim() || null,
+          }),
+        });
+        const json = await res.json();
+        if (!res.ok || !json.ok) throw new Error(json.error || "No se pudo repartir el pago a cuenta");
+        setForm((f) => ({ ...f, clientId: "", patientId: "", amount: "", notes: "" }));
+        setReparto(null);
+        setShowForm(false);
+        load();
+        loadMorosidad();
+        return;
+      }
       // Qué conceptos componen la cuota (y el prorrateo de cada uno, si lo
       // hay) queda escrito en la nota del cobro: es lo que Rosa lee meses
       // después.
@@ -916,7 +972,7 @@ export default function CobrosPage() {
                   factura dejaba ese dinero sin registrar. */}
               <FormRow label="¿De qué es el cobro?">
                 <div className="flex gap-2">
-                  {[["factura", "De una factura"], ["cuota", "Cuota del mes"]].map(([k, lbl]) => (
+                  {[["factura", "De una factura"], ["cuota", "Cuota del mes"], ["cuenta", "A cuenta"]].map(([k, lbl]) => (
                     <button
                       key={k}
                       type="button"
@@ -1090,6 +1146,32 @@ export default function CobrosPage() {
                 </>
               )}
 
+              {/* A CUENTA (07/09/2026): la familia que paga varios meses de
+                  golpe. Se elige la familia y el importe, y el CRM enseña qué
+                  meses cubre ANTES de guardar; al registrar crea el cobro de
+                  cada mes con su cuota, así que cuando llegue el día 1 ese mes
+                  ya está pagado y la generación no lo duplica. */}
+              {form.modo === "cuenta" && (
+                <>
+                  <FormRow label="Familia *">
+                    <SelectorCliente
+                      fuente="billing"
+                      value={form.clientId}
+                      onChange={(v) => setForm((f) => ({ ...f, clientId: v, patientId: "" }))}
+                      className={inputCls}
+                      opcionesFijas={[{ value: "", label: "Selecciona cliente..." }]}
+                    />
+                  </FormRow>
+                  <FormRow label="Desde el mes">
+                    <input type="month" value={form.periodMonth}
+                      onChange={(e) => setForm((f) => ({ ...f, periodMonth: e.target.value }))} className={inputCls} />
+                    <p className="text-[10px] text-neutral-400 mt-1">
+                      El primer mes que se paga. Los que ya estén cobrados se saltan solos.
+                    </p>
+                  </FormRow>
+                </>
+              )}
+
               {form.modo === "factura" && (
               <FormRow label="Factura *">
                 <Select
@@ -1132,6 +1214,36 @@ export default function CobrosPage() {
                       </>
                     )}
                   </p>
+                )}
+                {/* Lo que cubre el pago a cuenta, antes de guardarlo: la queja
+                    de la tarea era que «nadie lo ve venir». */}
+                {form.modo === "cuenta" && (
+                  <div className="mt-2">
+                    {repartoCargando && <p className="text-[11px] text-neutral-400">Calculando qué meses cubre…</p>}
+                    {!repartoCargando && reparto && reparto.aplicaciones.length > 0 && (
+                      <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2">
+                        <p className="text-[11px] text-neutral-500 mb-1.5">
+                          Cubre {reparto.aplicaciones.length === 1 ? "este mes" : `estos ${reparto.aplicaciones.length} meses`}:
+                        </p>
+                        <ul className="space-y-0.5">
+                          {reparto.aplicaciones.map((a) => (
+                            <li key={a.mes} className="flex justify-between text-[12px] text-neutral-700">
+                              <span>{a.mesLegible}</span>
+                              <span className="tabular font-medium">{fmtMoney(a.importe)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        {reparto.saltados.length > 0 && (
+                          <p className="text-[10px] text-neutral-400 mt-1.5">
+                            {reparto.saltados.length === 1 ? "Un mes ya estaba cobrado y se salta." : `${reparto.saltados.length} meses ya estaban cobrados y se saltan.`}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {!repartoCargando && reparto?.aviso && (
+                      <p className="text-[11px] mt-1.5 text-amber-700">{reparto.aviso}</p>
+                    )}
+                  </div>
                 )}
                 {form.modo === "cuota" && parcialDelMes && (
                   <p className={`text-[11px] mt-1.5 ${parcialDelMes.completo ? "text-amber-700" : "text-neutral-500"}`}>

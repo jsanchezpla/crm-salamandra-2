@@ -753,6 +753,24 @@ llevar aparejado el tipo que cobró — «aunque sea internamente».
 
 Motivo y contexto: `docs/decisions/2026-08-29-el-dinero-se-sabe-por-facturas.md`.
 
+## Un descuento ya abonado no se prorratea (07/09/2026, vuelta de AV-0062)
+
+Rosa, sobre el primer mes de una alta del día 11: «190/4 = 47,50 x 3 sesiones
+= 142,50 menos 30 de reserva = 112,50; lo que está mal es el cálculo del CRM».
+El catálogo de Aumenta ya tiene «Reserva de plaza» (30 €) y «Descuento reserva
+ya abonada» (−30 €). La regla que faltaba: en `importeDeCuota` los conceptos
+con precio NEGATIVO se separan (`fijo`) de los positivos
+(`mensualProrrateable`), y `planDeCuotasDelMes` calcula
+`mensualProrrateable * factor + fijo`. Una reserva pagada entera se descuenta
+entera; prorratearla devolvería solo una parte de algo ya cobrado del todo.
+Con la cuota de 190 €, 3 de 4 sesiones y el descuento: 112,50 €, que es la
+cuenta del centro. Prueba: `_smoke-cuotas.mjs`.
+
+⚠️ El CRM no puede adivinar qué familias han pagado reserva: el concepto de
+descuento hay que añadirlo a SU cuota. Y el importe corregido a mano en un
+cobro pendiente se pisa en cuanto se edita la cuota (`cambiosDelCobro`), así
+que la corrección buena es la de la cuota, no la del cobro.
+
 ## Tres arreglos de Cobros y de la factura (07/09/2026, tarde)
 
 - **El pie legal cabe** (AV-0064 de Aumenta): el texto de protección de datos
@@ -820,6 +838,44 @@ con lo que se contó entonces, y el de la devolución cuadraba de menos.
   `marcarCobroDevuelto` (Stripe) la pone al recibir la devolución.
 - Fijado en `scripts/_smoke-caja.mjs` («las devoluciones: entró un día, salió
   otro»). En producción no había ningún cobro en `refunded` cuando se hizo.
+
+## El pago a cuenta: varios meses de golpe (07/09/2026)
+
+Del Registro del 06/09: «+ Registrar cobro» pedía UN mes, así que la familia
+que en septiembre pagaba septiembre y octubre juntos obligaba a apuntar dos
+cobros a mano, y el de octubre quedaba como cobrado de un mes que aún no se ha
+generado — no se duplica (al generar, esa cuota ya tiene cobro), pero nadie lo
+veía venir.
+
+Ahora Cobros tiene un tercer modo, **«A cuenta»**: se elige la familia, el
+importe y desde qué mes, y el CRM enseña **qué meses cubre antes de guardar**.
+
+- **Cada euro acaba en un mes.** No hay saldo ni monedero: el reparto crea el
+  cobro de cada mes cubierto (`cuota_id`, paciente y concepto de su cuota), con
+  la **fecha y el método del día en que trajeron el dinero**. Por eso la caja de
+  ese día no cambia por repartirlo: 240 € en efectivo siguen siendo 240 €. Y
+  cuando llegue el día 1, esa cuota ya tiene cobro y la generación no duplica.
+- **Meses ENTEROS.** Lo que no completa un mes no se reparte: se dice qué sobra
+  y con cuánto entraría el mes siguiente («250 € cubren hasta 240 € y sobran
+  10 €. Con 360 € entra un mes más»), y no se guarda nada. Un mes futuro medio
+  pagado sería invisible: al generarse vería «ya cobrado» y no crearía el
+  pendiente que delata lo que falta. El mes a medias tiene su propio camino, el
+  cobro de ESE mes, que rellena el resto solo (`restoDelMes.js`).
+- **Si el mes ya tiene su cobro pendiente**, se cobra ese en vez de crear otro
+  —mismo dinero, mismo `cuota_id`—, y solo cuando la suma es exactamente lo que
+  falta.
+- **Tres motivos cortan el reparto** en un mes, cada uno con su frase: pagado a
+  medias y sin pendiente; pendiente que no se puede tocar (factura, Stripe o
+  banco); pendiente que no cuadra con lo que vale el mes. Saltárselo dejaría un
+  mes a deber por debajo de meses ya pagados.
+- **Un mes ya cobrado no para nada**: se salta y el dinero va al siguiente.
+- Piezas: `lib/billing/pagoACuenta.js` (el reparto, puro, fijado en
+  `scripts/_smoke-pago-a-cuenta.mjs` con la cuenta que manda —lo repartido más
+  lo que sobra es lo que trajeron—) y `app/api/billing/payments/a-cuenta/`
+  (`GET` vista previa · `POST` lo registra). Ruta aparte del POST de cobros
+  porque no es un cobro: son varios, y la vista previa necesita dónde vivir. El
+  coste de cada mes sale de `planDeCuotasDelMes`, el mismo sitio del que sale la
+  generación mensual. Horizonte: 12 meses.
 
 ## «Editar cobro» corrige el mes y el paciente (07/09/2026)
 
