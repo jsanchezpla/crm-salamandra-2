@@ -32,7 +32,7 @@ const VACIO = PACIENTE_VACIO;
 const inputCls =
   "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)] placeholder:text-gray-300";
 
-export default function PacientesDelAlta({ pacientes, onChange, nombreCliente }) {
+export default function PacientesDelAlta({ pacientes, onChange, nombreCliente, primero = false }) {
   const actualizar = (i, campos) =>
     onChange(pacientes.map((p, idx) => (idx === i ? { ...p, ...campos } : p)));
 
@@ -48,12 +48,14 @@ export default function PacientesDelAlta({ pacientes, onChange, nombreCliente })
   };
 
   return (
-    <div className="pt-2 border-t border-gray-100 space-y-3">
+    <div className={primero ? "space-y-3" : "pt-2 border-t border-gray-100 space-y-3"}>
       <div className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-xs font-medium text-gray-700">Pacientes</div>
+          <div className="text-xs font-medium text-gray-700">{primero ? "Paciente" : "Pacientes"}</div>
           <p className="text-[11px] text-gray-400">
-            Quién viene a consulta. Puede ser un hijo, varios, o la propia persona que abre la ficha.
+            {primero
+              ? "Quién viene a consulta: su nombre, sus apellidos y su fecha de nacimiento. Su familia va después."
+              : "Quién viene a consulta. Puede ser un hijo, varios, o la propia persona que abre la ficha."}
           </p>
         </div>
         {pacientes.length === 0 && (
@@ -77,12 +79,16 @@ export default function PacientesDelAlta({ pacientes, onChange, nombreCliente })
               </button>
             </div>
 
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={esElCliente}
-                onChange={(e) => marcarEsElCliente(i, e.target.checked)}
-                className="rounded border-gray-300 accent-[var(--color-primary)]" />
-              <span className="text-xs text-gray-600">El paciente es el propio cliente</span>
-            </label>
+            {/* Con el alta que empieza por el paciente esta casilla sobra:
+                aquí el paciente es el hijo y la familia se teclea después. */}
+            {!primero && (
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={esElCliente}
+                  onChange={(e) => marcarEsElCliente(i, e.target.checked)}
+                  className="rounded border-gray-300 accent-[var(--color-primary)]" />
+                <span className="text-xs text-gray-600">El paciente es el propio cliente</span>
+              </label>
+            )}
 
             {CAMPOS_PACIENTE.map(({ label, key, type, placeholder }) => (
               <div key={key}>

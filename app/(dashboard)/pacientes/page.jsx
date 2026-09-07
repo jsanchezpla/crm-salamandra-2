@@ -143,9 +143,9 @@ export default function PacientesPage() {
         </div>
         {/* El alta vive en la ficha de la familia (ver la cabecera del fichero). */}
         <Link
-          href="/clientes"
+          href="/clientes?alta=1"
           className="self-start lg:self-auto text-xs font-medium px-4 py-2 rounded-lg border border-neutral-200 text-neutral-700 hover:border-neutral-400 hover:bg-neutral-50 inline-flex items-center gap-2"
-          title="Los pacientes se crean desde la ficha de su familia"
+          title="Abre el alta de Clientes: la familia y su paciente en el mismo formulario"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />

@@ -240,7 +240,13 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, ten
   // si alguien la manda a mano se ignora en silencio en vez de crear filas en
   // una tabla que ese cliente no usa.
   const enListaEspera = !!body.listaEspera && hasModule("clients_avanzado") && !!tenantModels.WaitlistEntry;
-  const { pacientes, error: errorPacientes } = hasModule("pacientes")
+  // `tenantHasModule` y NO `hasModule` (07/09/2026): la pantalla pinta el
+  // bloque de pacientes por los módulos del CENTRO, y con `hasModule` —que
+  // además exige el acceso del USUARIO que da el alta— a quien no tuviera
+  // `pacientes` en su acceso se le descartaban en silencio los pacientes que
+  // acababa de teclear (201 sin aviso). Mismo criterio que
+  // `lib/clients/moduleAssignments.js`.
+  const { pacientes, error: errorPacientes } = tenantHasModule("pacientes")
     ? normalizarPacientes(body.pacientes)
     : { pacientes: [] };
   if (errorPacientes) return error(errorPacientes, 422);
@@ -255,7 +261,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, ten
    * encendida con pacientes reales: el correo de un tutor es una LLAVE de esa
    * área (lib/citas/portalClient.js), así que ahí no se toca nada.
    */
-  const { progenitores, error: errorProgenitores } = hasModule("pacientes")
+  const { progenitores, error: errorProgenitores } = tenantHasModule("pacientes")
     ? normalizarProgenitores(body.progenitores)
     : { progenitores: [] };
   if (errorProgenitores) return error(errorProgenitores, 422);

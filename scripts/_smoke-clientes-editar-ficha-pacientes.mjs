@@ -73,5 +73,6 @@ test("Clínica → Pacientes ya no da de alta: solo enlaza a Clientes", () => {
   assert.ok(!/showCreate/.test(src), "sigue el estado del modal de alta");
   assert.ok(!/submitCreate/.test(src), "sigue el envío del alta suelta");
   assert.ok(!/method: "POST"[\s\S]{0,80}\/api\/pacientes/.test(src), "la pantalla sigue creando pacientes por su cuenta");
-  assert.ok(/href="\/clientes"/.test(src), "no queda por dónde ir a dar de alta");
+  // `?alta=1` desde el 07/09/2026: el enlace abre el alta de Clientes al entrar.
+  assert.ok(/href="\/clientes(\?alta=1)?"/.test(src), "no queda por dónde ir a dar de alta");
 });

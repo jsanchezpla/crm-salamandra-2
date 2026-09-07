@@ -11,6 +11,7 @@ import FacturacionDelAlta from "../../../components/clients/FacturacionDelAlta.j
 import ClientPatientsSection from "../../../components/clients/ClientPatientsSection.jsx";
 import { CAMPOS_FISCALES } from "../../../lib/clients/camposFiscales.js";
 import { camposCliente, PERFIL_COMERCIAL } from "../../../lib/clients/formularioAlta.js";
+import { textosDelAlta, hayPacienteConNombre } from "../../../lib/clients/altaPorPaciente.js";
 import { VOCABULARIO_CLIENTE } from "../../../lib/clients/vocabulario.js";
 import { CATEGORIAS, rotuloCategoria } from "../../../lib/booking/categorias.js";
 import { avisoBorradoSegunModulos } from "../../../lib/clients/avisoBorrado.js";
@@ -72,8 +73,14 @@ export default function ClientesClient({
   conFacturacion = false,
   conCategoria = false,
   vocab = VOCABULARIO_CLIENTE,
+  // El alta que empieza por el paciente (AV-0051 de Aumenta, 07/09/2026):
+  // interruptor del módulo `pacientes`, resuelto en servidor. Y `abrirAlta`:
+  // `/clientes?alta=1` abre el alta nada más entrar.
+  altaPorPaciente = false,
+  abrirAlta = false,
 }) {
   const router = useRouter();
+  const textosAlta = textosDelAlta({ porPaciente: altaPorPaciente, singular: vocab.singular });
   const mounted = useMounted();
   const [clients, setClients] = useState([]);
   const [total, setTotal] = useState(0);
@@ -128,7 +135,10 @@ export default function ClientesClient({
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [newClientOpen, setNewClientOpen] = useState(false);
-  const CAMPOS_ALTA = camposCliente(perfil, { conPacientes, conCategoria });
+  useEffect(() => {
+    if (abrirAlta) setNewClientOpen(true);
+  }, [abrirAlta]);
+  const CAMPOS_ALTA = camposCliente(perfil, { conPacientes, conCategoria, titularEsProgenitor: altaPorPaciente });
   const ALTA_VACIA = Object.fromEntries(CAMPOS_ALTA.map((c) => [c.key, ""]));
   // La ficha edita lo mismo que se pregunta en el alta: si no, el código
   // postal que acaba de teclear recepción no se podría corregir nunca.
@@ -360,7 +370,7 @@ export default function ClientesClient({
   }
 
   function validateNewClient(form) {
-    if (!form.name.trim()) return "El nombre es obligatorio";
+    if (!form.name.trim()) return textosAlta.sinNombreTitular;
     const email = form.email.trim();
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return "El email no tiene un formato válido (ej. nombre@empresa.com)";
@@ -395,6 +405,12 @@ export default function ClientesClient({
   }
 
   async function handleCreateClient() {
+    // Con el alta que empieza por el paciente, sin paciente no hay alta: la
+    // ficha de la familia sola es justo lo que se quería evitar.
+    if (altaPorPaciente && !hayPacienteConNombre(nuevosPacientes)) {
+      setNewClientError(textosAlta.sinPaciente);
+      return;
+    }
     const validationError = validateNewClient(newClientForm);
     if (validationError) {
       setNewClientError(validationError);
@@ -919,7 +935,7 @@ export default function ClientesClient({
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className={`bg-white rounded-2xl shadow-2xl w-full ${conPacientes ? "max-w-lg" : "max-w-md"} max-h-[90dvh] flex flex-col`}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h2 className="font-semibold text-gray-900">Nuevo {vocab.singular}</h2>
+              <h2 className="font-semibold text-gray-900">{textosAlta.titulo}</h2>
               <button
                 onClick={cerrarAlta}
                 className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"
@@ -933,6 +949,27 @@ export default function ClientesClient({
               {newClientError && (
                 <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">
                   {newClientError}
+                </div>
+              )}
+              {/* El paciente PRIMERO donde el centro lo pide (AV-0051 de
+                  Aumenta, 07/09/2026): en un centro infantil el primer nombre
+                  que se teclea es el del niño, y con la familia delante ese
+                  nombre acababa de titular de la ficha. */}
+              {altaPorPaciente && conPacientes && (
+                <PacientesDelAlta
+                  primero
+                  pacientes={nuevosPacientes}
+                  onChange={(lista) => {
+                    setNuevosPacientes(lista);
+                    if (newClientError) setNewClientError(null);
+                  }}
+                  nombreCliente={newClientForm.name}
+                />
+              )}
+              {altaPorPaciente && textosAlta.cabeceraFamilia && (
+                <div className="pt-3 border-t border-gray-100">
+                  <div className="text-xs font-medium text-gray-700">{textosAlta.cabeceraFamilia.titulo}</div>
+                  <p className="text-[11px] text-gray-400">{textosAlta.cabeceraFamilia.ayuda}</p>
                 </div>
               )}
               {CAMPOS_ALTA.map(({ label, key, type, placeholder, opciones, ayuda }) => (
@@ -978,7 +1015,7 @@ export default function ClientesClient({
                   parentescoTitular={newClientForm.parentescoTitular}
                 />
               )}
-              {conPacientes && (
+              {conPacientes && !altaPorPaciente && (
                 <PacientesDelAlta
                   pacientes={nuevosPacientes}
                   onChange={(lista) => {
@@ -1017,7 +1054,7 @@ export default function ClientesClient({
                   disabled={!newClientForm.name.trim() || creatingClient}
                   className="flex-1 bg-[var(--color-primary)] hover:opacity-90 text-white text-sm font-medium py-2 rounded-lg transition-opacity disabled:opacity-40"
                 >
-                  {creatingClient ? "Creando…" : `Crear ${vocab.singular}`}
+                  {creatingClient ? "Creando…" : textosAlta.boton}
                 </button>
                 <button
                   onClick={cerrarAlta}
