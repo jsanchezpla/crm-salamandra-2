@@ -971,9 +971,12 @@ export default function FacturasPage() {
                     </FormRow>
                     {/* LA RAZÓN SOCIAL DE ESTA FACTURA (04/09/2026, Rodrigo):
                         con padres separados cada uno quiere la suya a su
-                        nombre. Sale la elegida en la ficha y se puede cambiar
-                        aquí sin tocarla. Solo aparece si la familia tiene
-                        tutores; en una empresa no hay nada que elegir. */}
+                        nombre. Sale la de la ficha y se puede cambiar aquí sin
+                        tocarla — y desde el 08/09/2026 «la de la ficha» es el
+                        tutor principal aunque nadie haya elegido a nadie, que
+                        es lo que evita facturar a nombre del niño. Solo aparece
+                        si la familia tiene tutores; en una empresa no hay nada
+                        que elegir. */}
                     {clienteElegido && String(clienteElegido.id) === String(form.clientId)
                       && (clienteElegido.razonesSociales?.length ?? 0) > 1 ? (
                       <FormRow label="Razón social (a nombre de)">
@@ -983,7 +986,7 @@ export default function FacturasPage() {
                           className={inputCls}
                           options={clienteElegido.razonesSociales.map((o) => ({
                             value: o.value,
-                            label: o.value === LA_FICHA ? `${o.label} (la ficha)` : o.label,
+                            label: o.label,
                           }))}
                         />
                         {clienteElegido.razonesSociales.find((o) => o.value === form.guardianId)?.sinDni && (

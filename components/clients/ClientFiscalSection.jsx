@@ -25,7 +25,7 @@ import HelpTooltip from "../ui/HelpTooltip.jsx";
 // listado (31/08/2026): así los dos sitios enseñan y guardan LO MISMO.
 import { CAMPOS_FISCALES as CAMPOS } from "../../lib/clients/camposFiscales.js";
 // A nombre de cuál de sus tutores se factura por defecto (04/09/2026).
-import { opcionesDeRazonSocial, razonSocialPorDefecto, nombreDeRazonSocial, repartoEntreTutores, LA_FICHA } from "../../lib/billing/razonSocial.js";
+import { opcionesDeRazonSocial, razonSocialPorDefecto, razonSocialGuardada, nombreDeRazonSocial, repartoEntreTutores, LA_FICHA } from "../../lib/billing/razonSocial.js";
 
 // ── El reparto entre tutores, en la pantalla (06/09/2026) ───────────────────
 // Tutores con nombre e id (los que ofrece «A nombre de», menos la ficha).
@@ -71,7 +71,9 @@ export default function ClientFiscalSection({ clientId }) {
   function abrir() {
     setBorrador({
       ...Object.fromEntries(CAMPOS.map((c) => [c.key, datos?.[c.key] || ""])),
-      fiscalGuardianId: razonSocialPorDefecto(datos),
+      // Lo GUARDADO, no lo calculado: si aquí se sembrara el tutor principal,
+      // entrar a corregir la dirección lo dejaría clavado a mano (08/09/2026).
+      fiscalGuardianId: razonSocialGuardada(datos),
       fiscalSplit: repartoEntreTutores(datos),
     });
     setError(null);
@@ -104,9 +106,15 @@ export default function ClientFiscalSection({ clientId }) {
   const inputCls = "w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm";
   const labelCls = "block text-xs font-medium text-gray-600 mb-1";
   const rellenos = CAMPOS.filter((c) => (datos[c.key] || "").trim());
+  // A nombre de quién saldrán sus facturas nuevas: el tutor elegido, el
+  // principal, o la ficha (08/09/2026).
+  const aNombreDe = razonSocialPorDefecto(datos);
+  const automatico = aNombreDe !== LA_FICHA && razonSocialGuardada(datos) === LA_FICHA;
   // El mismo criterio que el candado de emisión del servidor: razón social
   // (con respaldo al nombre de la ficha) y NIF, con respaldo al DNI del titular.
-  const faltaParaFacturar = [
+  // Con la factura a nombre de un tutor manda SU DNI, no el de la ficha: avisar
+  // ahí de que «falta el NIF» sería una falsa alarma que no deja arreglar nada.
+  const faltaParaFacturar = aNombreDe !== LA_FICHA ? [] : [
     !datos.fiscalName && !datos.name ? "la razón social" : null,
     !datos.fiscalTaxId && !datos.taxId ? "el NIF/CIF" : null,
   ].filter(Boolean);
@@ -147,17 +155,28 @@ export default function ClientFiscalSection({ clientId }) {
                   .join(" · ")}
                 <span className="block text-[11px] text-gray-400 mt-0.5">«Facturar el mes» emite una factura por tutor con su parte.</span>
               </div>
-            ) : razonSocialPorDefecto(datos) !== LA_FICHA ? (
+            ) : aNombreDe !== LA_FICHA ? (
               <div className="text-[13px] text-gray-700">
                 <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block">A nombre de</span>
-                {nombreDeRazonSocial(datos, razonSocialPorDefecto(datos))}
+                {nombreDeRazonSocial(datos, aNombreDe)}
+                {automatico && (
+                  <span className="block text-[11px] text-gray-400 mt-0.5">
+                    Automático: el tutor principal de la familia, con su DNI. Se cambia en «Editar».
+                  </span>
+                )}
               </div>
             ) : null}
             {rellenos.length === 0 ? (
               <div className="text-sm text-gray-400 italic">
-                Sin datos propios de facturación. Las facturas saldrán a nombre de{" "}
-                {datos.name || "esta ficha"}
-                {datos.taxId ? `, con el DNI ${datos.taxId}` : ""}.
+                Sin datos propios de facturación.{" "}
+                {aNombreDe !== LA_FICHA ? (
+                  <>Sus facturas van a nombre del tutor de arriba.</>
+                ) : (
+                  <>
+                    Las facturas saldrán a nombre de {datos.name || "esta ficha"}
+                    {datos.taxId ? `, con el DNI ${datos.taxId}` : ""}.
+                  </>
+                )}
               </div>
             ) : (
               <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
@@ -188,13 +207,14 @@ export default function ClientFiscalSection({ clientId }) {
                   onChange={(e) => setBorrador((b) => ({ ...b, fiscalGuardianId: e.target.value }))}
                 >
                   {opcionesDeRazonSocial(datos).map((o) => (
-                    <option key={o.value || "ficha"} value={o.value}>
-                      {o.value === LA_FICHA ? `${o.label} (la ficha)` : o.label}
-                    </option>
+                    <option key={o.value || "ficha"} value={o.value}>{o.label}</option>
                   ))}
                 </select>
                 <p className="text-[11px] text-gray-400 mt-1">
                   Sale por defecto en sus facturas nuevas, y en cada una se puede cambiar.
+                  {" "}En «Automático» se factura al tutor principal —el titular de la ficha si es
+                  uno de ellos, y si no el primero de la lista— con su DNI; para que salga a nombre
+                  de la ficha o de una empresa, escribe abajo la razón social.
                   {opcionesDeRazonSocial(datos).find((o) => o.value === borrador.fiscalGuardianId)?.sinDni
                     ? " Ojo: sin DNI en la ficha de tutores no se podrá emitir a su nombre."
                     : ""}

@@ -88,8 +88,17 @@ prueba("sin DNI en la tutora, el grupo se aparta con el motivo en vez de salir a
   afirma.match(sinNif[0].motivo, /no tiene DNI/);
 });
 
-prueba("sin razón social por defecto, todo como siempre: a nombre de la ficha", () => {
+prueba("sin elegir a nadie, el lote va al TUTOR PRINCIPAL (08/09/2026)", () => {
+  // Antes salía a nombre de la ficha, y en Aumenta la ficha se llama como el
+  // niño en 216 familias. Nadie había elegido tutor en NINGUNA de las 1.094.
   const { facturables } = agrupar({ cobros: [cobroT], clientes: [fichaCon({ fiscalGuardianId: null })] });
+  afirma.equal(facturables[0].guardianId, TUTORA.id);
+  afirma.equal(facturables[0].aNombreDe, "Marta Pérez");
+  afirma.equal(facturables[0].fotoFiscal.nif, "22222222J");
+});
+
+prueba("sin tutores, el lote sigue saliendo a nombre de la ficha", () => {
+  const { facturables } = agrupar({ cobros: [cobroT], clientes: [fichaCon({ fiscalGuardianId: null, guardians: [] })] });
   afirma.equal(facturables[0].guardianId, undefined);
   afirma.equal(facturables[0].fotoFiscal, undefined);
 });
@@ -101,8 +110,16 @@ prueba("una ficha SIN NIF cuya razón social por defecto es un tutor con DNI sí
   afirma.equal(facturables[0].nif, "22222222J");
 });
 
-prueba("sin NIF y sin tutor por defecto, sigue apartada como «sin NIF»", () => {
-  const { facturables, sinNif } = agrupar({ cobros: [cobroT], clientes: [fichaCon({ taxId: null, fiscalTaxId: null, fiscalGuardianId: null })] });
+prueba("sin NIF, sin tutor elegido y SIN TUTORES, sigue apartada como «sin NIF»", () => {
+  const ficha = fichaCon({ taxId: null, fiscalTaxId: null, fiscalGuardianId: null, guardians: [] });
+  const { facturables, sinNif } = agrupar({ cobros: [cobroT], clientes: [ficha] });
   afirma.equal(facturables.length, 0);
   afirma.equal(sinNif[0].motivo, "sin NIF");
+});
+
+prueba("sin NIF en la ficha pero con un tutor con DNI, ya NO cae en «sin NIF»", () => {
+  // 19 familias de Aumenta estaban así: sin NIF de ficha y sin tutor elegido.
+  const { facturables, sinNif } = agrupar({ cobros: [cobroT], clientes: [fichaCon({ taxId: null, fiscalTaxId: null, fiscalGuardianId: null })] });
+  afirma.equal(sinNif.length, 0);
+  afirma.equal(facturables[0].nif, "22222222J");
 });
