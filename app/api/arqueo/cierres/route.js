@@ -117,11 +117,38 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
 
   const totalDescuadre = cierres.reduce((s, c) => s + Number(c.difference || 0), 0);
 
+  /*
+   * El ÚLTIMO cierre de esa caja, al margen del filtro de fechas (07/09/2026,
+   * AV-0067): es de donde sale el fondo que se propone para el cierre
+   * siguiente, y si dependiera del rango que hay puesto en pantalla la
+   * propuesta desaparecería justo cuando alguien mira una semana concreta.
+   * Van solo los dos campos que hacen falta.
+   */
+  let ultimoCierre = null;
+  if (cajaId) {
+    const ultimo = await CashClose.findOne({
+      where: { cashPointId: cajaId },
+      order: [["closeDate", "DESC"], ["createdAt", "DESC"]],
+      attributes: ["closeDate", "countedAmount", "closedById"],
+    });
+    if (ultimo) {
+      ultimoCierre = {
+        closeDate: ultimo.closeDate,
+        countedAmount: ultimo.countedAmount,
+        // Si nadie lo cerró, no hubo conteo: los 828 cierres que Aumenta
+        // importó de Organízate están a cero y sin autor, y proponer ese cero
+        // sería inventarse un dato. Viaja resumido, sin el id de la persona.
+        hechoPorUnaPersona: Boolean(ultimo.closedById),
+      };
+    }
+  }
+
   return ok({
     cierres,
     total: cierres.length,
     conDescuadre: cierres.filter((c) => Number(c.difference) !== 0).length,
     totalDescuadre: +totalDescuadre.toFixed(2),
+    ultimoCierre,
   });
 });
 

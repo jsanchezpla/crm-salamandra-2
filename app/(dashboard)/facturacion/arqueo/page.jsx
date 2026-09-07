@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { hoyVigente } from "@/lib/billing/cuotas.js";
+import { fondoSugerido } from "@/lib/billing/caja.js";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import MovimientosCaja from "../_components/MovimientosCaja.jsx";
 import ResumenCaja from "../_components/ResumenCaja.jsx";
@@ -14,10 +15,19 @@ const fmt = (n) =>
 
 const hoy = () => hoyVigente();
 
+/** «2026-07-31» → «31/07/2026». La casilla habla de un día concreto. */
+const fmtFecha = (iso) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso ?? ""));
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : String(iso ?? "");
+};
+
 export default function ArqueoPage() {
   const [cajas, setCajas] = useState([]);
   const [cajaId, setCajaId] = useState("");
   const [cierres, setCierres] = useState([]);
+  // El último cierre de esta caja, para proponer el fondo del siguiente
+  // (07/09/2026, AV-0067). Viene del servidor al margen del filtro de fechas.
+  const [ultimoCierre, setUltimoCierre] = useState(null);
   const [resumen, setResumen] = useState({ total: 0, conDescuadre: 0, totalDescuadre: 0 });
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
@@ -63,6 +73,7 @@ export default function ArqueoPage() {
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || "No se pudieron cargar los cierres");
       setCierres(j.data?.cierres ?? []);
+      setUltimoCierre(j.data?.ultimoCierre ?? null);
       setResumen({
         total: j.data?.total ?? 0,
         conDescuadre: j.data?.conDescuadre ?? 0,
@@ -101,8 +112,22 @@ export default function ArqueoPage() {
     }
   }
 
+  /*
+   * El fondo NO se abre vacío: se propone lo que se contó en el cierre
+   * anterior, que es con lo que se abre un cajón de verdad (AV-0067 de
+   * Aumenta: «no puedo cuadrar saldo porque no sé de qué saldo habéis
+   * partido»). Es una propuesta y no un dato: se cambia antes de comprobar, y
+   * sin cierre anterior se deja vacía y se dice por qué.
+   */
+  const fondoDeAyer = fondoSugerido(ultimoCierre);
+
   function abrirCierre() {
-    setForm({ closeDate: hoy(), openingAmount: "", countedAmount: "", notes: "" });
+    setForm({
+      closeDate: hoy(),
+      openingAmount: fondoDeAyer ? String(fondoDeAyer.importe) : "",
+      countedAmount: "",
+      notes: "",
+    });
     setPrevio(null);
     setFormError(null);
     setShowCierre(true);
@@ -348,6 +373,17 @@ export default function ArqueoPage() {
               <label className="block">
                 <span className="text-[12px] text-neutral-500">Fondo inicial (lo que había al abrir)</span>
                 <input type="number" step="0.01" value={form.openingAmount} onChange={(e) => { setForm({ ...form, openingAmount: e.target.value }); setPrevio(null); }} className={inputCls} placeholder="0,00" />
+                {/* De dónde sale el número: sin esto la casilla vuelve a ser un
+                    hueco que nadie sabe rellenar, que es el aviso AV-0067. */}
+                {fondoDeAyer ? (
+                  <span className="mt-1 block text-[11.5px] text-neutral-400">
+                    Es lo que se contó al cerrar el {fmtFecha(fondoDeAyer.fecha)}. Cámbialo si el dinero fue al banco o si has metido cambio.
+                  </span>
+                ) : (
+                  <span className="mt-1 block text-[11.5px] text-neutral-400">
+                    Es el primer cierre de esta caja: escribe el dinero que hay ahora en el cajón y a partir de aquí se arrastra solo.
+                  </span>
+                )}
               </label>
               <label className="block">
                 <span className="text-[12px] text-neutral-500">Dinero contado en el cajón *</span>

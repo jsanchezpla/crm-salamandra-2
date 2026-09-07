@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { hoyVigente } from "@/lib/billing/cuotas.js";
+import { ejerciciosDe, facturasDelEjercicio, sePuedeDescargar } from "@/lib/billing/ejerciciosFactura.js";
 import { useRouter } from "next/navigation";
 import PatientReparto from "./PatientReparto.jsx";
 
@@ -39,11 +40,17 @@ export default function PatientBillingSection({ patientId, clientId }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [showReparto, setShowReparto] = useState(false);
+  // El ejercicio que se mira; "" son todos (07/09/2026, AV-0066 de Aumenta:
+  // «no se ven todas las facturas emitidas de ese paciente en ejercicios
+  // anteriores y no se pueden descargar»).
+  const [ejercicio, setEjercicio] = useState("");
 
   const load = useCallback(() => {
     let alive = true;
     setLoading(true);
-    fetch(`/api/billing/invoices?patientId=${patientId}&limit=50`, { cache: "no-store" })
+    // 500 y no 50: un niño con años de historia tenía cortadas las facturas
+    // viejas justo por donde ella las busca.
+    fetch(`/api/billing/invoices?patientId=${patientId}&limit=500`, { cache: "no-store" })
       .then(async (r) => {
         if (r.status === 403) { if (alive) setAvailable(false); return null; }
         return r.json();
@@ -60,6 +67,9 @@ export default function PatientBillingSection({ patientId, clientId }) {
   }, [patientId]);
 
   useEffect(() => load(), [load]);
+
+  const ejercicios = useMemo(() => ejerciciosDe(invoices), [invoices]);
+  const visibles = useMemo(() => facturasDelEjercicio(invoices, ejercicio), [invoices, ejercicio]);
 
   // Pagadores frecuentes del paciente (calculados de sus facturas): permiten
   // crear una factura para un pagador recurrente con un clic, sin re-teclearlo.
@@ -159,11 +169,34 @@ export default function PatientBillingSection({ patientId, clientId }) {
         </p>
       )}
 
+      {/* El ejercicio, solo si el paciente tiene facturas de más de un año. */}
+      {ejercicios.length > 1 && (
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-[10px] text-neutral-400">Ejercicio</span>
+          <select
+            value={ejercicio}
+            onChange={(e) => setEjercicio(e.target.value)}
+            className="rounded-lg border border-neutral-200 bg-white px-2 py-1 text-[11px] text-neutral-600"
+            aria-label="Ejercicio del paciente"
+          >
+            <option value="">Todos los años</option>
+            {ejercicios.map((a) => (
+              <option key={a} value={a}>{a}</option>
+            ))}
+          </select>
+          <span className="text-[10px] text-neutral-400">
+            {visibles.length === invoices.length
+              ? `${invoices.length} facturas`
+              : `${visibles.length} de ${invoices.length}`}
+          </span>
+        </div>
+      )}
+
       {invoices.length === 0 ? (
         <p className="text-[11px] text-neutral-400">Sin facturas para este paciente.</p>
       ) : (
         <ul className="divide-y divide-neutral-100">
-          {invoices.map((inv) => (
+          {visibles.map((inv) => (
             <li key={inv.id} className="py-2 flex items-center gap-3 text-xs">
               <span className="font-medium text-neutral-800 shrink-0">{inv.number?.startsWith("DRAFT-") ? "(borrador)" : inv.number}</span>
               {inv.customFields?.splitGroupId && (
@@ -175,6 +208,19 @@ export default function PatientBillingSection({ patientId, clientId }) {
                 {STATUS_LABEL[inv.status] || inv.status}
               </span>
               <span className="text-neutral-800 font-medium shrink-0 tabular-nums">{eur(inv.total)}</span>
+              {/* Descargarla desde aquí, que es donde ella la busca (AV-0066).
+                  Un borrador no: todavía no tiene número. */}
+              {sePuedeDescargar(inv) && (
+                <a
+                  href={`/api/billing/invoices/${inv.id}/pdf`}
+                  title={`Descargar ${inv.number}`}
+                  className="shrink-0 inline-flex items-center text-neutral-400 hover:text-[var(--color-primary,#1B3A2D)] transition-colors"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3.5 h-3.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                  </svg>
+                </a>
+              )}
             </li>
           ))}
         </ul>
