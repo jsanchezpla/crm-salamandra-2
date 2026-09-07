@@ -1,8 +1,8 @@
 import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
-import { mesesSeguidosSinPagar } from "../../../../lib/billing/mesesSinPagar.js";
-import { mesVigente, debeElMes } from "../../../../lib/billing/cuotas.js";
+import { mesesSeguidosSinPagar, loQueFaltaDelMes } from "../../../../lib/billing/mesesSinPagar.js";
+import { mesVigente, debeElMes, planDeCuotasDelMes } from "../../../../lib/billing/cuotas.js";
 
 /**
  * GET /api/billing/morosidad?mes=AAAA-MM — quién no ha pagado el mes
@@ -76,7 +76,9 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     const { Cuota } = ctx.tenantModels;
     const cuotasPorCliente = new Map();
     if (Cuota) {
-      const filas = await Cuota.findAll({ attributes: ["clientId", "startDate", "endDate", "active"], raw: true });
+      // Con importe y conceptos (07/09/2026): hacen falta para saber cuánto
+      // ESPERA el mes y decir «debe 60 €» cuando se pagó a medias.
+      const filas = await Cuota.findAll({ attributes: ["id", "clientId", "patientId", "startDate", "endDate", "active", "amount", "conceptIds", "method", "dayOfMonth"], raw: true });
       for (const f of filas) {
         if (!f.clientId) continue;
         const cid = String(f.clientId);
@@ -117,19 +119,44 @@ export const GET = withTenant(async (request, _rc, ctx) => {
       attributes: ["clientId", "periodMonth", "amount", "paidAt"],
     });
 
-    // Meses pagados por cliente + fecha del último cobro (para el listado).
+    // Meses pagados por cliente + fecha del último cobro (para el listado),
+    // y cuánto se ha cobrado del mes pedido (para el pagado a medias).
     const pagados = new Map();
     const ultimo = new Map();
+    const cobradoDelMes = new Map();
     for (const c of cobros) {
       const cid = String(c.clientId);
       const m = c.periodMonth ? String(c.periodMonth).slice(0, 7) : null;
       if (m) {
         if (!pagados.has(cid)) pagados.set(cid, new Set());
         pagados.get(cid).add(m);
+        if (m === mes) cobradoDelMes.set(cid, (cobradoDelMes.get(cid) ?? 0) + Number(c.amount || 0));
       }
       const anterior = ultimo.get(cid);
       if (!anterior || new Date(c.paidAt) > new Date(anterior)) ultimo.set(cid, c.paidAt);
     }
+
+    /*
+     * ── UN MES PAGADO A MEDIAS NO ES UN MES PAGADO (07/09/2026) ─────────────
+     * Desde el 04/09 un mes se puede cobrar en dos veces. Con los 100 € de
+     * los 160 € apuntados, la familia salía «al día». Lo que ESPERA el mes lo
+     * dicen sus cuotas (`planDeCuotasDelMes`, el mismo cálculo que genera los
+     * cobros, con el prorrateo del mes de alta); sin cuotas asignadas no hay
+     * con qué comparar y manda la regla de siempre (algún cobro = pagado).
+     */
+    const { BillingConcept } = ctx.tenantModels;
+    let conceptos = [];
+    if (BillingConcept) {
+      try {
+        conceptos = (await BillingConcept.findAll({ attributes: ["id", "name", "unitPrice"], raw: true })).map((c) => ({ id: c.id, name: c.name, unitPrice: c.unitPrice }));
+      } catch { conceptos = []; }
+    }
+    const esperadoDelMes = (cid) => {
+      const filasCuota = cuotasPorCliente.get(cid);
+      if (!filasCuota?.length) return null;
+      const { aGenerar } = planDeCuotasDelMes({ mes, cuotas: filasCuota, conceptos });
+      return aGenerar.reduce((s, f) => s + Number(f.importe || 0), 0);
+    };
 
     const clientes = await Client.findAll({ where: { id: { [Op.in]: ids } }, attributes: ["id", "name", "email", "phone"] });
     const nombres = new Map(clientes.map((c) => [String(c.id), c]));
@@ -138,8 +165,29 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     let alDia = 0;
     for (const cid of ids) {
       const suyos = pagados.get(cid) ?? new Set();
-      if (suyos.has(mes)) {
+      const falta = suyos.has(mes)
+        ? loQueFaltaDelMes({ pagado: cobradoDelMes.get(cid) ?? 0, esperado: esperadoDelMes(cid) })
+        : null;
+      if (suyos.has(mes) && !falta) {
         alDia++;
+        continue;
+      }
+      // Pagado a medias: sale en la lista con lo que falta y sin acumular
+      // meses (este mes no está sin pagar, está a medias).
+      if (falta) {
+        const cli = nombres.get(cid);
+        morosos.push({
+          clientId: cid,
+          name: cli?.name ?? "(cliente borrado)",
+          email: cli?.email ?? null,
+          phone: cli?.phone ?? null,
+          pacientesActivos: porCliente.get(cid) ?? 0,
+          mesesSeguidos: 0,
+          debe: falta.debe,
+          pagado: falta.pagado,
+          esperado: falta.esperado,
+          ultimoCobro: ultimo.get(cid) ?? null,
+        });
         continue;
       }
       // Meses seguidos sin pagar, hacia atrás desde el mes pedido y sin

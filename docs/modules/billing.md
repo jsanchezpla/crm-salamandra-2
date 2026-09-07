@@ -751,6 +751,23 @@ llevar aparejado el tipo que cobró — «aunque sea internamente».
 
 Motivo y contexto: `docs/decisions/2026-08-29-el-dinero-se-sabe-por-facturas.md`.
 
+## Tres arreglos de Cobros y de la factura (07/09/2026, tarde)
+
+- **El pie legal cabe** (AV-0064 de Aumenta): el texto de protección de datos
+  que Aumenta quiere en cada factura son diez líneas; `invoicePdf.js` lo
+  mide (`heightOfString`) y lo ancla a 40 pt del borde inferior, en página
+  nueva si pisa lo escrito. Los textos de Aumenta (nota de exención del art.
+  20 1.3 y pie RGPD) se pusieron en sus ajustes el 07/09 (`vatExemptNote`,
+  `invoiceFooterText`); la nota se congela en cada factura al crearla.
+- **«Total cobrado» de Cobros es de todo el filtro**: `GET /api/billing/payments`
+  devuelve `totales { cobrado, pendiente }` sumados con el mismo `where` (y
+  los mismos JOIN de la búsqueda); la pantalla los usa y solo cae a la suma
+  de las filas cargadas con un servidor viejo.
+- **Un mes pagado a medias no es un mes pagado** en Morosidad: lo que espera
+  el mes lo dicen sus cuotas (`planDeCuotasDelMes`); con menos cobrado la
+  familia sale con «debe 60 €» y 0 meses acumulados (`loQueFaltaDelMes`,
+  `lib/billing/mesesSinPagar.js`); sin cuotas asignadas, la regla de siempre.
+
 ## El mes de alta se prorratea por sesiones (07/09/2026, AV-0062 de Aumenta)
 
 Rosa: «un paciente que empieza el día 11 viene 3 sesiones de 4 y el sistema
