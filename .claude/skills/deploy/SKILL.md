@@ -208,6 +208,40 @@ ssh crm-vps 'cd /opt/crm-salamandra && ./deploy.sh'
   `git pull` reemplaza el script mientras bash lo está ejecutando, así que la
   ejecución en curso sigue con el contenido viejo. Está avisado en su cabecera.
 
+#### ⚠️ Con varias sesiones a la vez: se avisa y se espera el «adelante»
+
+Dos despliegues sobre el mismo VPS se pisan, y no de forma limpia. **La única
+coordinación que funciona es avisar ANTES de lanzar y esperar un sí explícito de
+la otra sesión.** Mirar si hay un `deploy.sh` vivo NO basta, por dos motivos que
+costaron una tarde el 07/09/2026:
+
+1. **`pgrep -f deploy.sh | wc -l` siempre cuenta al menos 1**, porque el propio
+   `sh -c` que abre el ssh lleva «deploy.sh» en su línea de comandos y se cuenta
+   a sí mismo. Tuvo a una sesión media hora esperando turno con el VPS libre. Lo
+   que sí sirve (vacío = ninguno):
+
+   ```bash
+   ssh crm-vps "ps -eo pid,etime,cmd | grep deploy.sh | grep -v grep | grep -v 'ps -eo'"
+   ```
+
+2. **Que no haya proceso tampoco garantiza que el repo esté libre.** Un
+   despliegue arrancado justo cuando el otro desaparecía de `ps` murió con
+   `Unable to create .git/index.lock: File exists`, y dejó
+   `/opt/crm-salamandra` a medias: el commit entrante aplicado al índice, sin
+   commitear y con HEAD atrasado.
+
+**Cómo se recupera ese `git pull` a medias**, sin tocar historia y solo después
+de comprobar que lo que está preparado es EXACTAMENTE el commit entrante
+(`git diff --cached --stat` contra `git show <commit> --stat`) y que no hay nada
+sin preparar:
+
+```bash
+ssh crm-vps "cd /opt/crm-salamandra; git reset -q; git checkout -- .; git pull --ff-only"
+```
+
+Nada de `reset --hard` a ciegas: si en el árbol hubiera algo de alguien, se lo
+lleva por delante.
+
 ### 9. Comprobar DENTRO del contenedor
 
 En el repositorio ya se sabe que está bien: eso no prueba nada. Lo que importa es
