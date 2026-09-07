@@ -101,6 +101,54 @@ const ALTAS = [
     cliente: { nombre: "Lucas Herranz Fernández", nif: null },
     tutores: [],
   },
+  {
+    /*
+     * 07/09/2026. Leídos de su ficha de Organízate esa noche, con la sesión
+     * abierta en Chrome: es la ÚNICA forma de sacarlos, porque ninguno de los
+     * dieciséis volcados de `/opt/migracion-aumenta` los tiene (el de
+     * pacientes es del 02/08 y estas altas son posteriores).
+     *
+     * Como el 1271: la ficha solo trae nombre, fecha de nacimiento, DNI y
+     * móvil — pestaña de tutores VACÍA (`tut_id[1..4]` a 0), sin dirección y
+     * sin correo. Menor sin tutor conocido: el cliente va a su nombre con ese
+     * móvil y el centro completa la familia cuando venga a la entrevista.
+     * Saldrá solo en «Fichas a completar» (sin tutor, sin correo).
+     */
+    idPac: 1274,
+    firstName: "ALONSO",
+    lastName: "MARCOS GONZÁLEZ",
+    birthDate: "2018-10-27",
+    // El «cifnif» de su ficha son 8 dígitos SIN letra («43470280»), así que no
+    // es un NIF válido y no se guarda como tal: un NIF equivocado en un dato
+    // fiscal es peor que ninguno. Queda anotado para que el centro lo confirme.
+    dni: null,
+    address: null,
+    city: null,
+    postalCode: null,
+    phone: "646265659",
+    email: null,
+    notes: "Organízate: ficha sin tutores, sin dirección y sin correo. Su «CIF/NIF» allí es 43470280, sin letra: confirmar con la familia antes de usarlo para facturar.",
+    enrollmentDate: "2026-09-08", // su primera cita: entrevista inicial con Isabel Alberca
+    cliente: { nombre: "ALONSO MARCOS GONZÁLEZ", nif: null },
+    tutores: [],
+  },
+  {
+    // 07/09/2026, mismo caso y misma procedencia que el de arriba.
+    idPac: 1273,
+    firstName: "LUCAS DANIEL",
+    lastName: "Molero de Jesús",
+    birthDate: "2022-06-26",
+    dni: "60064385T",
+    address: null,
+    city: null,
+    postalCode: null,
+    phone: "660133458",
+    email: null,
+    notes: "Organízate: ficha sin tutores, sin dirección y sin correo.",
+    enrollmentDate: "2026-09-24", // su primera cita: informe diagnóstico con Isabel Alberca
+    cliente: { nombre: "LUCAS DANIEL Molero de Jesús", nif: "60064385T" },
+    tutores: [],
+  },
 ];
 
 async function main() {
