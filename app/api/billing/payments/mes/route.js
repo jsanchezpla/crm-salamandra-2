@@ -2,6 +2,7 @@ import { Op } from "sequelize";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { esMes } from "../../../../../lib/citas/cobrarMes.js";
+import { dondeEstaElCobroDe } from "../../../../../lib/billing/cobroDeCuota.js";
 
 /**
  * GET /api/billing/payments/mes?clientId=<uuid>&mes=AAAA-MM — los cobros
@@ -35,9 +36,13 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     if (!UUID_RE.test(clientId)) return error("Falta el cliente (clientId)", 422);
     if (!esMes(mes)) return error("El mes debe ser 'AAAA-MM'", 422);
 
+    // Con pagador, el cobro del mes está a nombre de quien paga y no de la
+    // familia: se busca por los dos caminos (07/09/2026).
+    const deLaFamilia = await dondeEstaElCobroDe({ tenantModels, clientId });
+
     const filas = await Payment.findAll({
       where: {
-        clientId,
+        ...deLaFamilia,
         status: "completed",
         periodMonth: { [Op.gte]: `${mes}-01`, [Op.lt]: `${mesSiguiente(mes)}-01` },
       },
@@ -49,7 +54,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     // saber que el cobro ya existe y que registrar el pago lo marca cobrado.
     const pendientes = await Payment.findAll({
       where: {
-        clientId,
+        ...deLaFamilia,
         status: "pending",
         cuotaId: { [Op.ne]: null },
         invoiceId: null,

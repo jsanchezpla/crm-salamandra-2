@@ -8,6 +8,7 @@ import { getTenantStripeConfig } from "../../../../lib/payments/stripeConfig.js"
 import { urlPanelStripe } from "../../../../lib/billing/cobroDesdeStripe.js";
 import { whereDeBusquedaCobros } from "../../../../lib/billing/busquedaCobros.js";
 import { billingHasPatients } from "../../../../lib/billing/patientLink.js";
+import { dondeEstaElCobroDe } from "../../../../lib/billing/cobroDeCuota.js";
 
 export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule }) => {
   try {
@@ -196,9 +197,13 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     let payment = null;
     let cobradosPendientes = [];
     if (!invoiceId && mes && clientId) {
+      // El pendiente del mes puede estar a nombre del PAGADOR de la cuota y no
+      // de la familia (07/09/2026): sin esto no se encontraba y se creaba un
+      // cobro NUEVO encima, con el pendiente de la fundación intacto y la caja
+      // sumando los dos.
       const pendientes = await Payment.findAll({
         where: {
-          clientId,
+          ...(await dondeEstaElCobroDe({ tenantModels, clientId })),
           periodMonth: mes,
           status: "pending",
           cuotaId: { [Op.ne]: null },
