@@ -3,6 +3,7 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { mesesSeguidosSinPagar, loQueFaltaDelMes } from "../../../../lib/billing/mesesSinPagar.js";
 import { mesVigente, debeElMes, planDeCuotasDelMes } from "../../../../lib/billing/cuotas.js";
+import { citasDelMesParaCuotas } from "../../../../lib/billing/citasParaProrrateo.js";
 
 /**
  * GET /api/billing/morosidad?mes=AAAA-MM — quién no ha pagado el mes
@@ -165,10 +166,25 @@ export const GET = withTenant(async (request, _rc, ctx) => {
         conceptos = (await BillingConcept.findAll({ attributes: ["id", "name", "unitPrice"], raw: true })).map((c) => ({ id: c.id, name: c.name, unitPrice: c.unitPrice }));
       } catch { conceptos = []; }
     }
+    /*
+     * ── Y SE CUENTA IGUAL QUE AL GENERAR (07/09/2026) ──────────────────────
+     * `planDeCuotasDelMes` prorratea el mes de alta por SESIONES cuando se le
+     * pasan las citas (AV-0062), y la generación real se las pasa. Aquí no, y
+     * las dos cuentas dejaban de dar lo mismo: una cuota de 190 € dada de alta
+     * un lunes con sesión los viernes se generó y se cobró a 142,50 € (3 de 4
+     * sesiones) mientras esta pantalla la recalculaba por días —190 × 23/30 =
+     * 145,67 €— y sacaba a la familia debiendo 3,17 €. Se cargan una sola vez
+     * para todas las familias de la lista, que es lo que hace la pieza.
+     */
+    const citasPorClave = await citasDelMesParaCuotas({
+      tenantModels: ctx.tenantModels,
+      mes,
+      cuotas: ids.flatMap((cid) => cuotasPorCliente.get(cid) ?? []),
+    });
     const esperadoDelMes = (cid) => {
       const filasCuota = cuotasPorCliente.get(cid);
       if (!filasCuota?.length) return null;
-      const { aGenerar } = planDeCuotasDelMes({ mes, cuotas: filasCuota, conceptos });
+      const { aGenerar } = planDeCuotasDelMes({ mes, cuotas: filasCuota, conceptos, citasPorClave });
       return aGenerar.reduce((s, f) => s + Number(f.importe || 0), 0);
     };
 

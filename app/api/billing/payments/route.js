@@ -112,7 +112,17 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
      * de la última página. Un belongsTo no duplica filas, así que la suma con
      * los mismos JOIN de la búsqueda es exacta.
      */
+    /*
+     * Y hacen caso al filtro de estado (07/09/2026): `where` ya trae el
+     * `status` que eligió la pantalla, y sumar con `status: estado` encima lo
+     * machacaba. Con «Pendiente» puesto, la tabla enseñaba 40 pendientes y la
+     * cabecera «Total cobrado 18.450 €», que era lo completado del mes ENTERO
+     * sin filtrar. Si el filtro pide un estado, el total del otro es 0, que es
+     * la verdad de lo que hay en pantalla.
+     */
+    const estadoPedido = where.status ?? null;
     const sumar = async (estado) => {
+      if (estadoPedido && estadoPedido !== estado) return 0;
       const [fila] = await Payment.findAll({
         where: { ...where, status: estado },
         include: busqueda ? include : [],
