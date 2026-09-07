@@ -87,7 +87,11 @@ export default function MiTrabajo({ trabajo }) {
                   className={`w-1.5 h-1.5 rounded-full shrink-0 ${PUNTO_PRIORIDAD[inc.prioridad] || PUNTO_PRIORIDAD.low}`}
                   title={`Prioridad ${inc.prioridadLabel?.toLowerCase() || ""}`}
                 />
-                <span className="flex-1 min-w-0 truncate text-[var(--ink-900)]">{inc.titulo}</span>
+                <span className="flex-1 min-w-0 truncate text-[var(--ink-900)]">
+                  {/* El paciente delante (07/09/2026, AV-0052 de Aumenta). */}
+                  {inc.paciente && <span className="text-[var(--ink-500)]">{inc.paciente} · </span>}
+                  {inc.titulo}
+                </span>
                 {chip && (
                   <span className={`shrink-0 text-[9px] font-semibold rounded-full px-2 py-0.5 ${chip.clase}`}>
                     {chip.texto}

@@ -254,8 +254,11 @@ export default function IncidenciasPage() {
                       )}
                     </div>
                     <div className="text-[11px] text-neutral-400 mt-0.5 truncate">
+                      {/* El paciente PRIMERO (07/09/2026, AV-0052 de Aumenta):
+                          el subtítulo se recorta por el final, y con varias
+                          responsables lo que no puede caerse es de quién va. */}
+                      {r.patient ? `${r.patient.name} · ` : ""}
                       {fmt(r.date)}
-                      {r.patient ? ` · ${r.patient.name}` : ""}
                       {/* Con varios responsables se enseñan todos: era el
                           punto del cambio, ver solo al principal lo dejaba a
                           medias. */}

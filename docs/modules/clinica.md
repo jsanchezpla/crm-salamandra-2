@@ -97,7 +97,8 @@ prompt no sabía nada. Ahora:
   apuntado, y para la IA es lo mismo que la voz: texto. `materialParaLaIA()`
   junta las dos fuentes cuando se dan las dos (con el rótulo
   `SEPARADOR_NOTAS` en medio, para poder distinguirlas después) y `MAX_NOTAS`
-  las acota en 20.000 caracteres. **Sin audio no se llama a Whisper ni hace
+  las acota en 30.000 caracteres (20.000 hasta el 07/09/2026, AV-0053 de
+  Aumenta). **Sin audio no se llama a Whisper ni hace
   falta clave de OpenAI**, y la pantalla no pinta sus pasos.
 - **El texto se guarda, venga de donde venga**: `clinic_sessions.ai_transcription`
   pasa a ser «de qué texto salió este registro» —la transcripción de un audio
@@ -447,6 +448,21 @@ incidencia sin nadie al cargo está huérfana, no vista). La respuesta lleva
   fallos) y `POST /api/notifications/read`. Componente `NotificationBell.jsx`
   (flotante abajo-derecha, sondeo cada 60s) montado en `DashboardShell` → visible
   en todo el dashboard.
+
+### El paciente delante, en la campana y en Mi trabajo (07/09/2026, AV-0052 de Aumenta)
+
+Isabel: «el nombre del paciente debajo del título solo lo ve quien creó la
+incidencia; a las demás les sale a quién va destinada». La lista de Equipo →
+Incidencias pintaba el paciente para todo el mundo; lo que no lo llevaba eran
+los tres sitios por donde la incidencia le LLEGA a la responsable antes que
+por la lista: la campana («Incidencia asignada» + solo el título), Inicio → Mi
+trabajo y el aviso de comentario. Ahora los tres dicen «Lucía Ruiz · …»
+(`lib/clinica/pacienteEnAvisos.js`, `conPaciente`; sin paciente, el texto va
+tal cual), y en la lista el paciente va DELANTE de la fecha, que el subtítulo
+se recorta por el final. Prueba: `_smoke-paciente-en-avisos.mjs`, que además
+vigila que la ruta del visto importe `cierraAlMarcarTodas`: desde el 05/09
+la llamaba sin importarla, marcar «vista» devolvía un 500 con el visto ya
+escrito y ninguna incidencia se cerraba sola (arreglado el 07/09/2026).
 
 ### 7. Incentivos ESCRITOS a mano (2026-07-24)
 

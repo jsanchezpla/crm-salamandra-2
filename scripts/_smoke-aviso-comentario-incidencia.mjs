@@ -67,6 +67,12 @@ describe("el aviso", () => {
     assert.equal(notificationLink(a.entityType, a.entityId), "/equipo/incidencias?incidencia=i-1");
   });
 
+  it("con paciente, su nombre va delante (AV-0052, 07/09/2026)", () => {
+    const conNino = { ...INC, patient: { firstName: "Lucía", lastName: "Ruiz" } };
+    const a = avisoDeComentario({ incidencia: conNino, comentario: { authorName: "Marta", text: "Visto" } });
+    assert.equal(a.body, "Lucía Ruiz · «Se solapan dos citas» · Visto");
+  });
+
   it("recorta un comentario largo: la conversación se lee en la ficha", () => {
     const a = avisoDeComentario({ incidencia: INC, comentario: { authorName: "Marta", text: "x".repeat(300) } });
     assert.ok(a.body.endsWith("…"));
