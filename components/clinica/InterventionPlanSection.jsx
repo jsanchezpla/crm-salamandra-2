@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import useGrabadora, { fmtSegundos } from "@/components/clinica/useGrabadora.js";
 import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
+import { normalizarObjetivos, agruparPorTerapeuta } from "@/lib/clinica/objetivosDelPlan.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -59,6 +60,80 @@ function ListaEditable({ etiqueta, valores, onChange, placeholder }) {
         <button type="button" onClick={anadir} className="px-3 rounded-lg border border-neutral-200 text-xs text-neutral-600 hover:bg-neutral-50 shrink-0">
           Añadir
         </button>
+      </div>
+    </div>
+  );
+}
+
+/** «logopedia» → «Logopedia», «terapia_ocupacional» → «Terapia ocupacional». */
+const rotuloEspecialidad = (k) => (k ? String(k).replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase()) : null);
+
+/**
+ * Objetivos POR TERAPEUTA (07/09/2026, AV-0061 de Aumenta, Estefanía: «hay
+ * pacientes compartidos y los objetivos cambian según la especialidad»).
+ *
+ * Un grupo por terapeuta del paciente —quien escribe, primero— con sus
+ * objetivos y su caja para añadir; los planes viejos (textos sin terapeuta)
+ * salen en «Sin terapeuta» y cada una puede hacerlos suyos. La regla de
+ * agrupar y normalizar vive en `lib/clinica/objetivosDelPlan.js`.
+ */
+function ObjetivosPorTerapeuta({ objetivos, onChange, terapeutas, equipo, yo, canEdit }) {
+  const [borradores, setBorradores] = useState({});
+  const grupos = agruparPorTerapeuta(objetivos, { terapeutas, equipo, yo });
+  const anadir = (terapeutaId) => {
+    const v = (borradores[terapeutaId ?? ""] ?? "").trim();
+    if (!v) return;
+    onChange(normalizarObjetivos([...objetivos, { texto: v, terapeutaId }]));
+    setBorradores((b) => ({ ...b, [terapeutaId ?? ""]: "" }));
+  };
+  const quitar = (o) => onChange(objetivos.filter((x) => !(x.texto === o.texto && x.terapeutaId === o.terapeutaId)));
+  const hacerMio = (o) => onChange(normalizarObjetivos(objetivos.map((x) => (x === o ? { ...x, terapeutaId: yo } : x))));
+  return (
+    <div>
+      <label className="text-[10px] uppercase tracking-wider text-neutral-400">Objetivos</label>
+      {grupos.length === 0 && <div className="mt-1 text-xs text-neutral-300">Sin definir</div>}
+      <div className="mt-1 space-y-3">
+        {grupos.map((g) => (
+          <div key={g.terapeutaId ?? "sin"} className="rounded-lg border border-neutral-100 bg-neutral-50/50 p-2.5">
+            <div className="text-[11px] font-medium text-neutral-700 mb-1.5">
+              {g.nombre}
+              {g.especialidad && <span className="text-neutral-400 font-normal"> · {rotuloEspecialidad(g.especialidad)}</span>}
+              {g.esYo && <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700">tú</span>}
+            </div>
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {g.objetivos.length === 0 && <span className="text-xs text-neutral-300">Sin objetivos todavía</span>}
+              {g.objetivos.map((o) => (
+                <span key={`${o.terapeutaId ?? ""}|${o.texto}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-neutral-200 text-[11px] text-neutral-700">
+                  {o.texto}
+                  {canEdit && g.terapeutaId === null && yo && (
+                    <button type="button" onClick={() => hacerMio(o)} title="Ponerlo a tu nombre" className="text-[10px] text-neutral-400 hover:text-emerald-700">
+                      mío
+                    </button>
+                  )}
+                  {canEdit && (
+                    <button type="button" onClick={() => quitar(o)} className="text-neutral-400 hover:text-rose-600" aria-label={`Quitar ${o.texto}`}>
+                      ×
+                    </button>
+                  )}
+                </span>
+              ))}
+            </div>
+            {canEdit && g.terapeutaId !== null && (
+              <div className="flex gap-2">
+                <input
+                  value={borradores[g.terapeutaId] ?? ""}
+                  onChange={(e) => setBorradores((b) => ({ ...b, [g.terapeutaId]: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); anadir(g.terapeutaId); } }}
+                  placeholder={g.esYo ? "Un objetivo tuyo para este paciente" : `Un objetivo de ${g.nombre}`}
+                  className={inputCls}
+                />
+                <button type="button" onClick={() => anadir(g.terapeutaId)} className="px-3 rounded-lg border border-neutral-200 text-xs text-neutral-600 hover:bg-neutral-50 shrink-0">
+                  Añadir
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -322,6 +397,22 @@ export default function InterventionPlanSection({ patientId, canEdit = true }) {
     objectives: [], activityTypes: [], methodologies: [],
     objectivesReportsPerTrimester: 0, sessionRecordsPerTrimester: 0,
   });
+  // Para agrupar los objetivos por terapeuta (AV-0061): los del paciente, el
+  // equipo (nombres de quien ya no esté) y quien escribe.
+  const [terapeutas, setTerapeutas] = useState([]);
+  const [equipo, setEquipo] = useState([]);
+  const [yo, setYo] = useState(null);
+  useEffect(() => {
+    let vivo = true;
+    fetch(`/api/pacientes/${patientId}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => {
+      if (!vivo) return;
+      const lista = Array.isArray(j?.data?.therapists) ? j.data.therapists : [];
+      setTerapeutas(lista.map((t) => ({ id: t.teamMemberId ?? t.id, nombre: t.displayName ?? "Terapeuta", especialidad: t.specialty ?? null })).filter((t) => t.id));
+    }).catch(() => {});
+    fetch(`/api/team?status=all&limit=200`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (vivo) setEquipo(j?.data?.members ?? []); }).catch(() => {});
+    fetch(`/api/team/me`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (vivo) setYo(j?.data?.member?.id ?? null); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [patientId]);
 
   const cargar = useCallback(() => {
     setCargando(true);
@@ -336,7 +427,7 @@ export default function InterventionPlanSection({ patientId, canEdit = true }) {
             diagnosis: p.diagnosis ?? "",
             consultationReasons: p.consultationReasons ?? "",
             previousInfo: p.previousInfo ?? "",
-            objectives: p.objectives ?? [],
+            objectives: normalizarObjetivos(p.objectives ?? []),
             activityTypes: p.activityTypes ?? [],
             methodologies: p.methodologies ?? [],
             objectivesReportsPerTrimester: p.reportSchedule?.objectivesReportsPerTrimester ?? 0,
@@ -406,14 +497,21 @@ export default function InterventionPlanSection({ patientId, canEdit = true }) {
             className={`mt-1 ${inputCls}`} placeholder="Informes anteriores, valoraciones externas, antecedentes relevantes…" />
         </div>
 
-        <ListaEditable etiqueta="Objetivos" valores={form.objectives} placeholder="Atención sostenida"
-          onChange={(v) => setForm({ ...form, objectives: v })} />
+        <ObjetivosPorTerapeuta
+          objetivos={form.objectives}
+          onChange={(v) => setForm({ ...form, objectives: v })}
+          terapeutas={terapeutas}
+          equipo={equipo}
+          yo={yo}
+          canEdit={canEdit}
+        />
         {canEdit && (
           <ObjetivosConIa
             patientId={patientId}
             plan={form}
+            // Lo que propone la IA entra a nombre de quien escribe (AV-0061).
             onAnadir={(nuevos) =>
-              setForm((f) => ({ ...f, objectives: [...f.objectives, ...nuevos.filter((n) => !f.objectives.includes(n))] }))
+              setForm((f) => ({ ...f, objectives: normalizarObjetivos([...f.objectives, ...nuevos.map((texto) => ({ texto, terapeutaId: yo ?? null }))]) }))
             }
           />
         )}

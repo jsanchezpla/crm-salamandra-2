@@ -546,6 +546,21 @@ sesión anterior, con un cartel que dice de dónde sale. La regla vive en
   registro el CRM diera de alta el borrador de la siguiente cita— porque
   llenaría la historia clínica de registros que nadie ha abierto.
 
+## Los objetivos del Plan, por terapeuta (07/09/2026, AV-0061 de Aumenta)
+
+Estefanía: «hay pacientes compartidos y los objetivos cambian según la
+especialidad». El Plan sigue siendo uno por paciente; cada objetivo de
+`objectives` pasa a ser `{ texto, terapeutaId }` (los textos sueltos de los
+planes viejos siguen valiendo como «sin terapeuta»), normalizado por
+`lib/clinica/objetivosDelPlan.js` en el PUT (`normalizarObjetivos`) y leído
+como textos por la IA (`textosDeObjetivos`). La pestaña Plan agrupa los
+objetivos por terapeuta del paciente (`/api/pacientes/[id]` → `therapists`,
+con su especialidad), quien escribe primero (`/api/team/me`), cada grupo con
+su caja para añadir, «mío» para adoptar un objetivo suelto, y lo que propone
+la IA entra a nombre de quien escribe. El PUT sigue guardando la lista
+entera (última en guardar gana): dos terapeutas a la vez sobre el mismo plan
+se pisan, como antes. Prueba: `_smoke-objetivos-del-plan.mjs`.
+
 ## Quién firma el registro por defecto (07/09/2026, AV-0060 de Aumenta)
 
 Daniela: «que salga la persona correcta de manera automática». Sin `?prof=`

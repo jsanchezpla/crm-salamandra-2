@@ -1,5 +1,6 @@
 import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
+import { textosDeObjetivos } from "../../../../../../lib/clinica/objetivosDelPlan.js";
 import { getTenantAnthropicKey } from "../../../../../../lib/ai/anthropicKey.js";
 import { getTenantAnthropicModel } from "../../../../../../lib/ai/anthropicModel.js";
 import { demoForcesFakeAi } from "../../../../../../lib/demo/isDemo.js";
@@ -64,7 +65,8 @@ export const POST = withTenant(async (request, rc, ctx) => {
       plan = guardado ? guardado.toJSON() : {};
     }
     plan = plan ?? {};
-    const yaTiene = Array.isArray(plan.objectives) ? plan.objectives.filter((o) => typeof o === "string") : [];
+    // Solo los textos: los objetivos llevan terapeuta desde el 07/09/2026 (AV-0061).
+    const yaTiene = textosDeObjetivos(plan.objectives);
 
     if (demoForcesFakeAi(ctx)) {
       return ok({ objetivos: objetivosDeEnsayo(ideas), fake: true });
