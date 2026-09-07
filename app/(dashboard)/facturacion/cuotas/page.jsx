@@ -220,6 +220,35 @@ export default function CuotasPage() {
     return m;
   }, [cuotas, hoy]);
 
+  /*
+   * QUÉ SALE EN EL DESPLEGABLE: solo lo que alguien paga de verdad
+   * (07/09/2026, Rodrigo: «desde Terapia 30 min semanales a Informe extra son
+   * conceptos de facturación, no tipos de cuota»).
+   *
+   * El catálogo de Aumenta tiene 46 conceptos y la mitad no son la cuota de
+   * nadie: sesiones sueltas, bonos, diagnósticos, la reserva de plaza, el
+   * informe extra. Son líneas de factura. En un desplegable que dice «Todas
+   * las cuotas» no filtraban nada —elegir cualquiera de ellos vaciaba la
+   * tabla— y enterraban las veinte que sí lo son.
+   *
+   * El criterio es EL USO, no la periodicidad del catálogo: «Terapia 45 min
+   * semanales» está marcada como mensual y tampoco la paga nadie. En cuanto
+   * se asigne la primera, el concepto aparece aquí solo.
+   *
+   * Cuenta también las BAJAS: el filtro manda sobre los dos cuadros, y una
+   * cuota que ya solo tiene bajas hay que poder encontrarla. El número entre
+   * paréntesis sigue siendo el de miembros vivos. Y no se cae la opción
+   * elegida ahora mismo aunque se quede sin miembros: hacer desaparecer el
+   * filtro puesto deja la tabla filtrada sin decir por qué.
+   */
+  const cuotasDelDesplegable = useMemo(() => {
+    const usados = new Set();
+    for (const c of cuotas) {
+      for (const id of Array.isArray(c.conceptIds) ? c.conceptIds : []) usados.add(String(id));
+    }
+    return conceptos.filter((c) => usados.has(String(c.id)) || String(c.id) === filtroConcepto);
+  }, [conceptos, cuotas, filtroConcepto]);
+
   const totalMes = visibles.filter((c) => c.active).reduce((s, c) => s + importeDe(c), 0);
 
   async function darDeBaja(cuota) {
@@ -417,7 +446,7 @@ export default function CuotasPage() {
           onChange={setFiltroConcepto}
           options={[
             { value: "", label: "Todas las cuotas" },
-            ...conceptos.map((c) => ({
+            ...cuotasDelDesplegable.map((c) => ({
               value: String(c.id),
               label: `${c.name}${miembrosPorConcepto.get(String(c.id)) ? ` (${miembrosPorConcepto.get(String(c.id))})` : ""}`,
             })),
