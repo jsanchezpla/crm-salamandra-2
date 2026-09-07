@@ -1032,8 +1032,9 @@ function DrawerCuota({ conceptos, cuota = null, inicial = null, ivaSugerido = 21
               {form.endDate
                 ? `Se cobran ${mesesDeTramo(form.startDate, form.endDate) ?? "?"} ${mesesDeTramo(form.startDate, form.endDate) === 1 ? "mes" : "meses"} y al terminar pasa sola al cuadro de bajas, sin salir del grupo: un clic la reintegra.`
                 : "Sin fecha de baja se cobra todos los meses hasta que se dé de baja a mano."}
-              {" "}El mes del alta y el de la baja se cobran prorrateados por días, y la cuenta queda
-              escrita en el cobro.
+              {" "}El mes del alta y el de la baja se cobran prorrateados por las sesiones que caen
+              dentro —«3 de 4»— y, si ese mes no hay citas, por días. La cuenta queda escrita en el
+              cobro.
             </p>
 
             <div className="flex flex-col gap-1">

@@ -902,7 +902,7 @@ export default function FacturasPage() {
             <div className="px-6 py-5">
               {/* MODO DETALLE (no edición) */}
               {!editing && openInvoice && (
-                <DetailView invoice={openInvoice} puedeFacturar={puedeFacturar} onAction={performAction} onEdit={startEdit} onOpenLinked={openDetailById} saving={saving} />
+                <DetailView invoice={openInvoice} puedeFacturar={puedeFacturar} onAction={performAction} onEdit={startEdit} onOpenLinked={openDetailById} saving={saving} haySello={!!settings?.stampUrl} />
               )}
 
               {/* MODO EDICIÓN o CREAR */}
@@ -1463,7 +1463,7 @@ function FormRow({ label, children }) {
   );
 }
 
-function DetailView({ invoice, puedeFacturar, onAction, onEdit, onOpenLinked, saving }) {
+function DetailView({ invoice, puedeFacturar, onAction, onEdit, onOpenLinked, saving, haySello }) {
   // La descarga del PDF puede llevar u omitir el nombre del paciente y el
   // sello (31/08/2026); por defecto salen los dos si existen.
   const [conPaciente, setConPaciente] = useState(true);
@@ -1639,10 +1639,21 @@ function DetailView({ invoice, puedeFacturar, onAction, onEdit, onOpenLinked, sa
                 Nombre del paciente
               </label>
             )}
-            <label className="inline-flex items-center gap-1.5 cursor-pointer">
-              <input type="checkbox" checked={conSello} onChange={(e) => setConSello(e.target.checked)} className="rounded border-neutral-300" />
-              Sello del centro
-            </label>
+            {haySello ? (
+              <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" checked={conSello} onChange={(e) => setConSello(e.target.checked)} className="rounded border-neutral-300" />
+                Sello del centro
+              </label>
+            ) : (
+              /*
+               * Sin sello puesto no se enseña la casilla (07/09/2026, AV-0069):
+               * marcarla y desmarcarla no cambiaba nada y parecía que el sello
+               * estaba y no salía. Se dice dónde se pone.
+               */
+              <Link href="/facturacion/configuracion" className="underline decoration-dotted hover:text-neutral-700">
+                Sin sello del centro: se sube en Configuración
+              </Link>
+            )}
           </div>
         </div>
       )}
