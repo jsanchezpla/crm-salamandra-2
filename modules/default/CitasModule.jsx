@@ -82,6 +82,14 @@ export default function CitasModule({
    * modal, que se monta DESPUÉS de un clic: para entonces el ref ya está.
    */
   const categoriasBloqueoRef = useRef([]);
+  /*
+   * Quién soy PARA LOS BLOQUEOS, tal como lo calcula el propio endpoint
+   * (`{ esAdmin, esAdministracion, teamMemberId }`): es lo que decide si el
+   * modal enseña «Quitar el bloqueo» (07/09/2026, Rodrigo). No se deduce del
+   * rol ni de la ficha de equipo por separado, porque «administración» es el
+   * DEPARTAMENTO y solo el servidor lo sabe de verdad.
+   */
+  const yoBloqueosRef = useRef(null);
   // Y el equipo, por lo mismo otra vez: al colgar un documento de un bloqueo se
   // elige a quién se le pide que lo lea (01/09/2026). `administracionRef` son
   // los ids de quien lleva la administración del centro, para el botón «Todos
@@ -472,6 +480,7 @@ export default function CitasModule({
         const jb = await rb.json();
         if (jb.ok) {
           categoriasBloqueoRef.current = jb.data.categorias ?? [];
+          yoBloqueosRef.current = jb.data.yo ?? null;
           equipoRef.current = jb.data.equipo ?? [];
           administracionRef.current = jb.data.administracion ?? [];
           fondos = (jb.data.bloqueos ?? [])
@@ -1401,8 +1410,15 @@ export default function CitasModule({
           categorias={categoriasBloqueoRef.current}
           equipo={equipoRef.current}
           administracion={administracionRef.current}
+          yo={yoBloqueosRef.current}
           onClose={() => setBloqueoAbierto(null)}
           onSaved={() => {
+            setBloqueoAbierto(null);
+            refrescarAgenda();
+          }}
+          /* Quitarlo desde donde se ve (07/09/2026, Rodrigo: «un bloqueo solo
+             se puede borrar desde Citas → Bloqueos, y es donde no está»). */
+          onQuitado={() => {
             setBloqueoAbierto(null);
             refrescarAgenda();
           }}

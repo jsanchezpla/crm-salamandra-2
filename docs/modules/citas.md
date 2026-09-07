@@ -525,6 +525,22 @@ Desde el 13/08/2026 el bono también se lee desde el alta manual de citas
 libres): al elegir a la paciente, su bono pone el tipo de cita. Ver «Repaso del
 13/08/2026» en la sección de UI.
 
+### Quitar un bloqueo desde la agenda (07/09/2026, Rodrigo)
+
+«Un bloqueo solo se puede borrar desde Citas → Bloqueos, no desde la agenda,
+que es donde se ve»: para quitar uno había que salir del calendario y buscarlo
+entre los 10.026 bloqueos futuros de Aumenta. El servidor ya sabía borrarlos
+(`DELETE /api/citas/bloqueos?id=`); lo que faltaba era el botón. `BloqueoModal`
+tiene ahora «Quitar el bloqueo», con `window.confirm` (al lado está «Convertir
+en cita» y esto no se deshace) y enseñado SOLO a quien el servidor va a dejar:
+la misma regla de `lib/citas/permisosBloqueos.js` —dirección todo,
+administración los de cualquier persona, el resto los suyos, y los cierres de
+centro solo dirección—, leída del `yo` que devuelve el propio
+`GET /api/citas/bloqueos` (`yoBloqueosRef` en `CitasModule`), porque
+«administración» es el DEPARTAMENTO y eso solo lo sabe el servidor. Prueba:
+`_smoke-quitar-bloqueo.mjs`, que compara el botón contra `vetoParaTocar` caso
+por caso.
+
 ### Convertir un bloqueo en cita (07/09/2026, AV-0059 de Aumenta)
 
 Olga: «reservamos un hueco hasta confirmar con la familia; al confirmarlo, ese

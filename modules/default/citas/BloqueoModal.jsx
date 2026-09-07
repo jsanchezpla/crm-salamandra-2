@@ -35,7 +35,7 @@ const fmtSize = (n) => {
   return kb < 1024 ? `${Math.max(1, Math.round(kb))} KB` : `${(kb / 1024).toFixed(1)} MB`;
 };
 
-export function BloqueoModal({ bloqueo, categorias = [], equipo = [], administracion = [], onClose, onSaved, onConvertir = null }) {
+export function BloqueoModal({ bloqueo, categorias = [], equipo = [], administracion = [], yo = null, onClose, onSaved, onConvertir = null, onQuitado = null }) {
   const [label, setLabel] = useState(bloqueo.label ?? "");
   const [categoryKey, setCategoryKey] = useState(bloqueo.categoryKey ?? "");
   const [startDate, setStartDate] = useState(toDateInput(bloqueo.start));
@@ -44,6 +44,18 @@ export function BloqueoModal({ bloqueo, categorias = [], equipo = [], administra
   const [endTime, setEndTime] = useState(toTimeInput(bloqueo.end));
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(null);
+  const [quitando, setQuitando] = useState(false);
+  /*
+   * ¿Le va a dejar el servidor quitarlo? La MISMA regla de
+   * `lib/citas/permisosBloqueos.js` (`vetoParaTocar`), leída aquí para no
+   * enseñar un botón que siempre contestaría 403: dirección quita todo;
+   * administración, los de cualquier persona (nunca un cierre de centro, que
+   * es el que no tiene persona); el resto, solo los suyos.
+   */
+  const puedeQuitarlo = Boolean(
+    yo?.esAdmin
+    || (bloqueo.teamMemberId && (yo?.esAdministracion || bloqueo.teamMemberId === yo?.teamMemberId))
+  );
 
   // ── Documentos aparejados ────────────────────────────────────────────────
   const [docs, setDocs] = useState([]);
@@ -62,6 +74,32 @@ export function BloqueoModal({ bloqueo, categorias = [], equipo = [], administra
       .catch(() => {});
   }, [bloqueo.id]);
   useEffect(() => { cargarDocs(); }, [cargarDocs]);
+
+  /*
+   * Quitar el bloqueo desde la agenda (07/09/2026, Rodrigo). El servidor ya
+   * sabía borrarlos (`DELETE /api/citas/bloqueos?id=`); lo que faltaba era el
+   * botón donde la persona está mirando: para quitar uno había que salir a
+   * Citas → Bloqueos y buscarlo entre los 10.026 futuros de Aumenta.
+   *
+   * El botón solo se enseña a quien el servidor va a dejar (`puedeQuitarlo`,
+   * la misma regla de `lib/citas/permisosBloqueos.js`), y pregunta antes: un
+   * bloqueo borrado no se recupera, y con «Convertir en cita» al lado, un
+   * dedo torcido no puede llevarse el hueco.
+   */
+  async function quitar() {
+    if (!window.confirm("¿Quitar este bloqueo de la agenda? El hueco queda libre y esto no se puede deshacer.")) return;
+    setErr(null);
+    setQuitando(true);
+    try {
+      const res = await fetch(`/api/citas/bloqueos?id=${encodeURIComponent(bloqueo.id)}`, { method: "DELETE" });
+      const j = await res.json().catch(() => null);
+      if (!res.ok || (j && j.ok === false)) throw new Error(j?.error || "No se ha podido quitar el bloqueo");
+      onQuitado ? onQuitado() : onSaved();
+    } catch (e) {
+      setErr(e.message);
+      setQuitando(false);
+    }
+  }
 
   async function guardar() {
     setErr(null);
@@ -421,17 +459,26 @@ export function BloqueoModal({ bloqueo, categorias = [], equipo = [], administra
               )}
             </div>
           </div>
-          <div className="px-5 py-3 border-t border-neutral-100 flex items-center justify-end gap-2">
+          <div className="px-5 py-3 border-t border-neutral-100 flex items-center gap-2">
+            <div className="flex items-center gap-2 mr-auto">
             {/* «Convertir en cita» (07/09/2026, AV-0059 de Aumenta): el hueco
                 reservado, una vez confirmado con la familia, pasa a ser la
                 cita del paciente con su cobro; el bloqueo se quita al guardar. */}
+            {puedeQuitarlo && (
+              <button type="button" onClick={() => !saving && !quitando && quitar()} disabled={saving || quitando}
+                title="Quita el bloqueo de la agenda y deja el hueco libre"
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors">
+                {quitando ? "Quitando…" : "Quitar el bloqueo"}
+              </button>
+            )}
             {onConvertir && !bloqueo.tallerId && (
               <button type="button" onClick={() => !saving && onConvertir()}
                 title="Abre el alta de cita en este hueco, con la terapeuta ya puesta; al guardarla, el bloqueo se quita"
-                className="mr-auto px-3 py-1.5 rounded-lg text-xs font-semibold border border-[var(--color-primary,#1B3A2D)] text-[var(--color-primary,#1B3A2D)] hover:bg-neutral-50 transition-colors">
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-[var(--color-primary,#1B3A2D)] text-[var(--color-primary,#1B3A2D)] hover:bg-neutral-50 transition-colors">
                 Convertir en cita
               </button>
             )}
+            </div>
             <button type="button" onClick={() => !saving && onClose()}
               className="px-3 py-1.5 text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">
               Cancelar
