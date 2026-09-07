@@ -8,6 +8,17 @@
  *   2. Documentos DEL paciente: buscador (escribe el nombre y filtra) + subir.
  *
  * Al subir cualquier documento, un modal pide el NOMBRE (obligatorio).
+ *
+ * ── EL CONTRATO ESTÁNDAR LO SUBE DIRECCIÓN (07/09/2026, AV-0057 de Aumenta) ──
+ * «No puedo adjuntar los contratos en su apartado correspondiente; me indica
+ * que solo lo puede subir el administrador.» El botón «Subir contrato» le
+ * salía a todo el equipo, pero `POST /api/pacientes/contract-template` es solo
+ * de admin: una puerta que siempre fallaba. Ahora quien no es admin no la ve, y
+ * en su lugar lee dónde va lo que de verdad quería colgar —el contrato FIRMADO
+ * de esa familia—, que no es esta tarjeta: es la ficha de la familia («Subir
+ * PDF firmado», cualquiera del equipo) o, si no llega a ella, los documentos
+ * del paciente de aquí abajo. El servidor sigue mandando; esto es no enseñar
+ * lo que va a fallar (mismo patrón que `ClientContractSection`).
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -16,6 +27,7 @@ import useZonaSoltar, { useEvitarSoltarFuera } from "@/components/ui/useZonaSolt
 import PdfPreviewModal from "@/components/documents/PdfPreviewModal.jsx";
 import { tipoParaVerEnPantalla } from "@/lib/documents/verEnPantalla.js";
 import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
+import { esAdmin } from "@/lib/auth/permisos.js";
 
 function fmtSize(n) {
   if (!n) return "";
@@ -54,6 +66,16 @@ export default function PatientDocumentsSection({ patientId }) {
   const [viendo, setViendo] = useState(null);
   const fileRef = useRef(null);
   const templateFileRef = useRef(null);
+  // Rol de quien mira: solo decide si se enseña «Subir contrato» (ver cabecera).
+  const [rol, setRol] = useState(null);
+  useEffect(() => {
+    let vivo = true;
+    fetch("/api/auth/me", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (vivo && j?.data?.role) setRol(j.data.role); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, []);
 
   const loadDocs = useCallback(
     (query = "") => {
@@ -185,6 +207,12 @@ export default function PatientDocumentsSection({ patientId }) {
             <div className="text-sm font-semibold text-neutral-800">Contrato estándar de la clínica</div>
             <div className="text-xs text-neutral-500 mt-0.5">
               El mismo para todos los pacientes. No hace falta subirlo en cada ficha.
+              {!esAdmin(rol) && (
+                <>
+                  {" "}Lo sube dirección. El contrato firmado de esta familia va en su ficha de familia
+                  («Subir PDF firmado») o, si no llegas a ella, aquí abajo como documento del paciente.
+                </>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -198,13 +226,19 @@ export default function PatientDocumentsSection({ patientId }) {
             ) : (
               <span className="text-xs text-neutral-400 italic">Aún no configurado</span>
             )}
-            <input ref={templateFileRef} type="file" className="hidden" onChange={() => pickFile("contrato", templateFileRef)} />
-            <button
-              onClick={() => templateFileRef.current?.click()}
-              className={`${btn} border border-neutral-300 text-neutral-700 hover:bg-neutral-50`}
-            >
-              {template ? "Reemplazar" : "Subir contrato"}
-            </button>
+            {/* Subirlo o reemplazarlo es de admin (el endpoint lo exige): a los
+                demás no se les enseña un botón que va a fallar (07/09/2026). */}
+            {esAdmin(rol) && (
+              <>
+                <input ref={templateFileRef} type="file" className="hidden" onChange={() => pickFile("contrato", templateFileRef)} />
+                <button
+                  onClick={() => templateFileRef.current?.click()}
+                  className={`${btn} border border-neutral-300 text-neutral-700 hover:bg-neutral-50`}
+                >
+                  {template ? "Reemplazar" : "Subir contrato"}
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>

@@ -436,7 +436,13 @@ Pestañas (`TABS` en `app/(dashboard)/pacientes/[id]/page.jsx`):
    (`PatientExternalContactsSection`, `/api/pacientes/[id]/contactos/**`), luego
    las actas, con alta (`NuevaCoordinacionModal`).
 6. **Documentos**: adjuntos del paciente (`PatientDocumentsSection`,
-   `/api/pacientes/[id]/documents/**`).
+   `/api/pacientes/[id]/documents/**`). Arriba, la tarjeta del **contrato
+   estándar de la clínica** (`/api/pacientes/contract-template`): «Subir
+   contrato» / «Reemplazar» solo se le enseñan a admin, que es lo que exige el
+   POST (07/09/2026, AV-0057 de Aumenta: a una terapeuta le salía el botón y
+   el servidor le decía que solo puede el administrador); a los demás les dice
+   que el contrato FIRMADO de la familia va en la ficha de la familia o como
+   documento del paciente.
 
 **Histórico (hasta 06/2026):** en la maqueta solo Diego Martín (`id="p-1"`)
 tenía datos completos y los otros 5 pacientes eran placeholders con empty
