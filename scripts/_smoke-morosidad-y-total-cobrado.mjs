@@ -37,26 +37,42 @@ function llamadas(src) {
   return { total: todas.length, conCitas: todas.filter((x) => x.includes("citasPorClave")).length };
 }
 
-describe("morosidad cuenta el mes igual que la generación", () => {
-  it("la morosidad pasa las citas al plan de cuotas", () => {
-    const { total, conCitas } = llamadas(morosidad);
-    assert.ok(total > 0, "no encuentro la llamada a planDeCuotasDelMes");
-    assert.equal(conCitas, total, "alguna llamada de morosidad se quedó sin citasPorClave");
+/*
+ * ── LA MOROSIDAD YA NO RECALCULA EL MES (07/09/2026, noche) ────────────────
+ * La primera versión de esta prueba exigía que la morosidad pasara las citas
+ * al recálculo, porque recalculaba. Medido sobre septiembre en producción, ese
+ * recálculo era peor que el problema: el «Descuento reserva ya abonada» de
+ * −30 € se aplicó al generar (261 de 281 cobros lo llevan en la nota) y ya no
+ * está en ninguna de las 281 cuotas vivas, así que el recálculo lo volvía a
+ * pedir y la pantalla acusaba a unas 95 familias de deber 30 € que no debían,
+ * frente a 7 casos reales. Lo que se vigila ahora es lo contrario: que NO
+ * recalcule y que lo que falta salga de los cobros pendientes.
+ */
+describe("morosidad no recalcula el mes: lee los pendientes", () => {
+  it("no queda ningún recálculo del mes en la morosidad", () => {
+    const { total } = llamadas(morosidad);
+    assert.equal(total, 0, "la morosidad ha vuelto a recalcular el mes desde las cuotas");
+    assert.ok(
+      !morosidad.includes("citasDelMesParaCuotas"),
+      "si ya no se recalcula, las citas del mes sobran aquí",
+    );
   });
 
-  it("la generación las sigue pasando en TODAS sus llamadas", () => {
+  it("lo que falta sale de los cobros PENDIENTES de ese mes", () => {
+    assert.match(morosidad, /status:\s*"pending"/, "no encuentro la consulta de pendientes");
+    const consulta = morosidad.slice(morosidad.indexOf('status: "pending"') - 200, morosidad.indexOf('status: "pending"') + 200);
+    assert.ok(consulta.includes("periodMonth"), "los pendientes hay que pedirlos del MES que se mira");
+    // Y el esperado se arma con lo cobrado + lo pendiente, para que la resta de
+    // `loQueFaltaDelMes` devuelva exactamente el pendiente.
+    const esperado = morosidad.slice(morosidad.indexOf("const esperadoDelMes"));
+    assert.ok(esperado.includes("pendienteDelMes"), "el esperado tiene que salir del pendiente");
+    assert.ok(esperado.includes("cobradoDelMes"), "y sumarle lo que ya entró");
+  });
+
+  it("la generación SÍ sigue pasando las citas en todas sus llamadas", () => {
     const { total, conCitas } = llamadas(generar);
     assert.ok(total >= 2, `esperaba al menos dos llamadas, encuentro ${total}`);
     assert.equal(conCitas, total, "alguna llamada de la generación se quedó sin citasPorClave");
-  });
-
-  it("las citas se cargan de una vez, no una por familia", () => {
-    assert.match(morosidad, /import \{ citasDelMesParaCuotas \} from/);
-    const dentroDelBucle = morosidad.slice(morosidad.indexOf("const esperadoDelMes"));
-    assert.ok(
-      !dentroDelBucle.includes("await citasDelMesParaCuotas"),
-      "la carga de citas no puede estar dentro de lo que se llama por familia",
-    );
   });
 });
 

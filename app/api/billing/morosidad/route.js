@@ -2,8 +2,7 @@ import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { mesesSeguidosSinPagar, loQueFaltaDelMes } from "../../../../lib/billing/mesesSinPagar.js";
-import { mesVigente, debeElMes, planDeCuotasDelMes } from "../../../../lib/billing/cuotas.js";
-import { citasDelMesParaCuotas } from "../../../../lib/billing/citasParaProrrateo.js";
+import { mesVigente, debeElMes } from "../../../../lib/billing/cuotas.js";
 
 /**
  * GET /api/billing/morosidad?mes=AAAA-MM — quién no ha pagado el mes
@@ -152,40 +151,49 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     }
 
     /*
-     * ── UN MES PAGADO A MEDIAS NO ES UN MES PAGADO (07/09/2026) ─────────────
-     * Desde el 04/09 un mes se puede cobrar en dos veces. Con los 100 € de
-     * los 160 € apuntados, la familia salía «al día». Lo que ESPERA el mes lo
-     * dicen sus cuotas (`planDeCuotasDelMes`, el mismo cálculo que genera los
-     * cobros, con el prorrateo del mes de alta); sin cuotas asignadas no hay
-     * con qué comparar y manda la regla de siempre (algún cobro = pagado).
+     * ── UN MES PAGADO A MEDIAS NO ES UN MES PAGADO ─────────────────────────
+     * Desde el 04/09 un mes se puede cobrar en dos veces: con 100 € de los
+     * 160 € apuntados, la familia salía «al día».
+     *
+     * LO QUE FALTA SON SUS COBROS PENDIENTES DE ESE MES, no una cuenta nueva
+     * (07/09/2026, noche). La primera versión recalculaba el mes desde las
+     * cuotas y eso resultó ser peor que el problema: al generar septiembre se
+     * aplicó el «Descuento reserva ya abonada» de −30 € (261 de los 281 cobros
+     * de cuota lo llevan escrito en la nota) y ese concepto YA NO está en
+     * ninguna de las 281 cuotas vivas, así que el recálculo lo volvía a pedir
+     * y la pantalla acusaba a unas 95 familias de deber 30 € que no debían.
+     * Medido sobre septiembre: leer los pendientes pilla las 7 familias que de
+     * verdad tienen un mes a medias y no acusa a nadie en falso; recalcular
+     * pillaba esas mismas y se inventaba 95.
+     *
+     * Es además lo honesto: un cobro pendiente ES lo que el centro le pidió a
+     * esa familia y no ha cobrado. Sin pendientes no hay nada que reclamar de
+     * ese mes.
+     *
+     * ⚠️ Lo que esto NO ve, y hay que arreglar aparte: cuando se cobra a
+     * medias un mes con UN solo pendiente, el POST de cobros machaca el
+     * importe de esa fila (160 pendientes → 100 cobrados) y los 60 que faltan
+     * no quedan en ninguna parte. Hasta que el cobro parcial parta la fila,
+     * ese caso se pierde. Está apuntado en el Registro.
      */
-    const { BillingConcept } = ctx.tenantModels;
-    let conceptos = [];
-    if (BillingConcept) {
-      try {
-        conceptos = (await BillingConcept.findAll({ attributes: ["id", "name", "unitPrice"], raw: true })).map((c) => ({ id: c.id, name: c.name, unitPrice: c.unitPrice }));
-      } catch { conceptos = []; }
+    const pendientesDelMes = await Payment.findAll({
+      where: { clientId: { [Op.in]: ids }, status: "pending", periodMonth: `${mes}-01` },
+      attributes: ["clientId", "amount"],
+    });
+    const pendienteDelMes = new Map();
+    for (const p of pendientesDelMes) {
+      const cid = String(p.clientId);
+      pendienteDelMes.set(cid, (pendienteDelMes.get(cid) ?? 0) + Number(p.amount || 0));
     }
     /*
-     * ── Y SE CUENTA IGUAL QUE AL GENERAR (07/09/2026) ──────────────────────
-     * `planDeCuotasDelMes` prorratea el mes de alta por SESIONES cuando se le
-     * pasan las citas (AV-0062), y la generación real se las pasa. Aquí no, y
-     * las dos cuentas dejaban de dar lo mismo: una cuota de 190 € dada de alta
-     * un lunes con sesión los viernes se generó y se cobró a 142,50 € (3 de 4
-     * sesiones) mientras esta pantalla la recalculaba por días —190 × 23/30 =
-     * 145,67 €— y sacaba a la familia debiendo 3,17 €. Se cargan una sola vez
-     * para todas las familias de la lista, que es lo que hace la pieza.
+     * Lo esperado del mes = lo que ya entró + lo que sigue pendiente. Así
+     * `loQueFaltaDelMes` (con su prueba) sigue haciendo la resta de siempre y
+     * lo que devuelve como «debe» es exactamente el pendiente.
      */
-    const citasPorClave = await citasDelMesParaCuotas({
-      tenantModels: ctx.tenantModels,
-      mes,
-      cuotas: ids.flatMap((cid) => cuotasPorCliente.get(cid) ?? []),
-    });
     const esperadoDelMes = (cid) => {
-      const filasCuota = cuotasPorCliente.get(cid);
-      if (!filasCuota?.length) return null;
-      const { aGenerar } = planDeCuotasDelMes({ mes, cuotas: filasCuota, conceptos, citasPorClave });
-      return aGenerar.reduce((s, f) => s + Number(f.importe || 0), 0);
+      const pendiente = pendienteDelMes.get(cid) ?? 0;
+      if (pendiente <= 0) return null;
+      return Math.round(((cobradoDelMes.get(cid) ?? 0) + pendiente) * 100) / 100;
     };
 
     const clientes = await Client.findAll({ where: { id: { [Op.in]: ids } }, attributes: ["id", "name", "email", "phone"] });
