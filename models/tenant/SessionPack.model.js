@@ -46,6 +46,24 @@ export function defineSessionPack(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      /**
+       * De quién es el bono dentro de la familia (08/09/2026, AV-0055 de
+       * Aumenta). Olga: «los bonos tendrían que reflejarse por paciente no
+       * cliente o estar enlazados». En una familia con dos hermanos, el bono
+       * de uno se le gastaba al otro: las citas del hermano equivocado
+       * descontaban sesiones del mismo montón y nadie lo veía.
+       *
+       * NULL = de la familia entera, que es lo que había hasta hoy y sigue
+       * valiendo para cualquiera de sus pacientes. Con paciente, el bono SOLO
+       * se engancha a las citas de ESE paciente (`lib/citas/packs.js`).
+       *
+       * Sigue sin ser lo que ata las citas al bono —eso es el correo o la
+       * ficha—: es un filtro encima, no la clave.
+       */
+      patientId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       eventTypeId: {
         type: DataTypes.UUID,
         allowNull: false,
@@ -137,6 +155,7 @@ export function defineSessionPack(sequelize) {
         // La consulta de cada reserva: «¿tiene esta persona bono de este tipo?».
         { fields: ["client_email", "event_type_id", "status"], name: "session_packs_email_type_idx" },
         { fields: ["client_id"], name: "session_packs_client_idx" },
+        { fields: ["patient_id"], name: "session_packs_patient_idx" },
       ],
     }
   );

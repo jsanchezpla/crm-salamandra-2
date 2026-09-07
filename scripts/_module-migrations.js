@@ -421,6 +421,9 @@ export const MODULES = {
     // El bono ya no exige correo (07/09/2026, AV-0055 de Aumenta): se ata a la
     // ficha cuando la familia no tiene, y se elige en la cita nueva.
     "migrate-session-packs-por-ficha",
+    // De quién es el bono dentro de la familia (08/09/2026, AV-0055): sin esto,
+    // en una familia con dos hermanos el bono de uno se le gastaba al otro.
+    "migrate-session-packs-paciente",
     // «Esta es la valoración inicial» (04/08/2026): la marca del tipo de cita
     // al que se entra SIN firmar contratos, porque es la primera visita.
     "migrate-valoracion-inicial",

@@ -627,6 +627,40 @@ alguien que llegó por Instagram y nunca ha reservado es un caso legítimo, y pa
 ese está el botón «Crear cuenta en la web» de su ficha (ver
 `docs/modules/formularios.md`).
 
+### De quién es el bono dentro de la familia (08/09/2026, AV-0055 de Aumenta)
+
+Olga, segunda vuelta del mismo aviso: «los bonos tendrían que reflejarse por
+paciente no cliente o estar enlazados». El bono colgaba de la FAMILIA —por
+correo o por ficha—, así que en una familia con dos hermanos el bono de uno se
+le gastaba al otro: las citas del hermano equivocado descontaban del mismo
+montón y nadie lo veía hasta que las cuentas no salían.
+
+`session_packs.patient_id` (`migrate-session-packs-paciente`, nullable) dice de
+quién es. **NULL = de la familia entera**, que es lo que hay en todos los bonos
+ya dados y lo que se sigue ofreciendo a cualquiera de sus pacientes: la
+compatibilidad es el caso por defecto, no un apaño.
+
+La regla la decide `lib/citas/bonoDelPaciente.js`, que vive APARTE de `packs.js`
+a propósito: la necesita el navegador —el desplegable «Bono de sesiones» del
+alta de citas— y `packs.js` importa Sequelize, así que meterlo en un componente
+de cliente se llevaría el ORM al bundle.
+
+- `packValeParaPaciente` es la valla: `elegirPack` rechaza el bono de un
+  hermano con esa frase, y el desplegable ni lo ofrece.
+- `packsParaPaciente` ORDENA en vez de solo filtrar: primero los del niño,
+  después los de la familia. Así la regla de siempre —se gasta el más antiguo
+  primero— sigue valiendo dentro de cada grupo, y un bono comprado para él se
+  gasta antes que uno genérico.
+- **Sin paciente en la cita no se niega nada**: el área privada reserva a
+  nombre de la familia y ahí no hay con qué decidir; negarlo dejaría a una
+  familia sin poder usar un bono que ha pagado.
+
+En el alta («Dar un bono») el desplegable **solo sale si la familia tiene más de
+un paciente**: con uno solo, «toda la familia» y «ese niño» son lo mismo, y se
+preselecciona. El endpoint comprueba que el paciente ES de esa ficha —si no, el
+bono quedaría atado a la familia de uno y al niño de otra y no lo encontraría
+nadie— y, sin ficha en el cuerpo, toma la del paciente.
+
 ### Tercera puerta: `settings.citas.soloConPago`
 
 Con ella encendida, desde la agenda pública solo se reserva lo que pasa por

@@ -14,6 +14,7 @@ import { datosAlElegirFicha } from "../../../lib/clients/contactoDeFicha.js";
 import { repasarContactoDeCita, avisoDeContacto } from "../../../lib/citas/contactoCita.js";
 import { CADENCIAS, fechasDeRepeticion } from "../../../lib/citas/recurrencia.js";
 import { cobroDelTipo, normalizarCobro, euros } from "../../../lib/citas/dineroDeLaCita.js";
+import { packsParaPaciente } from "../../../lib/citas/bonoDelPaciente.js";
 import { inputCls } from "./chips.jsx";
 
 const EMPTY_BOOKING_FORM = {
@@ -88,6 +89,13 @@ export function NuevaCitaDrawer({
   const [bonos, setBonos] = useState([]);
   const [packId, setPackId] = useState("");
   const bonoElegido = bonos.find((b) => b.id === packId) ?? null;
+  /*
+   * Los bonos que se le pueden gastar a ESTE paciente (08/09/2026, AV-0055).
+   * El de un hermano ni se ofrece: el servidor lo rechazaría igual, y enseñar
+   * en un desplegable algo que va a dar error es peor que no enseñarlo. Sin
+   * paciente elegido salen todos, como hasta ahora.
+   */
+  const bonosDelPaciente = packsParaPaciente(bonos, createForm.patientId || null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
 
@@ -725,7 +733,7 @@ export function NuevaCitaDrawer({
               {/* Sus bonos (07/09/2026, AV-0055 de Aumenta): solo sale si la
                   familia tiene alguno vivo. Elegirlo pone el tipo de cita y
                   quita el bloque de cobro: la sesión ya está pagada. */}
-              {!esTaller && bonos.length > 0 && (
+              {!esTaller && bonosDelPaciente.length > 0 && (
                 <div>
                   <label className="block text-[11px] font-medium text-neutral-500 mb-1">Bono de sesiones</label>
                   <Select
@@ -733,7 +741,7 @@ export function NuevaCitaDrawer({
                     onChange={(v) => (v ? elegirBono(v) : setPackId(""))}
                     options={[
                       { value: "", label: "— Sin bono (cita suelta) —", pinned: true },
-                      ...bonos.map((b) => ({
+                      ...bonosDelPaciente.map((b) => ({
                         value: b.id,
                         label: `«${b.nombre}» · le quedan ${b.restantes} de ${b.total}`,
                       })),

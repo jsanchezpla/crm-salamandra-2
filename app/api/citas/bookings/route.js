@@ -435,12 +435,19 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     if (Object.prototype.hasOwnProperty.call(body, "packId")) {
       if (body.packId) {
         if (typeof body.packId !== "string" || !UUID_RE.test(body.packId)) return error("packId inválido");
-        const elegido = await elegirPack(tenantModels, { packId: body.packId, email: clientEmail, clientId, eventTypeId });
+        // El paciente va desde el 08/09/2026 (AV-0055): un bono dado a un
+        // hermano no se le puede gastar a este niño, y el error lo dice.
+        const elegido = await elegirPack(tenantModels, {
+          packId: body.packId, email: clientEmail, clientId,
+          patientId: patRes.patientId, eventTypeId,
+        });
         if (elegido.error) return error(elegido.error, 422);
         enBono = elegido;
       }
     } else if (clientEmail || clientId) {
-      enBono = await asignarSesion(tenantModels, { email: clientEmail, clientId, eventTypeId });
+      enBono = await asignarSesion(tenantModels, {
+        email: clientEmail, clientId, patientId: patRes.patientId, eventTypeId,
+      });
     }
 
     /*

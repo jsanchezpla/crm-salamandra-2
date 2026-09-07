@@ -191,6 +191,30 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
 
     const notes = typeof body.notes === "string" ? body.notes.trim().slice(0, 2000) || null : null;
 
+    /*
+     * ── DE QUIÉN ES DENTRO DE LA FAMILIA (08/09/2026, AV-0055) ──────────────
+     * Olga: «los bonos tendrían que reflejarse por paciente no cliente o estar
+     * enlazados». Sin esto, en una familia con dos hermanos el bono de uno se
+     * le gastaba al otro. Opcional a propósito: sin paciente el bono es de la
+     * familia entera, que es lo que hay en los que ya están dados.
+     *
+     * Se comprueba que el paciente ES de esa ficha: si no, el bono quedaría
+     * atado a la familia de uno y al niño de otra, y no lo encontraría nadie.
+     */
+    let patientId = null;
+    if (body.patientId) {
+      const { Patient } = tenantModels;
+      if (!Patient) return error("Este centro no tiene pacientes", 422);
+      const paciente = await Patient.findByPk(body.patientId);
+      if (!paciente) return error("Ese paciente no existe", 422);
+      if (clientId && paciente.clientId && paciente.clientId !== clientId) {
+        return error("Ese paciente no es de esta ficha", 422);
+      }
+      // Sin ficha en el cuerpo, la del paciente: el bono se ata a las dos.
+      if (!clientId && paciente.clientId) clientId = paciente.clientId;
+      patientId = paciente.id;
+    }
+
     // ── Avisos, no cortes ───────────────────────────────────────────────────
     // Dar un bono de 1 sesión sobre un tipo que no es pack es raro pero legítimo
     // (una sesión suelta ya cobrada por transferencia), así que no se bloquea.
@@ -219,6 +243,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     const pack = await SessionPack.create({
       clientEmail: clientEmail || null,
       clientId,
+      patientId,
       eventTypeId: eventType.id,
       totalSessions,
       // Se pagó fuera de la pasarela: no hay plazos que gestionar aquí.

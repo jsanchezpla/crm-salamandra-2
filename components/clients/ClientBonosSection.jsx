@@ -39,6 +39,17 @@ import { eurosToCents } from "../../lib/payments/money.js";
 
 import { puedeDarBonos } from "../../lib/citas/quienDaBonos.js";
 
+/**
+ * El nombre del paciente de un bono, o «otro paciente» si ya no está en la
+ * lista (se fusionó su ficha, o se movió de familia). Nunca el id crudo: en
+ * pantalla un UUID no le dice nada a nadie.
+ */
+function nombreDePaciente(pacientes, patientId) {
+  const p = (Array.isArray(pacientes) ? pacientes : []).find((x) => x.id === patientId);
+  if (!p) return "otro paciente";
+  return `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim() || "otro paciente";
+}
+
 /** «9 sept, 17:03», hora de Madrid: el rechazo de una cuota y su reintento. */
 function fechaCorta(valor) {
   const d = new Date(valor);
@@ -57,6 +68,12 @@ export default function ClientBonosSection({ clientId, onCambio }) {
   const [esAdmin, setEsAdmin] = useState(false);
   const [cliente, setCliente] = useState(null);
   const [bonos, setBonos] = useState([]);
+  /*
+   * Los pacientes de la familia (08/09/2026, AV-0055). Se cargan AQUÍ y no en
+   * el formulario porque los necesitan los dos: el formulario para elegir de
+   * quién es el bono, y la lista para poder poner el nombre en vez del id.
+   */
+  const [pacientes, setPacientes] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [abierto, setAbierto] = useState(false);
   const [quitando, setQuitando] = useState(null);
@@ -70,12 +87,18 @@ export default function ClientBonosSection({ clientId, onCambio }) {
       fetch("/api/citas/event-types?active=true", { cache: "no-store" }).then((r) => r.ok),
       fetch(`/api/clients/${clientId}`, { cache: "no-store" }).then((r) => r.json()).catch(() => null),
       fetch("/api/auth/me", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      // 403/404 = este centro no tiene pacientes (el cliente ES el paciente):
+      // entonces el bono no se reparte y el desplegable no sale.
+      fetch(`/api/pacientes?clientId=${clientId}`, { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null)).catch(() => null),
     ])
-      .then(([hayCitas, ficha, yo]) => {
+      .then(([hayCitas, ficha, yo, pacs]) => {
         if (!vivo) return;
         setDisponible(hayCitas);
         setCliente(ficha?.data ?? null);
         setBonos(Array.isArray(ficha?.data?.bonos) ? ficha.data.bonos : []);
+        const lista = Array.isArray(pacs?.data) ? pacs.data : Array.isArray(pacs?.data?.items) ? pacs.data.items : [];
+        setPacientes(lista);
         // Dirección o quien lleve Facturación (07/09/2026): la misma regla que el endpoint.
         const mods = Array.isArray(yo?.data?.enabledModules) ? yo.data.enabledModules : [];
         setEsAdmin(puedeDarBonos({ role: yo?.data?.role, hasModule: (k) => mods.includes(k) }));
@@ -151,6 +174,7 @@ export default function ClientBonosSection({ clientId, onCambio }) {
       {abierto && (
         <DarBonoForm
           cliente={cliente}
+          pacientes={pacientes}
           onHecho={() => { setAbierto(false); recargar(); }}
         />
       )}
@@ -175,7 +199,19 @@ export default function ClientBonosSection({ clientId, onCambio }) {
         {lista.map((b) => (
           <div key={b.id}>
             <div className="flex items-baseline justify-between gap-3">
-              <span className="text-sm text-gray-800">{b.nombre}</span>
+              <span className="text-sm text-gray-800">
+                {b.nombre}
+                {/*
+                  * De quién es dentro de la familia (08/09/2026, AV-0055). Sin
+                  * paciente no se dice nada: «de toda la familia» es lo normal
+                  * y repetirlo en cada línea sería ruido.
+                  */}
+                {b.patientId && (
+                  <span className="ml-1.5 text-[11px] text-gray-500">
+                    · {nombreDePaciente(pacientes, b.patientId)}
+                  </span>
+                )}
+              </span>
               <span
                 className={`text-sm font-semibold ${b.restantes > 0 ? "text-[var(--color-primary)]" : "text-gray-400"}`}
               >
@@ -251,9 +287,16 @@ export default function ClientBonosSection({ clientId, onCambio }) {
  * una familia sin correo también tiene bono, y sus citas se enganchan al
  * elegir el bono en la cita nueva. Se avisa de lo que se pierde sin correo.
  */
-function DarBonoForm({ cliente, onHecho }) {
+function DarBonoForm({ cliente, pacientes = [], onHecho }) {
   const [tipos, setTipos] = useState([]);
   const [eventTypeId, setEventTypeId] = useState("");
+  /*
+   * De quién es el bono (08/09/2026, AV-0055). Vacío = de toda la familia, que
+   * es lo que había hasta hoy. Con UN solo paciente se preselecciona: en una
+   * familia de un hijo, «toda la familia» y «ese niño» son lo mismo, y dejarlo
+   * vacío obligaría a elegir para nada. Con dos o más, se elige a propósito.
+   */
+  const [patientId, setPatientId] = useState(pacientes.length === 1 ? pacientes[0].id : "");
   const [sesiones, setSesiones] = useState("");
   const [importe, setImporte] = useState("");
   const [nota, setNota] = useState("");
@@ -294,6 +337,7 @@ function DarBonoForm({ cliente, onHecho }) {
         body: JSON.stringify({
           clientId: cliente?.id ?? null,
           clientEmail: correo || null,
+          patientId: patientId || null,
           eventTypeId,
           totalSessions: Number(sesiones) || 1,
           amount: importe === "" ? null : eurosToCents(importe),
@@ -346,6 +390,29 @@ function DarBonoForm({ cliente, onHecho }) {
           ))}
         </select>
       </div>
+
+      {/*
+        * De quién es (08/09/2026, AV-0055 de Aumenta). Solo sale cuando la
+        * familia tiene MÁS DE UN paciente: con uno solo no hay nada que
+        * repartir y el desplegable sería una pregunta con una respuesta.
+        */}
+      {pacientes.length > 1 && (
+        <div>
+          <label className="block text-[11px] font-medium text-gray-500 mb-1">¿De quién es?</label>
+          <select value={patientId} onChange={(e) => setPatientId(e.target.value)} className={inputCls}>
+            <option value="">De toda la familia</option>
+            {pacientes.map((p) => (
+              <option key={p.id} value={p.id}>
+                {`${p.firstName ?? ""} ${p.lastName ?? ""}`.trim()}
+              </option>
+            ))}
+          </select>
+          <p className="text-[11px] text-gray-400 mt-1">
+            Si eliges a uno, sus sesiones solo se le descuentan a él. «De toda la familia» vale para
+            cualquiera de los hermanos, que es como funcionaban los bonos hasta ahora.
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-2">
         <div>
