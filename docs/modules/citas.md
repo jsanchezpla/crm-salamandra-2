@@ -525,6 +525,30 @@ Desde el 13/08/2026 el bono también se lee desde el alta manual de citas
 libres): al elegir a la paciente, su bono pone el tipo de cita. Ver «Repaso del
 13/08/2026» en la sección de UI.
 
+### La copia de Organízate no pone armazón en los días de cierre (07/09/2026)
+
+`blocked_days` (los 16 cierres del curso: festivos, Nochebuena, Nochevieja y
+Semana Santa) cancelaba las CITAS de esos días, pero las RESERVAS de Organízate
+entraban igual —allí un festivo es un día laborable normal—, así que cada
+pasada de `scripts/actualizar-agenda-organizate.js` volvía a poner «GESTIÓN
+DOCUMENTAL», «DESCANSO» y «LIBRE PACIENTES» en días cerrados: 727 bloqueos en
+esos 16 días, medidos el 07/09/2026 tras la copia (45 el 14 de septiembre, 59
+el 6 de enero). La agenda de un festivo salía sin pacientes pero con el armazón
+entero, y borrarlos a mano no servía porque la copia siguiente los recreaba.
+
+El script ya cargaba `festivos` de `blocked_days` para las citas; ahora el
+bucle de reservas lo mira también y salta esos días, contándolos en el informe
+(«Reservas saltadas por caer en día de cierre»). Al no entrar en `deseados`,
+los que ya estén puestos pasan a «sobran» y se van en la misma pasada, con los
+frenos de siempre: solo los que llevan la marca de Organízate, y nunca los que
+tienen documentos o una sesión de taller colgando. Prueba:
+`_smoke-reservas-en-cierre.mjs`, que además vigila que el salto vaya DESPUÉS
+del corte por `--desde` (si no, tocaría días anteriores a la fecha pedida).
+
+⚠️ El arreglo evita que vuelvan, pero **no borra solo los 727 que ya están**:
+eso pasa en la siguiente ejecución del script, que es una escritura en
+producción y va con su copia de seguridad y su autorización.
+
 ### Quitar un bloqueo desde la agenda (07/09/2026, Rodrigo)
 
 «Un bloqueo solo se puede borrar desde Citas → Bloqueos, no desde la agenda,

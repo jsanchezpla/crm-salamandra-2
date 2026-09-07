@@ -368,11 +368,30 @@ async function main() {
 
   // ── Las reservas, por diferencia de conjuntos ─────────────────────────────
   const bloquesCrear = [], bloquesBorrar = [];
-  let bloquesIguales = 0, bloquesConCola = 0;
+  let bloquesIguales = 0, bloquesConCola = 0, bloquesEnCierre = 0;
   if (!SIN_RESERVAS) {
     const deseados = new Map();
     for (const r of volcado.reservas) {
       if (r.fecha < DESDE) continue;
+      /*
+       * ── LOS DÍAS QUE EL CENTRO CIERRA NO LLEVAN ARMAZÓN (07/09/2026) ──────
+       *
+       * `blocked_days` cancela las CITAS de los festivos —eso ya lo hace este
+       * script más arriba— pero las RESERVAS entraban igual: en Organízate un
+       * festivo es un día laborable normal, así que cada pasada volvía a poner
+       * «GESTIÓN DOCUMENTAL», «DESCANSO» y «LIBRE PACIENTES» en los 16 días de
+       * cierre del curso. Medido el 07/09/2026: 727 bloqueos repartidos por
+       * esos días, 45 el 14 de septiembre y 59 el 6 de enero, y la agenda de un
+       * festivo salía sin pacientes pero con el armazón entero, como si el
+       * centro abriera. Borrarlos a mano no servía: la copia siguiente los
+       * volvía a crear.
+       *
+       * Al no entrar en `deseados`, los que ya estén puestos pasan a «sobran» y
+       * se van en esta misma pasada, con los frenos de siempre (solo los que
+       * llevan la marca de Organízate, y nunca los que tienen documentos o una
+       * sesión de taller colgando).
+       */
+      if (festivos.has(r.fecha)) { bloquesEnCierre++; continue; }
       const teamMemberId = terapeutaDe(r.idEmp);
       if (!teamMemberId) continue;
       const startAt = instanteMadrid(r.fecha, r.hora);
@@ -435,6 +454,7 @@ async function main() {
     console.log(`  Bloqueos que se crean                       ${n6(bloquesCrear.length)}`);
     console.log(`  Bloqueos que se borran                      ${n6(bloquesBorrar.length)}`);
     if (bloquesConCola) console.log(`  Bloqueos que sobran pero tienen documentos  ${n6(bloquesConCola)}   (se conservan)`);
+    if (bloquesEnCierre) console.log(`  Reservas saltadas por caer en día de cierre ${n6(bloquesEnCierre)}   (no se ponen)`);
   }
   console.log();
 
