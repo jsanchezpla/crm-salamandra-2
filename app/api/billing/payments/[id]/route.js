@@ -2,7 +2,7 @@ import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { logBillingAudit, resumenImporte, datosPeticion } from "../../../../../lib/billing/audit.js";
 import { ok, noContent, error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { updateInvoiceStatus } from "../../../../../lib/billing/updateInvoiceStatus.js";
-import { billingHasPatients } from "../../../../../lib/billing/patientLink.js";
+import { billingHasPatients, pacienteValeParaElCobro } from "../../../../../lib/billing/patientLink.js";
 
 const VALID_STATUS = new Set(["pending", "completed", "failed", "refunded"]);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -37,7 +37,7 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
 
-    const { Payment, Invoice, Patient } = tenantModels;
+    const { Payment, Invoice, Patient, Cuota } = tenantModels;
     const { id } = await params;
     const body = await request.json();
     const payment = await Payment.findByPk(id);
@@ -109,8 +109,27 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
         if (!billingHasPatients(hasModule) || !Patient) return error("Este centro no lleva pacientes", 409);
         const paciente = await Patient.findByPk(body.patientId, { attributes: ["id", "clientId"] });
         if (!paciente) return notFound("Paciente no encontrado");
-        const familia = updates.clientId ?? payment.clientId;
-        if (familia && paciente.clientId && String(paciente.clientId) !== String(familia)) {
+        /*
+         * Con PAGADOR (07/09/2026) el cliente del cobro es quien paga y el niño
+         * es de otra ficha, así que valen las dos: la del cobro y la de la
+         * cuota de la que nació. Con la regla vieja, un cobro de una cuota que
+         * paga una fundación no se podía ni editar. La regla, con su prueba, en
+         * `lib/billing/patientLink.js`.
+         */
+        let cuotaClientId = null;
+        if (payment.cuotaId && Cuota) {
+          try {
+            const cuota = await Cuota.findByPk(payment.cuotaId, { attributes: ["id", "clientId"] });
+            cuotaClientId = cuota?.clientId ?? null;
+          } catch {
+            // Sin tabla de cuotas en este schema se queda la regla de siempre.
+          }
+        }
+        if (!pacienteValeParaElCobro({
+          pacienteClientId: paciente.clientId,
+          cobroClientId: updates.clientId ?? payment.clientId,
+          cuotaClientId,
+        })) {
           return error("Ese paciente no es de la familia de este cobro", 409);
         }
         updates.patientId = paciente.id;

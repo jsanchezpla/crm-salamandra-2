@@ -892,6 +892,14 @@ choca con el índice de `migrate-payments-cuota-unica` y sale como 409 con
 frase, no como 500. La auditoría (`resumenImporte`) lleva desde hoy el mes, el
 paciente, el estado y la fecha de la devolución, que antes cambiaban sin rastro.
 
+**Qué paciente vale** lo dice `pacienteValeParaElCobro`
+(`lib/billing/patientLink.js`, fijado en `scripts/_smoke-paciente-del-cobro.mjs`):
+la ficha del cobro **y** la de su cuota. Las dos, porque el pagador y esto
+entraron a master el mismo día y se pisaron: con pagador el cobro nace a nombre
+de quien paga y el niño es de otra ficha, así que la regla «de la familia del
+cobro» devolvía 409 al guardar CUALQUIER cambio de ese cobro —el importe
+incluido— y dejaba la cuota inservible desde Cobros y desde el arqueo.
+
 ## La factura a mano, a la vista (07/09/2026, AV-0063 de Aumenta)
 
 Rosa: «necesito hacer una factura con concepto manual y no veo la forma». La
