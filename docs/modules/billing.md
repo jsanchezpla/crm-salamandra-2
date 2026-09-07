@@ -756,9 +756,14 @@ Motivo y contexto: `docs/decisions/2026-08-29-el-dinero-se-sabe-por-facturas.md`
 ## Tres arreglos de Cobros y de la factura (07/09/2026, tarde)
 
 - **El pie legal cabe** (AV-0064 de Aumenta): el texto de protección de datos
-  que Aumenta quiere en cada factura son diez líneas; `invoicePdf.js` lo
-  mide (`heightOfString`) y lo ancla a 40 pt del borde inferior, en página
-  nueva si pisa lo escrito. Los textos de Aumenta (nota de exención del art.
+  que Aumenta quiere en cada factura son diez líneas; `invoicePdf.js` lo mide
+  (`heightOfString`) y lo ancla al MARGEN inferior con dos puntos de holgura,
+  en página nueva solo si pisa lo escrito. ⚠️ Anclarlo al BORDE (40 pt) fue el
+  primer intento y salía mal: por debajo del margen de 50 pt PDFKit abre
+  página nueva él solo, así que hasta un pie de una línea se llevaba una
+  segunda página en blanco. Se vio generando el PDF de una factura real de
+  Aumenta en producción. Prueba: `_smoke-factura-pie.mjs`.
+  Los textos de Aumenta (nota de exención del art.
   20 1.3 y pie RGPD) se pusieron en sus ajustes el 07/09 (`vatExemptNote`,
   `invoiceFooterText`); la nota se congela en cada factura al crearla.
 - **«Total cobrado» de Cobros es de todo el filtro**: `GET /api/billing/payments`
