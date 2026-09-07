@@ -1068,6 +1068,19 @@ conceptos que la componen, importe, método, día de cobro, alta y baja.
   familia: se deja vacío y ya. Migración `migrate-billing-cuotas-pagador.js`,
   **ANTES del despliegue**.
 
+  **Lo que la familia NO ve, y es a propósito**: la ficha de la familia no
+  enseña la cuota que paga otro, ni su cobro, ni su factura — son del pagador,
+  y la familia no debe ese dinero. Su resumen de facturación va sobre facturas
+  (`getClientBillingSummary`), así que la factura sale en la ficha de la
+  fundación y no en la suya, que es lo correcto. Esa cuota **sí** se encuentra
+  en la pantalla de Cuotas buscando por la familia o por el niño
+  (`cuotaCasaCon` mira las dos). Si algún día se quiere que la ficha de la
+  familia diga «la cuota de Mateo la paga la Fundación X», eso es pantalla
+  nueva: no ha existido nunca un panel de cuotas en la ficha, así que no es una
+  regresión de esto (repasado el 07/09/2026 y decidido NO apuntarlo en el
+  Registro: con cero cuotas con pagador en producción sería una tarea de algo
+  que hoy no le pasa a nadie).
+
 - **El importe puede ser NULL, y eso SIGNIFICA algo**: «lo que digan sus
   conceptos». Así una subida de precio se aplica cambiando UN concepto y no 300
   filas. Con un número escrito manda ese número: es el precio pactado con esa
