@@ -9,6 +9,7 @@ import { urlPanelStripe } from "../../../../lib/billing/cobroDesdeStripe.js";
 import { whereDeBusquedaCobros } from "../../../../lib/billing/busquedaCobros.js";
 import { billingHasPatients } from "../../../../lib/billing/patientLink.js";
 import { dondeEstaElCobroDe } from "../../../../lib/billing/cobroDeCuota.js";
+import { decidirCobroDelPendiente } from "../../../../lib/billing/cobroParcial.js";
 
 export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule }) => {
   try {
@@ -206,6 +207,9 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
      */
     let payment = null;
     let cobradosPendientes = [];
+    // Si el cobro parcial ha partido la fila pendiente, con qué se ha quedado
+    // pendiente: la pantalla lo dice al terminar.
+    let partido = null;
     if (!invoiceId && mes && clientId) {
       // El pendiente del mes puede estar a nombre del PAGADOR de la cuota y no
       // de la familia (07/09/2026): sin esto no se encontraba y se creaba un
@@ -228,9 +232,46 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       const importe = Math.round(Number(amount) * 100) / 100;
       if (pendientes.length === 1) {
         const p = pendientes[0];
+        /*
+         * ── COBRAR A MEDIAS PARTE LA FILA (07/09/2026, Rodrigo) ────────────
+         * Antes esta fila se pasaba a cobrada CON EL IMPORTE TECLEADO, sin
+         * mirar si cubría lo que pedía: la de 160 € se convertía en una de
+         * 100 € cobrada y los 60 € que faltaban no quedaban en ninguna parte.
+         * La familia salía al día debiendo dinero. Y no era raro: 266 de las
+         * 273 familias con cuota de `aumenta` tienen UNA sola fila al mes.
+         * Ahora lo que traen queda cobrado y el resto sigue pendiente, del
+         * mismo mes y de la misma cuota, que es lo que la morosidad lee y lo
+         * que el centro espera ver en Cobros. La regla, con su prueba, en
+         * `lib/billing/cobroParcial.js`.
+         */
+        const decision = decidirCobroDelPendiente({ pendiente: p.amount, importe });
+        if (decision.accion === "partir") {
+          /*
+           * El resto se queda en la fila que YA existía (misma cuota, mismo
+           * mes, sigue pendiente) y lo cobrado nace en una fila nueva. Así el
+           * índice único de un solo pendiente por cuota y mes se respeta solo,
+           * y el pendiente conserva su antigüedad y su nota.
+           */
+          await p.update({ amount: decision.restoPendiente });
+          payment = await Payment.create({
+            invoiceId: null,
+            clientId: p.clientId,
+            patientId: p.patientId,
+            conceptId: conceptoValido ?? p.conceptId ?? null,
+            cuotaId: p.cuotaId,
+            periodMonth: p.periodMonth,
+            amount: decision.cobrado,
+            paidAt,
+            method,
+            status: "completed",
+            notes: [p.notes, notes].filter(Boolean).join(" — ") || null,
+          });
+          cobradosPendientes = [];
+          partido = { pendienteId: p.id, resto: decision.restoPendiente };
+        } else {
         await p.update({
           status: "completed",
-          amount: importe,
+          amount: decision.cobrado,
           paidAt,
           method,
           notes: notes || p.notes || null,
@@ -238,6 +279,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
         });
         payment = p;
         cobradosPendientes = [p.id];
+        }
       } else if (pendientes.length > 1 && Math.abs(suma - importe) < 0.005) {
         for (const p of pendientes) {
           await p.update({ status: "completed", paidAt, method, notes: notes ? `${p.notes ? `${p.notes} — ` : ""}${notes}` : p.notes });
@@ -292,7 +334,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       before: null,
       after: resumenImporte(payment),
     });
-    return created({ ...payment.toJSON(), cobradosPendientes });
+    return created({ ...payment.toJSON(), cobradosPendientes, partido });
   } catch (err) {
     return serverError(err);
   }

@@ -54,5 +54,9 @@ test("Registrar cobro avisa del cobro pendiente que va a cobrar en vez de duplic
   assert.match(src, /\} else \{[\s\S]{0,400}setParcialDelMes\(Number\(esperado\)/, "sin `return` temprano: la cuota de la familia se pinta también con pendiente");
   assert.match(src, /notes: pendientesDelMes\.length\s*\? form\.notes\.trim\(\) \|\| null/, "con pendiente solo viaja la nota escrita a mano");
   assert.match(src, /Este mes ya tiene su cobro pendiente en Cobros/);
-  assert.match(src, /No se crea otra fila/);
+  // Desde el 07/09/2026 el aviso ya no promete que «no se crea otra fila»:
+  // cobrar de menos PARTE el pendiente (lo que traen se cobra, el resto sigue
+  // pendiente), y eso hay que decirlo antes de pulsar.
+  assert.match(src, /Si pones MENOS, se parte/);
+  assert.ok(!/No se crea otra fila/.test(src), "el aviso viejo prometía algo que ya no es verdad");
 });

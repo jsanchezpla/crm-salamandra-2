@@ -881,6 +881,32 @@ importe y desde qué mes, y el CRM enseña **qué meses cubre antes de guardar**
   coste de cada mes sale de `planDeCuotasDelMes`, el mismo sitio del que sale la
   generación mensual. Horizonte: 12 meses.
 
+## Cobrar un mes a medias parte la fila (07/09/2026, decisión de Rodrigo)
+
+Al registrar un cobro de un mes con UN solo cobro pendiente, el POST pasaba esa
+fila a cobrada **con el importe tecleado**, sin mirar si cubría lo que pedía: la
+de 160 € se convertía en una de 100 € cobrada y los 60 € que faltaban no
+quedaban en ninguna parte. La familia salía al día debiendo dinero.
+
+Y era el camino normal, no un caso raro: en `aumenta`, de las 273 familias con
+cuota viva y cobro generado en septiembre de 2026, **266 tenían UNA sola fila**
+en el mes. Solo las 7 con dos cuotas (dos hermanos) podían enseñar un mes a
+medias, y por accidente.
+
+- **Ahora la fila se parte** cuando traen menos: el resto se queda en la fila
+  que ya existía —misma cuota, mismo mes, sigue pendiente, conserva su
+  antigüedad y su nota— y lo cobrado nace en una fila nueva. Así el índice único
+  de un solo pendiente por cuota y mes se respeta solo.
+- **Traer lo mismo o de más no parte nada**: la fila se cobra entera y lo de más
+  se absorbe en ella, como hasta hoy. Partir por arriba no significaría nada.
+- La regla vive en `lib/billing/cobroParcial.js` (`decidirCobroDelPendiente`),
+  fijada en `scripts/_smoke-cobro-parcial.mjs` con la cuenta que manda: lo
+  cobrado más lo que queda es siempre lo que pedía la fila.
+- Es la otra mitad de que **la morosidad lea los pendientes**: sin partir, un
+  cobro parcial borraba la deuda; sin leer pendientes, la morosidad se la
+  inventaba. Con las dos, lo que se debe de un mes es lo que el CRM tiene
+  escrito que falta.
+
 ## Con pagador, el cobro del mes no está donde se buscaba (07/09/2026)
 
 Repaso del código de esa misma noche, cuando el pagador de la cuota y tres

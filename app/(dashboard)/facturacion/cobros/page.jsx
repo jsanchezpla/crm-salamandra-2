@@ -1203,7 +1203,9 @@ export default function CobrosPage() {
                     {pendientesDelMes.length === 1 ? (
                       <>
                         Este mes ya tiene su cobro pendiente en Cobros ({fmtMoney(pendientesDelMes[0].amount)}), y es lo
-                        que se ha puesto arriba: al registrar, ese cobro pasa a cobrado con el importe de arriba. No se crea otra fila.
+                        que se ha puesto arriba: al registrar, ese cobro pasa a cobrado. Si pones MENOS, se parte:
+                        se cobra lo que traen y el resto se queda pendiente de este mes, así que la familia sigue
+                        saliendo en Morosidad por lo que falta.
                       </>
                     ) : (
                       <>
