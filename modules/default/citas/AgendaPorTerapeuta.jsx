@@ -218,6 +218,7 @@ export default function AgendaPorTerapeuta({
           extendedProps: {
             esBloqueo: true, bloqueoId: b.id, label: b.label, categoryKey: b.categoryKey ?? null, tallerId: b.tallerId ?? null,
             categoryLabel: b.categoryLabel ?? null, teamMemberName: b.teamMemberName ?? null,
+            teamMemberId: b.teamMemberId ?? null,
           },
         };
       }), []);

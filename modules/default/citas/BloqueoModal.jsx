@@ -35,7 +35,7 @@ const fmtSize = (n) => {
   return kb < 1024 ? `${Math.max(1, Math.round(kb))} KB` : `${(kb / 1024).toFixed(1)} MB`;
 };
 
-export function BloqueoModal({ bloqueo, categorias = [], equipo = [], administracion = [], onClose, onSaved }) {
+export function BloqueoModal({ bloqueo, categorias = [], equipo = [], administracion = [], onClose, onSaved, onConvertir = null }) {
   const [label, setLabel] = useState(bloqueo.label ?? "");
   const [categoryKey, setCategoryKey] = useState(bloqueo.categoryKey ?? "");
   const [startDate, setStartDate] = useState(toDateInput(bloqueo.start));
@@ -421,7 +421,17 @@ export function BloqueoModal({ bloqueo, categorias = [], equipo = [], administra
               )}
             </div>
           </div>
-          <div className="px-5 py-3 border-t border-neutral-100 flex justify-end gap-2">
+          <div className="px-5 py-3 border-t border-neutral-100 flex items-center justify-end gap-2">
+            {/* «Convertir en cita» (07/09/2026, AV-0059 de Aumenta): el hueco
+                reservado, una vez confirmado con la familia, pasa a ser la
+                cita del paciente con su cobro; el bloqueo se quita al guardar. */}
+            {onConvertir && !bloqueo.tallerId && (
+              <button type="button" onClick={() => !saving && onConvertir()}
+                title="Abre el alta de cita en este hueco, con la terapeuta ya puesta; al guardarla, el bloqueo se quita"
+                className="mr-auto px-3 py-1.5 rounded-lg text-xs font-semibold border border-[var(--color-primary,#1B3A2D)] text-[var(--color-primary,#1B3A2D)] hover:bg-neutral-50 transition-colors">
+                Convertir en cita
+              </button>
+            )}
             <button type="button" onClick={() => !saving && onClose()}
               className="px-3 py-1.5 text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">
               Cancelar

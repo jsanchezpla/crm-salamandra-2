@@ -560,6 +560,7 @@ export default function CitasModule({
                 esBloqueo: true, bloqueoId: b.id, label: b.label,
                 categoryKey: b.categoryKey ?? null, tallerId: b.tallerId ?? null,
                 categoryLabel: b.categoryLabel ?? null, teamMemberName: b.teamMemberName ?? null,
+                teamMemberId: b.teamMemberId ?? null,
               },
             }));
         }
@@ -607,6 +608,7 @@ export default function CitasModule({
         label: info.event.extendedProps.label,
         categoryKey: info.event.extendedProps.categoryKey ?? null,
         tallerId: info.event.extendedProps.tallerId ?? null,
+        teamMemberId: info.event.extendedProps.teamMemberId ?? null,
         start: info.event.start,
         end: info.event.end ?? info.event.start,
       });
@@ -1403,6 +1405,29 @@ export default function CitasModule({
           onSaved={() => {
             setBloqueoAbierto(null);
             refrescarAgenda();
+          }}
+          /*
+           * «Convertir en cita» (07/09/2026, AV-0059 de Aumenta): un
+           * «Reservado» que la familia confirma pasa a ser la cita del
+           * paciente, con su cobro. Se abre el alta de cita con la fecha, la
+           * hora y la terapeuta del hueco; el drawer crea la cita sin el aviso
+           * del bloqueo y quita el bloqueo al guardar.
+           */
+          onConvertir={() => {
+            const b = bloqueoAbierto;
+            setBloqueoAbierto(null);
+            const inicio = new Date(b.start);
+            const fin = new Date(b.end);
+            setCreacion({
+              date: toDateInput(inicio),
+              time: toTimeInput(inicio),
+              teamMemberId: b.teamMemberId ?? "",
+              desdeBloqueo: {
+                id: b.id,
+                rotulo: b.label || b.titulo || "bloqueo",
+                minutos: Math.max(0, Math.round((fin.getTime() - inicio.getTime()) / 60000)),
+              },
+            });
           }}
         />
       )}

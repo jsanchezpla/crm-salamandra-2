@@ -62,7 +62,12 @@ export function NuevaCitaDrawer({
     ...EMPTY_BOOKING_FORM,
     date: inicial.date,
     time: inicial.time,
+    // La terapeuta del hueco, cuando la cita nace de un bloqueo (07/09/2026,
+    // AV-0059): «Convertir en cita» la trae puesta.
+    teamMemberId: inicial.teamMemberId ?? "",
   });
+  // El bloqueo que esta cita sustituye (`{ id, rotulo, minutos }`), o null.
+  const desdeBloqueo = inicial.desdeBloqueo ?? null;
   /*
    * ── CITA O BLOQUEO (03/09/2026) ──────────────────────────────────────────
    * El mismo hueco pulsado sirve para las dos cosas. Arriba del drawer se
@@ -423,6 +428,9 @@ export function NuevaCitaDrawer({
              * volvía a salir una y otra vez y la cita no se llegaba a crear.
              */
             ...(insistir ? { permitirFestivo: true, permitirBloqueo: true } : {}),
+            // La cita que sustituye a un bloqueo choca con ese mismo bloqueo:
+            // no tiene sentido avisar de él (07/09/2026, AV-0059).
+            ...(desdeBloqueo ? { permitirBloqueo: true } : {}),
           }),
         });
 
@@ -512,6 +520,27 @@ export function NuevaCitaDrawer({
         }
       }
 
+      /*
+       * Y el bloqueo que sustituye se quita (07/09/2026, AV-0059): la cita ya
+       * existe, así que si el borrado falla (un 403, un bloqueo ya quitado por
+       * otra) se dice y no se deshace nada — quitarlo a mano desde Citas →
+       * Bloqueos es un gesto; una cita perdida, no.
+       */
+      if (desdeBloqueo?.id) {
+        try {
+          const rb = await fetch(`/api/citas/bloqueos?id=${encodeURIComponent(desdeBloqueo.id)}`, { method: "DELETE" });
+          const jb = await rb.json().catch(() => null);
+          if (!rb.ok) {
+            await avisar({
+              titulo: "Cita creada, pero el hueco sigue ahí",
+              texto: `No se ha podido quitar el bloqueo «${desdeBloqueo.rotulo}»: ${jb?.error || "sin detalle"}.\n\nQuítalo desde Citas → Bloqueos.`,
+            });
+          }
+        } catch {
+          await avisar({ titulo: "Cita creada, pero el hueco sigue ahí", texto: "No se ha podido quitar el bloqueo. Quítalo desde Citas → Bloqueos." });
+        }
+      }
+
       // El padre refresca el calendario y cierra el drawer (que muere con
       // su formulario dentro: no hay nada que vaciar).
       onCreated();
@@ -587,6 +616,12 @@ export function NuevaCitaDrawer({
                 puede rellenar sola: eligiéndola antes, su bono pone el tipo (ver
                 `buscarBono`) y su terapeuta pone el profesional.
               */}
+              {desdeBloqueo && (
+                <div className="text-xs rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-amber-800">
+                  Esta cita sustituye al hueco <strong>«{desdeBloqueo.rotulo}»</strong>
+                  {desdeBloqueo.minutos ? ` (${desdeBloqueo.minutos} min)` : ""}: al guardarla, el bloqueo se quita de la agenda.
+                </div>
+              )}
               <BuscadorPaciente
                 etiqueta={patients.length > 0 ? "Cliente (la familia) *" : "Cliente / paciente *"}
                 nombre={createForm.clientName}

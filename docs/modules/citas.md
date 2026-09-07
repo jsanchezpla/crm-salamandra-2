@@ -525,6 +525,19 @@ Desde el 13/08/2026 el bono también se lee desde el alta manual de citas
 libres): al elegir a la paciente, su bono pone el tipo de cita. Ver «Repaso del
 13/08/2026» en la sección de UI.
 
+### Convertir un bloqueo en cita (07/09/2026, AV-0059 de Aumenta)
+
+Olga: «reservamos un hueco hasta confirmar con la familia; al confirmarlo, ese
+hueco debe ir asociado a un cobro y un paciente, y no nos deja». El modal del
+bloqueo (`BloqueoModal`) tiene «Convertir en cita» (no en talleres): el
+calendario abre `NuevaCitaDrawer` con fecha, hora y terapeuta del hueco
+(`inicial.teamMemberId`, `inicial.desdeBloqueo = { id, rotulo, minutos }`), el
+drawer avisa de que la cita sustituye al hueco, manda `permitirBloqueo: true`
+(el propio bloqueo chocaría) y, creada la cita, hace `DELETE /api/citas/bloqueos?id=`;
+si el borrado falla, la cita se queda y se dice que se quite desde Citas →
+Bloqueos. Paciente y cobro los pide el alta de siempre. Prueba:
+`_smoke-convertir-bloqueo-en-cita.mjs`.
+
 ### El bono se elige en la cita, y vale sin correo (07/09/2026, AV-0055 de Aumenta)
 
 Olga: «hemos intentado crear una cita de un paciente que tiene bono y no existe
