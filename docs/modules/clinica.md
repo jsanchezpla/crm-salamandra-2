@@ -546,6 +546,18 @@ sesión anterior, con un cartel que dice de dónde sale. La regla vive en
   registro el CRM diera de alta el borrador de la siguiente cita— porque
   llenaría la historia clínica de registros que nadie ha abierto.
 
+## Quién firma el registro por defecto (07/09/2026, AV-0060 de Aumenta)
+
+Daniela: «que salga la persona correcta de manera automática». Sin `?prof=`
+(registro abierto desde la ficha, que es como nacen 1.047 de las 1.202
+sesiones de septiembre de Aumenta) el editor firmaba con el terapeuta DE
+REFERENCIA del paciente, que en un compartido es el primero de la lista.
+Regla nueva en `lib/clinica/firmaPorDefecto.js` (`terapeutaPorDefecto`): la
+cita → quien escribe (`/api/team/me`) → el de referencia → nadie. Y `POST
+/api/clinica/sessions` firma con quien escribe si no llega firma
+(`resolveCurrentTeamMemberId`) y comprueba que la firma sea del centro, como
+ya hacía el PATCH. Prueba: `_smoke-firma-por-defecto.mjs`.
+
 ## Registro de sesión en 3 partes (sprint Aumenta 2026-07, punto 4)
 
 Una sesión ya no es solo el informe de lo que pasó dentro:

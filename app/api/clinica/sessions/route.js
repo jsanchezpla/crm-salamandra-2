@@ -1,4 +1,5 @@
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
+import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
 import { clientIdOfPatient } from "../../../../lib/clinica/patientClient.js";
 import { ok, created, error, forbidden } from "../../../../lib/utils/apiResponse.js";
 import { serializeSession } from "../../../../lib/clinica/serialize.js";
@@ -65,11 +66,20 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     return error("Body inválido");
   }
   if (!body?.patientId) return error("patientId es obligatorio");
-  if (!body?.therapistId) return error("therapistId es obligatorio");
+  // Sin firma, firma quien escribe (07/09/2026, AV-0060): la ficha de equipo
+  // del usuario que llama. Y con firma, que sea del centro (el PATCH ya lo
+  // exigía; el POST no).
+  let therapistId = typeof body?.therapistId === "string" && body.therapistId.trim() ? body.therapistId.trim() : null;
+  if (!therapistId) therapistId = await resolveCurrentTeamMemberId(request, ctx.tenantModels);
+  if (!therapistId) return error("therapistId es obligatorio");
+  if (ctx.tenantModels.TeamMember) {
+    const existe = await ctx.tenantModels.TeamMember.findByPk(therapistId, { attributes: ["id"] });
+    if (!existe) return error("Ese profesional no es del centro");
+  }
   const obs = body.observations && typeof body.observations === "object" && !Array.isArray(body.observations) ? body.observations : {};
   const payload = {
     patientId: body.patientId,
-    therapistId: body.therapistId,
+    therapistId,
     sessionDate: body.sessionDate ? new Date(body.sessionDate) : new Date(),
     duration: body.duration != null && body.duration !== "" ? Number(body.duration) : null,
     objectives: Array.isArray(body.objectives) ? body.objectives : [],

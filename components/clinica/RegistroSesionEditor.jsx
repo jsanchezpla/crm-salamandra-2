@@ -93,6 +93,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { terapeutaPorDefecto } from "@/lib/clinica/firmaPorDefecto.js";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import useZonaSoltar, { useEvitarSoltarFuera } from "@/components/ui/useZonaSoltar.js";
@@ -369,6 +370,21 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
       .catch(() => {});
   }, []);
 
+  /*
+   * Quién está escribiendo (07/09/2026, AV-0060 de Aumenta: «que salga la
+   * persona correcta de manera automática»). Su ficha de equipo, por
+   * `/api/team/me`; sin ficha (dirección sin ficha, o sin módulo) queda a
+   * null y la regla sigue con el terapeuta de referencia. Ver
+   * `lib/clinica/firmaPorDefecto.js`.
+   */
+  const [yo, setYo] = useState(null);
+  useEffect(() => {
+    fetch(`/api/team/me`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setYo(j?.data?.member?.id ?? null))
+      .catch(() => {});
+  }, []);
+
   /**
    * ── CON QUIÉN NACE FIRMADO UN REGISTRO QUE SE ESTRENA ────────────────────
    *
@@ -396,15 +412,18 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
    */
   useEffect(() => {
     if (sessionId || terapeutaId) return;
-    if (profDeLaCita) {
-      if (!equipo.length) return;
-      if (equipo.some((m) => m.id === profDeLaCita)) {
-        setTerapeutaId(profDeLaCita);
-        return;
-      }
-    }
-    if (patient?.mainTherapistId) setTerapeutaId(patient.mainTherapistId);
-  }, [sessionId, terapeutaId, profDeLaCita, equipo, patient?.mainTherapistId]);
+    // Con profesional en la cita se espera al equipo (para comprobar que es
+    // del centro); sin cita, a que llegue `/api/team/me` no se espera más de
+    // lo que tarda: si quien escribe no tiene ficha, la regla sigue.
+    if (profDeLaCita && !equipo.length) return;
+    const elegido = terapeutaPorDefecto({
+      profDeLaCita,
+      yo,
+      equipo,
+      mainTherapistId: patient?.mainTherapistId ?? null,
+    });
+    if (elegido) setTerapeutaId(elegido);
+  }, [sessionId, terapeutaId, profDeLaCita, equipo, yo, patient?.mainTherapistId]);
 
   /**
    * Las plantillas del centro y, si se está editando, LA SESIÓN — en el mismo
