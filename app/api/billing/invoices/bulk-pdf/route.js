@@ -17,7 +17,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
  * fecha de emisión cae en el rango. El ZIP se transmite en streaming: cada PDF se
  * genera y se añade sobre la marcha, sin acumular todos en memoria.
  */
-export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
+export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
     const { searchParams } = new URL(request.url);
@@ -61,6 +61,7 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
             ? partners.find((p) => p.id === inv.partnerId)?.name || null
             : null;
           const buf = await buildInvoicePdfBuffer({
+            brandColor: tenant?.settings?.brand?.primaryColor,
             invoice: inv,
             client: inv.client,
             settings,

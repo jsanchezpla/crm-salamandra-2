@@ -21,7 +21,7 @@ import { invoicePatientInclude } from "@/lib/billing/patientLink.js";
  * configurado). 31/08/2026: una factura a una fundación tiene que poder decir
  * por qué niño es — y también poder callárselo.
  */
-export const GET = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
+export const GET = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
     const { Invoice, Client, TenantBillingSettings } = tenantModels;
@@ -58,6 +58,9 @@ export const GET = withTenant(async (request, { params }, { tenantModels, hasMod
     // Solo el borrador lleva marca: una factura ya emitida, aunque se abra en
     // pantalla, ES el documento y no puede salir sellada.
     const construir = invoice.status === "draft" ? buildInvoicePreviewPdfBuffer : buildInvoicePdfBuffer;
+    // El color del centro viste el documento (07/09/2026). Si el cliente no
+    // tiene marca puesta, el PDF sale como salía.
+    const brandColor = tenant?.settings?.brand?.primaryColor;
     const buffer = await construir({
       invoice,
       client: invoice.client,
@@ -66,6 +69,7 @@ export const GET = withTenant(async (request, { params }, { tenantModels, hasMod
       logo,
       patientName,
       stamp,
+      brandColor,
     });
 
     return new Response(buffer, {

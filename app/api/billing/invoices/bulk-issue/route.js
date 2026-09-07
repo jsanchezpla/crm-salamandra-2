@@ -140,7 +140,7 @@ const vistaGrupo = (g) => ({
   cobros: g.cobros.map((c) => ({ id: c.id, amount: c.amount, paidAt: c.paidAt, method: c.method })),
 });
 
-export const GET = withTenant(async (request, _rc, { tenantModels, hasModule }) => {
+export const GET = withTenant(async (request, _rc, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
     const { TenantBillingSettings } = tenantModels;
@@ -177,6 +177,7 @@ export const GET = withTenant(async (request, _rc, { tenantModels, hasModule }) 
       const calc = calculateInvoice({ lines: lineasDeCuota({ cobros: grupo.cobros, mes, vatRate }), irpfRate: 0 });
       const ficha = fichas.get(grupo.clientId);
       const buffer = await buildInvoicePreviewPdfBuffer({
+        brandColor: tenant?.settings?.brand?.primaryColor,
         invoice: {
           id: grupo.grupoId,
           status: "draft",

@@ -98,7 +98,8 @@ export const POST = withTenant(async (request, { params }, ctx) => {
           ? `${invoice.patient.firstName || ""} ${invoice.patient.lastName || ""}`.trim() || null
           : null;
         const stamp = await cargarLogo(settings.stampUrl);
-        const pdf = await buildInvoicePdfBuffer({ invoice, client: cliente, settings, partnerName, logo, patientName, stamp });
+        const pdf = await buildInvoicePdfBuffer({ invoice, client: cliente, settings, partnerName, logo, patientName, stamp,
+          brandColor: ctx.tenant?.settings?.brand?.primaryColor });
 
         const total = `${Number(invoice.total ?? 0).toLocaleString("es-ES", {
           minimumFractionDigits: 2,

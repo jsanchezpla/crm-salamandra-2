@@ -57,7 +57,8 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       try {
         const settings = (await TenantBillingSettings.findOne()) || {};
         const logo = await cargarLogo(membreteDe(settings, "presupuesto").logoUrl);
-        const pdf = await buildQuotePdfBuffer({ quote, client: cliente, settings, logo });
+        const pdf = await buildQuotePdfBuffer({ quote, client: cliente, settings, logo,
+          brandColor: ctx.tenant?.settings?.brand?.primaryColor });
 
         const total = `${Number(quote.total ?? 0).toLocaleString("es-ES", {
           minimumFractionDigits: 2,

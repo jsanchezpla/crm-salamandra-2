@@ -13,7 +13,7 @@ import { cargarLogo } from "@/lib/billing/logoMembrete.js";
  * numerado desde que nace y enseñárselo al cliente antes de «enviarlo»
  * formalmente es su uso normal.
  */
-export const GET = withTenant(async (_request, { params }, { tenantModels, hasModule }) => {
+export const GET = withTenant(async (_request, { params }, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
     const { Quote, Client, TenantBillingSettings } = tenantModels;
@@ -26,7 +26,8 @@ export const GET = withTenant(async (_request, { params }, { tenantModels, hasMo
 
     const settings = (await TenantBillingSettings.findOne()) || {};
     const logo = await cargarLogo(membreteDe(settings, "presupuesto").logoUrl);
-    const buffer = await buildQuotePdfBuffer({ quote, client: quote.client, settings, logo });
+    const buffer = await buildQuotePdfBuffer({ quote, client: quote.client, settings, logo,
+      brandColor: tenant?.settings?.brand?.primaryColor });
 
     return new Response(buffer, {
       status: 200,
