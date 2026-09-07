@@ -864,6 +864,10 @@ importe y desde qué mes, y el CRM enseña **qué meses cubre antes de guardar**
 - **Si el mes ya tiene su cobro pendiente**, se cobra ese en vez de crear otro
   —mismo dinero, mismo `cuota_id`—, y solo cuando la suma es exactamente lo que
   falta.
+- **Cuenta lo ya cobrado del mes CON factura y sin ella.** El mes que ya pasó
+  por «Facturar el mes» lleva su factura en el cobro; mirarlo solo entre los
+  cobros sin factura lo daba por impagado y el reparto lo ofrecía entero, así
+  que la familia que trae dinero para octubre habría vuelto a pagar septiembre.
 - **Tres motivos cortan el reparto** en un mes, cada uno con su frase: pagado a
   medias y sin pendiente; pendiente que no se puede tocar (factura, Stripe o
   banco); pendiente que no cuadra con lo que vale el mes. Saltárselo dejaría un
@@ -876,6 +880,34 @@ importe y desde qué mes, y el CRM enseña **qué meses cubre antes de guardar**
   porque no es un cobro: son varios, y la vista previa necesita dónde vivir. El
   coste de cada mes sale de `planDeCuotasDelMes`, el mismo sitio del que sale la
   generación mensual. Horizonte: 12 meses.
+
+## Con pagador, el cobro del mes no está donde se buscaba (07/09/2026)
+
+Repaso del código de esa misma noche, cuando el pagador de la cuota y tres
+cosas más entraron a master con horas de diferencia. **Desde el pagador, el
+cobro del mes nace a nombre de quien paga**, así que buscarlo por el
+`client_id` de la familia dejó de encontrarlo. Dos sitios se quedaron atrás y
+salía caro:
+
+- La cita del niño preguntaba `GET /api/billing/payments/mes?clientId=<familia>`
+  y no veía nada, así que enseñaba «Cobrar mes» como si nadie hubiera pagado.
+- Al pulsarlo, el POST de cobros tampoco encontraba el pendiente y **creaba un
+  cobro nuevo**: el mes acababa con el pendiente de la fundación y un cobro
+  cobrado de la familia, y la caja del día sumaba los dos.
+
+Ahora los dos usan `dondeEstaElCobroDe` (`lib/billing/cobroDeCuota.js`): el
+cobro de una familia es el suyo **o** el de una de sus cuotas. Sin tabla de
+cuotas devuelve la condición de siempre. Comprobado en local con una cuota con
+pagador: el pendiente de la fundación se encuentra desde la familia y
+registrar el cobro lo pasa a cobrado sin crear otra fila.
+
+**Un devuelto sin fecha de devolución no cuenta como dinero que entró.**
+`haEntrado` daba por entrado cualquier `refunded`, pero la salida solo se
+apunta el día de `refunded_at`: uno sin fecha sumaría en su día y no restaría
+en ninguno, y el arqueo de ese día se descuadraría solo. Sin fecha se comporta
+como antes del 07/09/2026 —fuera de la caja—, en `caja.js` y en el esperado del
+cierre. En producción no había ninguno (comprobado en los 15 schemas), así que
+es un cinturón, no una reparación.
 
 ## «Editar cobro» corrige el mes y el paciente (07/09/2026)
 

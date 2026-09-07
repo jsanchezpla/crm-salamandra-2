@@ -92,11 +92,17 @@ async function mesesDeLaFamilia({ tenantModels, clientId, desde }) {
   }
 
   const lista = mesesDesde(desde, HORIZONTE_MESES);
+  /*
+   * TODOS los cobros de esos meses, con factura o sin ella. Filtrar por
+   * `invoice_id IS NULL` dejaba fuera los meses ya facturados («Facturar el mes»
+   * pone la factura en el cobro), así que un mes cobrado Y facturado salía con
+   * «ya cobrado 0» y el reparto lo ofrecía entero: la familia que trae dinero
+   * para octubre habría vuelto a pagar septiembre.
+   */
   const cobros = await Payment.findAll({
     where: {
       clientId,
       periodMonth: { [Op.in]: lista.map((m) => `${m}-01`) },
-      invoiceId: null,
     },
   });
 
