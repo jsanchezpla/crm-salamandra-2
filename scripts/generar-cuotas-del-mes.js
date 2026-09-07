@@ -24,6 +24,7 @@
 
 import { getTenantDb } from "../lib/db/tenantDb.js";
 import { planDeCuotasDelMes, mesValido, mesLegible, ultimoDiaDe } from "../lib/billing/cuotas.js";
+import { citasDelMesParaCuotas } from "../lib/billing/citasParaProrrateo.js";
 import { Op } from "sequelize";
 
 const METODO_POR_DEFECTO = "transfer"; // el mismo que el endpoint
@@ -75,6 +76,8 @@ async function main() {
     })),
     conceptos: conceptos.map((c) => ({ id: c.id, name: c.name, unitPrice: c.unitPrice })),
     yaGenerados: yaGenerados.map((p) => String(p.cuotaId)),
+    // Por sesiones cuando hay citas en el mes (AV-0062, 07/09/2026).
+    citasPorClave: await citasDelMesParaCuotas({ tenantModels: models, mes, cuotas: cuotas.map((c) => c.toJSON()) }),
   });
 
   const total = aGenerar.reduce((s, f) => s + f.importe, 0);

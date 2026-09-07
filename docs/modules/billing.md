@@ -750,6 +750,21 @@ llevar aparejado el tipo que cobró — «aunque sea internamente».
 
 Motivo y contexto: `docs/decisions/2026-08-29-el-dinero-se-sabe-por-facturas.md`.
 
+## El mes de alta se prorratea por sesiones (07/09/2026, AV-0062 de Aumenta)
+
+Rosa: «un paciente que empieza el día 11 viene 3 sesiones de 4 y el sistema
+calcula 20 días de 30». `tramoDelMes` (`lib/billing/cuotas.js`) admite ahora
+las citas del mes del paciente (`{ citas }`): los días de la semana con cita
+dentro del tramo son el patrón, y el factor es sesiones en el tramo ÷ sesiones
+que ese patrón tiene en el mes entero (`sesionesDelTramo`); el rótulo pasa a
+«desde el 11/09/2026 (3 de 4 sesiones)». Sin citas en el tramo, por días como
+siempre. Las citas las carga `lib/billing/citasParaProrrateo.js`
+(`citasDelMesParaCuotas`, sin canceladas, paciente primero y si no familia) y
+las reciben `planDeCuotasDelMes` por `citasPorClave` desde sus tres llamadores
+(`cobroDeCuota.js`, `cuotas/generar`, `generar-cuotas-del-mes.js`). El cajón
+«Registrar cobro» y las líneas de factura siguen por días (`prorrateo.js`): no
+tienen las citas delante. Prueba: `_smoke-cuotas.mjs`.
+
 ## La factura a mano, a la vista (07/09/2026, AV-0063 de Aumenta)
 
 Rosa: «necesito hacer una factura con concepto manual y no veo la forma». La

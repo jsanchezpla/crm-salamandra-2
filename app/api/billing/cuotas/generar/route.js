@@ -1,5 +1,6 @@
 import { Op } from "sequelize";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
+import { citasDelMesParaCuotas } from "../../../../../lib/billing/citasParaProrrateo.js";
 import { ok, error, forbidden, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { logBillingAudit, datosPeticion } from "../../../../../lib/billing/audit.js";
 import { billingHasPatients } from "../../../../../lib/billing/patientLink.js";
@@ -134,6 +135,8 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       conceptos,
       yaGenerados,
       metodos: metodos.length ? metodos : null,
+      // Por sesiones cuando hay citas en el mes (AV-0062, 07/09/2026).
+      citasPorClave: await citasDelMesParaCuotas({ tenantModels, mes, cuotas }),
     });
 
     return ok({
@@ -178,6 +181,8 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       conceptos,
       yaGenerados,
       metodos: metodos.length ? metodos : null,
+      // Por sesiones cuando hay citas en el mes (AV-0062, 07/09/2026).
+      citasPorClave: await citasDelMesParaCuotas({ tenantModels, mes, cuotas }),
     });
 
     const creados = [];

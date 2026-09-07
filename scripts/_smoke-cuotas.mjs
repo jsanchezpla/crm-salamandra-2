@@ -114,6 +114,26 @@ describe("el tramo del mes (qué parte se cobra)", () => {
     assert.equal(rotuloDeTramo(t), "desde el 13/09/2026 (18/30 días)");
   });
 
+  it("con citas en el mes, el alta se prorratea por SESIONES (AV-0062, 07/09/2026)", () => {
+    // Septiembre de 2026: los viernes son 4, 11, 18 y 25. Alta el día 11 con
+    // cita los viernes → 3 de 4 sesiones, no 20 de 30 días.
+    const citas = ["2026-09-11", "2026-09-18", "2026-09-25"].map((f) => ({ scheduledAt: `${f}T15:15:00.000Z` }));
+    const t = tramoDelMes("2026-09", { startDate: "2026-09-11" }, { citas });
+    assert.deepEqual(t.sesiones, { enElTramo: 3, enElMes: 4 });
+    assert.equal(t.factor, 0.75);
+    assert.equal(rotuloDeTramo(t), "desde el 11/09/2026 (3 de 4 sesiones)");
+    // Dos días a la semana (martes y jueves) desde el día 15: 5 de 9.
+    const dos = ["2026-09-15", "2026-09-17", "2026-09-22", "2026-09-24", "2026-09-29"].map((f) => ({ scheduledAt: `${f}T09:00:00.000Z` }));
+    const t2 = tramoDelMes("2026-09", { startDate: "2026-09-15" }, { citas: dos });
+    assert.deepEqual(t2.sesiones, { enElTramo: 5, enElMes: 9 });
+    // Sin citas dentro del tramo, por días como siempre.
+    const t3 = tramoDelMes("2026-09", { startDate: "2026-09-11" }, { citas: [{ scheduledAt: "2026-09-04T15:15:00.000Z" }] });
+    assert.equal(t3.sesiones, null);
+    assert.equal(rotuloDeTramo(t3), "desde el 11/09/2026 (20/30 días)");
+    // El mes entero no se toca aunque haya citas.
+    assert.equal(tramoDelMes("2026-09", { startDate: "2020-01-01" }, { citas }).factor, 1);
+  });
+
   it("el mes de la BAJA también, por el otro lado", () => {
     const t = tramoDelMes("2026-09", { startDate: "2020-01-01", endDate: "2026-09-10" });
     assert.equal(t.diasCobrados, 10);
