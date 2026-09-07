@@ -134,6 +134,25 @@ describe("el tramo del mes (qué parte se cobra)", () => {
     assert.equal(tramoDelMes("2026-09", { startDate: "2020-01-01" }, { citas }).factor, 1);
   });
 
+  it("un descuento por algo ya abonado NO se prorratea (07/09/2026, vuelta de AV-0062)", () => {
+    // La cuenta de Rosa: 190/4 = 47,50 x 3 sesiones = 142,50, menos los 30 de
+    // la reserva ya pagada = 112,50. La reserva se abonó entera: se resta entera.
+    const conceptos = [
+      { id: "c1", name: "Cuota Pedagogía 60x1", unitPrice: 190 },
+      { id: "c2", name: "Descuento reserva ya abonada", unitPrice: -30 },
+    ];
+    const citas = ["2026-09-11", "2026-09-18", "2026-09-25"].map((f) => ({ scheduledAt: `${f}T16:00:00.000Z` }));
+    const cuota = { id: "q1", clientId: "cli", patientId: "p", conceptIds: ["c1", "c2"], startDate: "2026-09-11", active: true };
+    const { aGenerar } = planDeCuotasDelMes({ mes: "2026-09", cuotas: [cuota], conceptos, citasPorClave: { "p:p": citas } });
+    assert.equal(aGenerar[0].importe, 112.5);
+    // Sin el descuento, solo el prorrateo por sesiones.
+    const solo = planDeCuotasDelMes({ mes: "2026-09", cuotas: [{ ...cuota, conceptIds: ["c1"] }], conceptos, citasPorClave: { "p:p": citas } });
+    assert.equal(solo.aGenerar[0].importe, 142.5);
+    // Y en un mes ENTERO el descuento también va entero: 190 - 30.
+    const entero = planDeCuotasDelMes({ mes: "2026-10", cuotas: [cuota], conceptos });
+    assert.equal(entero.aGenerar[0].importe, 160);
+  });
+
   it("el mes de la BAJA también, por el otro lado", () => {
     const t = tramoDelMes("2026-09", { startDate: "2020-01-01", endDate: "2026-09-10" });
     assert.equal(t.diasCobrados, 10);
