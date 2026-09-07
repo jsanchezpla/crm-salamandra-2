@@ -387,16 +387,53 @@ fallar. Sin él, un fallo de 200 ms deja a alguien pagando 130 €/mes sin fin.
 
 ### ⚠️ Al desplegar: los eventos nuevos hay que darlos de alta en Stripe
 
-El webhook escucha ahora `invoice.paid` e `invoice.payment_failed`. Si el
-endpoint del tenant está configurado con una lista explícita de eventos (y no
-con «todos»), **esos dos no llegarán** y las cuotas 2ª en adelante se cobrarán
-sin que el CRM se entere: el dinero entra, pero no se apunta y el cerrojo de
-seguridad nunca corre. Hay que añadirlos en el panel de Stripe del cliente.
+El webhook escucha ahora `invoice.paid`, `invoice.payment_failed` y, desde el
+07/09/2026, `customer.subscription.deleted`. Si el endpoint del tenant está
+configurado con una lista explícita de eventos (y no con «todos»), **esos no
+llegarán** y las cuotas 2ª en adelante se cobrarán sin que el CRM se entere: el
+dinero entra, pero no se apunta y el cerrojo de seguridad nunca corre. Hay que
+añadirlos en el panel de Stripe del cliente (`scripts/comprobar-stripe.js <slug>`
+dice cuáles faltan).
 
-Una cuota rechazada **no toca el bono**: Stripe reintenta él solo y quitarle las
-sesiones a alguien por una tarjeta caducada sería tratar un problema de banco
-como un impago. Queda el rastro en `PaymentSession.metadata` y un aviso en el
-log.
+### Cuando el banco rechaza una cuota (07/09/2026)
+
+El caso real: el 07/09/2026 el banco de una paciente de tunutrilaura rechazó la
+2.ª cuota de su plan de 3 × 130 € con `card_velocity_exceeded` (código de red
+61: la tarjeta había superado el límite de gasto que le pone su banco). Stripe
+hizo UN intento y programó el siguiente para dos días después (Smart Retries).
+El CRM no había tocado nada —ni un cargo de más, ni un reintento— pero tampoco
+supo contarlo: apuntaba «rechazada por el banco» leyendo
+`last_finalization_error` (el error de EMITIR la factura, no el de cobrarla), no
+avisaba a nadie y, si la cuota entraba al reintento, el rastro se quedaba puesto.
+
+Lo que hace ahora (`lib/payments/cuotaRechazada.js`):
+
+- **No reintenta el cobro** (Stripe lo hace mejor y sin cargar dos veces) y
+  **no toca el bono**: quitarle las sesiones a alguien por una tarjeta con el
+  límite superado sería tratar un problema de banco como un impago.
+- Apunta en `PaymentSession.metadata` el rastro completo (`cuotaFallidaAt`,
+  factura, intento, importe, `proximoIntentoAt` —lo que Stripe promete—,
+  `enlacePagoCuota` —la página de Stripe donde la paciente puede pagar esa cuota
+  con otra tarjeta—) y, fuera de la transacción, el **motivo real** leído del
+  PaymentIntent del intento (`invoice_payments` → `last_payment_error`), en
+  castellano para quien lleva el centro (`EXPLICACION_RECHAZO`).
+- **Avisa en la campana** a los admins (`cuota_rechazada`): quién, qué cuota,
+  por qué, cuándo lo reintenta Stripe y que el bono sigue activo.
+- Lo enseña en la **ficha** (sección Bonos: «a plazos: 1 de 3 cuotas cobradas»
+  y el aviso en ámbar) y en **«Mis pagos»** del portal, con el enlace para pagar
+  con otra tarjeta.
+- Cuando la cuota por fin entra (`invoice.paid`), **borra el rastro entero**
+  (`sinRastroDeRechazo`). Una factura de 0 € (prorrateo o abono) no cuenta como
+  cuota.
+- Si Stripe se rinde y cancela la suscripción con cuotas sin cobrar
+  (`customer.subscription.deleted`), marca `planInterrumpidoAt`, contrasta el
+  recuento con Stripe y avisa (`plan_interrumpido`): el bono sigue entero y la
+  decisión —quitarlo o cobrar por otra vía— es de la profesional. Si el plan
+  estaba completo, solo apunta `planCompletadoAt`.
+
+Lo que sigue siendo de Stripe: los reintentos y el correo a la paciente con el
+enlace de pago (Configuración → Facturación → Suscripciones y correos, en su
+panel). Fijado en `scripts/_smoke-cuota-rechazada.mjs`.
 
 ---
 

@@ -13,6 +13,16 @@ import {
 import { leerCaducidadAutorizacion } from "../../../../../lib/payments/autorizacion.js";
 import { sesionDeFactura, suscripcionDeFactura } from "../../../../../lib/payments/fraccionado.js";
 import { conCobroRegistrado, marcarCobroDevuelto } from "../../../../../lib/billing/cobroDesdeStripe.js";
+import {
+  avisarAlCentro,
+  avisoDeCuotaRechazada,
+  avisoDePlanInterrumpido,
+  estadoCuotasDe,
+  motivoDeRechazoDeFactura,
+  quienYQue,
+  rastroDeRechazo,
+  sinRastroDeRechazo,
+} from "../../../../../lib/payments/cuotaRechazada.js";
 
 /**
  * POST /api/webhooks/stripe/[tenantSlug]
@@ -509,6 +519,14 @@ async function procesar(ctx, { PaymentSession, event, t, caducaEn = null }) {
     case "invoice.paid": {
       if (obj?.billing_reason === "subscription_create") return "primera cuota, ya contada en el checkout";
 
+      // Una factura de 0 € no es una cuota: es el prorrateo o el abono que
+      // Stripe emite al cancelar a mitad de periodo (se vio en las dos
+      // suscripciones de prueba de agosto, con `subscription_cycle` y 0,00 €).
+      // Contarla dejaría el recuento por delante de la realidad (07/09/2026).
+      if (Number.isInteger(obj?.amount_paid) && obj.amount_paid <= 0) {
+        return "factura sin importe (prorrateo o abono) — no es una cuota";
+      }
+
       const psId = sesionDeFactura(obj);
       const suscripcion = suscripcionDeFactura(obj);
       if (!psId) return "factura sin PaymentSession — no es de un fraccionado nuestro";
@@ -518,18 +536,21 @@ async function procesar(ctx, { PaymentSession, event, t, caducaEn = null }) {
 
       const total = Number(ps.metadata?.instalmentMonths) || null;
       const pagadas = (Number(ps.metadata?.cuotasPagadas) || 1) + 1;
+      // Si esta cuota venía de un rechazo (Stripe la reintentó y entró), el
+      // rastro del rechazo se borra: la ficha y el portal dejan de avisar.
+      const recuperada = !!ps.metadata?.cuotaFallidaAt;
 
       // El bono NO se toca: ya se creó entero con la primera cuota y da derecho
       // a sus N sesiones desde el primer día. Esto es solo el rastro del cobro
       // — que es lo que hay que poder enseñar cuando alguien pregunte por qué
       // le han cargado 130 € otra vez.
       await ps.update(
-        { metadata: { ...(ps.metadata ?? {}), cuotasPagadas: pagadas, ultimaCuotaAt: new Date().toISOString() } },
+        { metadata: { ...sinRastroDeRechazo(ps.metadata), cuotasPagadas: pagadas, ultimaCuotaAt: new Date().toISOString() } },
         { transaction: t }
       );
 
       return {
-        outcome: `cuota ${pagadas}${total ? ` de ${total}` : ""} cobrada`,
+        outcome: `cuota ${pagadas}${total ? ` de ${total}` : ""} cobrada${recuperada ? " (tras un rechazo del banco)" : ""}`,
         // Cerrojo de seguridad, fuera de la transacción: si el calendario no se
         // llegó a poner, esto corta la suscripción al llegar al total.
         postCommit: async () => {
@@ -545,34 +566,154 @@ async function procesar(ctx, { PaymentSession, event, t, caducaEn = null }) {
       };
     }
 
-    // Una cuota que el banco rechazó. Stripe reintenta él solo (Smart Retries)
-    // y avisa a la paciente si el centro lo tiene configurado; aquí solo se
-    // deja el rastro para que se pueda ver desde el CRM.
+    // Una cuota que el banco rechazó (rehecho el 07/09/2026, tras el rechazo
+    // real de una paciente de tunutrilaura: `card_velocity_exceeded`). Stripe
+    // reintenta él solo (Smart Retries) y, si el centro lo tiene activado,
+    // escribe a la paciente con el enlace para pagar con otra tarjeta. Aquí NO
+    // se reintenta nada: se apunta el rastro (con la fecha del reintento y el
+    // enlace de pago), se averigua el motivo REAL fuera de la transacción y se
+    // avisa en la campana — que hasta hoy no pasaba: Laura se enteraba mirando
+    // Stripe, y el CRM guardaba «rechazada por el banco» a secas.
     //
-    // NO se toca el bono: quitarle las sesiones a alguien por una tarjeta
-    // caducada, antes de que Stripe haya terminado de reintentar, sería tratar
-    // un problema de banco como un impago.
+    // El motivo no está en la factura: `last_finalization_error` es el error de
+    // EMITIRLA. El del cobro vive en el PaymentIntent del intento, colgando de
+    // `invoice_payments` (`lib/payments/cuotaRechazada.js`).
+    //
+    // NO se toca el bono: quitarle las sesiones a alguien por una tarjeta con
+    // el límite superado, antes de que Stripe haya terminado de reintentar,
+    // sería tratar un problema de banco como un impago.
     case "invoice.payment_failed": {
       const psId = sesionDeFactura(obj);
       if (!psId) return "factura sin PaymentSession";
       const ps = await PaymentSession.findByPk(psId, { transaction: t });
       if (!ps) return "sin PaymentSession";
 
+      const rastro = rastroDeRechazo(obj);
+      const metadata = { ...(ps.metadata ?? {}), ...rastro };
+      await ps.update({ metadata }, { transaction: t });
+
+      const estado = estadoCuotasDe(metadata);
+      const reintento = rastro.proximoIntentoAt
+        ? `Stripe reintentará el ${rastro.proximoIntentoAt}`
+        : "Stripe NO va a reintentarlo";
+      process.stderr.write(
+        `[stripe:webhook] CUOTA RECHAZADA ${ctx.slug} ps=${ps.id} (factura ${obj?.id}, intento ${rastro.cuotaFallidaIntentos}). ${reintento}. Se avisa en la campana.\n`
+      );
+
+      return {
+        outcome: `cuota ${estado?.rechazada?.cuota ?? "?"}${estado ? ` de ${estado.total}` : ""} rechazada — ${rastro.proximoIntentoAt ? "Stripe reintentará" : "sin más reintentos"}`,
+        // Fuera de la transacción: son llamadas a Stripe y a la campana, y un
+        // fallo en ellas no debe hacer que Stripe reintente un evento que ya
+        // está apuntado. Si el motivo no se puede leer, queda el provisional.
+        postCommit: async () => {
+          let final = metadata;
+          try {
+            const stripe = await getStripe(ctx);
+            const motivo = await motivoDeRechazoDeFactura(stripe, obj?.id);
+            if (motivo) {
+              final = {
+                ...metadata,
+                cuotaFallidaMotivo: motivo.explicacion.slice(0, 300),
+                cuotaFallidaCodigo: motivo.codigo,
+              };
+              await ps.update({ metadata: final });
+            }
+          } catch (err) {
+            process.stderr.write(
+              `[stripe:webhook] ${ctx.slug}: no se pudo leer el motivo del rechazo (factura ${obj?.id}): ${err.message}\n`
+            );
+          }
+          try {
+            const { nombre, programa } = await quienYQue(ctx, ps);
+            const aviso = avisoDeCuotaRechazada({ nombre, programa, estado: estadoCuotasDe(final) });
+            await avisarAlCentro(ctx, ps, { type: "cuota_rechazada", ...aviso });
+          } catch (err) {
+            process.stderr.write(
+              `[stripe:webhook] ${ctx.slug}: no se pudo avisar del rechazo (ps=${ps.id}): ${err.message}\n`
+            );
+          }
+        },
+      };
+    }
+
+    // Stripe ha dado la suscripción por terminada (07/09/2026). Lo normal es
+    // que sea el calendario cancelándola al cobrar la última cuota, y entonces
+    // solo se deja constancia. Lo que importa es el otro caso: Stripe se rindió
+    // tras los reintentos de una cuota rechazada (o alguien la canceló desde
+    // el panel) con cuotas SIN cobrar — la paciente tiene el bono entero y ya
+    // nadie va a intentar cobrarle el resto. Eso es una decisión de la
+    // profesional, así que se le avisa; el CRM no le quita el bono solo.
+    //
+    // Se decide con nuestro recuento (dentro de la transacción, sin red) y se
+    // contrasta con Stripe fuera: si allí constan todas pagadas, el recuento
+    // nuestro iba atrasado, se corrige y el aviso no se manda.
+    case "customer.subscription.deleted": {
+      const psId = obj?.metadata?.paymentSessionId ?? null;
+      if (!psId) return "suscripción sin PaymentSession — no es un fraccionado nuestro";
+      const ps = await PaymentSession.findByPk(psId, { transaction: t });
+      if (!ps) return "sin PaymentSession";
+
+      const estado = estadoCuotasDe(ps.metadata);
+      if (!estado) return "suscripción sin plan de cuotas";
+      if (ps.metadata?.planInterrumpidoAt || ps.metadata?.planCompletadoAt) return "ya constaba terminada";
+
+      const ahora = new Date().toISOString();
+      if (estado.completo) {
+        await ps.update(
+          { metadata: { ...sinRastroDeRechazo(ps.metadata), planCompletadoAt: ahora } },
+          { transaction: t }
+        );
+        return `plan completo (${estado.pagadas}/${estado.total}) — suscripción terminada`;
+      }
+
       await ps.update(
         {
           metadata: {
             ...(ps.metadata ?? {}),
-            cuotaFallidaAt: new Date().toISOString(),
-            cuotaFallidaMotivo: String(obj?.last_finalization_error?.message ?? "rechazada por el banco").slice(0, 300),
+            planInterrumpidoAt: ahora,
+            planInterrumpidoMotivo: obj?.cancellation_details?.reason ?? null,
           },
         },
         { transaction: t }
       );
 
-      process.stderr.write(
-        `[stripe:webhook] CUOTA RECHAZADA ${ctx.slug} ps=${ps.id} (factura ${obj?.id}). Stripe reintentará; si no entra, hay que hablar con la paciente.\n`
-      );
-      return "cuota rechazada — Stripe reintentará";
+      return {
+        outcome: `plan INTERRUMPIDO con ${estado.pagadas} de ${estado.total} cuotas — se avisa al centro`,
+        postCommit: async () => {
+          try {
+            const { cuotasPagadasDe } = await import("../../../../../lib/payments/fraccionado.js");
+            const pagadas = await cuotasPagadasDe(ctx, obj.id);
+            if (pagadas >= estado.total) {
+              // Nuestro contador iba atrasado: el plan sí estaba completo.
+              const { planInterrumpidoAt, planInterrumpidoMotivo, ...resto } = ps.metadata ?? {};
+              await ps.update({
+                metadata: { ...sinRastroDeRechazo(resto), cuotasPagadas: pagadas, planCompletadoAt: new Date().toISOString() },
+              });
+              return;
+            }
+            if (pagadas !== estado.pagadas) {
+              await ps.update({ metadata: { ...(ps.metadata ?? {}), cuotasPagadas: pagadas } });
+            }
+          } catch (err) {
+            process.stderr.write(
+              `[stripe:webhook] ${ctx.slug}: no se pudo contrastar con Stripe el plan de ${obj?.id}: ${err.message}\n`
+            );
+          }
+          const final = estadoCuotasDe(ps.metadata);
+          process.stderr.write(
+            `[stripe:webhook] PLAN INTERRUMPIDO ${ctx.slug} ps=${ps.id} sub=${obj?.id}: ${final?.pagadas} de ${final?.total} cuotas cobradas; el bono sigue entero. Se avisa en la campana.\n`
+          );
+          try {
+            const { nombre, programa } = await quienYQue(ctx, ps);
+            const aviso = avisoDePlanInterrumpido({ nombre, programa, estado: final });
+            await avisarAlCentro(ctx, ps, { type: "plan_interrumpido", ...aviso });
+          } catch (err) {
+            process.stderr.write(
+              `[stripe:webhook] ${ctx.slug}: no se pudo avisar del plan interrumpido (ps=${ps.id}): ${err.message}\n`
+            );
+          }
+        },
+      };
     }
 
     default:

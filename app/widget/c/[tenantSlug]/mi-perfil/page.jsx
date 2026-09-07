@@ -843,7 +843,13 @@ export default function MiPerfilPage() {
                   >
                     <div className="font-medium text-[var(--widget-text)]">{p.nombre}</div>
                     <div className="mt-1 text-[14px] text-[var(--widget-text)]">
-                      Próximo pago: <b>{fmtFecha(p.fecha)}</b>
+                      {p.fecha ? (
+                        <>
+                          Próximo pago: <b>{fmtFecha(p.fecha)}</b>
+                        </>
+                      ) : (
+                        <>Cuota pendiente de cobro</>
+                      )}
                       {Number.isInteger(p.importe) && p.importe > 0 && (
                         <>
                           {" "}·{" "}
@@ -852,8 +858,34 @@ export default function MiPerfilPage() {
                       )}
                     </div>
                     <div className="text-[12px] text-[var(--widget-text-faint)] mt-0.5">
-                      Cuota {p.cuota} de {p.totalCuotas} · se cobra sola en tu tarjeta, no tienes que hacer nada
+                      Cuota {p.cuota} de {p.totalCuotas}
+                      {!p.rechazada && " · se cobra sola en tu tarjeta, no tienes que hacer nada"}
                     </div>
+                    {/* La cuota que el banco rechazó (07/09/2026): el motivo en
+                        palabras llanas, cuándo se reintenta y el enlace de Stripe
+                        para pagarla ya con otra tarjeta. */}
+                    {p.rechazada && (
+                      <div className="mt-2 text-[12px] leading-snug text-amber-900 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                        <b>La cuota {p.rechazada.cuota} no se pudo cobrar</b> ({fmtFecha(p.rechazada.fecha)}):{" "}
+                        {p.rechazada.motivo}.{" "}
+                        {p.rechazada.proximoIntento
+                          ? `Se volverá a intentar el ${fmtFecha(p.rechazada.proximoIntento)}.`
+                          : "No se volverá a intentar automáticamente."}
+                        {p.rechazada.enlacePago && (
+                          <>
+                            {" "}
+                            <a
+                              href={p.rechazada.enlacePago}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="underline font-semibold"
+                            >
+                              Pagar esta cuota ahora con otra tarjeta
+                            </a>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

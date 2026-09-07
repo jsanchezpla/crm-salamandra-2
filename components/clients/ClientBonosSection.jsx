@@ -39,6 +39,19 @@ import { eurosToCents } from "../../lib/payments/money.js";
 
 import { puedeDarBonos } from "../../lib/citas/quienDaBonos.js";
 
+/** «9 sept, 17:03», hora de Madrid: el rechazo de una cuota y su reintento. */
+function fechaCorta(valor) {
+  const d = new Date(valor);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString("es-ES", {
+    timeZone: "Europe/Madrid",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export default function ClientBonosSection({ clientId, onCambio }) {
   const [disponible, setDisponible] = useState(false); // ¿este centro tiene Citas?
   const [esAdmin, setEsAdmin] = useState(false);
@@ -172,7 +185,8 @@ export default function ClientBonosSection({ clientId, onCambio }) {
             <div className="text-[11px] text-gray-500 mt-0.5 flex items-baseline justify-between gap-3">
               <span>
                 {b.resumen}
-                {b.modoPago === "instalment" && " · pago fraccionado"}
+                {b.modoPago === "instalment" &&
+                  (b.cuotas ? ` · a plazos: ${b.cuotas.resumen}` : " · pago fraccionado")}
               </span>
               {esAdmin && (
                 <button
@@ -197,6 +211,25 @@ export default function ClientBonosSection({ clientId, onCambio }) {
                 style={{ width: `${b.total ? (b.reservadas / b.total) * 100 : 0}%` }}
               />
             </div>
+            {/* Una cuota que el banco rechazó (07/09/2026): se dice aquí, que es
+                donde Laura mira antes de llamar a nadie, con el motivo en
+                castellano y lo que va a hacer Stripe. El bono no cambia. */}
+            {b.cuotas?.rechazada && !b.cuotas?.interrumpido && (
+              <p className="mt-2 text-[11px] leading-snug text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+                La cuota {b.cuotas.rechazada.cuota} de {b.cuotas.total} no se pudo cobrar el{" "}
+                {fechaCorta(b.cuotas.rechazada.fecha)}: {b.cuotas.rechazada.motivo}.{" "}
+                {b.cuotas.rechazada.proximoIntento
+                  ? `Stripe la reintenta el ${fechaCorta(b.cuotas.rechazada.proximoIntento)}.`
+                  : "Stripe no la va a reintentar: hay que hablar con la paciente."}
+              </p>
+            )}
+            {b.cuotas?.interrumpido && (
+              <p className="mt-2 text-[11px] leading-snug text-red-800 bg-red-50 border border-red-200 rounded px-2 py-1.5">
+                Plan a plazos cancelado sin completar el {fechaCorta(b.cuotas.interrumpido.fecha)}:{" "}
+                {b.cuotas.pagadas} de {b.cuotas.total} cuotas cobradas. El bono sigue entero: decide si se lo
+                quitas o si le cobras el resto por otra vía.
+              </p>
+            )}
           </div>
         ))}
       </div>
