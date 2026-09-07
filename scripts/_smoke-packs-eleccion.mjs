@@ -23,6 +23,7 @@ import assert from "node:assert/strict";
 
 import { elegirPack, packEsDe, asignarSesion, cobroDeBono } from "../lib/citas/packs.js";
 import { normalizarCobro, resumenCobro, seCobra, MODOS_COBRO, loQueSeCobraDe } from "../lib/citas/dineroDeLaCita.js";
+import { puedeDarBonos } from "../lib/citas/quienDaBonos.js";
 
 const AHORA = new Date("2026-09-07T10:00:00Z");
 const futura = (n) => ({ status: "confirmed", scheduledAt: new Date(AHORA.getTime() + n * 86_400_000).toISOString(), sessionNumber: n });
@@ -120,5 +121,15 @@ describe("el cobro de una sesión de bono", () => {
     assert.equal(seCobra(cita), false);
     assert.equal(resumenCobro(cita), "Bono «PSICOLOGIA 45» · sesión 3 de 5");
     assert.equal(loQueSeCobraDe([cita, { cobroModo: "libre", cobroTexto: "Informe", cobroImporte: 4000 }]).total, 4000);
+  });
+});
+
+describe("quién da bonos", () => {
+  it("dirección siempre; quien lleve Facturación también; el resto, no", () => {
+    assert.equal(puedeDarBonos({ role: "admin", hasModule: () => false }), true);
+    assert.equal(puedeDarBonos({ role: "superadmin" }), true);
+    assert.equal(puedeDarBonos({ role: "user", hasModule: (k) => k === "billing" }), true);
+    assert.equal(puedeDarBonos({ role: "user", hasModule: (k) => k === "citas" }), false);
+    assert.equal(puedeDarBonos({ role: "user" }), false);
   });
 });

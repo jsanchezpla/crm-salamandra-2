@@ -520,6 +520,8 @@ cita nacía suelta sin que nadie lo viera. Cuatro cambios, todos del base:
   5 · le quedan 3». Las sesiones se siguen CONTANDO desde las citas: nada
   cambia en qué gasta y qué no (`_smoke-packs-sesiones.mjs`).
 
+**Quién los da** (misma tarde): dirección, y quien tenga acceso a Facturación (`lib/citas/quienDaBonos.js`, `puedeDarBonos`): en Aumenta los bonos los lleva administración con rol `user`. El resto ve los bonos de la ficha sin botones.
+
 Pruebas: `_smoke-packs-eleccion.mjs`. Lo que NO hace: cobrar el bono. El dinero
 del bono se apunta en Cobros como hasta ahora (Aumenta tiene dos conceptos
 «Bono 5 sesiones…» en su catálogo); «Dar un bono» solo deja escrito el importe.

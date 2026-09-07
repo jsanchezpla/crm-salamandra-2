@@ -1,6 +1,7 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { logCitasAudit } from "../../../../../lib/citas/audit.js";
+import { puedeDarBonos, MOTIVO_SIN_PERMISO } from "../../../../../lib/citas/quienDaBonos.js";
 
 /**
  * PATCH /api/citas/packs/[id] — anular o reactivar un bono (05/08/2026).
@@ -14,7 +15,6 @@ import { logCitasAudit } from "../../../../../lib/citas/audit.js";
  * equivocada, una transferencia que nunca llegó.
  */
 
-const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const ESTADOS = new Set(["active", "anulado"]);
 
 export const PATCH = withTenant(async (request, ctx, { tenant, tenantModels, hasModule }) => {
@@ -24,7 +24,7 @@ export const PATCH = withTenant(async (request, ctx, { tenant, tenantModels, has
     const userRole = request.headers.get("x-user-role") ?? "user";
     const userId = request.headers.get("x-user-id");
     const ip = request.headers.get("x-forwarded-for") ?? null;
-    if (!ADMIN_ROLES.has(userRole)) return forbidden("Solo admin puede tocar los bonos");
+    if (!puedeDarBonos({ role: userRole, hasModule })) return forbidden(MOTIVO_SIN_PERMISO);
 
     const { SessionPack, EventType } = tenantModels;
     if (!SessionPack) return notFound("Bono no encontrado");

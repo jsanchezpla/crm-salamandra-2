@@ -37,7 +37,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useDialogo } from "../ui/Dialogo.jsx";
 import { eurosToCents } from "../../lib/payments/money.js";
 
-const ADMIN_ROLES = ["admin", "superadmin"];
+import { puedeDarBonos } from "../../lib/citas/quienDaBonos.js";
 
 export default function ClientBonosSection({ clientId, onCambio }) {
   const [disponible, setDisponible] = useState(false); // ¿este centro tiene Citas?
@@ -63,7 +63,9 @@ export default function ClientBonosSection({ clientId, onCambio }) {
         setDisponible(hayCitas);
         setCliente(ficha?.data ?? null);
         setBonos(Array.isArray(ficha?.data?.bonos) ? ficha.data.bonos : []);
-        setEsAdmin(ADMIN_ROLES.includes(yo?.data?.role));
+        // Dirección o quien lleve Facturación (07/09/2026): la misma regla que el endpoint.
+        const mods = Array.isArray(yo?.data?.enabledModules) ? yo.data.enabledModules : [];
+        setEsAdmin(puedeDarBonos({ role: yo?.data?.role, hasModule: (k) => mods.includes(k) }));
       })
       .catch(() => {})
       .finally(() => { if (vivo) setCargando(false); });

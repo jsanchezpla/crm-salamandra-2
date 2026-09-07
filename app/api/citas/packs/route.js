@@ -3,6 +3,7 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { created, ok, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { logCitasAudit } from "../../../../lib/citas/audit.js";
 import { esPack, bonosDeCliente } from "../../../../lib/citas/packs.js";
+import { puedeDarBonos, MOTIVO_SIN_PERMISO } from "../../../../lib/citas/quienDaBonos.js";
 
 /**
  * POST /api/citas/packs — dar un bono a mano (05/08/2026).
@@ -24,7 +25,6 @@ import { esPack, bonosDeCliente } from "../../../../lib/citas/packs.js";
  *   · se audita.
  */
 
-const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
 const normalizeEmail = (v) => (typeof v === "string" ? v.trim().toLowerCase() : "");
 const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
@@ -135,7 +135,8 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     const userRole = request.headers.get("x-user-role") ?? "user";
     const userId = request.headers.get("x-user-id");
     const ip = request.headers.get("x-forwarded-for") ?? null;
-    if (!ADMIN_ROLES.has(userRole)) return forbidden("Solo admin puede dar bonos a mano");
+    // Dirección, o quien lleve Facturación (07/09/2026): ver lib/citas/quienDaBonos.js.
+    if (!puedeDarBonos({ role: userRole, hasModule })) return forbidden(MOTIVO_SIN_PERMISO);
 
     const { SessionPack, EventType, Client } = tenantModels;
     if (!SessionPack) return error("Este cliente no tiene bonos de sesiones", 422);
