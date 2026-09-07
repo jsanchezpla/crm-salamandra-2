@@ -158,8 +158,13 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       if (!clientEmail) clientEmail = normalizeEmail(ficha.portalEmail || ficha.email);
     }
 
-    if (!clientEmail || !isValidEmail(clientEmail)) {
-      return error("Hace falta el correo de la paciente para darle el bono", 422);
+    // Por ficha O por correo (07/09/2026, AV-0055 de Aumenta): una familia sin
+    // correo también puede tener bono; se ata a su ficha y las citas se le
+    // enganchan al crearlas desde el CRM (`elegirPack`). Sin correo no hay área
+    // privada que lo vea, y se avisa.
+    if (clientEmail && !isValidEmail(clientEmail)) return error("Ese correo no tiene un formato válido", 422);
+    if (!clientEmail && !clientId) {
+      return error("Hace falta la ficha o el correo de la paciente para darle el bono", 422);
     }
 
     // ── De qué ──────────────────────────────────────────────────────────────
@@ -199,14 +204,19 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
         `«${eventType.name}» está a la vista de todo el mundo en la agenda pública. Si este bono es de un acuerdo privado, márcalo como oculto en Citas → Tipos de cita.`
       );
     }
-    if (!(await constaElCorreo(tenantModels, clientEmail))) {
+    if (clientEmail && !(await constaElCorreo(tenantModels, clientEmail))) {
       avisos.push(
         `A ${clientEmail} no le consta ninguna cita ni solicitud previa. Comprueba que es el correo con el que entra en la web: el bono va atado a ese correo, y si no coincide ella no verá nada. Si es nueva, créale la cuenta desde su ficha.`
       );
     }
+    if (!clientEmail) {
+      avisos.push(
+        "La ficha no tiene correo: el bono queda atado a la ficha. Las citas se le enganchan desde el CRM (eligiendo el bono al crearlas), pero no podrá pedirlas ella desde el área privada."
+      );
+    }
 
     const pack = await SessionPack.create({
-      clientEmail,
+      clientEmail: clientEmail || null,
       clientId,
       eventTypeId: eventType.id,
       totalSessions,

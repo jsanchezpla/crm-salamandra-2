@@ -78,9 +78,11 @@ export function NuevaCitaDrawer({
    * de entrada, y sin marcarla la cita nace callada (`omitirCorreo`).
    */
   const [avisarCorreo, setAvisarCorreo] = useState(false);
-  // El bono de quien se acaba de elegir en el alta manual: `{ tono, texto,
-  // eventTypeId }`. Ver `buscarBono`.
-  const [bonoAviso, setBonoAviso] = useState(null);
+  // Los bonos VIVOS de la familia elegida y cuál se ha elegido para esta cita
+  // (07/09/2026, AV-0055 de Aumenta). Ver `buscarBono` y `elegirBono`.
+  const [bonos, setBonos] = useState([]);
+  const [packId, setPackId] = useState("");
+  const bonoElegido = bonos.find((b) => b.id === packId) ?? null;
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
 
@@ -246,23 +248,29 @@ export function NuevaCitaDrawer({
   }
 
   /*
-   * ── EL BONO PONE EL TIPO DE CITA (13/08/2026, Rodrigo) ────────────────────
+   * ── EL BONO SE ELIGE, Y PONE EL TIPO DE CITA (13/08/2026 → 07/09/2026) ────
    *
-   * «Si tiene un bono asignado, cuando se pone el paciente en la cita manual
-   * directamente el tipo de cita se pone con el bono, así no hay que ir a
-   * buscarlo a la ficha.» Quien tiene un bono viene SIEMPRE a lo mismo, y con
-   * 57 tipos de cita en la lista elegir el que no es se paga caro: la cita no
-   * descuenta del bono y hay que rehacerla.
+   * Rodrigo (13/08): «si tiene un bono asignado, cuando se pone el paciente en
+   * la cita manual directamente el tipo de cita se pone con el bono». Hasta hoy
+   * esto solo AVISABA: el servidor adivinaba el bono por correo + tipo, y en
+   * un centro con familias sin correo la cita nacía suelta sin que nadie lo
+   * viera (AV-0055 de Aumenta: «no existe ninguna opción para enlazar esas
+   * citas con los bonos»).
    *
-   * Solo se pone solo si el campo está vacío. Si ya hay un tipo elegido y el del
-   * bono es otro, no se pisa lo que ha escrito una persona: se ofrece.
+   * Ahora el bono se ELIGE aquí y viaja como `packId`: el servidor comprueba
+   * que es de esa familia, de ese tipo y que le quedan sesiones. Con un solo
+   * bono vivo se preselecciona (y pone su tipo de cita); con varios, elige la
+   * persona; «Sin bono» crea la cita suelta aunque la familia tenga uno.
    */
-  function ponerTipoDelBono(eventTypeId) {
-    updateCreateForm("eventTypeId", eventTypeId);
+  function elegirBono(id, lista = bonos) {
+    setPackId(id);
+    const b = lista.find((x) => x.id === id);
+    if (b?.eventTypeId) updateCreateForm("eventTypeId", b.eventTypeId);
   }
 
   async function buscarBono(cliente) {
-    setBonoAviso(null);
+    setBonos([]);
+    setPackId("");
     if (!cliente?.id && !cliente?.email) return;
     try {
       const params = new URLSearchParams();
@@ -270,75 +278,23 @@ export function NuevaCitaDrawer({
       if (cliente.email) params.set("email", cliente.email);
       const r = await fetch(`/api/citas/packs?${params.toString()}`, { cache: "no-store" });
       const j = await r.json();
-      const bonos = j?.ok ? (j.data?.bonos ?? []) : [];
-      if (!bonos.length) return;
-
-      // Con varios bonos vivos no se adivina: se enseñan y elige la persona.
-      if (bonos.length > 1) {
-        setBonoAviso({
-          tono: "aviso",
-          eventTypeId: null,
-          texto: `Tiene ${bonos.length} bonos activos (${bonos
-            .map((b) => `«${b.nombre}», le quedan ${b.restantes}`)
-            .join(" · ")}). Elige tú el tipo de cita.`,
-        });
-        return;
+      const lista = j?.ok ? (j.data?.bonos ?? []) : [];
+      setBonos(lista);
+      // Un solo bono vivo: se da por elegido, salvo que ya haya otro tipo de
+      // cita puesto a mano (no se pisa lo que escribió una persona).
+      const unico = lista.length === 1 ? lista[0] : null;
+      if (unico && (!createForm.eventTypeId || createForm.eventTypeId === unico.eventTypeId)) {
+        elegirBono(unico.id, lista);
       }
-
-      const bono = bonos[0];
-      const yaHayOtroTipo = Boolean(createForm.eventTypeId) && createForm.eventTypeId !== bono.eventTypeId;
-      if (!yaHayOtroTipo) ponerTipoDelBono(bono.eventTypeId);
-
-      /*
-       * ⚠️ El bono va atado al CORREO (ver `lib/citas/packs.js`): la cita se
-       * engancha buscando el bono por el correo con el que se crea. Si el de la
-       * ficha es otro —hay bonos dados al correo del portal—, la cita se crearía
-       * con el tipo correcto y AUN ASÍ no descontaría. Es el fallo mudo de los
-       * bonos, y aquí se puede decir a tiempo.
-       */
-      const correoCita = (cliente.email || createForm.clientEmail || "").trim().toLowerCase();
-      const correoBono = (bono.correo || "").trim().toLowerCase();
-      const cuenta = `le quedan ${bono.restantes} de ${bono.total}`;
-
-      // Ficha sin correo y bono con él: se pone el del bono. Sin correo la cita
-      // ni se puede crear, y ese es justo el que hace que descuente.
-      const correoPuesto = Boolean(correoBono) && !correoCita;
-      if (correoPuesto) setCreateForm((prev) => ({ ...prev, clientEmail: correoBono }));
-
-      if (correoBono && correoCita && correoBono !== correoCita) {
-        setBonoAviso({
-          tono: "aviso",
-          eventTypeId: bono.eventTypeId,
-          ofrecer: yaHayOtroTipo,
-          texto: `Su bono «${bono.nombre}» (${cuenta}) está a nombre de ${correoBono} y la cita va a ${correoCita}: así NO descontará del bono. Cambia el correo de la cita si quieres que cuente.`,
-        });
-        return;
-      }
-
-      let texto;
-      if (!yaHayOtroTipo && correoPuesto) texto = `Tipo y correo puestos por su bono «${bono.nombre}»: ${cuenta}.`;
-      else if (!yaHayOtroTipo) texto = `Tipo puesto por su bono «${bono.nombre}»: ${cuenta}.`;
-      else if (correoPuesto) texto = `Correo puesto por su bono «${bono.nombre}»: ${cuenta}. El tipo elegido no es el del bono.`;
-      else texto = `Tiene bono de «${bono.nombre}» y ${cuenta}, pero el tipo elegido es otro.`;
-
-      setBonoAviso({
-        tono: yaHayOtroTipo ? "aviso" : "bono",
-        eventTypeId: bono.eventTypeId,
-        ofrecer: yaHayOtroTipo,
-        texto,
-      });
     } catch {
       // Sin bonos que enseñar la cita se apunta igual: esto ayuda, no manda.
     }
   }
 
-  /** Se rompe el enlace con la ficha → el bono deja de aplicar. */
+  /** Se rompe el enlace con la ficha → sus bonos dejan de aplicar. */
   function olvidarBono() {
-    if (bonoAviso?.eventTypeId && createForm.eventTypeId === bonoAviso.eventTypeId) {
-      // La modalidad se queda como estaba: ya no depende del tipo de cita.
-      setCreateForm((prev) => ({ ...prev, eventTypeId: "" }));
-    }
-    setBonoAviso(null);
+    setBonos([]);
+    setPackId("");
   }
 
   async function submitCreate() {
@@ -360,7 +316,7 @@ export function NuevaCitaDrawer({
      * mismo hoy dejan de decirlo el día que alguien toque una. Aquí solo sirve
      * para enseñar el error antes de mandar; el que manda es el 422 de la API.
      */
-    if (!esTaller) {
+    if (!esTaller && !packId) {
       const { error: errorCobro } = normalizarCobro(cobro ?? {}, {
         concepto: cobro?.modo === "cuota" ? { id: cobro.conceptId, name: cobro.texto, unitPrice: null } : null,
         exigido: exigeCobro,
@@ -439,7 +395,10 @@ export function NuevaCitaDrawer({
              * (`lib/citas/dinero.js`), así que mandar lo que ve la pantalla
              * apuntaría 0 € en toda cita creada por el equipo.
              */
-            ...(cobro
+            // El bono elegido, o `null` = cita suelta aunque tenga bono. La
+            // clave va SIEMPRE: así el servidor no adivina (07/09/2026).
+            packId: packId || null,
+            ...(cobro && !packId
               ? {
                   cobro:
                     cobro.modo === "cuota"
@@ -728,13 +687,41 @@ export function NuevaCitaDrawer({
               </>
               )}
 
+              {/* Sus bonos (07/09/2026, AV-0055 de Aumenta): solo sale si la
+                  familia tiene alguno vivo. Elegirlo pone el tipo de cita y
+                  quita el bloque de cobro: la sesión ya está pagada. */}
+              {!esTaller && bonos.length > 0 && (
+                <div>
+                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Bono de sesiones</label>
+                  <Select
+                    value={packId}
+                    onChange={(v) => (v ? elegirBono(v) : setPackId(""))}
+                    options={[
+                      { value: "", label: "— Sin bono (cita suelta) —", pinned: true },
+                      ...bonos.map((b) => ({
+                        value: b.id,
+                        label: `«${b.nombre}» · le quedan ${b.restantes} de ${b.total}`,
+                      })),
+                    ]}
+                    className={inputCls}
+                  />
+                  <p className={`text-[10px] mt-1 ${bonoElegido ? "text-emerald-700" : "text-neutral-400"}`}>
+                    {bonoElegido
+                      ? `Esta cita es la sesión ${bonoElegido.gastadas + bonoElegido.reservadas + 1} de su bono «${bonoElegido.nombre}»: ya está pagada y no se cobra.`
+                      : "Tiene bono, pero esta cita se creará suelta y con su cobro de siempre."}
+                  </p>
+                </div>
+              )}
+
               <div>
                 <label className="block text-[11px] font-medium text-neutral-500 mb-1">Tipo de cita *</label>
                 <Select
                   value={createForm.eventTypeId}
                   onChange={(v) => {
-                    // Cambiarlo a mano deja sin sentido el cartel del bono.
-                    if (bonoAviso?.eventTypeId && v !== bonoAviso.eventTypeId) setBonoAviso(null);
+                    // El bono es de SU tipo: cambiarlo a mano suelta el bono
+                    // (y se ve, porque el desplegable de arriba vuelve a
+                    // «Sin bono»).
+                    if (bonoElegido && v !== bonoElegido.eventTypeId) setPackId("");
                     updateCreateForm("eventTypeId", v);
                   }}
                   options={[
@@ -766,26 +753,6 @@ export function NuevaCitaDrawer({
                     Los talleres salen aquí marcados como «Taller». Al elegir uno no hace falta paciente:
                     van los apuntados a su grupo.
                   </p>
-                )}
-                {bonoAviso && (
-                  <div
-                    className={`mt-1.5 text-[11px] leading-snug rounded-md px-2.5 py-1.5 border ${
-                      bonoAviso.tono === "aviso"
-                        ? "text-amber-800 bg-amber-50 border-amber-100"
-                        : "text-emerald-800 bg-emerald-50 border-emerald-100"
-                    }`}
-                  >
-                    {bonoAviso.texto}
-                    {bonoAviso.ofrecer && (
-                      <button
-                        type="button"
-                        onClick={() => ponerTipoDelBono(bonoAviso.eventTypeId)}
-                        className="ml-1.5 underline underline-offset-2 font-medium"
-                      >
-                        Poner el del bono
-                      </button>
-                    )}
-                  </div>
                 )}
               </div>
 
@@ -971,7 +938,7 @@ export function NuevaCitaDrawer({
                 * DICIENDO POR QUÉ — que es lo que convierte una cita gratis en
                 * una decisión en vez de en un olvido.
                 */}
-              {!esTaller && (exigeCobro || cobro) && (
+              {!esTaller && !packId && (exigeCobro || cobro) && (
                 <div className="border border-neutral-200 rounded-xl p-3 bg-neutral-50/60 space-y-2">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <label className="text-[11px] font-medium text-neutral-500">

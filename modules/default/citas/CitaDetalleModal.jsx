@@ -1054,9 +1054,22 @@ export function CitaDetalleModal({
                   <div className="text-[11px] uppercase tracking-wider text-neutral-400 mb-1">Bono</div>
                   <div className="text-[13px] text-neutral-800">
                     Sesión {openBooking.sessionNumber}
-                    {Number(openBooking.eventType?.sessionsCount) > 1
-                      ? ` de ${openBooking.eventType.sessionsCount}`
-                      : ""}
+                    {openBooking.bono?.total
+                      ? ` de ${openBooking.bono.total}`
+                      : Number(openBooking.eventType?.sessionsCount) > 1
+                        ? ` de ${openBooking.eventType.sessionsCount}`
+                        : ""}
+                    {/* Cuántas le quedan (07/09/2026, AV-0055 de Aumenta): las
+                        futuras cuentan como reservadas, no como libres. */}
+                    {openBooking.bono && (
+                      <span className="text-neutral-500">
+                        {" · "}
+                        {openBooking.bono.restantes > 0
+                          ? `le quedan ${openBooking.bono.restantes}`
+                          : "no le quedan sesiones libres"}
+                        {openBooking.bono.reservadas > 0 && ` (${openBooking.bono.reservadas} reservada${openBooking.bono.reservadas === 1 ? "" : "s"})`}
+                      </span>
+                    )}
                   </div>
                 </div>
               )}

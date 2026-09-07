@@ -6,6 +6,7 @@ import { notifyUsers } from "../../../../../lib/notifications/notifyUsers.js";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, noContent, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { citaSegunRol } from "../../../../../lib/citas/dinero.js";
+import { estadoPack } from "../../../../../lib/citas/packs.js";
 import {
   normalizeString,
   normalizeEmail,
@@ -105,6 +106,23 @@ function bookingIncludes({ EventType, TeamMember, Patient }, tieneModuloElTenant
   return inc;
 }
 
+/** `{ nombre, total, gastadas, reservadas, restantes }` del bono, o null. */
+async function cuentaDelBono(tenantModels, packId) {
+  const { SessionPack, Booking, EventType } = tenantModels;
+  if (!SessionPack || !packId) return null;
+  try {
+    const pack = await SessionPack.findByPk(packId, {
+      include: EventType ? [{ model: EventType, as: "eventType", attributes: ["name"] }] : [],
+    });
+    if (!pack) return null;
+    const citas = await Booking.findAll({ where: { packId }, attributes: ["id", "status", "scheduledAt", "cancelledAt", "noShowJustified", "sessionNumber"] });
+    const estado = estadoPack(pack, citas);
+    return { id: pack.id, nombre: pack.eventType?.name ?? "Bono de sesiones", estado: pack.status, ...estado };
+  } catch {
+    return null;
+  }
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // GET /api/citas/bookings/[id]
 // ───────────────────────────────────────────────────────────────────────────
@@ -135,7 +153,12 @@ export const GET = withTenant(async (request, { params }, { tenant, tenantModels
     // Fuga doble si no se filtra: el importe de la cita Y la tarifa completa del
     // tipo, que viaja anidada en `eventType` (el include no restringe atributos).
     const rolQuienMira = request.headers.get("x-user-role");
-    return ok(citaSegunRol(row.toJSON(), rolQuienMira));
+    const cita = citaSegunRol(row.toJSON(), rolQuienMira);
+    // Por dónde va su bono (07/09/2026, AV-0055 de Aumenta): «sesión 3 de 5,
+    // le quedan 2». Consulta aparte y a prueba de tenants sin la migración de
+    // bonos: sin tabla, la cita sale igual y sin `bono`.
+    if (row.packId) cita.bono = await cuentaDelBono(tenantModels, row.packId);
+    return ok(cita);
   } catch (err) {
     return serverError(err);
   }

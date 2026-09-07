@@ -488,6 +488,42 @@ Desde el 13/08/2026 el bono también se lee desde el alta manual de citas
 libres): al elegir a la paciente, su bono pone el tipo de cita. Ver «Repaso del
 13/08/2026» en la sección de UI.
 
+### El bono se elige en la cita, y vale sin correo (07/09/2026, AV-0055 de Aumenta)
+
+Olga: «hemos intentado crear una cita de un paciente que tiene bono y no existe
+ninguna opción para enlazar esas citas con los bonos y que vaya restando».
+Aumenta no tenía ni un bono: «Dar un bono» exigía correo (330 de sus 1.083
+fichas no tienen) y, aun con bono, el alta manual solo AVISABA y el servidor
+adivinaba por correo + tipo (`asignarSesion`): con otro tipo o sin correo, la
+cita nacía suelta sin que nadie lo viera. Cuatro cambios, todos del base:
+
+- **Bono por ficha además de por correo.** `session_packs.client_email` admite
+  nulo (`scripts/migrate-session-packs-por-ficha.js`); `POST /api/citas/packs`
+  acepta `clientId` sin correo (avisa de que sin correo no hay área privada
+  que lo vea); `packActivoDe`/`asignarSesion`/`bonosDeCliente` buscan por las
+  dos cosas (`packEsDe`).
+- **Se elige en la cita nueva.** Al elegir a la familia, `NuevaCitaDrawer`
+  pide sus bonos vivos y pinta un desplegable «Bono de sesiones» («PSICOLOGÍA
+  45 · le quedan 3 de 5»); con uno solo se preselecciona y pone su tipo de
+  cita; «Sin bono» crea la cita suelta aunque tenga. El cuerpo lleva SIEMPRE
+  `packId` (el id, o `null`): con id el servidor comprueba con `elegirPack`
+  que es de esa familia, de ese tipo y con sesiones libres (422 si no); con
+  `null` no adivina; sin la clave (widget, clientes viejos) adivina como antes.
+- **La sesión de bono no se cobra**: cuarto modo `bono` de
+  `lib/citas/dineroDeLaCita.js` (`cobroDeBono`: 0 €, «Bono «X» · sesión 3 de
+  5»), que solo escribe el servidor —`normalizarCobro` lo rechaza desde el
+  navegador— y que `seCobra`/`loQueSeCobraDe` ignoran. Con «cobro
+  obligatorio» encendido, el bloque de cobro desaparece al elegir el bono.
+- **El detalle dice por dónde va**: `GET /api/citas/bookings/[id]` añade
+  `bono: { nombre, total, gastadas, reservadas, restantes }` (consulta aparte,
+  a prueba de tenants sin la tabla) y la ficha de la cita pinta «Sesión 2 de
+  5 · le quedan 3». Las sesiones se siguen CONTANDO desde las citas: nada
+  cambia en qué gasta y qué no (`_smoke-packs-sesiones.mjs`).
+
+Pruebas: `_smoke-packs-eleccion.mjs`. Lo que NO hace: cobrar el bono. El dinero
+del bono se apunta en Cobros como hasta ahora (Aumenta tiene dos conceptos
+«Bono 5 sesiones…» en su catálogo); «Dar un bono» solo deja escrito el importe.
+
 ⚠️ **El bono va atado al CORREO, y ese es el fallo mudo de esta pantalla.** Es
 como la identifica el portal. Si el correo de la ficha no es el que ella usa
 para entrar en la web, el bono queda creado, se ve en su ficha y **ella no ve

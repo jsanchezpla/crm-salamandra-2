@@ -104,8 +104,11 @@ describe("el freno al crear la cita", () => {
   });
 
   it("un modo inventado no cuela", () => {
-    assert.equal(MODOS_COBRO.length, 3);
+    // Tres que elige quien apunta la cita + `bono`, que solo escribe el
+    // servidor (07/09/2026, AV-0055): ver _smoke-packs-eleccion.mjs.
+    assert.equal(MODOS_COBRO.length, 4);
     assert.match(normalizarCobro({ modo: "gratis" }, {}).error, /desconocido/i);
+    assert.match(normalizarCobro({ modo: "bono" }, {}).error, /elige el bono/i);
   });
 
   it("cuota: hace falta el concepto, y de él salen nombre e importe", () => {

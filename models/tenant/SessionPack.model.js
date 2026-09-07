@@ -32,9 +32,15 @@ export function defineSessionPack(sequelize) {
         defaultValue: DataTypes.UUIDV4,
         primaryKey: true,
       },
+      /**
+       * Admite nulo desde el 07/09/2026 (AV-0055 de Aumenta): un bono dado
+       * desde la ficha a una familia SIN correo se ata por `clientId`. Sin
+       * correo no hay área privada que lo vea, pero el CRM sí lo engancha al
+       * crear la cita (`lib/citas/packs.js`, `elegirPack`).
+       */
       clientEmail: {
         type: DataTypes.STRING(255),
-        allowNull: false,
+        allowNull: true,
       },
       clientId: {
         type: DataTypes.UUID,

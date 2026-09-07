@@ -23,7 +23,7 @@ import { getTenantResendConfig } from "../../../../lib/outreach/resendConfig.js"
 import { bookingConfirmedTemplate } from "../../../../lib/email/templates/citas/bookingConfirmed.js";
 import { cargarAusencias, minutosOcupados } from "../../../../lib/citas/ausencias.js";
 import { getMadridParts } from "../../../../lib/citas/slots.js";
-import { asignarSesion } from "../../../../lib/citas/packs.js";
+import { asignarSesion, elegirPack, cobroDeBono } from "../../../../lib/citas/packs.js";
 import { grupoDeTipoDeCita, montarCitaDeTaller } from "../../../../lib/clinica/citaDeTaller.js";
 import { cobroObligatorio, cobroDelTipo, normalizarCobro } from "../../../../lib/citas/dineroDeLaCita.js";
 import { terapeutasDeGrupo } from "../../../../lib/clinica/grupoDeTaller.js";
@@ -424,9 +424,24 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     // cita se engancha y se numera. La agenda del CRM no cobra —lo apunta la
     // profesional a mano—, así que aquí solo importa la numeración. Sin correo
     // no hay a quién buscarle el bono: el correo es opcional desde el 02/08.
-    const enBono = clientEmail
-      ? await asignarSesion(tenantModels, { email: clientEmail, eventTypeId })
-      : null;
+    //
+    // Desde el 07/09/2026 (AV-0055 de Aumenta) el alta manual DICE el bono:
+    // `packId` en el cuerpo. Con `packId` se comprueba que es de esa familia,
+    // de ese tipo y que le quedan sesiones (`elegirPack`); con `packId: null`
+    // la cita nace suelta aunque la familia tenga bono (lo eligió así quien la
+    // apunta); y sin la clave en el cuerpo —el widget y los clientes viejos—
+    // se adivina como siempre, ahora también por ficha.
+    let enBono = null;
+    if (Object.prototype.hasOwnProperty.call(body, "packId")) {
+      if (body.packId) {
+        if (typeof body.packId !== "string" || !UUID_RE.test(body.packId)) return error("packId inválido");
+        const elegido = await elegirPack(tenantModels, { packId: body.packId, email: clientEmail, clientId, eventTypeId });
+        if (elegido.error) return error(elegido.error, 422);
+        enBono = elegido;
+      }
+    } else if (clientEmail || clientId) {
+      enBono = await asignarSesion(tenantModels, { email: clientEmail, clientId, eventTypeId });
+    }
 
     /*
      * ── EL DINERO DE LA CITA (04/09/2026, Aumenta por Rodrigo) ──────────────
@@ -452,7 +467,15 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     // Aumenta apunta citas todo el equipo y casi nadie tiene Facturación.
     const exigirCobro = cobroObligatorio(tenant) && tenantHasModule("billing") && !tallerGrupoId;
     let cobro = null;
-    {
+    if (enBono) {
+      // Una sesión de bono ya está pagada: ni cuota, ni cobro suelto, ni «sin
+      // coste» que justificar (07/09/2026). Queda escrito de qué bono es.
+      cobro = cobroDeBono({
+        nombre: eventType.name,
+        sessionNumber: enBono.sessionNumber,
+        total: enBono.pack?.totalSessions ?? eventType.sessionsCount,
+      });
+    } else {
       const { BillingConcept } = tenantModels;
       const hayCatalogo = Boolean(BillingConcept) && tenantHasModule("billing");
       const pedido = body.cobro && typeof body.cobro === "object" ? body.cobro : {};

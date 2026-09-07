@@ -211,10 +211,10 @@ export default function ClientBonosSection({ clientId, onCambio }) {
  * un acuerdo cerrado por WhatsApp puede ser otro, y bloquear el alta por un
  * descuadre de 10 € obligaría a mentir en el formulario.
  *
- * ⚠️ **El bono va atado al CORREO.** Es como lo encuentra todo lo demás: el
- * portal para enseñarle su tipo de cita, y el alta manual para descontar la
- * sesión. Sin correo en la ficha no se puede dar, y por eso el formulario lo
- * dice y no deja enviar en vez de dejar que el servidor conteste un 422.
+ * El bono va atado al correo cuando lo hay (es como lo encuentra el área
+ * privada) y, desde el 07/09/2026 (AV-0055 de Aumenta), a la FICHA cuando no:
+ * una familia sin correo también tiene bono, y sus citas se enganchan al
+ * elegir el bono en la cita nueva. Se avisa de lo que se pierde sin correo.
  */
 function DarBonoForm({ cliente, onHecho }) {
   const [tipos, setTipos] = useState([]);
@@ -250,7 +250,6 @@ function DarBonoForm({ cliente, onHecho }) {
     setErr(null);
     setAvisos([]);
     if (!eventTypeId) { setErr("Elige el tipo de cita"); return; }
-    if (!correo) { setErr("Esta ficha no tiene correo, y el bono va atado a uno"); return; }
 
     setGuardando(true);
     try {
@@ -259,7 +258,7 @@ function DarBonoForm({ cliente, onHecho }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           clientId: cliente?.id ?? null,
-          clientEmail: correo,
+          clientEmail: correo || null,
           eventTypeId,
           totalSessions: Number(sesiones) || 1,
           amount: importe === "" ? null : eurosToCents(importe),
@@ -294,9 +293,10 @@ function DarBonoForm({ cliente, onHecho }) {
           que entra en su área privada y con el que se le descuentan las sesiones.
         </p>
       ) : (
-        <p className="text-[11px] text-red-600">
-          Esta ficha no tiene correo. El bono va atado a uno —es como se le encuentra al descontar la
-          sesión—, así que ponle antes el correo en sus datos.
+        <p className="text-[11px] text-gray-500">
+          Esta ficha no tiene correo: el bono se le da a la ficha. Las citas se le enganchan al crearlas
+          desde el CRM (eligiendo el bono en la cita); lo que no podrá es pedirlas ella sola desde el
+          área privada.
         </p>
       )}
 
@@ -352,7 +352,7 @@ function DarBonoForm({ cliente, onHecho }) {
 
       <button
         type="submit"
-        disabled={guardando || !correo}
+        disabled={guardando}
         className="w-full bg-[var(--color-primary)] text-white text-xs font-semibold py-2 rounded-md disabled:opacity-50"
       >
         {guardando ? "Dando el bono…" : "Dar el bono"}

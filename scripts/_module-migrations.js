@@ -418,6 +418,9 @@ export const MODULES = {
     // (04/08/2026). Un tipo de cita pasa a poder valer por N sesiones, con su
     // numeración («3 de 10») visible en el calendario.
     "migrate-packs-sesiones",
+    // El bono ya no exige correo (07/09/2026, AV-0055 de Aumenta): se ata a la
+    // ficha cuando la familia no tiene, y se elige en la cita nueva.
+    "migrate-session-packs-por-ficha",
     // «Esta es la valoración inicial» (04/08/2026): la marca del tipo de cita
     // al que se entra SIN firmar contratos, porque es la primera visita.
     "migrate-valoracion-inicial",
