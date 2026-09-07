@@ -36,6 +36,7 @@ import {
   saldoDeMovimientos,
   resumenDelDia,
   cobrosDelDia,
+  haEntrado,
 } from "../lib/billing/caja.js";
 
 const CAJA = "11111111-1111-1111-1111-111111111111";
@@ -208,5 +209,82 @@ describe("la lista de cobros de un día", () => {
     assert.deepEqual(r.lista, []);
     assert.equal(r.pendientes.cobros, 0);
     assert.equal(r.pendientes.importe, 0);
+  });
+});
+
+/*
+ * ── LAS DEVOLUCIONES (07/09/2026, tarea del Registro) ──────────────────────
+ * Marcar un cobro como «Devuelto» lo sacaba de lo cobrado y no apuntaba la
+ * salida en ningún sitio: el día del cobro dejaba de cuadrar con lo que se
+ * contó entonces y el de la devolución cuadraba de menos. Ahora son dos
+ * apuntes: entró el día `paidAt`, salió el día `refundedAt`.
+ */
+describe("las devoluciones: entró un día, salió otro", () => {
+  const devuelto = {
+    id: "d1", amount: 50, method: "cash", status: "refunded",
+    paidAt: "2026-09-04T10:00:00.000Z", refundedAt: "2026-09-06T11:00:00.000Z",
+  };
+
+  it("el cobro devuelto SIGUE contando el día que se cobró: el dinero entró", () => {
+    const r = resumenDelDia({ cobros: [devuelto] });
+    assert.equal(r.efectivo.importe, 50);
+    assert.equal(r.efectivo.cobros, 1);
+    assert.equal(r.pendiente, 0);
+    assert.equal(r.cobrado, 50);
+  });
+
+  it("el día de la devolución resta de su cesta y sale del cajón", () => {
+    const r = resumenDelDia({
+      cobros: [{ id: "c9", amount: 80, method: "cash", status: "completed" }],
+      devoluciones: [devuelto],
+      fondoInicial: 100,
+    });
+    assert.equal(r.efectivo.importe, 30);
+    assert.equal(r.efectivo.devuelto, 50);
+    assert.equal(r.devuelto, 50);
+    assert.equal(r.devoluciones, 1);
+    assert.equal(r.cobrado, 30);
+    assert.equal(r.enCaja, 130); // 100 + 80 − 50
+  });
+
+  it("una devolución con tarjeta no toca el cajón: resta de tarjeta", () => {
+    const r = resumenDelDia({ devoluciones: [{ ...devuelto, method: "card" }], fondoInicial: 100 });
+    assert.equal(r.tarjeta.importe, -50);
+    assert.equal(r.efectivo.importe, 0);
+    assert.equal(r.enCaja, 100);
+  });
+
+  it("cobrado y devuelto el mismo día se anulan, pero el día no parece vacío", () => {
+    const r = resumenDelDia({ cobros: [devuelto], devoluciones: [devuelto] });
+    assert.equal(r.cobrado, 0);
+    assert.equal(r.devuelto, 50);
+    assert.equal(r.efectivo.cobros, 1);
+  });
+
+  it("en la lista del día la devolución va en negativo, marcada y a la hora en que se devolvió", () => {
+    const cobroDelDia = { id: "c1", amount: 20, method: "cash", status: "completed", paidAt: "2026-09-06T12:00:00.000Z" };
+    const { lista, pendientes } = cobrosDelDia([cobroDelDia], [devuelto]);
+    assert.deepEqual(lista.map((c) => c.id), ["d1", "c1"]);
+    assert.equal(lista[0].devolucion, true);
+    assert.equal(lista[0].amount, -50);
+    assert.equal(lista[0].paidAt, devuelto.refundedAt);
+    assert.equal(pendientes.cobros, 0);
+    // Y sigue sumando lo mismo que la fila del día.
+    const suma = lista.reduce((s, c) => s + c.amount, 0);
+    assert.equal(suma, resumenDelDia({ cobros: [cobroDelDia], devoluciones: [devuelto] }).cobrado);
+  });
+
+  it("un cobro que no está devuelto no se cuela como devolución aunque se le pase", () => {
+    const r = resumenDelDia({ devoluciones: [{ ...devuelto, status: "completed" }] });
+    assert.equal(r.devuelto, 0);
+    assert.equal(r.devoluciones, 0);
+    assert.equal(cobrosDelDia([], [{ ...devuelto, status: "completed" }]).lista.length, 0);
+  });
+
+  it("haEntrado: cobrado y devuelto sí; pendiente y fallido no", () => {
+    assert.equal(haEntrado({ status: "completed" }), true);
+    assert.equal(haEntrado({ status: "refunded" }), true);
+    assert.equal(haEntrado({ status: "pending" }), false);
+    assert.equal(haEntrado({ status: "failed" }), false);
   });
 });

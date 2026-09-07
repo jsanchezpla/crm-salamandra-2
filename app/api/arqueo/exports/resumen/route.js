@@ -88,7 +88,8 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, tenant, hasM
         hora: horaMadrid(c.paidAt),
         paciente: c.patientName ?? "—",
         cliente: c.clientName ?? "—",
-        metodo: METODO[c.method] ?? c.method,
+        // La devolución va en negativo y dicha: es lo que cuadra el cajón.
+        metodo: c.devolucion ? `Devolución · ${METODO[c.method] ?? c.method}` : (METODO[c.method] ?? c.method),
         factura: c.invoiceNumber ?? (c.periodMonth ? `sin factura · ${c.periodMonth}` : "sin factura"),
         nota: c.notes ?? "",
         importe: c.amount,

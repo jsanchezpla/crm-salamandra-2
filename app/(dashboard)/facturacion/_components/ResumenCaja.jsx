@@ -146,7 +146,14 @@ export default function ResumenCaja({ cajaId }) {
           <Tarjeta titulo="Efectivo" valor={fmtMoney(datos.total.efectivo.importe)} pie={`${datos.total.efectivo.cobros} cobros`} />
           <Tarjeta titulo="Tarjeta" valor={fmtMoney(datos.total.tarjeta.importe)} pie={`${datos.total.tarjeta.cobros} cobros`} />
           <Tarjeta titulo="Banco" valor={fmtMoney(datos.total.banco.importe)} pie={`${datos.total.banco.cobros} cobros · incluye domiciliaciones`} />
-          <Tarjeta titulo="Total cobrado" valor={fmtMoney(datos.total.cobrado)} pie={datos.total.pendiente ? `${fmtMoney(datos.total.pendiente)} pendiente, sin contar` : "todo cobrado"} />
+          <Tarjeta
+            titulo="Total cobrado"
+            valor={fmtMoney(datos.total.cobrado)}
+            pie={[
+              datos.total.devuelto ? `${fmtMoney(datos.total.devuelto)} devueltos, ya restados` : null,
+              datos.total.pendiente ? `${fmtMoney(datos.total.pendiente)} pendiente, sin contar` : null,
+            ].filter(Boolean).join(" · ") || "todo cobrado"}
+          />
         </div>
       )}
 
@@ -172,6 +179,11 @@ export default function ResumenCaja({ cajaId }) {
               )}
               {!cargando && dias.map((d) => {
                 const cobros = d.lista ?? [];
+                // La lista lleva también las devoluciones del día (en negativo,
+                // 07/09/2026): se cuentan aparte para que «3 cobros» no incluya
+                // una salida.
+                const numDevoluciones = cobros.filter((c) => c.devolucion).length;
+                const numCobros = cobros.length - numDevoluciones;
                 const abierto = verTodos || unSoloDia || abiertos.has(d.fecha);
                 const desplegable = cobros.length > 0 || d.pendientes?.cobros > 0;
                 return (
@@ -190,9 +202,14 @@ export default function ResumenCaja({ cajaId }) {
                           >
                             <span className={`text-neutral-400 transition-transform ${abierto ? "rotate-90" : ""}`} aria-hidden="true">›</span>
                             {fmtDate(d.fecha)}
-                            {cobros.length > 0 && (
+                            {numCobros > 0 && (
                               <span className="text-[11px] text-neutral-400">
-                                · {cobros.length} {cobros.length === 1 ? "cobro" : "cobros"}
+                                · {numCobros} {numCobros === 1 ? "cobro" : "cobros"}
+                              </span>
+                            )}
+                            {numDevoluciones > 0 && (
+                              <span className="text-[11px] text-rose-600">
+                                · {numDevoluciones} {numDevoluciones === 1 ? "devolución" : "devoluciones"}
                               </span>
                             )}
                           </button>
@@ -254,7 +271,10 @@ export default function ResumenCaja({ cajaId }) {
                                         c.clientName ?? <span className="text-neutral-400">—</span>
                                       )}
                                     </td>
-                                    <td className="px-2 py-1.5 text-neutral-600">{METODOS[c.method] ?? c.method}</td>
+                                    <td className="px-2 py-1.5 text-neutral-600">
+                                      {c.devolucion && <span className="text-rose-600 font-medium">Devolución · </span>}
+                                      {METODOS[c.method] ?? c.method}
+                                    </td>
                                     <td className="px-2 py-1.5 font-mono text-[11.5px]">
                                       {c.invoiceId ? (
                                         <Link
@@ -270,7 +290,7 @@ export default function ResumenCaja({ cajaId }) {
                                         </span>
                                       )}
                                     </td>
-                                    <td className="px-2 py-1.5 text-right tabular font-medium text-neutral-800">{fmtMoney(c.amount)}</td>
+                                    <td className={`px-2 py-1.5 text-right tabular font-medium ${c.devolucion ? "text-rose-600" : "text-neutral-800"}`}>{fmtMoney(c.amount)}</td>
                                   </tr>
                                 ))}
                               </tbody>

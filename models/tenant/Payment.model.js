@@ -52,6 +52,17 @@ export function definePayment(sequelize) {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      // Cuándo se devolvió el dinero (07/09/2026). Un cobro «Devuelto» son DOS
+      // movimientos de caja: entró el día `paidAt` y salió el día `refundedAt`.
+      // Sin esta fecha, el resumen por día no sabía dónde apuntar la salida y
+      // el arqueo del día de la devolución cuadraba de menos. La escribe el
+      // PATCH al pasar a `refunded` (hoy, o el día que se diga) y la
+      // devolución que llega de Stripe; vuelve a NULL si el cobro deja de
+      // estar devuelto.
+      refundedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
       // ── De quién y de qué terapia es la cuota (31/08/2026) ──────────────
       // «Facturar el mes» solo sabía agrupar por pagador porque el cobro no
       // guardaba ni el paciente ni el concepto. Ambos opcionales: el cobro a

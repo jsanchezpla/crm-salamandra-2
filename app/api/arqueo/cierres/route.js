@@ -42,11 +42,21 @@ async function calcularEsperado(tenantModels, cashPointId, fecha, openingAmount)
   // Ventana del día completo en hora de MADRID (exacta en los cambios de hora).
   const { start, end } = madridDayRange(new Date(`${fecha}T12:00:00Z`));
 
+  // Un cobro DEVUELTO también entró en el cajón el día que se cobró: lo que
+  // sale es la devolución, y sale el día de `refundedAt` (07/09/2026).
   const cobros = await Payment.findAll({
     where: {
       method: "cash",
-      status: "completed",
+      status: { [Op.in]: ["completed", "refunded"] },
       paidAt: { [Op.gte]: start, [Op.lt]: end },
+    },
+    attributes: ["id", "amount"],
+  });
+  const devoluciones = await Payment.findAll({
+    where: {
+      method: "cash",
+      status: "refunded",
+      refundedAt: { [Op.gte]: start, [Op.lt]: end },
     },
     attributes: ["id", "amount"],
   });
@@ -59,14 +69,18 @@ async function calcularEsperado(tenantModels, cashPointId, fecha, openingAmount)
     : [];
 
   const efectivo = cobros.reduce((s, p) => s + Number(p.amount || 0), 0);
+  const devuelto = devoluciones.reduce((s, p) => s + Math.abs(Number(p.amount || 0)), 0);
   const caja = saldoDeMovimientos(movimientos.map((m) => m.toJSON()));
   return {
     efectivoDelDia: +efectivo.toFixed(2),
     numCobros: cobros.length,
+    // Lo devuelto en efectivo ese día: sale del cajón como una salida más.
+    devueltoDelDia: +devuelto.toFixed(2),
+    numDevoluciones: devoluciones.length,
     entradas: caja.entradas,
     salidas: caja.salidas,
     numMovimientos: movimientos.length,
-    esperado: +(Number(openingAmount || 0) + efectivo + caja.neto).toFixed(2),
+    esperado: +(Number(openingAmount || 0) + efectivo - devuelto + caja.neto).toFixed(2),
   };
 }
 

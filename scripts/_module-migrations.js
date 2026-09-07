@@ -630,6 +630,9 @@ export const MODULES = {
     // Un solo cobro por cuota y mes: índice único parcial sobre payments
     // (06/09/2026). ANTES del despliegue: el código cuenta con que exista.
     "migrate-payments-cuota-unica",
+    // Cuándo se devolvió un cobro (07/09/2026): payments.refunded_at. ANTES
+    // del despliegue: el modelo pide la columna por nombre.
+    "migrate-payments-refunded-at",
     // Entradas y salidas de caja: lo que pasa por el cajon y no es un cobro.
     // 01/09/2026, ANTES del despliegue.
     "migrate-arqueo-movimientos",
