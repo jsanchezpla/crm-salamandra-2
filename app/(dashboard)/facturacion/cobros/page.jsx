@@ -101,6 +101,13 @@ export default function CobrosPage() {
    */
   const [reparto, setReparto] = useState(null);
   const [repartoCargando, setRepartoCargando] = useState(false);
+  /*
+   * Las citas de esa familia en ese mes (07/09/2026, AV-0068). Solo fechas, y
+   * solo para que el prorrateo del mes de alta salga POR SESIONES, que es lo
+   * que hace la generación: sin ellas, teclear la cuota daba un importe y
+   * generarla otro.
+   */
+  const [citasDelMes, setCitasDelMes] = useState([]);
 
   const conceptosElegidos = lineasCuota
     .map(({ id, inicio }) => {
@@ -109,7 +116,8 @@ export default function CobrosPage() {
     })
     .filter(Boolean);
   const cuentaCuota = partesConProrrateo(
-    conceptosElegidos.map(({ c, inicio }) => ({ importe: Number(c.unitPrice || 0), inicio }))
+    conceptosElegidos.map(({ c, inicio }) => ({ importe: Number(c.unitPrice || 0), inicio })),
+    { mes: form.periodMonth, citas: citasDelMes }
   );
 
   // El importe se rellena solo al tocar conceptos o fecha de inicio, desde el
@@ -125,7 +133,7 @@ export default function CobrosPage() {
       })
       .filter(Boolean);
     if (!partes.length) return null;
-    return partesConProrrateo(partes).total;
+    return partesConProrrateo(partes, { mes: form.periodMonth, citas: citasDelMes }).total;
   }
   function aplicarImporteCuota(items) {
     const total = totalDeItems(items);
@@ -244,6 +252,7 @@ export default function CobrosPage() {
     setOrigenCuota(null);
     setParcialDelMes(null);
     setPendientesDelMes([]);
+    setCitasDelMes([]);
     setForm((f) => (f.amount === "" ? f : { ...f, amount: "" }));
     if (!form.clientId || !conceptosCatalogo.length) return;
 
@@ -319,9 +328,13 @@ export default function CobrosPage() {
        */
       const jMes = await pedir(
         `/api/billing/payments/mes?clientId=${encodeURIComponent(form.clientId)}` +
-          `&mes=${encodeURIComponent(form.periodMonth)}`
+          `&mes=${encodeURIComponent(form.periodMonth)}` +
+          (form.patientId ? `&patientId=${encodeURIComponent(form.patientId)}` : "")
       );
       if (turno !== turnoCuota.current) return;
+      // Las citas llegan aquí, antes de que nadie pueda teclear un «Empezó
+      // el»: el prorrateo solo salta al escribir esa fecha (AV-0068).
+      setCitasDelMes(Array.isArray(jMes?.data?.citas) ? jMes.data.citas : []);
       const cobrosDelMes = jMes?.data?.cobros ?? [];
       // La misma regla que el POST de payments: con paciente elegido, solo los
       // pendientes de ese paciente; sin él, todos los de la familia.
