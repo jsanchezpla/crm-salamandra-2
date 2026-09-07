@@ -15,6 +15,7 @@ import { hoyVigente } from "@/lib/billing/cuotas.js";
 import { ivaPorDefecto } from "../../../../lib/billing/ivaPorDefecto.js";
 import PatientReparto from "@/components/billing/PatientReparto.jsx";
 import PartirFacturaModal from "../_components/PartirFacturaModal.jsx";
+import VistaPreviaFacturaModal from "../_components/VistaPreviaFacturaModal.jsx";
 import { ordenarConSugeridos } from "../../../../lib/billing/empleadosSugeridos.js";
 import { lineaDesdeConcepto } from "../../../../lib/billing/conceptosCatalogo.js";
 import { cuotasQueEntran, conceptosDeCuotas, huellaLineas, sePuedeRellenar } from "../../../../lib/billing/cuotaParaRellenar.js";
@@ -1464,6 +1465,33 @@ function DetailView({ invoice, puedeFacturar, onAction, onEdit, onOpenLinked, sa
   // sello (31/08/2026); por defecto salen los dos si existen.
   const [conPaciente, setConPaciente] = useState(true);
   const [conSello, setConSello] = useState(true);
+  // Ver el PDF de verdad en pantalla, sobre todo ANTES de emitir (07/09/2026).
+  const [previaAbierta, setPreviaAbierta] = useState(false);
+  // Lo que se le pide al PDF, igual para la descarga y para la vista previa.
+  const paramsPdf = (extra = []) => {
+    const p = [...extra, !conPaciente ? "paciente=0" : null, !conSello ? "sello=0" : null].filter(Boolean);
+    return p.length ? `?${p.join("&")}` : "";
+  };
+  /*
+   * Qué le falta a esta factura para poder emitirse. Se calcula aquí arriba y
+   * no dentro del bloque de Acciones porque lo miran DOS botones de Emitir: el
+   * de siempre y el de la vista previa.
+   *
+   * A nombre de un tutor (02/09/2026): lo que tiene que estar completo es el
+   * tutor, y lo dice con sus palabras (lib/billing/datosFiscales.js). Con la
+   * ficha, el mismo criterio que el candado del servidor: con dos columnas en
+   * juego, si la pantalla mira una y el servidor la otra, el botón sale
+   * deshabilitado en facturas que el servidor sí dejaría emitir.
+   */
+  const fiscalMissing = [];
+  if (invoice.guardianId) {
+    const faltaTutor = invoice.faltaTutor ?? null;
+    if (faltaTutor) fiscalMissing.push(faltaTutor);
+  } else {
+    if (!nombreFiscalDeCliente(invoice.client)) fiscalMissing.push("razón social");
+    if (!nifDeCliente(invoice.client)) fiscalMissing.push("NIF/CIF");
+  }
+  const cantIssue = invoice.status === "draft" && fiscalMissing.length > 0;
   const totalPaid = Number(invoice.paidAmount || 0);
   const remaining = Math.max(0, Number(invoice.total) - totalPaid);
   const lineBreakdown = (invoice.lines ?? []).reduce((map, l) => {
@@ -1577,18 +1605,29 @@ function DetailView({ invoice, puedeFacturar, onAction, onEdit, onOpenLinked, sa
 
       {invoice.status !== "draft" && (
         <div className="pt-1 space-y-1.5">
-          <a
-            href={`/api/billing/invoices/${invoice.id}/pdf${[
-              !conPaciente ? "paciente=0" : null,
-              !conSello ? "sello=0" : null,
-            ].filter(Boolean).length ? "?" + [!conPaciente ? "paciente=0" : null, !conSello ? "sello=0" : null].filter(Boolean).join("&") : ""}`}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide border border-neutral-300 text-neutral-700 hover:bg-neutral-50 transition"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-            </svg>
-            Descargar PDF
-          </a>
+          <div className="flex flex-wrap items-center gap-2">
+            <a
+              href={`/api/billing/invoices/${invoice.id}/pdf${paramsPdf()}`}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide border border-neutral-300 text-neutral-700 hover:bg-neutral-50 transition"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+              </svg>
+              Descargar PDF
+            </a>
+            {/* Verla sin descargarla (07/09/2026): el mismo PDF, en pantalla. */}
+            <button
+              type="button"
+              onClick={() => setPreviaAbierta(true)}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide border border-neutral-300 text-neutral-700 hover:bg-neutral-50 transition"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.964-7.178z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              Ver en pantalla
+            </button>
+          </div>
           {/* Con o sin nombre del paciente y sello, eligiéndolo (31/08/2026). */}
           <div className="flex items-center gap-4 text-[11px] text-neutral-500">
             {invoice.patient && (
@@ -1606,22 +1645,7 @@ function DetailView({ invoice, puedeFacturar, onAction, onEdit, onOpenLinked, sa
       )}
 
       {/* Acciones */}
-      {puedeFacturar && (() => {
-        const fiscalMissing = [];
-        // A nombre de un tutor (02/09/2026): lo que tiene que estar completo
-        // es el tutor, y lo dice con sus palabras (lib/billing/datosFiscales.js).
-        const faltaTutor = invoice.guardianId ? invoice.faltaTutor ?? null : null;
-        if (invoice.guardianId) {
-          if (faltaTutor) fiscalMissing.push(faltaTutor);
-        } else {
-          if (!nombreFiscalDeCliente(invoice.client)) fiscalMissing.push("razón social");
-          // El mismo criterio que el candado del servidor: con dos columnas
-          // en juego, si la pantalla mira una y el servidor la otra, el botón
-          // sale deshabilitado en facturas que el servidor sí dejaría emitir.
-          if (!nifDeCliente(invoice.client)) fiscalMissing.push("NIF/CIF");
-        }
-        const cantIssue = invoice.status === "draft" && fiscalMissing.length > 0;
-        return (
+      {puedeFacturar && (
         <div className="space-y-3 pt-4 border-t border-neutral-100">
           <h3 className="eyebrow flex items-center gap-1.5">
             Acciones
@@ -1644,6 +1668,11 @@ function DetailView({ invoice, puedeFacturar, onAction, onEdit, onOpenLinked, sa
               <button onClick={onEdit} disabled={saving}
                 className="px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide text-white disabled:opacity-40"
                 style={{ background: "var(--color-primary, #1B3A2D)" }}>Editar</button>
+              {/* Verla antes de emitirla (07/09/2026): el PDF de verdad, con
+                  «VISTA PREVIA» cruzándolo mientras sea borrador. */}
+              <button onClick={() => setPreviaAbierta(true)} disabled={saving}
+                title="Ver el PDF tal y como quedará, antes de emitirla"
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide border border-neutral-300 text-neutral-700 hover:bg-neutral-50 disabled:opacity-40">Vista previa</button>
               <button onClick={() => onAction("issue")} disabled={saving || cantIssue}
                 title={cantIssue ? "Cliente sin datos fiscales completos" : ""}
                 className="px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide bg-emerald-600 text-white disabled:opacity-40 disabled:cursor-not-allowed">Emitir</button>
@@ -1678,8 +1707,32 @@ function DetailView({ invoice, puedeFacturar, onAction, onEdit, onOpenLinked, sa
           )}
           </div>
         </div>
-        );
-      })()}
+      )}
+
+      {previaAbierta && (
+        <VistaPreviaFacturaModal
+          url={`/api/billing/invoices/${invoice.id}/pdf${paramsPdf(["previa=1"])}`}
+          titulo={invoice.status === "draft" ? "Vista previa de la factura" : `Factura ${invoice.number}`}
+          subtitulo={[invoice.client?.fiscalName || invoice.client?.name, fmtMoney(invoice.total)].filter(Boolean).join(" · ")}
+          onClose={() => setPreviaAbierta(false)}
+          // Emitir desde aquí mismo, que es para lo que se abre: se mira y se
+          // decide sin cerrar. Con la ficha incompleta el botón sale apagado,
+          // igual que el de abajo (lo negaría el servidor de todas formas).
+          onEmitir={
+            puedeFacturar && invoice.status === "draft"
+              ? () => { setPreviaAbierta(false); onAction("issue"); }
+              : null
+          }
+          emitirTexto="Emitir factura"
+          emitirDisabled={cantIssue}
+          emitiendo={saving}
+          aviso={
+            invoice.status === "draft"
+              ? "Es un borrador: todavía no tiene número y se puede cambiar."
+              : "Es la factura emitida, la misma que se descarga."
+          }
+        />
+      )}
     </div>
   );
 }

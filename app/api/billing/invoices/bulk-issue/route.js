@@ -8,6 +8,16 @@ import { fotoFiscalDe, ATRIBUTOS_PARA_CONGELAR } from "../../../../../lib/billin
 import { agruparLoteCuotas, agrupacionValida, lineasDeCuota, mesValido, finExclusivoDe } from "../../../../../lib/billing/lotesCuotas.js";
 import { madridToday } from "../../../../../lib/utils/madridDate.js";
 import { metodosValidos } from "../../../../../lib/billing/caja.js";
+import { buildInvoicePreviewPdfBuffer } from "../../../../../lib/billing/invoicePdf.js";
+import { membreteDe } from "../../../../../lib/billing/membrete.js";
+import { cargarLogo } from "../../../../../lib/billing/logoMembrete.js";
+import { contentDisposition } from "../../../../../lib/documents/helpers.js";
+
+// La nota de exención que se congela en cada factura del lote cuando el emisor
+// no repercute IVA. Aquí arriba porque la escriben DOS: el POST al emitir y la
+// vista previa al enseñar cómo va a quedar; si divergieran, el papel que se
+// mira y el que se emite dirían cosas distintas.
+const NOTA_EXENCION = "Operación exenta de IVA conforme al artículo 20 de la Ley 37/1992 del IVA.";
 
 /**
  * La «Facturación del mes» (31/08/2026, petición de Aumenta — la Facturación
@@ -16,6 +26,7 @@ import { metodosValidos } from "../../../../../lib/billing/caja.js";
  * (`payments.invoice_id`) para que cada factura nazca COBRADA.
  *
  *   GET  ?mes=AAAA-MM             → vista previa: qué se emitiría y qué no
+ *   GET  ?mes=…&previa=<grupoId>  → el PDF de esa factura, sin emitirla
  *   POST { mes, issueDate?, exclude?: [clientId] } → emite en serie
  *
  * Qué entra en el lote: cobros `completed` con ese `period_month` y sin
@@ -141,8 +152,67 @@ export const GET = withTenant(async (request, _rc, { tenantModels, hasModule }) 
     const metodos = metodosValidos(params.getAll("metodo"));
 
     const settings = await TenantBillingSettings.findOne();
-    const { facturables, sinNif } = await recogerLote({ tenantModels, mes, agrupacion, metodos });
+    const { facturables, sinNif, fichas } = await recogerLote({ tenantModels, mes, agrupacion, metodos });
     const hoy = madridToday();
+
+    /*
+     * ?previa=<grupoId> → el PDF de UNA de las facturas del lote, tal y como
+     * quedará (07/09/2026, Rodrigo: «quiero que haya una vista previa de las
+     * facturas antes de emitirlas con un botón»). Aquí es donde más falta
+     * hacía: el lote emite decenas de facturas de un botonazo y lo emitido no
+     * se borra.
+     *
+     * Se arma con las MISMAS piezas que el POST —`lineasDeCuota` y
+     * `calculateInvoice`, la misma foto fiscal y la misma nota de exención—,
+     * pero no se guarda ni gasta número: sale como borrador y marcada.
+     */
+    const grupoPrevia = params.get("previa");
+    if (grupoPrevia) {
+      const grupo = facturables.find((g) => g.grupoId === grupoPrevia);
+      if (!grupo) return error("Ese cobro ya no está en el lote: vuelve a abrir la Facturación del mes", 404);
+      const fechaPedida = params.get("fecha");
+      const fecha = /^\d{4}-\d{2}-\d{2}$/.test(fechaPedida ?? "") ? fechaPedida : hoy;
+      const vatExempt = !!settings?.vatExempt;
+      const vatRate = vatExempt ? 0 : Number(settings?.defaultVatRate ?? 21);
+      const calc = calculateInvoice({ lines: lineasDeCuota({ cobros: grupo.cobros, mes, vatRate }), irpfRate: 0 });
+      const ficha = fichas.get(grupo.clientId);
+      const buffer = await buildInvoicePreviewPdfBuffer({
+        invoice: {
+          id: grupo.grupoId,
+          status: "draft",
+          series: "F",
+          number: null,
+          issueDate: fecha,
+          dueDate: fecha,
+          lines: calc.lines,
+          taxBase: calc.taxBase,
+          vatAmount: calc.vatAmount,
+          irpfRate: 0,
+          irpfAmount: 0,
+          total: calc.total,
+          paidAmount: 0,
+          guardianId: grupo.guardianId ?? null,
+          fiscalSnapshot: grupo.fotoFiscal ?? fotoFiscalDe(ficha),
+          customFields: vatExempt ? { vatExemptNote: settings?.vatExemptNote || NOTA_EXENCION } : {},
+        },
+        client: ficha,
+        settings: settings || {},
+        logo: await cargarLogo(membreteDe(settings, "factura").logoUrl),
+        patientName: grupo.paciente ?? null,
+        stamp: await cargarLogo(settings?.stampUrl),
+      });
+      return new Response(buffer, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": contentDisposition("inline", `vista-previa-${mes}-${grupo.nombre}.pdf`),
+          "Content-Length": String(buffer.length),
+          "X-Content-Type-Options": "nosniff",
+          "Content-Security-Policy": "default-src 'none'; object-src 'self'",
+          "Cache-Control": "private, no-cache",
+        },
+      });
+    }
 
     return ok({
       mes,
@@ -204,9 +274,7 @@ export const POST = withTenant(async (request, _rc, { tenant, tenantModels, hasM
     // calculando la base hacia atrás desde lo cobrado (ver lotesCuotas.js).
     const vatExempt = !!settings?.vatExempt;
     const vatRate = vatExempt ? 0 : Number(settings?.defaultVatRate ?? 21);
-    const vatExemptNote = vatExempt
-      ? settings?.vatExemptNote || "Operación exenta de IVA conforme al artículo 20 de la Ley 37/1992 del IVA."
-      : null;
+    const vatExemptNote = vatExempt ? settings?.vatExemptNote || NOTA_EXENCION : null;
 
     const { facturables, sinNif, fichas } = await recogerLote({ tenantModels, mes, agrupacion, metodos });
     const sequelize = Invoice.sequelize;

@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from "react";
 import { mesVigente } from "@/lib/billing/cuotas.js";
 import Link from "next/link";
 import { fmtMoney } from "./Kpi.jsx";
+import VistaPreviaFacturaModal from "./VistaPreviaFacturaModal.jsx";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition";
@@ -44,6 +45,10 @@ export default function FacturarMesDrawer({ open, onClose, onDone }) {
   // Qué facturar por forma de pago (01/09/2026, Rodrigo: «poder elegir lo que
   // quieres facturar: banco, tarjeta, efectivo»). Vacío = todo, lo de siempre.
   const [metodos, setMetodos] = useState([]);
+  // La fila cuya factura se está mirando en PDF antes de emitir el lote
+  // (07/09/2026): aquí no se emite de una en una, así que la vista previa solo
+  // se mira; el botón de emitir sigue siendo el del lote entero.
+  const [previa, setPrevia] = useState(null);
 
   useEffect(() => {
     if (!open) return;
@@ -73,6 +78,15 @@ export default function FacturarMesDrawer({ open, onClose, onDone }) {
     [preview, excluidos]
   );
   const importeSeleccionado = seleccionadas.reduce((s, g) => s + Number(g.importe || 0), 0);
+
+  /** El PDF de la factura de esa fila, tal y como saldrá con lo elegido ahora
+   *  (mes, agrupación, formas de pago y fecha de emisión). */
+  function urlPrevia(g) {
+    const qs = new URLSearchParams({ mes, agrupacion, previa: g.grupoId ?? g.clientId });
+    metodos.forEach((m) => qs.append("metodo", m));
+    if (fecha) qs.set("fecha", fecha);
+    return `/api/billing/invoices/bulk-issue?${qs}`;
+  }
 
   function toggle(clientId) {
     setExcluidos((prev) => {
@@ -288,6 +302,15 @@ export default function FacturarMesDrawer({ open, onClose, onDone }) {
                           </span>
                         )}
                         <span className="text-neutral-400">{g.cobros.length === 1 ? "1 cobro" : `${g.cobros.length} cobros`}</span>
+                        {/* Ver cómo quedará ESA factura antes de emitir el lote (07/09/2026). */}
+                        <button
+                          type="button"
+                          onClick={() => setPrevia(g)}
+                          title="Ver el PDF de esta factura tal y como quedará"
+                          className="text-[11px] underline text-neutral-400 hover:text-neutral-800 shrink-0"
+                        >
+                          Ver
+                        </button>
                         <span className="font-semibold tabular text-neutral-900">{fmtMoney(g.importe)}</span>
                       </li>
                     ))}
@@ -332,6 +355,21 @@ export default function FacturarMesDrawer({ open, onClose, onDone }) {
           </div>
         )}
       </aside>
+
+      {previa && (
+        <VistaPreviaFacturaModal
+          url={urlPrevia(previa)}
+          titulo={`Vista previa · ${previa.nombre}`}
+          subtitulo={[
+            previa.terapia,
+            previa.paciente,
+            previa.aNombreDe ? `a nombre de ${previa.aNombreDe}` : null,
+            fmtMoney(previa.importe),
+          ].filter(Boolean).join(" · ")}
+          onClose={() => setPrevia(null)}
+          aviso="Así quedará al emitir el lote: todavía no tiene número ni está emitida."
+        />
+      )}
     </>
   );
 }
