@@ -37,6 +37,13 @@ export function defineCuota(sequelize) {
       // De qué niño es. Opcional: en nutrición el paciente ES el cliente, y en
       // un centro sin módulo asistencial no hay pacientes que enganchar.
       patientId: { type: DataTypes.UUID, allowNull: true, field: "patient_id" },
+      // Quién paga cuando NO es la familia (07/09/2026, Registro): la
+      // fundación o la empresa que paga la cuota de este niño todos los meses.
+      // NULL = paga la familia (`clientId`), lo de siempre. Con pagador, el
+      // cobro del mes nace a su nombre —con el niño de paciente— y «Facturar
+      // el mes» le saca su factura sin que la familia lo vea en la suya; antes
+      // había que hacer el Reparto desde la ficha cada mes, a mano.
+      payerClientId: { type: DataTypes.UUID, allowNull: true, field: "payer_client_id" },
       // Los conceptos del catálogo que la componen (ids). Varios: dos hermanos,
       // cuota + descuento, logopedia + psicología.
       conceptIds: { type: DataTypes.JSONB, allowNull: true, field: "concept_ids" },
@@ -63,6 +70,7 @@ export function defineCuota(sequelize) {
       indexes: [
         { fields: ["client_id"], name: "billing_cuotas_client_idx" },
         { fields: ["patient_id"], name: "billing_cuotas_patient_idx" },
+        { fields: ["payer_client_id"], name: "billing_cuotas_payer_idx" },
         { fields: ["active"], name: "billing_cuotas_active_idx" },
       ],
     }

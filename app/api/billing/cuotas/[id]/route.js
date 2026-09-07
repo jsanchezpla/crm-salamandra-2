@@ -37,6 +37,18 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
     const { valores, problema } = limpiarCuota(body, { parcial: true });
     if (problema) return error(problema, 422);
 
+    // El pagador nuevo (07/09/2026) es otra ficha, y tiene que existir. En
+    // una edición parcial la familia puede no viajar: se compara con la de la
+    // fila. Su cobro pendiente del mes cambia de nombre abajo, con el resto.
+    if (valores.payerClientId) {
+      const familia = String(valores.clientId ?? cuota.clientId);
+      if (valores.payerClientId === familia) {
+        return error("El pagador es la propia familia: déjalo vacío para que pague ella", 422);
+      }
+      const pagador = await tenantModels.Client.findByPk(valores.payerClientId, { attributes: ["id"] });
+      if (!pagador) return error("La ficha del pagador no existe", 422);
+    }
+
     // La baja escrita sin apagar la cuota (o al revés) deja la fila diciendo
     // dos cosas a la vez. Quién contradice a quién lo decide `lib/billing/
     // cuotas.js` (`cuadrarBajaYActiva`), con su prueba: aquí solo se aplica.
@@ -153,6 +165,7 @@ function resumenCuota(c) {
   return {
     clienteId: c.clientId ?? null,
     pacienteId: c.patientId ?? null,
+    pagadorId: c.payerClientId ?? null,
     importe: c.amount != null ? String(c.amount) : null,
     conceptos: Array.isArray(c.conceptIds) ? c.conceptIds.length : 0,
     metodo: c.method ?? null,

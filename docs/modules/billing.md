@@ -391,10 +391,12 @@ Qué paga cada familia todos los meses. No confundir con `BillingConcept` (el
 catálogo: el precio de la casa) ni con `clients.cuota_concept_ids` (la cuota
 APRENDIDA del último cobro, que rellena el drawer).
 
-`clientId` (NOT NULL, el pagador), `patientId` (opcional), `conceptIds` (JSONB),
-`amount` (**nullable, y el NULL significa «lo que digan sus conceptos»**),
-`method`, `dayOfMonth`, `startDate` (NOT NULL), `endDate` (la baja), `active`,
-`notes`. Ver la sección «Cuotas mensuales asignadas (01/09/2026)».
+`clientId` (NOT NULL, la familia), `patientId` (opcional), `payerClientId`
+(**nullable: quién paga cuando no es la familia** — 07/09/2026), `conceptIds`
+(JSONB), `amount` (**nullable, y el NULL significa «lo que digan sus
+conceptos»**), `method`, `dayOfMonth`, `startDate` (NOT NULL), `endDate` (la
+baja), `active`, `notes`. Ver la sección «Cuotas mensuales asignadas
+(01/09/2026)».
 
 ### RecurringInvoice
 
@@ -937,9 +939,25 @@ las dos sabe decir *quién debe pagar este mes*: no tienen fecha de alta, ni
 baja, ni paciente, ni método. Con ~175 cuotas al mes, eso es teclear 175 cobros
 cada 30 días.
 
-**Qué es una `Cuota`** (`billing_cuotas`): la ASIGNACIÓN. Pagador (`client_id`,
-NOT NULL: sin pagador no se cobra ni se factura), paciente opcional, los
+**Qué es una `Cuota`** (`billing_cuotas`): la ASIGNACIÓN. Familia (`client_id`,
+NOT NULL: sin ella no se cobra ni se factura), paciente opcional, los
 conceptos que la componen, importe, método, día de cobro, alta y baja.
+
+- **Y quién la paga, si no es la familia** (`payer_client_id`, 07/09/2026,
+  Registro: «una fundación o una empresa que paga la cuota de un niño todos los
+  meses hay que facturarla a mano cada mes»). NULL = paga la familia, lo de
+  siempre. Con pagador, el cobro del mes **nace a nombre del pagador** con el
+  niño de paciente (lo decide `planDeCuotasDelMes`, que pone el pagador en
+  `clientId` y deja la familia en `familiaId`), así que «Facturar el mes» le
+  saca su factura sin saber nada de esto y la familia no ve ese importe en la
+  suya. Tres sitios se enteran solos: `GET /cuotas?clientId=` devuelve «las que
+  paga esta ficha» (las suyas que no paga otro + las de otras familias que paga
+  ella), la **morosidad** persigue a quien paga y no a la familia apadrinada —si
+  no, saldría morosa para siempre, porque no hay cobro a su nombre—, y el
+  **portal** abre el mes de la familia también con el cobro que va a nombre del
+  pagador pero lleva a su niño de paciente. El pagador no puede ser la propia
+  familia: se deja vacío y ya. Migración `migrate-billing-cuotas-pagador.js`,
+  **ANTES del despliegue**.
 
 - **El importe puede ser NULL, y eso SIGNIFICA algo**: «lo que digan sus
   conceptos». Así una subida de precio se aplica cambiando UN concepto y no 300

@@ -630,6 +630,9 @@ export const MODULES = {
     // Un solo cobro por cuota y mes: índice único parcial sobre payments
     // (06/09/2026). ANTES del despliegue: el código cuenta con que exista.
     "migrate-payments-cuota-unica",
+    // Quién paga la cuota cuando no es la familia (07/09/2026):
+    // billing_cuotas.payer_client_id. ANTES del despliegue: el modelo la pide.
+    "migrate-billing-cuotas-pagador",
     // Cuándo se devolvió un cobro (07/09/2026): payments.refunded_at. ANTES
     // del despliegue: el modelo pide la columna por nombre.
     "migrate-payments-refunded-at",

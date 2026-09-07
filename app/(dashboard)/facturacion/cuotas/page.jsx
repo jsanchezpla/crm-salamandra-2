@@ -58,6 +58,7 @@ const mesActual = () => mesVigente();
 const CUOTA_VACIA = () => ({
   conceptIds: [],
   amount: "",
+  payerClientId: "",
   method: "transfer",
   dayOfMonth: "",
   startDate: hoyIso(),
@@ -487,6 +488,12 @@ export default function CuotasPage() {
                       <Link href={`/clientes/${c.clientId}`} className="hover:underline">
                         {c.client?.fiscalName || c.client?.name || "—"}
                       </Link>
+                      {/* Quién la paga cuando no es la familia (07/09/2026). */}
+                      {c.payer && (
+                        <div className="text-[10px] text-amber-700 mt-0.5" title="El cobro de cada mes nace a nombre de esta ficha y «Facturar el mes» le saca su factura">
+                          paga: <Link href={`/clientes/${c.payer.id}`} className="hover:underline">{c.payer.fiscalName || c.payer.name}</Link>
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-xs text-neutral-500">
                       {nombres.length ? nombres.join(" + ") : <span className="italic text-neutral-300">sin conceptos</span>}
@@ -665,6 +672,8 @@ function DrawerCuota({ conceptos, cuota = null, inicial = null, ivaSugerido = 21
           notes: cuota.notes ?? "",
           // De qué hijo es: editable desde el 06/09/2026 (antes solo se veía).
           patientId: cuota.patientId ?? "",
+          // Quién la paga si no es la familia (07/09/2026).
+          payerClientId: cuota.payerClientId ?? "",
         }
       // Desde el filtro de una cuota, el alta nace con ESA cuota puesta:
       // «añadir un paciente al grupo» es abrir y elegirlo.
@@ -729,6 +738,7 @@ function DrawerCuota({ conceptos, cuota = null, inicial = null, ivaSugerido = 21
         startDate: form.startDate,
         endDate: form.endDate || null,
         notes: form.notes || null,
+        payerClientId: form.payerClientId || null,
         ...(editando ? { patientId: form.patientId || null } : {}),
       };
       const r = editando
@@ -829,6 +839,37 @@ function DrawerCuota({ conceptos, cuota = null, inicial = null, ivaSugerido = 21
             ) : (
               <SelectorDestinatarios valores={destinatarios} onChange={setDestinatarios} />
             )}
+
+            {/* Quién paga, si no es la familia (07/09/2026, Registro: «una
+                fundación o una empresa que paga la cuota de un niño todos los
+                meses hay que facturarla a mano cada mes»). Con pagador, el
+                cobro de cada mes nace a su nombre —con el niño de paciente— y
+                «Facturar el mes» le saca su factura; la familia no lo ve en la
+                suya. Vacío = paga la familia. */}
+            <div>
+              <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Quién paga</label>
+              <div className="mt-1 flex items-center gap-2">
+                <div className="flex-1 min-w-0">
+                  <SelectorCliente
+                    value={form.payerClientId}
+                    onChange={(id) => setForm((f) => ({ ...f, payerClientId: id || "" }))}
+                    fuente="billing"
+                    placeholder="La familia (lo normal)"
+                    className={inputCls}
+                    aria-label="Quién paga la cuota"
+                  />
+                </div>
+                {form.payerClientId && (
+                  <button type="button" onClick={() => setForm((f) => ({ ...f, payerClientId: "" }))}
+                    className="text-[11px] text-neutral-500 hover:text-neutral-900 whitespace-nowrap">Que pague la familia</button>
+                )}
+              </div>
+              <p className="text-[10px] text-neutral-400 mt-1">
+                {form.payerClientId
+                  ? "El cobro de cada mes nacerá a nombre de esta ficha, con el niño de paciente, y «Facturar el mes» le sacará su factura. La familia no verá este importe en la suya."
+                  : "Déjalo vacío si paga la familia. Si una fundación o una empresa paga esta cuota, elígela aquí."}
+              </p>
+            </div>
 
             <div>
               <div className="flex items-center justify-between gap-2">

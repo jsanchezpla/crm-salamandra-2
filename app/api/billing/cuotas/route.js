@@ -35,7 +35,14 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
 
     const where = {};
     if (searchParams.get("todas") !== "1") where.active = true;
-    if (searchParams.get("clientId")) where.clientId = searchParams.get("clientId");
+    if (searchParams.get("clientId")) {
+      // «Las cuotas que PAGA esta ficha» (07/09/2026): las suyas que no paga
+      // otro, más las de otras familias que paga ella (la fundación). Es lo
+      // que los cajones de cobro y de factura necesitan para rellenar el
+      // importe: a la familia no se le puede sugerir lo que paga la fundación.
+      const cid = searchParams.get("clientId");
+      where[Op.or] = [{ clientId: cid, payerClientId: null }, { payerClientId: cid }];
+    }
     if (searchParams.get("patientId")) where.patientId = searchParams.get("patientId");
     const metodos = metodosValidos(searchParams.getAll("metodo"));
     if (metodos.length) where.method = { [Op.in]: metodos };
@@ -44,6 +51,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       where,
       include: [
         { model: Client, as: "client", attributes: ["id", "name", "fiscalName", "taxId", "fiscalTaxId"] },
+        { model: Client, as: "payer", attributes: ["id", "name", "fiscalName"], required: false },
         ...includePaciente(tenantModels, hasModule),
       ],
       order: [["active", "DESC"], ["startDate", "DESC"]],
@@ -93,6 +101,14 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     const muestra = limpiarCuota({ ...body, ...destinatarios[0] });
     if (muestra.problema) return error(muestra.problema, 422);
 
+    // El pagador, si lo hay, es UNO para todo el lote (la fundación que paga
+    // la de estos tres niños) y tiene que existir: se comprueba una vez.
+    const pagadorId = muestra.valores.payerClientId ?? null;
+    if (pagadorId) {
+      const pagador = await Client.findByPk(pagadorId, { attributes: ["id"] });
+      if (!pagador) return error("La ficha del pagador no existe", 422);
+    }
+
     const permitirDuplicadas = body?.permitirDuplicadas === true;
     const creadas = [];
     const omitidas = [];
@@ -103,6 +119,10 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
 
       const ficha = await Client.findByPk(valores.clientId, { attributes: ["id", "name"] });
       if (!ficha) { omitidas.push({ ...destino, motivo: "la ficha no existe" }); continue; }
+      if (pagadorId && pagadorId === String(valores.clientId)) {
+        omitidas.push({ ...destino, nombre: ficha.name, motivo: "el pagador es la propia familia: déjalo vacío" });
+        continue;
+      }
 
       if (!permitirDuplicadas) {
         // Mismo pagador y mismo paciente con cuota viva = casi siempre un doble
@@ -137,6 +157,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
           conceptos: (muestra.valores.conceptIds ?? []).length,
           desde: muestra.valores.startDate,
           metodo: muestra.valores.method,
+          pagador: pagadorId,
         },
       });
     }

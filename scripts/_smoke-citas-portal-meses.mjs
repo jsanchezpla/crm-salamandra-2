@@ -1,4 +1,5 @@
 // @prueba ligera — funciones de /lib con una tabla de cobros de mentira; sin base, sin servidor, sin .env.
+import { Op } from "sequelize";
 /**
  * _smoke-citas-portal-meses.mjs — qué meses de documentos ve la familia en su
  * área privada, y la excepción que el centro abre a mano (19/08/2026).
@@ -82,8 +83,23 @@ function doc(id, createdAt, extra = {}) {
  * (familia y estado), devuelve solo `periodMonth` y apunta qué le han pedido.
  * Con `revienta`, lanza ese error en vez de contestar.
  */
+/**
+ * La tabla de cobros de mentira. Entiende las dos formas del `where`: la de
+ * siempre (`clientId`) y la de los centros con pacientes (07/09/2026), que
+ * pregunta por la familia O por sus niños — el cobro que paga la fundación va
+ * a nombre de ella con el niño de paciente.
+ */
 function pagosFalsos(filas = [], { revienta = null } = {}) {
   const llamadas = [];
+  const casa = (f, where) => {
+    const ramas = where[Op.or];
+    if (!ramas) return f.clientId === where.clientId;
+    return ramas.some((r) => {
+      if (r.clientId !== undefined) return f.clientId === r.clientId;
+      const dentro = r.patientId?.[Op.in];
+      return Array.isArray(dentro) && dentro.includes(f.patientId);
+    });
+  };
   return {
     llamadas,
     Payment: {
@@ -91,7 +107,7 @@ function pagosFalsos(filas = [], { revienta = null } = {}) {
         llamadas.push({ where, attributes });
         if (revienta) throw revienta;
         return filas
-          .filter((f) => f.clientId === where.clientId && f.status === where.status)
+          .filter((f) => casa(f, where) && f.status === where.status)
           .map((f) => ({ periodMonth: f.periodMonth }));
       },
     },
@@ -99,9 +115,10 @@ function pagosFalsos(filas = [], { revienta = null } = {}) {
 }
 
 /** Un cobro de la familia `c-1`, completado salvo que se diga, del mes que sea. */
-const cobro = (periodMonth, status = "completed", clientId = "c-1") => ({
+const cobro = (periodMonth, status = "completed", clientId = "c-1", patientId = null) => ({
   clientId,
   status,
+  patientId,
   periodMonth,
 });
 
@@ -255,6 +272,27 @@ describe("mesesAbiertos: cobrados + abiertos a mano, con una tabla de cobros de 
   it("los cobros de OTRA familia no abren nada a esta", async () => {
     const { Payment } = pagosFalsos([cobro("2026-06-01", "completed", "c-2")]);
     assert.equal((await mesesAbiertos({ Payment }, { id: "c-1" })).size, 0);
+  });
+  /*
+   * El mes que paga OTRO por el niño (07/09/2026): desde que la cuota puede
+   * tener pagador —la fundación—, el cobro nace a nombre del pagador con el
+   * niño de paciente. Sin esto, la familia apadrinada vería sus documentos
+   * bloqueados todos los meses aunque su cuota esté pagada.
+   */
+  it("el cobro que paga la fundación por el niño abre el mes de SU familia", async () => {
+    const { Payment, llamadas } = pagosFalsos([cobro("2026-08-01", "completed", "fundacion", "p-1")]);
+    const Patient = { async findAll() { return [{ id: "p-1" }]; } };
+    const abiertos = await mesesAbiertos({ Payment, Patient }, { id: "c-1" });
+    assert.deepEqual([...abiertos], ["2026-08"]);
+    // Y se pregunta por los DOS caminos, no solo por el de la familia.
+    assert.equal(llamadas.length, 1);
+    assert.ok(llamadas[0].where.status === "completed");
+  });
+  it("sin pacientes, la consulta es la de siempre: la familia y nada más", async () => {
+    const { Payment, llamadas } = pagosFalsos([cobro("2026-08-01")]);
+    const Patient = { async findAll() { return []; } };
+    await mesesAbiertos({ Payment, Patient }, { id: "c-1" });
+    assert.deepEqual(llamadas[0].where, { clientId: "c-1", status: "completed" });
   });
   it("un cobro sin mes (periodMonth vacío) no abre nada", async () => {
     const { Payment } = pagosFalsos([cobro(null), cobro(undefined), cobro("")]);

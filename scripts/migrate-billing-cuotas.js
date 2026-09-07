@@ -44,6 +44,7 @@ async function main() {
          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
          client_id UUID NOT NULL,
          patient_id UUID,
+         payer_client_id UUID,
          concept_ids JSONB,
          amount NUMERIC(12,2),
          method VARCHAR(20),
@@ -58,6 +59,11 @@ async function main() {
     );
     await s.query(`CREATE INDEX IF NOT EXISTS billing_cuotas_client_idx ON "${schema}"."billing_cuotas" (client_id)`);
     await s.query(`CREATE INDEX IF NOT EXISTS billing_cuotas_patient_idx ON "${schema}"."billing_cuotas" (patient_id)`);
+    // Quién paga cuando no es la familia (07/09/2026). En un schema que ya
+    // tenía la tabla la añade `migrate-billing-cuotas-pagador.js`; aquí va para
+    // que el tenant nuevo nazca con ella.
+    await s.query(`ALTER TABLE "${schema}"."billing_cuotas" ADD COLUMN IF NOT EXISTS payer_client_id UUID`);
+    await s.query(`CREATE INDEX IF NOT EXISTS billing_cuotas_payer_idx ON "${schema}"."billing_cuotas" (payer_client_id)`);
     await s.query(`CREATE INDEX IF NOT EXISTS billing_cuotas_active_idx ON "${schema}"."billing_cuotas" (active)`);
 
     // El cobro sabe de qué cuota nació. Sin FK, como el resto de puentes

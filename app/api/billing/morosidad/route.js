@@ -73,20 +73,34 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     // desaparece sola aunque el paciente siga de alta. Una familia SIN cuotas
     // asignadas sigue con la regla de siempre (paciente activo): a esas no se
     // les puede aplicar una vigencia que nadie escribió.
+    //
+    // ── Y QUIEN DEBE ES QUIEN PAGA (07/09/2026) ───────────────────────────
+    // Desde que la cuota puede tener un pagador distinto de la familia (la
+    // fundación que paga la de este niño), el cobro del mes nace a nombre del
+    // PAGADOR. Perseguir a la familia por ese mes sería perseguir a quien no
+    // debe nada y no tiene cobro a su nombre: sale morosa para siempre. Así
+    // que las cuotas se agrupan por quien las paga, y la familia solo entra en
+    // la lista por las que paga ella.
     const { Cuota } = ctx.tenantModels;
     const cuotasPorCliente = new Map();
+    const familiasConCuota = new Set();
     if (Cuota) {
       // Con importe y conceptos (07/09/2026): hacen falta para saber cuánto
       // ESPERA el mes y decir «debe 60 €» cuando se pagó a medias.
-      const filas = await Cuota.findAll({ attributes: ["id", "clientId", "patientId", "startDate", "endDate", "active", "amount", "conceptIds", "method", "dayOfMonth"], raw: true });
+      const filas = await Cuota.findAll({ attributes: ["id", "clientId", "payerClientId", "patientId", "startDate", "endDate", "active", "amount", "conceptIds", "method", "dayOfMonth"], raw: true });
       for (const f of filas) {
         if (!f.clientId) continue;
-        const cid = String(f.clientId);
+        familiasConCuota.add(String(f.clientId));
+        const cid = String(f.payerClientId || f.clientId);
         if (!cuotasPorCliente.has(cid)) cuotasPorCliente.set(cid, []);
         cuotasPorCliente.get(cid).push(f);
       }
     }
     const poblacion = new Set(porCliente.keys());
+    // Toda familia con cuota sale primero y vuelve a entrar abajo solo si paga
+    // alguna: sin esto, la que tiene pagador se quedaría dentro por la regla
+    // del paciente activo, que es de las familias SIN cuota escrita.
+    for (const cid of familiasConCuota) poblacion.delete(cid);
     for (const [cid, filas] of cuotasPorCliente) {
       if (debeElMes(filas, mes)) poblacion.add(cid);
       else poblacion.delete(cid);

@@ -300,6 +300,25 @@ describe("el plan del mes", () => {
     const r = planDeCuotasDelMes({ mes: "2026-13", cuotas: [cuota()] });
     assert.deepEqual(r, { aGenerar: [], repetidas: [], sinImporte: [] });
   });
+
+  // ── El pagador distinto de la familia (07/09/2026, Registro) ─────────────
+  it("con pagador, el cobro nace a nombre del pagador y la familia queda apuntada", () => {
+    const FUNDACION = "44444444-4444-4444-4444-444444444444";
+    const { aGenerar } = plan({ payerClientId: FUNDACION, pagador: "Fundación Adecco" });
+    assert.equal(aGenerar.length, 1);
+    assert.equal(aGenerar[0].clientId, FUNDACION);
+    assert.equal(aGenerar[0].familiaId, CLIENTE);
+    assert.equal(aGenerar[0].payerClientId, FUNDACION);
+    assert.equal(aGenerar[0].pagador, "Fundación Adecco");
+    assert.equal(aGenerar[0].importe, 190);
+  });
+
+  it("sin pagador, el cobro es de la familia y no hay pagador que apuntar", () => {
+    const { aGenerar } = plan();
+    assert.equal(aGenerar[0].clientId, CLIENTE);
+    assert.equal(aGenerar[0].familiaId, CLIENTE);
+    assert.equal(aGenerar[0].payerClientId, null);
+  });
 });
 
 describe("lo que acepta el alta de una cuota", () => {
@@ -338,6 +357,18 @@ describe("lo que acepta el alta de una cuota", () => {
   it("los conceptos repetidos se colapsan y los ids falsos se caen", () => {
     const { valores } = limpiarCuota({ ...base, conceptIds: [LOGO, LOGO, "no-soy-un-uuid"] });
     assert.deepEqual(valores.conceptIds, [LOGO]);
+  });
+
+  it("el pagador distinto de la familia viaja como id o no viaja (07/09/2026)", () => {
+    const FUNDACION = "44444444-4444-4444-4444-444444444444";
+    assert.equal(limpiarCuota({ ...base, payerClientId: FUNDACION }).valores.payerClientId, FUNDACION);
+    assert.equal(limpiarCuota({ ...base, payerClientId: "" }).valores.payerClientId, null);
+    assert.equal(limpiarCuota(base).valores.payerClientId, null);
+    assert.match(limpiarCuota({ ...base, payerClientId: "fundacion" }).problema, /pagador/i);
+    // La propia familia como pagador no es un pagador: se deja vacío.
+    assert.match(limpiarCuota({ ...base, payerClientId: CLIENTE }).problema, /familia/i);
+    // En la edición parcial solo viaja lo que viaja, también esto.
+    assert.deepEqual(Object.keys(limpiarCuota({ payerClientId: FUNDACION }, { parcial: true }).valores), ["payerClientId"]);
   });
 });
 

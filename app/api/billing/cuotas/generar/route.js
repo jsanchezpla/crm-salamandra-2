@@ -64,6 +64,9 @@ async function recogerCuotas({ tenantModels, hasModule, mes }) {
     },
     include: [
       { model: Client, as: "client", attributes: ["id", "name", "fiscalName"] },
+      // Quien paga cuando no es la familia (07/09/2026): el cobro nace a su
+      // nombre (lo decide `planDeCuotasDelMes`); aquí solo se trae para decirlo.
+      { model: Client, as: "payer", attributes: ["id", "name", "fiscalName"], required: false },
       ...includePaciente(tenantModels, hasModule),
     ],
     order: [["startDate", "ASC"]],
@@ -99,6 +102,7 @@ async function recogerCuotas({ tenantModels, hasModule, mes }) {
       ...c.toJSON(),
       nombre: c.client?.fiscalName || c.client?.name || "(ficha no encontrada)",
       paciente: c.patient ? `${c.patient.firstName} ${c.patient.lastName}`.trim() : null,
+      pagador: c.payer ? c.payer.fiscalName || c.payer.name : null,
     })),
     conceptos: conceptos.map((c) => ({ id: c.id, name: c.name, unitPrice: c.unitPrice })),
     yaGenerados: yaGenerados.map((p) => String(p.cuotaId)),
@@ -111,6 +115,7 @@ const vista = (f) => ({
   patientId: f.patientId,
   nombre: f.nombre,
   paciente: f.paciente,
+  pagador: f.pagador ?? null,
   importe: f.importe,
   importeMensual: f.importeMensual,
   method: f.method,
