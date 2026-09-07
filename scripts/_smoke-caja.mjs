@@ -281,10 +281,20 @@ describe("las devoluciones: entró un día, salió otro", () => {
     assert.equal(cobrosDelDia([], [{ ...devuelto, status: "completed" }]).lista.length, 0);
   });
 
-  it("haEntrado: cobrado y devuelto sí; pendiente y fallido no", () => {
+  it("haEntrado: cobrado sí; pendiente y fallido no", () => {
     assert.equal(haEntrado({ status: "completed" }), true);
-    assert.equal(haEntrado({ status: "refunded" }), true);
     assert.equal(haEntrado({ status: "pending" }), false);
     assert.equal(haEntrado({ status: "failed" }), false);
+  });
+
+  it("un devuelto CON fecha entró (y saldrá su día); SIN fecha, no cuenta", () => {
+    assert.equal(haEntrado({ status: "refunded", refundedAt: "2026-09-06T11:00:00.000Z" }), true);
+    // Sin `refundedAt` la salida no se apunta en ningún día: contarlo como
+    // entrado inventaría un descuadre. Se comporta como antes del 07/09/2026.
+    assert.equal(haEntrado({ status: "refunded", refundedAt: null }), false);
+    assert.equal(haEntrado({ status: "refunded" }), false);
+    const r = resumenDelDia({ cobros: [{ id: "viejo", amount: 80, method: "cash", status: "refunded" }], fondoInicial: 100 });
+    assert.equal(r.efectivo.importe, 0);
+    assert.equal(r.enCaja, 100);
   });
 });

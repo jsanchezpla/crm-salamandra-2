@@ -47,8 +47,11 @@ async function calcularEsperado(tenantModels, cashPointId, fecha, openingAmount)
   const cobros = await Payment.findAll({
     where: {
       method: "cash",
-      status: { [Op.in]: ["completed", "refunded"] },
       paidAt: { [Op.gte]: start, [Op.lt]: end },
+      // El devuelto solo cuenta como entrado si SE SABE cuándo salió: sin
+      // `refunded_at` la salida no se apunta en ningún día y el esperado subiría
+      // por un dinero que ya no está en el cajón (misma regla que `haEntrado`).
+      [Op.or]: [{ status: "completed" }, { status: "refunded", refundedAt: { [Op.ne]: null } }],
     },
     attributes: ["id", "amount"],
   });
