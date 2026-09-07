@@ -262,15 +262,33 @@ export default function ConfiguracionPage() {
           <Field label="Días de vencimiento por defecto">
             <input disabled={!puedeFacturar} type="number" min="0" value={settings.defaultPaymentTermsDays} onChange={(e) => setField("defaultPaymentTermsDays", Number(e.target.value))} className={inputCls} />
           </Field>
-          <Field label="URL del logo (facturas)">
-            <input disabled={!puedeFacturar} value={settings.logoUrl ?? ""} onChange={(e) => setField("logoUrl", e.target.value)} placeholder="https://… (PNG o JPG)" className={inputCls} />
-          </Field>
-          <Field label="URL del sello del centro">
-            <input disabled={!puedeFacturar} value={settings.stampUrl ?? ""} onChange={(e) => setField("stampUrl", e.target.value)} placeholder="https://… (PNG o JPG); sale junto a los totales" className={inputCls} />
-          </Field>
-          <Field label="URL del logo (presupuestos)">
-            <input disabled={!puedeFacturar} value={settings.quoteLogoUrl ?? ""} onChange={(e) => setField("quoteLogoUrl", e.target.value)} placeholder="Vacío = el de las facturas" className={inputCls} />
-          </Field>
+          <ImagenDeMarca
+            campo="logo"
+            etiqueta="Logo (facturas)"
+            valor={settings.logoUrl}
+            disabled={!puedeFacturar}
+            placeholder="https://… o súbelo"
+            onCambiarTexto={(v) => setField("logoUrl", v)}
+            onSubida={(ref) => setField("logoUrl", ref)}
+          />
+          <ImagenDeMarca
+            campo="sello"
+            etiqueta="Sello del centro"
+            valor={settings.stampUrl}
+            disabled={!puedeFacturar}
+            placeholder="https://… o súbelo; sale junto a los totales"
+            onCambiarTexto={(v) => setField("stampUrl", v)}
+            onSubida={(ref) => setField("stampUrl", ref)}
+          />
+          <ImagenDeMarca
+            campo="logoPresupuesto"
+            etiqueta="Logo (presupuestos)"
+            valor={settings.quoteLogoUrl}
+            disabled={!puedeFacturar}
+            placeholder="Vacío = el de las facturas"
+            onCambiarTexto={(v) => setField("quoteLogoUrl", v)}
+            onSubida={(ref) => setField("quoteLogoUrl", ref)}
+          />
           <Field label="Texto al pie de la factura" full>
             <textarea disabled={!puedeFacturar} rows={2} value={settings.invoiceFooterText ?? ""} onChange={(e) => setField("invoiceFooterText", e.target.value)} className={inputCls + " resize-y"} />
           </Field>
@@ -462,5 +480,82 @@ function Field({ label, children, full }) {
       <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">{label}</label>
       {children}
     </div>
+  );
+}
+
+/**
+ * Una imagen de marca: se sube desde el ordenador o se pega una dirección
+ * (07/09/2026, AV-0069 de Aumenta: «no sale el sello, está reflejado pero ni
+ * puesto ni quitado el click»). Hasta hoy solo existía lo segundo, y quien
+ * tenía el sello en un PNG no podía hacer nada con él.
+ *
+ * Al subir se guarda SOLO. No se deja el fichero esperando a que alguien
+ * pulse «Guardar»: un fichero subido y no guardado es basura en disco que
+ * nadie sabe de quién es.
+ */
+function ImagenDeMarca({ campo, etiqueta, valor, onSubida, disabled, onCambiarTexto, placeholder }) {
+  const [subiendo, setSubiendo] = useState(false);
+  const [fallo, setFallo] = useState(null);
+  const esSubida = typeof valor === "string" && valor.startsWith("/marca/");
+
+  async function subir(file) {
+    if (!file) return;
+    setFallo(null);
+    setSubiendo(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("campo", campo);
+      const r = await fetch("/api/billing/settings/imagen", { method: "POST", body: fd });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || "No se ha podido subir");
+      onSubida(j.data.ref);
+    } catch (e) {
+      setFallo(e.message);
+    } finally {
+      setSubiendo(false);
+    }
+  }
+
+  return (
+    <Field label={etiqueta}>
+      <div className="flex items-center gap-2">
+        <input
+          disabled={disabled}
+          value={esSubida ? "" : valor ?? ""}
+          onChange={(e) => onCambiarTexto(e.target.value)}
+          placeholder={esSubida ? "" : placeholder}
+          className={inputCls + (esSubida ? " opacity-0 pointer-events-none absolute" : "")}
+        />
+        {esSubida && (
+          <span className="flex-1 flex items-center gap-2 text-xs text-neutral-600">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`/api/billing/settings/imagen?ref=${encodeURIComponent(valor)}`} alt={etiqueta} className="h-8 w-auto max-w-[120px] object-contain rounded border border-neutral-200 bg-white" />
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onCambiarTexto("")}
+              className="text-neutral-400 hover:text-rose-600 transition-colors"
+            >
+              Quitarla
+            </button>
+          </span>
+        )}
+        <label className={`shrink-0 text-[11px] font-medium px-2.5 py-1.5 rounded-md border transition-colors ${disabled || subiendo ? "border-neutral-200 text-neutral-300" : "border-neutral-200 text-neutral-600 hover:bg-neutral-50 cursor-pointer"}`}>
+          {subiendo ? "Subiendo…" : esSubida ? "Cambiar" : "Subir imagen"}
+          <input
+            type="file"
+            accept="image/png,image/jpeg"
+            disabled={disabled || subiendo}
+            className="hidden"
+            onChange={(e) => { subir(e.target.files?.[0]); e.target.value = ""; }}
+          />
+        </label>
+      </div>
+      {fallo && <span className="mt-1 block text-[11px] text-rose-600">{fallo}</span>}
+      <span className="mt-1 block text-[11px] text-neutral-400">
+        PNG o JPG, hasta 2 MB. Son los únicos formatos que sabe dibujar el PDF.
+      </span>
+    </Field>
   );
 }

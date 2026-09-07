@@ -1,5 +1,6 @@
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
+import { CAMPOS_MARCA, refValidaPara } from "../../../../lib/billing/marcaImagen.js";
 
 
 export const GET = withTenant(async (_request, _ctx, { tenantModels, hasModule }) => {
@@ -16,7 +17,7 @@ export const GET = withTenant(async (_request, _ctx, { tenantModels, hasModule }
   }
 });
 
-export const PUT = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
+export const PUT = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
 
@@ -38,6 +39,19 @@ export const PUT = withTenant(async (request, _ctx, { tenantModels, hasModule })
     const updates = {};
     for (const k of allowed) {
       if (k in body) updates[k] = body[k];
+    }
+
+    /*
+     * Las imágenes de marca subidas (07/09/2026, AV-0069): en los ajustes se
+     * guarda una referencia nuestra, `/marca/<slug>/<uuid>.png`. El cerrojo va
+     * AQUÍ, en la escritura, y no al leer: así el PDF puede fiarse de la fila
+     * sin volver a preguntar de quién es. Una URL de internet o el campo vacío
+     * pasan tal cual, que es lo de siempre.
+     */
+    for (const columna of Object.values(CAMPOS_MARCA)) {
+      if (columna in updates && !refValidaPara(tenant.slug, updates[columna])) {
+        return error("Esa imagen de marca no es de este centro", 422);
+      }
     }
 
     // Régimen fiscal del emisor: 'company' (SL, sin IRPF) | 'autonomo' (autónomo
