@@ -519,19 +519,24 @@ describe("buildInvoicePdfBuffer: a quién se factura", () => {
     assert.ok(texto.includes("NIF/CIF: 12345678Z"));
   });
 
-  it("el correo NO se congela: no es un dato fiscal, es por dónde se escribe hoy", async () => {
+  it("el correo del cliente NO SALE en la factura (07/09/2026, el centro)", async () => {
+    // «En la factura no debe salir el mail». Y tienen razón por dos motivos:
+    // no es un dato fiscal —ninguna normativa lo pide— y con la razón social
+    // de un tutor se estaba imprimiendo el correo de una persona distinta de
+    // aquella a nombre de quien va la factura.
     const texto = await textoFactura({
       invoice: { fiscalSnapshot: { nombre: "Pérez e Hijos SL", nif: "B11111111" } },
       client: { ...CLIENTE, email: "nuevo@ejemplo.es" },
     });
-    assert.ok(texto.includes("nuevo@ejemplo.es"));
+    assert.equal(texto.includes("nuevo@ejemplo.es"), false);
+    assert.equal(texto.includes("familia@ejemplo.es"), false);
   });
 
-  it("las señas del cliente salen entre el nombre y la tabla: NIF, dirección, CP y correo", async () => {
+  it("las señas del cliente salen entre el nombre y la tabla: NIF, dirección y CP", async () => {
     const texto = await textoFactura();
     assert.ok(texto.includes("C/ Mayor 1"));
     assert.ok(texto.includes("28001 Madrid"));
-    assert.ok(texto.includes("familia@ejemplo.es"));
+    // El correo ya no: ver la prueba de arriba.
   });
 
   it("una razón social de DOS líneas no pisa el NIF (el fallo del 21/08/2026)", async () => {
@@ -576,9 +581,10 @@ describe("buildInvoicePdfBuffer: a quién se factura", () => {
   it("un cliente de señas largas empuja la TABLA hacia abajo, no se mete en ella", async () => {
     // La otra mitad del arreglo del 21/08/2026, y la que no se ve mirando solo
     // el bloque del cliente: la tabla arrancaba a altura fija (`blockY + 78`),
-    // así que en cuanto las señas ocupaban unas líneas de más el correo del
-    // cliente caía DENTRO de la banda gris de la cabecera —o directamente sobre
-    // la primera línea de concepto—. La cabecera de la tabla se dibuja en x=54
+    // así que en cuanto las señas ocupaban unas líneas de más la última línea
+    // del cliente caía DENTRO de la banda de la cabecera —o directamente sobre
+    // la primera línea de concepto—. (Desde el 07/09/2026 el correo ya no sale,
+    // así que quien empuja es la dirección, que en este caso son dos líneas.) La cabecera de la tabla se dibuja en x=54
     // y siguientes, nunca en x=50, así que la comprobación de arriba no la ve:
     // hay que mirar el bloque del cliente CONTRA la tabla.
     const buffer = await buildInvoicePdfBuffer({
@@ -589,7 +595,6 @@ describe("buildInvoicePdfBuffer: a quién se factura", () => {
         fiscalAddress: "Calle de la Ribera del Loira número 46, Edificio 2, planta 3, puerta B",
         fiscalZip: "28042",
         fiscalCity: "Madrid",
-        email: "administracion.facturacion@asociacionmadresypadres.example.org",
       },
       settings: EMISOR,
     });
@@ -603,8 +608,12 @@ describe("buildInvoicePdfBuffer: a quién se factura", () => {
     // abajo es el bloque del cliente, y tiene que quedar POR ENCIMA de la
     // cabecera de la tabla (más `y` = más arriba).
     const bloque = posiciones.filter((p) => p.x === 50 && p.y <= rotulo.y);
+    // Siete y no ocho desde el 07/09/2026: el correo del cliente ya no se
+    // imprime, así que el bloque tiene una línea menos. Lo que de verdad fija
+    // esta prueba es lo de abajo —que nada del bloque se meta en la tabla—;
+    // este número solo garantiza que el caso sigue siendo el largo.
     assert.ok(
-      bloque.length >= 8,
+      bloque.length >= 7,
       `el cliente largo debería ocupar varias líneas, no ${bloque.length}`
     );
     for (const p of bloque) {
@@ -636,8 +645,13 @@ describe("buildInvoicePdfBuffer: a quién se factura", () => {
 });
 
 describe("buildInvoicePdfBuffer: número, estado y quién la emite", () => {
-  it("una factura emitida lleva serie · número; un borrador lleva «BORRADOR»", async () => {
-    assert.ok((await textoFactura()).includes("FACTURA\nF2026 · F2026-0007"));
+  it("una factura emitida lleva su NÚMERO y no la serie; un borrador lleva «BORRADOR»", async () => {
+    // 07/09/2026, el centro: «no debe salir (…) la serie de la factura». El
+    // número correlativo identifica la factura él solo; la serie se sigue
+    // guardando y sigue mandando en la numeración, solo que no se imprime.
+    const texto = await textoFactura();
+    assert.ok(texto.includes("FACTURA\nF2026-0007"));
+    assert.equal(texto.includes("F2026 · F2026-0007"), false, "la serie ya no se imprime");
     const borrador = await textoFactura({ invoice: { status: "draft" } });
     assert.ok(borrador.includes("FACTURA\nBORRADOR"));
     assert.equal(borrador.includes("F2026-0007"), false, "un borrador no puede enseñar número");

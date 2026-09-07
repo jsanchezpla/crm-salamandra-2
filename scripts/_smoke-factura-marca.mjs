@@ -84,11 +84,18 @@ describe("el color sale de la pieza que ya existía", () => {
     assert.ok(!/parseInt\(c\.slice\(1\), 16\)/.test(pdf), "eso sería reimplementar el hex a mano");
   });
 
-  it("el título, la cabecera de la tabla y el TOTAL van del color", () => {
+  it("el título y la cabecera de la tabla van del color", () => {
     assert.match(pdf, /fillColor\(MARCA\)\.text\(S\.titulo/);
     assert.match(pdf, /doc\.rect\(LEFT, y, RIGHT - LEFT, 20\)\.fill\(MARCA_SUAVE\)/);
-    assert.match(pdf, /doc\.rect\(totX, y - 5, RIGHT - totX, 28\)\.fill\(MARCA\)/);
-    assert.match(pdf, /fillColor\("#ffffff"\)/, "el TOTAL va en blanco sobre el color");
+  });
+
+  it("pero el TOTAL no lleva caja: negrita y ya (07/09/2026, el centro)", () => {
+    // Se probó con una caja del color de la marca y el centro la quitó:
+    // «elimina el cuadro del total del dinero y simplemente ponlo en negrita».
+    // Una factura no es un cartel.
+    assert.ok(!/doc\.rect\(totX/.test(pdf), "el TOTAL ha vuelto a tener caja");
+    assert.ok(!/fillColor\("#ffffff"\)/.test(pdf), "no queda texto blanco sin fondo que lo sostenga");
+    assert.match(pdf, /doc\.font\("Helvetica-Bold"\)\.fontSize\(12\)\.fillColor\(INK\);/);
   });
 });
 
