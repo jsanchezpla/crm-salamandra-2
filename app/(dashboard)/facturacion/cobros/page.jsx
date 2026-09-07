@@ -29,6 +29,8 @@ const METHOD_LABELS = {
 
 export default function CobrosPage() {
   const [payments, setPayments] = useState([]);
+  // Los totales de todo lo que casa con el filtro, del servidor (07/09/2026).
+  const [totales, setTotales] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const [me, setMe] = useState(null);
@@ -398,6 +400,7 @@ export default function CobrosPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error");
       setPayments(json.data?.payments ?? []);
+      setTotales(json.data?.totales ?? null);
     } catch (e) {
       setErrorMsg(e.message);
     } finally { setLoading(false); }
@@ -467,9 +470,14 @@ export default function CobrosPage() {
   // no siempre trae plano).
   const filtered = payments;
 
+  // El total lo dice el servidor sobre TODO lo que casa con el filtro
+  // (07/09/2026); la suma de las filas cargadas es solo la caída de un
+  // servidor viejo sin `totales`.
   const totalCollected = useMemo(
-    () => filtered.filter((p) => p.status === "completed").reduce((s, p) => s + Number(p.amount || 0), 0),
-    [filtered]
+    () => (totales && Number.isFinite(Number(totales.cobrado))
+      ? Number(totales.cobrado)
+      : filtered.filter((p) => p.status === "completed").reduce((s, p) => s + Number(p.amount || 0), 0)),
+    [filtered, totales]
   );
 
   const loadMorosidad = useCallback(() => {
@@ -757,7 +765,9 @@ export default function CobrosPage() {
                   </Link>
                   <span className="text-[11px] text-neutral-500">{m.phone || m.email || "sin contacto"}</span>
                   <span className={`text-[11px] px-2 py-0.5 rounded-full ${m.mesesSeguidos >= 3 ? "bg-red-50 text-red-700" : m.mesesSeguidos === 2 ? "bg-amber-50 text-amber-700" : "bg-neutral-100 text-neutral-600"}`}>
-                    {m.mesesSeguidos === 1 ? "1 mes" : `${m.mesesSeguidos} meses`}
+                    {m.mesesSeguidos === 0 && m.debe != null
+                      ? `debe ${fmtMoney(m.debe)}`
+                      : m.mesesSeguidos === 1 ? "1 mes" : `${m.mesesSeguidos} meses`}
                   </span>
                 </li>
               ))}

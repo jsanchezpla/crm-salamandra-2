@@ -1,4 +1,4 @@
-import { Op } from "sequelize";
+import { Op, fn, col } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { logBillingAudit, resumenImporte, datosPeticion } from "../../../../lib/billing/audit.js";
 import { ok, created, error, forbidden, notFound, serverError } from "../../../../lib/utils/apiResponse.js";
@@ -104,7 +104,26 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
       };
     });
 
-    return ok({ payments, total: count, page, limit });
+    /*
+     * Los totales de TODO lo que casa con el filtro, no de la página
+     * (07/09/2026): la cabecera de Cobros sumaba las 100 filas cargadas y en
+     * Aumenta (308 cobros en septiembre) decía un «Total cobrado» que era el
+     * de la última página. Un belongsTo no duplica filas, así que la suma con
+     * los mismos JOIN de la búsqueda es exacta.
+     */
+    const sumar = async (estado) => {
+      const [fila] = await Payment.findAll({
+        where: { ...where, status: estado },
+        include: busqueda ? include : [],
+        attributes: [[fn("COALESCE", fn("SUM", col("Payment.amount")), 0), "s"]],
+        raw: true,
+        ...(busqueda ? { subQuery: false } : {}),
+      });
+      return Number(fila?.s ?? 0);
+    };
+    const totales = { cobrado: await sumar("completed"), pendiente: await sumar("pending") };
+
+    return ok({ payments, total: count, page, limit, totales });
   } catch (err) {
     return serverError(err);
   }
