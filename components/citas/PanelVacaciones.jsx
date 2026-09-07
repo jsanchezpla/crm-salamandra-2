@@ -112,6 +112,12 @@ export default function PanelVacaciones() {
   const [abierto, setAbierto] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [fallo, setFallo] = useState(null);
+  /*
+   * El aviso de «esto cierra la agenda meses» cuando el servidor lo pide
+   * (08/09/2026). No se guarda a la primera: se enseña, y solo si dicen que
+   * sí se manda otra vez con `confirmarLargo`.
+   */
+  const [avisoLargo, setAvisoLargo] = useState(null);
   const [aviso, setAviso] = useState(null);
   /** Quién soy, según el servidor: `{ esAdmin, esAdministracion, puedeElegirPersona, teamMemberId }`. */
   const [yo, setYo] = useState(null);
@@ -200,6 +206,7 @@ export default function PanelVacaciones() {
     setAbierto(false);
     setEditando(null);
     setFallo(null);
+    setAvisoLargo(null);
     setForm((f) => ({
       ...f,
       teamMemberId: yo?.teamMemberId ?? "",
@@ -210,9 +217,10 @@ export default function PanelVacaciones() {
   }
 
   // El mismo formulario pone y corrige: lo único que cambia es a dónde va.
-  async function guardar() {
+  async function guardar(confirmarLargo = false) {
     setFallo(null);
     setAviso(null);
+    if (!confirmarLargo) setAvisoLargo(null);
     const fechaFin = form.fechaFin || form.fechaIni;
     const startAt = iso(form.fechaIni, form.horaIni);
     const endAt = iso(fechaFin, form.horaFin);
@@ -233,6 +241,8 @@ export default function PanelVacaciones() {
         categoryKey: form.categoryKey || null,
         tallerId: form.tallerId || null,
       };
+      // Solo va cuando ya han dicho que sí al aviso de más de un día.
+      if (confirmarLargo) cuerpo.confirmarLargo = true;
       // De quién es solo se manda si se puede cambiar (dirección y
       // administración). Sin eso no se manda NUNCA al corregir: el servidor
       // responde 403 al verlo, aunque sea el mismo valor que ya tenía.
@@ -247,7 +257,18 @@ export default function PanelVacaciones() {
         }
       );
       const json = await res.json();
+      /*
+       * 422 con `avisoLargo` no es un fallo: es una pregunta. Se enseña con su
+       * botón y el formulario se queda abierto con lo que hay escrito, para
+       * que se pueda corregir la fecha de fin sin volver a teclearlo todo.
+       */
+      if (res.status === 422 && json.avisoLargo) {
+        setAvisoLargo({ ...json.avisoLargo, texto: json.error || json.avisoLargo.texto });
+        setGuardando(false);
+        return;
+      }
       if (!res.ok) throw new Error(json.error || "No se ha podido guardar");
+      setAvisoLargo(null);
       // Las citas que ya estaban dentro NO se cancelan: se avisa y decide el centro.
       const hecho = editando ? "Corregida" : "Bloqueado";
       if (json.data?.citasDentro > 0) {
@@ -397,9 +418,26 @@ export default function PanelVacaciones() {
           <p className="text-[11px] text-neutral-400 mt-2">
             Si dejas «Hasta» vacío se bloquea solo el día de inicio. Un día entero es de 00:00 a 23:59.
           </p>
+          {/*
+            * El aviso de un bloqueo de más de un día (08/09/2026). Sale ANTES
+            * de los botones y con el suyo propio: guardarlo es lo raro, y lo
+            * raro se hace en un segundo clic con el texto delante.
+            */}
+          {avisoLargo && (
+            <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2">
+              <p className="text-xs text-amber-900">{avisoLargo.texto}</p>
+              <button
+                onClick={() => guardar(true)}
+                disabled={guardando}
+                className="mt-2 text-xs px-3 py-1.5 rounded-md border border-amber-400 text-amber-900 hover:bg-amber-100 disabled:opacity-50"
+              >
+                Sé lo que hago: ciérrala {avisoLargo.dias} días seguidos
+              </button>
+            </div>
+          )}
           <div className="mt-3 flex items-center gap-2">
             <button
-              onClick={guardar}
+              onClick={() => guardar()}
               disabled={guardando}
               className="text-xs px-3 py-1.5 rounded-md bg-[#0F0F0F] text-white hover:bg-[#222] disabled:opacity-50"
             >

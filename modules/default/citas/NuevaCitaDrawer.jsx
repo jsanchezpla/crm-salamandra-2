@@ -1215,12 +1215,27 @@ function BloqueoRapido({ inicial, categorias, esAdmin, miFicha, teamMembers, avi
       // De quién es solo lo manda dirección; a un no-admin el servidor se lo
       // pone a su nombre haga lo que haga el navegador.
       if (esAdmin) cuerpo.teamMemberId = form.teamMemberId || null;
-      const r = await fetch("/api/citas/bloqueos", {
+      let r = await fetch("/api/citas/bloqueos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(cuerpo),
       });
-      const j = await r.json();
+      let j = await r.json();
+      /*
+       * Más de un día se pregunta (08/09/2026): desde aquí se bloquea un rato
+       * de la agenda del día, así que un tramo de meses casi siempre es la
+       * fecha de fin mal puesta. Se dice lo que va a pasar y, si aun así lo
+       * quieren, se manda otra vez con la confirmación.
+       */
+      if (r.status === 422 && j.avisoLargo) {
+        if (!(await confirmar(j.error))) { setSaving(false); return; }
+        r = await fetch("/api/citas/bloqueos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...cuerpo, confirmarLargo: true }),
+        });
+        j = await r.json();
+      }
       if (!r.ok || !j.ok) throw new Error(j.error || "No se ha podido bloquear el tramo");
       if (j.data?.citasDentro > 0) {
         await avisar({

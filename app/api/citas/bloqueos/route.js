@@ -1,6 +1,6 @@
 import { Op, fn, col } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
-import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
+import { ok, created, error, errorConDatos, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { logCitasAudit } from "../../../../lib/citas/audit.js";
 import { buildMadridDate } from "../../../../lib/citas/slots.js";
 import { colorDeBloqueo } from "../../../../lib/citas/coloresBloqueo.js";
@@ -10,6 +10,7 @@ import { categoriaDe, categoriasDe, claveValida } from "../../../../lib/citas/ca
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
 import { esAdministracion as esDeAdministracion, idsDeAdministracion } from "../../../../lib/team/departamentos.js";
 import { aNombreDeQuien, puedeElegirPersona, vetoParaTocar } from "../../../../lib/citas/permisosBloqueos.js";
+import { avisoDeBloqueoLargo } from "../../../../lib/citas/duracionBloqueo.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
@@ -398,6 +399,19 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     if (endAt <= startAt) return error("La fecha de fin tiene que ser posterior a la de inicio", 422);
 
     /*
+     * Un bloqueo de más de un día hay que quererlo (08/09/2026): dos personas
+     * cerraron sin saberlo su agenda hasta el 30/06/2027 por entender «hasta
+     * cuándo» como «hasta cuándo se repite». El freno está aquí y no solo en la
+     * pantalla para que una pestaña vieja tampoco pueda.
+     */
+    const largo = avisoDeBloqueoLargo(startAt, endAt);
+    if (largo && !body.confirmarLargo) {
+      // `errorConDatos` y no `error`: el segundo se come los detalles en
+      // producción, y la pantalla necesita el aviso para poder preguntar.
+      return errorConDatos(largo.texto, 422, { avisoLargo: largo });
+    }
+
+    /*
      * De quién es la ausencia.
      *
      * Lo decide `aNombreDeQuien` (lib/citas/permisosBloqueos.js, 07/09/2026):
@@ -563,6 +577,17 @@ export const PATCH = withTenant(async (request, _rc, ctx) => {
     const finFinal = cambios.endAt ?? fila.endAt;
     if (new Date(finFinal) <= new Date(inicioFinal)) {
       return error("La fecha de fin tiene que ser posterior a la de inicio", 422);
+    }
+    /*
+     * El mismo freno que al crear, y por el mismo motivo: estirar un bloqueo
+     * hasta el fin de curso desde la edición tapa la agenda igual que crearlo
+     * así. Solo se pregunta si el cambio lo ALARGA por encima del día; dejar
+     * como está uno que ya era largo no vuelve a preguntar.
+     */
+    const yaEraLargo = avisoDeBloqueoLargo(fila.startAt, fila.endAt);
+    const seraLargo = avisoDeBloqueoLargo(inicioFinal, finFinal);
+    if (seraLargo && !yaEraLargo && !body.confirmarLargo) {
+      return errorConDatos(seraLargo.texto, 422, { avisoLargo: seraLargo });
     }
 
     if (body.label !== undefined) {
