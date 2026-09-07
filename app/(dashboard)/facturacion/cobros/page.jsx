@@ -644,6 +644,15 @@ export default function CobrosPage() {
         <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
           <Link href="/facturacion" className="text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">← Volver</Link>
           <ExportButtons xlsxUrl={exportUrl} />
+          {/* La factura a mano, desde donde se está siempre (07/09/2026,
+              AV-0063 de Aumenta: «no veo la forma de hacerlo»). */}
+          {puedeFacturar && (
+            <Link
+              href="/facturacion/facturas?nueva=1"
+              className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-[var(--color-primary,#1B3A2D)] border border-[var(--color-primary,#1B3A2D)] hover:bg-neutral-50 transition-colors"
+              title="Una factura escrita a mano: concepto libre, precio e IVA"
+            >+ Factura a mano</Link>
+          )}
           {puedeFacturar && (
             <button
               onClick={() => setShowFacturarMes(true)}

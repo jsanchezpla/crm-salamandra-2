@@ -750,6 +750,16 @@ llevar aparejado el tipo que cobró — «aunque sea internamente».
 
 Motivo y contexto: `docs/decisions/2026-08-29-el-dinero-se-sabe-por-facturas.md`.
 
+## La factura a mano, a la vista (07/09/2026, AV-0063 de Aumenta)
+
+Rosa: «necesito hacer una factura con concepto manual y no veo la forma». La
+factura libre existía y no está gateada por rol (`puedeFacturar = Boolean(me)`
+desde el 14/08), pero solo se llegaba desde la pestaña Facturas y el campo del
+concepto no decía que era libre. Ahora Cobros tiene «+ Factura a mano»
+(`/facturacion/facturas?nueva=1`, que abre el alta al entrar) y cada línea
+lleva el rótulo «Concepto (texto libre) · o elige uno del catálogo arriba».
+Nada cambia en el servidor.
+
 ## Facturación del mes (31/08/2026)
 
 La «Facturación múltiple» de Organízate, que era lo único de su facturación que

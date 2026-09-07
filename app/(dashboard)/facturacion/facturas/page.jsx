@@ -623,6 +623,14 @@ export default function FacturasPage() {
     if (id) openDetailById(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // `?nueva=1` abre el alta a mano al entrar (07/09/2026, AV-0063): es como
+  // llega el enlace «+ Factura a mano» de Cobros. Espera a `me` porque el
+  // formulario se pinta con los ajustes que llegan con la sesión.
+  useEffect(() => {
+    if (!me) return;
+    if (new URLSearchParams(window.location.search).get("nueva") === "1") openCreate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me]);
 
   // Abre una factura por id (re-fetch con includes: rectifies/rectifiedBy).
   async function openDetailById(id) {
@@ -1137,8 +1145,14 @@ export default function FacturasPage() {
                                 className={inputCls + " text-xs"}
                               />
                             )}
+                            {/* El texto es LIBRE (07/09/2026, AV-0063): con el
+                                desplegable del catálogo encima parecía que
+                                había que elegir de una lista. */}
+                            <label className="block text-[10px] uppercase tracking-wider text-neutral-400">
+                              Concepto (texto libre){conceptosCatalogo.length > 0 ? " · o elige uno del catálogo arriba" : ""}
+                            </label>
                             <div className="flex items-start gap-2">
-                              <input value={l.description} placeholder="Concepto" onChange={(e) => setLine(idx, "description", e.target.value)} className={inputCls} />
+                              <input value={l.description} placeholder="Escribe el concepto tal cual irá en la factura" onChange={(e) => setLine(idx, "description", e.target.value)} className={inputCls} />
                               {form.lines.length > 1 && (
                                 <button type="button" onClick={() => removeLine(idx)} className="shrink-0 text-neutral-300 hover:text-red-500 transition-colors px-2">
                                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
