@@ -60,6 +60,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { getTenantDb } from "../lib/db/tenantDb.js";
+import { categoriasDe, categoriaPorEtiqueta } from "../lib/citas/categoriasBloqueo.js";
 
 const args = process.argv.slice(2);
 const CONFIRM = args.includes("--confirm");
@@ -370,6 +371,29 @@ async function main() {
   const bloquesCrear = [], bloquesBorrar = [];
   let bloquesIguales = 0, bloquesConCola = 0, bloquesEnCierre = 0;
   if (!SIN_RESERVAS) {
+    /*
+     * ── EL BLOQUEO NACE YA CLASIFICADO (07/09/2026) ──────────────────────────
+     *
+     * Las categorías (LIBRE PACIENTES, DESCANSO, GESTIÓN DOCUMENTAL…) son las
+     * que colorean y filtran la agenda, y hasta hoy esta copia creaba los
+     * bloqueos sin ninguna: 295 entraron así el 02/09 y 542 el 07/09, y hubo
+     * que pasarles después `backfill-categorias-bloqueo.js`. Se clasifica aquí,
+     * con la MISMA función que usa el relleno, para no repetir esa faena en
+     * cada pasada.
+     *
+     * Dos cosas a propósito: si el centro no tiene categorías, `categoriasDe`
+     * devuelve lista vacía y el bloqueo se queda sin clave (cargarlas es una
+     * decisión suya, no algo que le pase por la espalda); y la clave NO entra
+     * en la firma `k` de más abajo, así que un bloqueo que ya está puesto no se
+     * borra ni se recrea por esto — quien eligió su categoría a mano la
+     * conserva.
+     */
+    const [[tenant] = []] = await sequelize.query(
+      `SELECT settings FROM master.tenants WHERE slug = :slug`,
+      { replacements: { slug: SLUG } },
+    );
+    const categorias = categoriasDe(tenant);
+
     const deseados = new Map();
     for (const r of volcado.reservas) {
       if (r.fecha < DESDE) continue;
@@ -398,7 +422,16 @@ async function main() {
       const endAt = sumarMin(startAt, r.dur || 15);
       const label = etiquetaReserva(r.texto);
       const k = `${teamMemberId}|${startAt.toISOString()}|${endAt.toISOString()}|${label}`;
-      if (!deseados.has(k)) deseados.set(k, { teamMemberId, startAt, endAt, label, notes: `${MARCA} · reserva del planning` });
+      if (!deseados.has(k)) {
+        deseados.set(k, {
+          teamMemberId,
+          startAt,
+          endAt,
+          label,
+          categoryKey: categoriaPorEtiqueta(label, categorias),
+          notes: `${MARCA} · reserva del planning`,
+        });
+      }
     }
     const actuales = await m.TeamBlock.findAll({
       where: { startAt: { [Op.gte]: desdeInstante }, notes: { [Op.like]: `${MARCA}%` } },
