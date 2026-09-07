@@ -38,8 +38,21 @@
  * `lib/team/vocabulario.js` y llega en `vocabularioEquipo`: aquí no se
  * escribe la palabra a mano en ninguna frase.
  *
- * Lo que NO se hace aquí: bloqueos arrastrables, clic derecho, crear citas.
- * Para eso está la agenda de siempre, a un clic («Volver»).
+ * ── LOS BLOQUEOS TAMBIÉN SE ARRASTRAN (07/09/2026, AV-0056 de Aumenta) ─────
+ * «Hemos intentado mover un hueco asignado libre paciente y no nos deja,
+ * solamente nos deja mover los pacientes.» Los huecos «LIBRE PACIENTES» y
+ * «Reservado» de cada terapeuta son bloqueos a su nombre, y aquí se pintaban
+ * como bloques fijos. Ahora un bloqueo CON persona se arrastra igual que una
+ * cita: dentro de su columna cambia de hora, a otra columna cambia además de
+ * persona (`PATCH /api/citas/bloqueos` con `teamMemberId`). Quién puede lo
+ * decide el servidor (`lib/citas/permisosBloqueos.js`: dirección y
+ * administración los de cualquiera, el resto los suyos); si no deja, el tramo
+ * vuelve con el aviso. Los cierres de centro (sin persona) se pintan en todas
+ * las columnas y se quedan quietos: arrastrarlos a una sería ponérselos a
+ * alguien.
+ *
+ * Lo que NO se hace aquí: clic derecho, crear citas. Para eso está la agenda
+ * de siempre, a un clic («Volver»).
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -151,10 +164,13 @@ export default function AgendaPorTerapeuta({
     () => [...new Set(columnas.map((m) => toDateInput(fechaDe(m.id))))].sort().join(","),
     [columnas, fechaDe]
   );
-  useEffect(() => {
-    let vivo = true;
+  // Número de la última carga pedida: una respuesta vieja no pisa a una nueva
+  // (se cambia de día dos veces seguidas, o se mueve un bloqueo mientras carga).
+  const cargaRef = useRef(0);
+  const cargarBloqueos = useCallback(() => {
+    const carga = ++cargaRef.current;
     const dias = diasEnPantalla ? diasEnPantalla.split(",") : [];
-    Promise.all(
+    return Promise.all(
       dias.map((clave) => {
         const desde = desdeInputFecha(clave);
         const hasta = sumarDias(desde, 1);
@@ -164,17 +180,23 @@ export default function AgendaPorTerapeuta({
           .catch(() => []);
       })
     ).then((listas) => {
-      if (!vivo) return;
+      if (carga !== cargaRef.current) return;
       // El mismo bloqueo puede venir de dos días si los cruza: una vez basta.
       const vistos = new Set();
       bloqueosRef.current = listas.flat().filter((b) => !vistos.has(b.id) && vistos.add(b.id));
       refrescarTodas();
     });
-    return () => { vivo = false; };
+  }, [diasEnPantalla, refrescarTodas]);
+  useEffect(() => {
+    cargarBloqueos();
     // `version`: un bloqueo editado o borrado desde el modal también entra aquí.
-  }, [diasEnPantalla, version, refrescarTodas]);
+  }, [cargarBloqueos, version]);
 
-  /** Los bloqueos de una persona (y los del centro entero), como bloques fijos: aquí no se arrastran. */
+  /**
+   * Los bloqueos de una persona (y los del centro entero). Los que tienen
+   * persona se arrastran desde el 07/09/2026 (ver cabecera); los del centro
+   * se quedan fijos.
+   */
   const fondosDe = useCallback((teamMemberId) =>
     bloqueosRef.current
       .filter((b) => !b.teamMemberId || b.teamMemberId === teamMemberId)
@@ -191,8 +213,8 @@ export default function AgendaPorTerapeuta({
           backgroundColor: color,
           borderColor: color,
           textColor: colorTextoSobre(color),
-          editable: false,
-          startEditable: false,
+          editable: !!b.teamMemberId,
+          durationEditable: false,
           extendedProps: {
             esBloqueo: true, bloqueoId: b.id, label: b.label, categoryKey: b.categoryKey ?? null, tallerId: b.tallerId ?? null,
             categoryLabel: b.categoryLabel ?? null, teamMemberName: b.teamMemberName ?? null,
@@ -232,8 +254,12 @@ export default function AgendaPorTerapeuta({
    * se soltó, así que el mismo PATCH sirve para el mismo día y para otro.
    */
   async function recibir(teamMemberId, info) {
+    if (info.event.extendedProps?.esBloqueo) {
+      await moverBloqueo(info, { teamMemberId });
+      return;
+    }
     const inicio = info.event.start ? info.event.start.toISOString() : null;
-    if (!inicio || info.event.extendedProps?.esBloqueo) {
+    if (!inicio) {
       info.revert();
       return;
     }
@@ -268,10 +294,49 @@ export default function AgendaPorTerapeuta({
     }
   }
 
+  /**
+   * Un bloqueo arrastrado (07/09/2026, AV-0056): dentro de su columna cambia
+   * de hora; a otra columna, además de persona. FullCalendar ya movió inicio y
+   * fin (la duración no cambia). El PATCH pone las vallas y, si no deja, el
+   * tramo vuelve con el aviso. No se pregunta si avisar a nadie: un bloqueo no
+   * tiene paciente.
+   */
+  async function moverBloqueo(info, extra = {}) {
+    const inicio = info.event.start?.toISOString();
+    const fin = info.event.end?.toISOString();
+    if (!inicio || !fin) {
+      info.revert();
+      return;
+    }
+    setMoviendo(true);
+    try {
+      const r = await fetch(`/api/citas/bloqueos?id=${info.event.extendedProps.bloqueoId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startAt: inicio, endAt: fin, ...extra }),
+      });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || "No se pudo mover el bloqueo");
+      // Como con una cita recibida: la copia que soltó el arrastre no viene de
+      // la fuente de la columna; se retira y manda lo que traiga la recarga.
+      if (extra.teamMemberId) info.event.remove();
+    } catch (err) {
+      info.revert();
+      await avisar?.({ titulo: "El bloqueo no se ha movido", texto: err.message });
+    } finally {
+      setMoviendo(false);
+      cargarBloqueos();
+    }
+  }
+
   /** La cita se mueve DENTRO de su columna: solo cambia la hora. */
   async function mover(info) {
+    if (info.event.extendedProps?.esBloqueo) {
+      await moverBloqueo(info);
+      return;
+    }
     const inicio = info.event.start ? info.event.start.toISOString() : null;
-    if (!inicio || info.event.extendedProps?.esBloqueo) {
+    if (!inicio) {
       info.revert();
       return;
     }
@@ -320,7 +385,7 @@ export default function AgendaPorTerapeuta({
         <span className="text-[11px] text-neutral-400 ml-auto">
           {moviendo
             ? "Moviendo…"
-            : `Arrastra una cita a la columna de ${voc.otro} para pasársela. Cada columna puede enseñar un día distinto: cámbialo encima del nombre.`}
+            : `Arrastra una cita o un bloqueo a la columna de ${voc.otro} para pasárselo. Cada columna puede enseñar un día distinto: cámbialo encima del nombre.`}
         </span>
       </div>
       {recortadas > 0 && (

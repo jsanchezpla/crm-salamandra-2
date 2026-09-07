@@ -1598,7 +1598,7 @@ es donde la pidió Jorge: una pantalla, dos caminos.
 | | Regla |
 | --- | --- |
 | **Ver** | Todo el equipo ve los de todo el equipo, más los cierres de centro. Sin excepciones ni interruptor. |
-| **Poner / editar / quitar** | Cada cual, SOLO los suyos. Dirección, los de cualquiera y los cierres de centro. Lo imponen el POST, el PATCH y el DELETE; el desplegable «Quién» ni siquiera se le enseña a quien no es admin. |
+| **Poner / editar / quitar** | Cada cual, SOLO los suyos. Dirección, los de cualquiera y los cierres de centro. **Administración** (departamento de la ficha de equipo, `lib/team/departamentos.js`; desde el 07/09/2026, AV-0056 de Aumenta), los de cualquiera pero NO los cierres de centro. Lo imponen el POST, el PATCH y el DELETE con `lib/citas/permisosBloqueos.js` (prueba: `_smoke-permisos-bloqueos.mjs`); el desplegable «Quién» solo se enseña a dirección y administración, y «Todo el centro» solo a dirección. |
 | **En el calendario** | El tramo se rotula `Motivo · Persona` (y `Motivo · Todo el centro` si no tiene persona), para que se sepa de quién es sin abrirlo. Con un 📎 detrás si cuelga algún documento (01/09/2026): se ve que hay algo dentro sin abrirlo. |
 | **Documentos del tramo** | Desde el 01/09/2026 un bloqueo puede llevar documentos: se suben desde su modal (o desde el archivo, eligiendo el bloqueo) y ahí mismo se elige a quién del equipo se le pide que lo LEA. El documento va al **archivo central** con `source='bloqueo'` y `documents.team_block_id`; el acuse de lectura vive en `document_reads`. Todo el detalle en `documents.md` → «Documentos que HAY QUE LEER, y documentos de un bloqueo». |
 
@@ -1804,8 +1804,10 @@ independiente, porque partir un día por persona en la propia librería es su
 plugin de recursos, de pago) y usa lo que trae de fábrica para arrastrar un
 evento de un calendario a otro (`droppable` + `eventReceive`): al soltar, UN
 `PATCH /api/citas/bookings/[id]` con `teamMemberId` y `scheduledAt`, que
-valida el solape y, si no deja, la cita vuelve con el aviso. Los bloqueos se
-ven pero no se arrastran ahí; «Volver» devuelve la agenda de siempre en el
+valida el solape y, si no deja, la cita vuelve con el aviso. Los bloqueos CON
+persona también se arrastran desde el 07/09/2026 (AV-0056; `PATCH
+/api/citas/bloqueos`, con `teamMemberId` si cambian de columna); los cierres
+de centro se quedan quietos. «Volver» devuelve la agenda de siempre en el
 mismo día.
 
 ## Cuartos de hora, 7–21, un color, bloqueos solo con categoría, correo con confirmación y «Bloqueo» desde el hueco (03/09/2026)
@@ -1941,3 +1943,33 @@ la FK `Booking.clientId → clients.id` (22/07).
 ## Revisión del 06/09/2026
 
 - «Quitar las futuras» (`/api/pacientes/[id]/desprogramar`) corta en este mismo instante, nunca antes (la sesión de esta mañana no se cancela), y va cita a cita: retira el borrador de registro (`retirarBorradoresDeLaCita`) y devuelve el dinero si estaba cobrada (`reembolsarCitaSiProcede`), como el PATCH de una cita. Devuelve `reembolsadas`.
+
+## Administración mueve los bloqueos de cualquiera, y también en las columnas por terapeuta (07/09/2026)
+
+AV-0056 y AV-0058 de Aumenta (Olga, administración): «hemos intentado mover un
+hueco asignado libre paciente y no nos deja, solamente nos deja mover los
+pacientes»; «queríamos editar y añadir un texto y no era posible». Los huecos
+«LIBRE PACIENTES» (2.833) y «Reservado» (526) importados de Organízate son
+`team_blocks` a nombre de cada terapeuta, y Olga entra con rol `user`: la regla
+del 10/08/2026 (cada cual los suyos) le devolvía 403 al guardar el modal o al
+arrastrar en el calendario grande, y en la agenda por terapeuta los bloqueos ni
+se arrastraban.
+
+- **La regla vive en un sitio**: `lib/citas/permisosBloqueos.js`
+  (`vetoParaTocar`, `aNombreDeQuien`, `puedeElegirPersona`), y el endpoint la
+  aplica en POST, PATCH y DELETE. Tres escalones: dirección todo;
+  **administración** —el departamento de la ficha de equipo, el mismo criterio
+  del botón «Todos menos Administración» del archivo— los de cualquier
+  persona pero nunca un cierre de centro (sin persona); el resto, los suyos.
+  `quienSoy()` lee el departamento fresco en cada petición y manda al
+  navegador `esAdministracion` y `puedeElegirPersona`.
+- **Pantalla de Bloqueos**: administración ve el desplegable «Quién» con el
+  equipo (sin «Todo el centro») y los botones Editar / Quitar de todos.
+- **Columnas por terapeuta**: los bloqueos con persona se arrastran como una
+  cita (dentro de la columna cambia la hora; a otra columna, la persona); los
+  del centro siguen fijos. `AgendaPorTerapeuta` recarga sus bloqueos tras
+  mover uno (`cargarBloqueos`, con número de carga para que una respuesta vieja
+  no pise a la nueva).
+- nutri_laura no tiene a nadie en Administración ni Contabilidad, así que el
+  caso que parió la regla (Rocío cerrando la agenda de Laura) sigue igual de
+  cerrado.

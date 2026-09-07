@@ -34,6 +34,10 @@ import { colorTextoSobre } from "@/lib/citas/coloresBloqueo.js";
  *
  *   · el desplegable arranca en UNO MISMO; cerrar el centro es una elección.
  *   · quien no es admin no ve desplegable: solo puede ponerse las suyas.
+ *   · salvo ADMINISTRACIÓN (07/09/2026, AV-0056 de Aumenta: allí la agenda
+ *     la coloca administración con rol `user`): ve el desplegable con todo el
+ *     equipo, pero sin «Todo el centro». La regla, en
+ *     `lib/citas/permisosBloqueos.js`; aquí solo se enseña o no la puerta.
  *   · cada cual ve las suyas y las del centro, salvo con la agenda compartida
  *     encendida (Aumenta), donde se siguen viendo todas.
  *
@@ -109,7 +113,7 @@ export default function PanelVacaciones() {
   const [guardando, setGuardando] = useState(false);
   const [fallo, setFallo] = useState(null);
   const [aviso, setAviso] = useState(null);
-  /** Quién soy, según el servidor: `{ esAdmin, teamMemberId }`. */
+  /** Quién soy, según el servidor: `{ esAdmin, esAdministracion, puedeElegirPersona, teamMemberId }`. */
   const [yo, setYo] = useState(null);
   /** `null` = el formulario crea; un id = está corrigiendo esa ausencia. */
   const [editando, setEditando] = useState(null);
@@ -229,10 +233,10 @@ export default function PanelVacaciones() {
         categoryKey: form.categoryKey || null,
         tallerId: form.tallerId || null,
       };
-      // De quién es solo se manda si se puede cambiar. Sin ser dirección no se
-      // manda NUNCA al corregir: el servidor responde 403 al verlo, aunque sea
-      // el mismo valor que ya tenía.
-      if (yo?.esAdmin) cuerpo.teamMemberId = form.teamMemberId || null;
+      // De quién es solo se manda si se puede cambiar (dirección y
+      // administración). Sin eso no se manda NUNCA al corregir: el servidor
+      // responde 403 al verlo, aunque sea el mismo valor que ya tenía.
+      if (yo?.puedeElegirPersona) cuerpo.teamMemberId = form.teamMemberId || null;
 
       const res = await fetch(
         editando ? `/api/citas/bloqueos?id=${editando}` : "/api/citas/bloqueos",
@@ -299,7 +303,7 @@ export default function PanelVacaciones() {
           <div className={`grid gap-3 sm:grid-cols-2 ${categorias.length || talleres.length ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
             <label className="text-xs">
               <span className="block text-neutral-500 mb-1">Quién</span>
-              {yo?.esAdmin ? (
+              {yo?.puedeElegirPersona ? (
                 <select
                   value={form.teamMemberId}
                   onChange={(e) => setForm((f) => ({ ...f, teamMemberId: e.target.value }))}
@@ -309,8 +313,10 @@ export default function PanelVacaciones() {
                     <option key={m.id} value={m.id}>{m.displayName || m.email}</option>
                   ))}
                   {/* Al final y con su nombre completo: cerrar el centro entero
-                      es la excepción, no lo primero que se encuentra la mano. */}
-                  <option value="">Todo el centro (cierra a todo el mundo)</option>
+                      es la excepción, no lo primero que se encuentra la mano.
+                      Y solo dirección: administración elige a la persona pero
+                      no cierra el centro (07/09/2026). */}
+                  {yo?.esAdmin && <option value="">Todo el centro (cierra a todo el mundo)</option>}
                 </select>
               ) : (
                 /* Quien no es dirección solo se pone ausencias a sí mismo, así
@@ -459,7 +465,7 @@ export default function PanelVacaciones() {
             </div>
             {/* Editar y quitar van juntos: quien puede abrir un hueco puede
                 corregirlo. La condición es la misma que impone el servidor. */}
-            {(yo?.esAdmin || (b.teamMemberId && b.teamMemberId === yo?.teamMemberId)) && (
+            {(yo?.esAdmin || (b.teamMemberId && (yo?.esAdministracion || b.teamMemberId === yo?.teamMemberId))) && (
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   onClick={() => editar(b)}

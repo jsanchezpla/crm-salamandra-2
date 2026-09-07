@@ -8,7 +8,8 @@ import { categoriaDe, categoriasDe, claveValida } from "../../../../lib/citas/ca
 // `lib/citas/visibilidad.js` ya no se usa aquí: desde el 14/08/2026 los bloqueos
 // los ve todo el equipo y no siguen la regla de las citas (ver cabecera del GET).
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
-import { idsDeAdministracion } from "../../../../lib/team/departamentos.js";
+import { esAdministracion as esDeAdministracion, idsDeAdministracion } from "../../../../lib/team/departamentos.js";
+import { aNombreDeQuien, puedeElegirPersona, vetoParaTocar } from "../../../../lib/citas/permisosBloqueos.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
@@ -39,6 +40,11 @@ const ADMIN_ROLES = new Set(["admin", "superadmin"]);
  *     se resuelve AQUÍ a partir de la sesión; lo que mande el navegador da
  *     igual. Cerrar el centro entero sigue siendo cosa de dirección.
  *   · admin puede todo, incluido el cierre de centro.
+ *   · administración (07/09/2026, AV-0056 de Aumenta: allí la agenda de las
+ *     terapeutas la coloca administración, con rol `user`) puede poner,
+ *     cambiar y quitar los de CUALQUIER persona, pero no cerrar el centro.
+ *     «Administración» es el departamento de su ficha de equipo. La regla
+ *     entera, en un sitio: `lib/citas/permisosBloqueos.js`.
  *
  * ── QUIÉN VE QUÉ: TODOS, LAS DE TODOS (14/08/2026, Rodrigo) ─────────────────
  * Aquí no se recorta nada. Poner un bloqueo sigue siendo cosa de cada cual
@@ -108,11 +114,23 @@ function gate(ctx) {
 async function quienSoy(request, ctx) {
   const esAdmin = ADMIN_ROLES.has(request.headers.get("x-user-role"));
   const teamMemberId = await resolveCurrentTeamMemberId(request, ctx.tenantModels);
+  // Administración (07/09/2026, AV-0056 de Aumenta): el departamento de la
+  // ficha de equipo, leído fresco en cada petición. Quien lleva la agenda del
+  // centro toca los bloqueos de cualquiera (no los cierres de centro); la regla
+  // entera está en lib/citas/permisosBloqueos.js.
+  let esAdministracion = false;
+  const { TeamMember } = ctx.tenantModels ?? {};
+  if (teamMemberId && TeamMember) {
+    try {
+      const tm = await TeamMember.findByPk(teamMemberId, { attributes: ["department"], raw: true });
+      esAdministracion = esDeAdministracion(tm?.department);
+    } catch { /* sin departamento legible es una persona más del equipo */ }
+  }
   // Viaja al navegador para que la tabla sepa a cuáles ponerle los botones de
-  // editar y quitar. La API manda igual: esto es solo no enseñar una puerta
-  // cerrada. `agendaCompartida` estaba aquí para el filtro del calendario y se
-  // ha ido con él (14/08/2026).
-  return { esAdmin, teamMemberId };
+  // editar y quitar, y si enseña el desplegable «Quién». La API manda igual:
+  // esto es solo no enseñar una puerta cerrada. `agendaCompartida` estaba aquí
+  // para el filtro del calendario y se ha ido con él (14/08/2026).
+  return { esAdmin, esAdministracion, teamMemberId, puedeElegirPersona: esAdmin || esAdministracion };
 }
 
 /**
@@ -382,39 +400,25 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     /*
      * De quién es la ausencia.
      *
-     * Si NO es admin, no se mira el cuerpo de la petición: es SIEMPRE suya. Da
-     * igual lo que mande el navegador —una pestaña vieja, un desplegable que no
-     * se tocó, alguien curioseando con las herramientas del navegador—; el
-     * servidor no acepta que un no-admin cierre la agenda de otra persona ni la
-     * del centro entero.
+     * Lo decide `aNombreDeQuien` (lib/citas/permisosBloqueos.js, 07/09/2026):
+     * dirección elige a cualquiera o al centro entero; administración, a
+     * cualquiera pero nunca al centro; el resto del equipo se lo pone SIEMPRE
+     * a sí mismo, mande lo que mande el navegador —una pestaña vieja, un
+     * desplegable que no se tocó, alguien curioseando con las herramientas del
+     * navegador—. Un no-admin no cierra la agenda de otra persona ni la del
+     * centro entero.
      */
-    let teamMemberId = null;
+    const pedido = typeof body.teamMemberId === "string" && body.teamMemberId.trim() ? body.teamMemberId.trim() : null;
+    if (pedido && !UUID_RE.test(pedido)) return error("teamMemberId inválido", 422);
+    const { veto: vetoPersona, teamMemberId } = aNombreDeQuien(yo, pedido);
+    if (vetoPersona) return forbidden(vetoPersona);
     // Su color se lee de la misma consulta que ya validaba a la persona, para
     // que la respuesta lleve el color definitivo y la agenda no parpadee.
     let colorPersona = null;
-
-    if (!yo.esAdmin) {
-      if (!yo.teamMemberId) {
-        return forbidden(
-          "Tu usuario no está enlazado con una ficha de equipo, así que no se sabe de quién sería la ausencia. Pídeselo a un administrador."
-        );
-      }
-      teamMemberId = yo.teamMemberId;
-      if (TeamMember) {
-        const tm = await TeamMember.findByPk(teamMemberId, { attributes: ["id", "blockColor"] });
-        colorPersona = tm?.blockColor ?? null;
-      }
-    } else {
-      const tmId = typeof body.teamMemberId === "string" && body.teamMemberId.trim() ? body.teamMemberId.trim() : null;
-      if (tmId) {
-        if (!UUID_RE.test(tmId)) return error("teamMemberId inválido", 422);
-        if (TeamMember) {
-          const tm = await TeamMember.findByPk(tmId, { attributes: ["id", "blockColor"] });
-          if (!tm) return error("Esa persona no está en el equipo", 422);
-          colorPersona = tm.blockColor ?? null;
-        }
-        teamMemberId = tmId;
-      }
+    if (teamMemberId && TeamMember) {
+      const tm = await TeamMember.findByPk(teamMemberId, { attributes: ["id", "blockColor"] });
+      if (!tm) return error("Esa persona no está en el equipo", 422);
+      colorPersona = tm.blockColor ?? null;
     }
 
     // El motivo puede ir VACÍO desde el 03/09/2026 (Aumenta): antes se
@@ -529,13 +533,8 @@ export const PATCH = withTenant(async (request, _rc, ctx) => {
     if (!fila) return error("Esa ausencia ya no existe", 404);
 
     const yo = await quienSoy(request, ctx);
-    if (!yo.esAdmin && (!fila.teamMemberId || fila.teamMemberId !== yo.teamMemberId)) {
-      return forbidden(
-        fila.teamMemberId
-          ? "Solo puedes cambiar tus propias ausencias."
-          : "Los cierres de todo el centro los cambia un administrador."
-      );
-    }
+    const vetoTocar = vetoParaTocar(yo, fila, "cambiar");
+    if (vetoTocar) return forbidden(vetoTocar);
 
     let body;
     try { body = await request.json(); } catch { return error("Body inválido"); }
@@ -592,10 +591,12 @@ export const PATCH = withTenant(async (request, _rc, ctx) => {
       cambios.tallerId = await tallerValido(body.tallerId, ctx.tenantModels);
     }
 
-    // De quién es: SOLO dirección, y solo si lo manda.
+    // De quién es: dirección y administración (07/09/2026), y solo si lo
+    // manda. Administración no puede dejarlo SIN persona: eso cierra el
+    // centro entero, y eso sigue siendo de dirección.
     let colorPersona = null;
     if (body.teamMemberId !== undefined) {
-      if (!yo.esAdmin) {
+      if (!puedeElegirPersona(yo)) {
         return forbidden(
           "Cambiar de quién es una ausencia es cosa de dirección. Pídelo a un administrador."
         );
@@ -603,6 +604,9 @@ export const PATCH = withTenant(async (request, _rc, ctx) => {
       const tmId = typeof body.teamMemberId === "string" && body.teamMemberId.trim()
         ? body.teamMemberId.trim()
         : null;
+      if (!tmId && !yo.esAdmin) {
+        return forbidden("Cerrar todo el centro es cosa de dirección. Elige a una persona.");
+      }
       if (tmId) {
         if (!UUID_RE.test(tmId)) return error("teamMemberId inválido", 422);
         if (TeamMember) {
@@ -702,13 +706,8 @@ export const DELETE = withTenant(async (request, _rc, ctx) => {
      * ofreciendo huecos el día que no está.
      */
     const yo = await quienSoy(request, ctx);
-    if (!yo.esAdmin && (!fila.teamMemberId || fila.teamMemberId !== yo.teamMemberId)) {
-      return forbidden(
-        fila.teamMemberId
-          ? "Solo puedes quitar tus propias ausencias."
-          : "Los cierres de todo el centro los quita un administrador."
-      );
-    }
+    const vetoQuitar = vetoParaTocar(yo, fila, "quitar");
+    if (vetoQuitar) return forbidden(vetoQuitar);
 
     const antes = { teamMemberId: fila.teamMemberId, startAt: fila.startAt, endAt: fila.endAt, label: fila.label };
     await fila.destroy();
