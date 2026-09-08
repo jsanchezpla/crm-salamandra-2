@@ -66,6 +66,9 @@ export const POST = withTenant(async (request, _rc, ctx) => {
       file: form.get("file"),
       nombre: form.get("name"),
       ownerUserId,
+      // El contexto, para que la cuota sea la del CENTRO y no la de fábrica
+      // (08/09/2026, AV-0079): sin él se caía al gigabyte de siempre.
+      ctx,
     });
     if (res.error) return error(res.error, res.status ?? 400);
 
