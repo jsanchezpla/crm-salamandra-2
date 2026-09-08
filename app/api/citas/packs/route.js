@@ -1,6 +1,7 @@
 import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { created, ok, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
+import { cobroPendienteDeBono } from "../../../../lib/billing/cobroDelBono.js";
 import { logCitasAudit } from "../../../../lib/citas/audit.js";
 import { esPack, bonosDeCliente } from "../../../../lib/citas/packs.js";
 import { puedeDarBonos, MOTIVO_SIN_PERMISO } from "../../../../lib/citas/quienDaBonos.js";
@@ -240,23 +241,51 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       );
     }
 
-    const pack = await SessionPack.create({
-      clientEmail: clientEmail || null,
-      clientId,
-      patientId,
-      eventTypeId: eventType.id,
-      totalSessions,
-      // Se pagó fuera de la pasarela: no hay plazos que gestionar aquí.
-      pricingMode: "upfront",
-      amount,
-      instalmentAmount: null,
-      instalmentMonths: null,
-      paymentSessionId: null,
-      origin: "manual",
-      createdBy: await quienLoCrea(request, tenantModels),
-      purchasedAt: body.purchasedAt ? new Date(body.purchasedAt) : new Date(),
-      status: "active",
-      notes,
+    /*
+     * ── EL BONO Y SU DEUDA NACEN JUNTOS (08/09/2026, AV-0070) ───────────────
+     * Rosa: «los bonos se dan de alta con anticipación y deben de salir en
+     * pendiente para que cuando venga el cliente a su primera sesión lo abone».
+     * Hasta hoy dar un bono no creaba NINGÚN cobro, y a la vez sus citas nacían
+     * con importe 0 y «ya está pagada»: sesiones marcadas como pagadas sin que
+     * nadie hubiera pagado.
+     *
+     * Los dos en la MISMA transacción: si el cobro fallara aparte quedaría un
+     * bono sin deuda —o al revés—, que es peor que no tener ninguno de los dos.
+     */
+    const { Payment } = tenantModels;
+    const pack = await SessionPack.sequelize.transaction(async (t) => {
+      const creado = await SessionPack.create({
+        clientEmail: clientEmail || null,
+        clientId,
+        patientId,
+        eventTypeId: eventType.id,
+        totalSessions,
+        // Se pagó fuera de la pasarela: no hay plazos que gestionar aquí.
+        pricingMode: "upfront",
+        amount,
+        instalmentAmount: null,
+        instalmentMonths: null,
+        paymentSessionId: null,
+        origin: "manual",
+        createdBy: await quienLoCrea(request, tenantModels),
+        purchasedAt: body.purchasedAt ? new Date(body.purchasedAt) : new Date(),
+        status: "active",
+        notes,
+      }, { transaction: t });
+
+      const cobro = cobroPendienteDeBono({
+        amount,
+        clientId: creado.clientId,
+        patientId: creado.patientId,
+        packId: creado.id,
+        nombre: eventType.name,
+        sesiones: totalSessions,
+        compradoEl: creado.purchasedAt,
+      });
+      // Sin importe no se crea nada: un pendiente de cantidad desconocida no es
+      // una deuda, es una fila que nadie puede saldar (ver la pieza de lib).
+      if (cobro && Payment) await Payment.create(cobro, { transaction: t });
+      return creado;
     });
 
     await logCitasAudit({

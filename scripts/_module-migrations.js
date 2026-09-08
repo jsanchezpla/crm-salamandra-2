@@ -639,6 +639,8 @@ export const MODULES = {
     // Quién paga la cuota cuando no es la familia (07/09/2026):
     // billing_cuotas.payer_client_id. ANTES del despliegue: el modelo la pide.
     "migrate-billing-cuotas-pagador",
+    // El cobro pendiente que sale de un bono (08/09/2026, AV-0070).
+    "migrate-cobro-de-bono",
     // Cuándo se devolvió un cobro (07/09/2026): payments.refunded_at. ANTES
     // del despliegue: el modelo pide la columna por nombre.
     "migrate-payments-refunded-at",

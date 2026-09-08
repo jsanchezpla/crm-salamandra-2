@@ -85,6 +85,21 @@ export function definePayment(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      /**
+       * El bono del que sale este cobro (08/09/2026, AV-0070 de Aumenta).
+       *
+       * Dar un bono con importe crea su cobro PENDIENTE, igual que «Generar el
+       * mes» con las cuotas: hasta hoy no creaba ninguno, y a la vez las citas
+       * del bono nacían con importe 0 y «ya está pagada». O sea, sesiones
+       * marcadas como pagadas sin que nadie hubiera pagado.
+       *
+       * NULL = un cobro de los de siempre. Sin FK dura, como `cuotaId`: el
+       * dinero que entró no desaparece porque el bono se anule.
+       */
+      packId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       // ── El puente con el dinero de verdad (29/08/2026) ──────────────────
       // Hasta hoy un cobro era una anotación a mano: importe, fecha, método y
       // notas. No había NINGÚN identificador externo, así que desde un cobro no
@@ -121,6 +136,7 @@ export function definePayment(sequelize) {
         { fields: ["client_id"], name: "payments_client_idx" },
         { fields: ["period_month"], name: "payments_period_idx" },
         { fields: ["bank_transaction_id"], name: "payments_bank_tx_idx" },
+        { fields: ["pack_id"], name: "payments_pack_idx" },
       ],
     }
   );

@@ -425,7 +425,14 @@ function DarBonoForm({ cliente, pacientes = [], onHecho }) {
           />
         </div>
         <div>
-          <label className="block text-[11px] font-medium text-gray-500 mb-1">Importe cobrado (€)</label>
+          {/*
+            * «Importe del bono», no «Importe cobrado» (08/09/2026, AV-0070).
+            * Con el rótulo viejo Rosa lo dejaba en blanco —porque todavía no lo
+            * había cobrado— y entonces no se apuntaba la deuda en ningún sitio.
+            * Lo que se pide es cuánto VALE; cobrarlo es otra cosa y se hace en
+            * Cobros.
+            */}
+          <label className="block text-[11px] font-medium text-gray-500 mb-1">Importe del bono (€)</label>
           <input
             type="number" step="0.01" min={0}
             value={importe}
@@ -435,6 +442,21 @@ function DarBonoForm({ cliente, pacientes = [], onHecho }) {
           />
         </div>
       </div>
+
+      <p className="text-[11px] text-gray-500">
+        {importe && Number(importe) > 0 ? (
+          <>
+            Se le apuntará un cobro de <strong className="text-gray-700">{importe} €</strong>{" "}
+            <strong className="text-gray-700">pendiente</strong> en Cobros. Dárselo no es cobrarlo: cuando
+            pague, se marca ahí como cobrado. Si no paga, sale en Morosidad.
+          </>
+        ) : (
+          <>
+            Pon el importe aunque todavía no lo hayas cobrado: es lo que hace que salga como pendiente en
+            Cobros. Sin importe el bono funciona igual, pero la deuda no queda apuntada en ninguna parte.
+          </>
+        )}
+      </p>
 
       <div>
         <label className="block text-[11px] font-medium text-gray-500 mb-1">Nota</label>
