@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { hoyVigente } from "@/lib/billing/cuotas.js";
 import { ejerciciosDe, facturasDelEjercicio, sePuedeDescargar } from "@/lib/billing/ejerciciosFactura.js";
+import { esDeLaFamilia } from "@/lib/billing/facturasDelPaciente.js";
 import { useRouter } from "next/navigation";
 import PatientReparto from "./PatientReparto.jsx";
 
@@ -48,9 +49,20 @@ export default function PatientBillingSection({ patientId, clientId }) {
   const load = useCallback(() => {
     let alive = true;
     setLoading(true);
-    // 500 y no 50: un niño con años de historia tenía cortadas las facturas
-    // viejas justo por donde ella las busca.
-    fetch(`/api/billing/invoices?patientId=${patientId}&limit=500`, { cache: "no-store" })
+    /*
+     * 500 y no 50: un niño con años de historia tenía cortadas las facturas
+     * viejas justo por donde ella las busca. (Y hasta el 09/09/2026 el endpoint
+     * recortaba a 100 en silencio; ahora acepta 500 cuando se piden las de un
+     * paciente.)
+     *
+     * `conLasDeLaFamilia=1` (09/09/2026, Rodrigo): además de las suyas, las de
+     * su familia que no son de ningún hermano en concreto. En Aumenta son 2.964
+     * de 76 familias con hermanos, que llegaron del volcado sin decir de qué
+     * hijo eran y no se pueden repartir con nada. Salen en la ficha de cada
+     * hermano —que es lo que se pidió— MARCADAS como de la familia, sin
+     * duplicar una sola fila ni adivinar a quién pertenecen.
+     */
+    fetch(`/api/billing/invoices?patientId=${patientId}&limit=500&conLasDeLaFamilia=1`, { cache: "no-store" })
       .then(async (r) => {
         if (r.status === 403) { if (alive) setAvailable(false); return null; }
         return r.json();
@@ -70,6 +82,8 @@ export default function PatientBillingSection({ patientId, clientId }) {
 
   const ejercicios = useMemo(() => ejerciciosDe(invoices), [invoices]);
   const visibles = useMemo(() => facturasDelEjercicio(invoices, ejercicio), [invoices, ejercicio]);
+  // Las que se ven y NO son suyas: vienen de la familia sin repartir.
+  const deLaFamilia = useMemo(() => visibles.filter(esDeLaFamilia).length, [visibles]);
 
   // Pagadores frecuentes del paciente (calculados de sus facturas): permiten
   // crear una factura para un pagador recurrente con un clic, sin re-teclearlo.
@@ -192,6 +206,18 @@ export default function PatientBillingSection({ patientId, clientId }) {
         </div>
       )}
 
+      {/* Cuántas de las que se ven son de la familia y no suyas. Decirlo aquí
+          evita la pregunta de «¿por qué sale la misma factura en los dos
+          hermanos?», que es la que llegaría si solo se listaran. */}
+      {deLaFamilia > 0 && (
+        <p className="text-[11px] text-neutral-500 mb-2">
+          {deLaFamilia === 1
+            ? "Una de estas facturas es de la familia y no dice de qué hijo es"
+            : `${deLaFamilia} de estas facturas son de la familia y no dicen de qué hijo son`}
+          : vinieron así de Organízate. Salen en la ficha de cada hermano para que se encuentren.
+        </p>
+      )}
+
       {invoices.length === 0 ? (
         <p className="text-[11px] text-neutral-400">Sin facturas para este paciente.</p>
       ) : (
@@ -201,6 +227,14 @@ export default function PatientBillingSection({ patientId, clientId }) {
               <span className="font-medium text-neutral-800 shrink-0">{inv.number?.startsWith("DRAFT-") ? "(borrador)" : inv.number}</span>
               {inv.customFields?.splitGroupId && (
                 <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-600 shrink-0" title="Parte de un reparto de cuota">reparto</span>
+              )}
+              {esDeLaFamilia(inv) && (
+                <span
+                  className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 shrink-0"
+                  title="Vino de Organízate a nombre de la familia y no dice de qué hijo es. Sale en la ficha de cada hermano."
+                >
+                  de la familia
+                </span>
               )}
               <span className="text-neutral-400 shrink-0">{fmt(inv.issueDate)}</span>
               <span className="text-neutral-500 truncate flex-1 min-w-0">{inv.client?.name || "—"}</span>

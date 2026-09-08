@@ -12,6 +12,7 @@ import { withEffectiveStatusList } from "../../../../lib/billing/invoiceStatus.j
 import { resolveInvoicePatientId, invoicePatientInclude } from "../../../../lib/billing/patientLink.js";
 
 import { ATRIBUTOS_CLIENTE_FACTURA } from "../../../../lib/billing/nifCliente.js";
+import { whereFacturasDelPaciente } from "../../../../lib/billing/facturasDelPaciente.js";
 // GET /api/billing/invoices — listado paginado con filtros
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   try {
@@ -20,13 +21,49 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     const { searchParams } = new URL(request.url);
 
     const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
-    const limit = Math.min(100, parseInt(searchParams.get("limit") || "20"));
+    /*
+     * El tope sube a 500 cuando se piden las de UN paciente (09/09/2026): la
+     * ficha pedía 500 y se le daban 100 en silencio. Hoy el que más tiene son
+     * 91, pero un paciente de cuatro cursos los pasa, y el corte no se ve.
+     * Para el listado general se queda en 100: ahí hay 14.248 y se pagina.
+     */
+    const dePaciente = Boolean(searchParams.get("patientId"));
+    const limit = Math.min(dePaciente ? 500 : 100, parseInt(searchParams.get("limit") || "20"));
     const offset = (page - 1) * limit;
 
     const where = {};
     if (searchParams.get("status")) where.status = searchParams.get("status");
     if (searchParams.get("clientId")) where.clientId = searchParams.get("clientId");
-    if (searchParams.get("patientId")) where.patientId = searchParams.get("patientId");
+    /*
+     * ── LAS DE SU FAMILIA QUE NO SON DE NADIE (09/09/2026, Rodrigo) ──────
+     *
+     * En Aumenta quedan 2.964 facturas de 76 familias con hermanos que no se
+     * pueden repartir: llegaron del volcado atadas a la familia y no hay dato
+     * con el que saber de qué hijo son. «Pónselas a todos los pacientes por
+     * igual, por si las buscan en uno de los pacientes de cada familia».
+     *
+     * Se hace al MIRAR y no duplicando filas: la regla vive en
+     * `lib/billing/facturasDelPaciente.js` y la ficha las marca como «de la
+     * familia». La familia se saca del propio paciente, no del cliente: quien
+     * pregunta no puede pedir las de otra casa.
+     */
+    if (dePaciente) {
+      const conFamilia = searchParams.get("conLasDeLaFamilia") === "1";
+      let familiaDelPaciente = null;
+      if (conFamilia && tenantModels.Patient) {
+        const p = await tenantModels.Patient.findByPk(searchParams.get("patientId"), { attributes: ["id", "clientId"] });
+        familiaDelPaciente = p?.clientId ?? null;
+      }
+      Object.assign(
+        where,
+        whereFacturasDelPaciente({
+          patientId: searchParams.get("patientId"),
+          clientId: familiaDelPaciente,
+          conLasDeLaFamilia: conFamilia,
+          Op,
+        }),
+      );
+    }
     if (searchParams.get("employeeId")) where.employeeId = searchParams.get("employeeId");
     if (searchParams.get("series")) where.series = searchParams.get("series");
     if (searchParams.get("from") || searchParams.get("to")) {
