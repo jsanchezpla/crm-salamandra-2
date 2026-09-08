@@ -572,6 +572,46 @@ la IA entra a nombre de quien escribe. El PUT sigue guardando la lista
 entera (última en guardar gana): dos terapeutas a la vez sobre el mismo plan
 se pisan, como antes. Prueba: `_smoke-objetivos-del-plan.mjs`.
 
+**Y desde el 09/09/2026 se corrigen en sitio (AV-0080, Blanca): «esos mismos
+objetivos que te genera la IA, pueda modificarse, ya que ahora tan solo deja
+eliminarlos o añadir algún otro nuevo».** Cada objetivo pasa de píldora a fila
+con su botón «Editar» —siempre visible, que esto se usa en tablet— que abre un
+`textarea`: Enter guarda, Escape deja lo de antes, el `blur` no cierra ni
+guarda, y nada sale de la pantalla hasta «Guardar plan», como el resto de la
+pestaña. La forma de fila no es estética: los 571 objetivos de Aumenta miden
+112 caracteres de media y 239 pasan de 120, así que la píldora redonda ya se
+partía en dos líneas.
+
+La regla pura es `editarObjetivo(lista, indice, texto)` → `{ ok, motivo,
+objetivos }`, con la lista entera de vuelta cuando `ok` es false. Los tres
+motivos importan: `vacio` (borrar es la ×, no vaciar la caja), `no-esta` —y el
+índice tiene que ser un NÚMERO, porque `Number(null)` es 0 y un índice perdido
+corregiría en silencio el primer objetivo del plan— y `repetido`, que es el
+feo: dejar un objetivo con el mismo texto que otro de la MISMA terapeuta haría
+que `normalizarObjetivos` se quedara con el primero y el recién corregido
+desapareciera sin avisar. El mismo texto en dos terapeutas distintas sí vale.
+
+Quién puede corregir lo dice `puedeEditarObjetivo`: lo tuyo, lo que no tiene
+dueño (así se limpian los 188 sueltos de Aumenta) o todo si eres dirección —el
+rol se lee de `/api/auth/me`, que sí lo devuelve, y NO de `/api/team/me`, que
+no—. **La × se queda abierta para todo el equipo**: el encargo era poder
+corregir, y cerrar el borrado es una puerta que nadie ha pedido (`lib/auth/
+permisos.js`: lo que no es matador no se cierra por si acaso).
+
+De paso se arregla el botón «mío», que **no hacía nada desde el 07/09**:
+comparaba por identidad de objeto y `agruparPorTerapeuta` devuelve copias, así
+que el clic nunca acertaba. Ahora cada objetivo agrupado lleva su `indice` en la
+lista normalizada, y por ahí van «mío», «Editar» y la ×.
+
+⚠️ **Lo que NO cambia y sigue pendiente**: el PUT no fusiona. Dos terapeutas con
+la pestaña abierta a la vez se siguen pisando (afecta a 2 planes de 61 en
+Aumenta). Fusionar en el servidor tiene una trampa que hay que resolver antes:
+la caja de «Añadir» se pinta en TODOS los grupos a propósito —el placeholder
+dice «Un objetivo de {nombre}»—, así que una fusión de «solo entran los tuyos»
+borraría en silencio el objetivo que acabas de escribirle a una compañera. La
+regla correcta es «nunca se pierde, sí se puede añadir», y va en su propia
+tarea.
+
 ## Quién firma el registro por defecto (07/09/2026, AV-0060 de Aumenta)
 
 Daniela: «que salga la persona correcta de manera automática». Sin `?prof=`

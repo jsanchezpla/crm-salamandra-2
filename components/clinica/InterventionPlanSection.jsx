@@ -16,7 +16,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import useGrabadora, { fmtSegundos } from "@/components/clinica/useGrabadora.js";
 import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
-import { normalizarObjetivos, agruparPorTerapeuta } from "@/lib/clinica/objetivosDelPlan.js";
+import {
+  normalizarObjetivos,
+  agruparPorTerapeuta,
+  editarObjetivo,
+  puedeEditarObjetivo,
+  MAX_TEXTO_OBJETIVO,
+} from "@/lib/clinica/objetivosDelPlan.js";
+import { esAdmin as esDireccion } from "@/lib/auth/permisos.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -76,9 +83,34 @@ const rotuloEspecialidad = (k) => (k ? String(k).replace(/_/g, " ").replace(/^\w
  * objetivos y su caja para añadir; los planes viejos (textos sin terapeuta)
  * salen en «Sin terapeuta» y cada una puede hacerlos suyos. La regla de
  * agrupar y normalizar vive en `lib/clinica/objetivosDelPlan.js`.
+ *
+ * ── Y SE CORRIGEN EN SITIO (09/09/2026, AV-0080, Blanca) ───────────────────
+ * «Esos mismos objetivos que te genera la IA, pueda modificarse, ya que ahora
+ * tan solo deja eliminarlos o añadir algún otro nuevo.» Cada objetivo pasa de
+ * píldora a FILA con su botón «Editar»: con 112 caracteres de media (medido en
+ * los 571 objetivos de Aumenta) la píldora redonda ya se partía en dos líneas y
+ * no dejaba sitio para nada más.
+ *
+ * Tres decisiones que se notan al usarlo:
+ *   · «Editar» está SIEMPRE visible, no al pasar el ratón: esto se usa en
+ *     tablet, y una acción que solo aparece con el cursor no existe.
+ *   · Escapar sin guardar NO pierde nada, y el `blur` no cierra ni guarda:
+ *     perder lo escrito por clicar fuera es lo que más cabrea.
+ *   · Aquí no se persiste nada. Como el resto de la pestaña, hasta «Guardar
+ *     plan» no sale de la pantalla, y debajo se lo recuerda.
+ *
+ * Solo se corrige lo tuyo, lo que no tiene dueño, o todo si eres dirección
+ * (`puedeEditarObjetivo`). La × se queda abierta para todo el equipo, como
+ * estaba: el encargo era poder corregir, y cerrar el borrado es una puerta que
+ * nadie ha pedido.
  */
-function ObjetivosPorTerapeuta({ objetivos, onChange, terapeutas, equipo, yo, canEdit }) {
+function ObjetivosPorTerapeuta({ objetivos, onChange, terapeutas, equipo, yo, canEdit, esAdmin = false }) {
   const [borradores, setBorradores] = useState({});
+  // { indice, texto } del que se está corrigiendo, y el aviso de por qué no se
+  // ha podido guardar. El índice viene de `agruparPorTerapeuta` y es la
+  // posición en la lista NORMALIZADA, no en `objetivos`.
+  const [editando, setEditando] = useState(null);
+  const [avisoEdicion, setAvisoEdicion] = useState(null);
   const grupos = agruparPorTerapeuta(objetivos, { terapeutas, equipo, yo });
   const anadir = (terapeutaId) => {
     const v = (borradores[terapeutaId ?? ""] ?? "").trim();
@@ -86,8 +118,19 @@ function ObjetivosPorTerapeuta({ objetivos, onChange, terapeutas, equipo, yo, ca
     onChange(normalizarObjetivos([...objetivos, { texto: v, terapeutaId }]));
     setBorradores((b) => ({ ...b, [terapeutaId ?? ""]: "" }));
   };
-  const quitar = (o) => onChange(objetivos.filter((x) => !(x.texto === o.texto && x.terapeutaId === o.terapeutaId)));
-  const hacerMio = (o) => onChange(normalizarObjetivos(objetivos.map((x) => (x === o ? { ...x, terapeutaId: yo } : x))));
+  // Por ÍNDICE, no por texto ni por identidad: dos terapeutas pueden tener el
+  // mismo objetivo, y `agruparPorTerapeuta` devuelve copias.
+  const quitar = (o) => onChange(normalizarObjetivos(objetivos).filter((_, i) => i !== o.indice));
+  const hacerMio = (o) =>
+    onChange(normalizarObjetivos(objetivos).map((x, i) => (i === o.indice ? { ...x, terapeutaId: yo } : x)));
+  const guardarEdicion = () => {
+    const r = editarObjetivo(objetivos, editando.indice, editando.texto);
+    if (r.ok) { onChange(r.objetivos); setEditando(null); setAvisoEdicion(null); return; }
+    if (r.motivo === "repetido") { setAvisoEdicion("Ese objetivo ya lo tienes escrito."); return; }
+    if (r.motivo === "vacio") { setAvisoEdicion("Un objetivo no puede quedarse en blanco: para quitarlo, usa la ×."); return; }
+    setEditando(null);
+    setAvisoEdicion(null);
+  };
   return (
     <div>
       <label className="text-[10px] uppercase tracking-wider text-neutral-400">Objetivos</label>
@@ -100,23 +143,72 @@ function ObjetivosPorTerapeuta({ objetivos, onChange, terapeutas, equipo, yo, ca
               {g.especialidad && <span className="text-neutral-400 font-normal"> · {rotuloEspecialidad(g.especialidad)}</span>}
               {g.esYo && <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700">tú</span>}
             </div>
-            <div className="flex flex-wrap gap-1.5 mb-2">
+            <div className="space-y-1 mb-2">
               {g.objetivos.length === 0 && <span className="text-xs text-neutral-300">Sin objetivos todavía</span>}
-              {g.objetivos.map((o) => (
-                <span key={`${o.terapeutaId ?? ""}|${o.texto}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-neutral-200 text-[11px] text-neutral-700">
-                  {o.texto}
-                  {canEdit && g.terapeutaId === null && yo && (
-                    <button type="button" onClick={() => hacerMio(o)} title="Ponerlo a tu nombre" className="text-[10px] text-neutral-400 hover:text-emerald-700">
-                      mío
-                    </button>
-                  )}
-                  {canEdit && (
-                    <button type="button" onClick={() => quitar(o)} className="text-neutral-400 hover:text-rose-600" aria-label={`Quitar ${o.texto}`}>
-                      ×
-                    </button>
-                  )}
-                </span>
-              ))}
+              {g.objetivos.map((o) => {
+                const mio = puedeEditarObjetivo(o, { yo, esAdmin });
+                if (editando?.indice === o.indice) {
+                  return (
+                    <div key={o.indice} className="rounded-lg bg-white border border-neutral-300 px-2 py-1.5">
+                      <textarea
+                        autoFocus
+                        rows={2}
+                        maxLength={MAX_TEXTO_OBJETIVO}
+                        value={editando.texto}
+                        onChange={(e) => { setEditando({ ...editando, texto: e.target.value }); setAvisoEdicion(null); }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); guardarEdicion(); }
+                          if (e.key === "Escape") { e.preventDefault(); setEditando(null); setAvisoEdicion(null); }
+                        }}
+                        className="w-full text-[11px] text-neutral-700 bg-transparent resize-y focus:outline-none"
+                      />
+                      <div className="flex items-center justify-between gap-2 mt-1">
+                        <span className="text-[10px] text-neutral-400">
+                          {MAX_TEXTO_OBJETIVO - editando.texto.length < 30
+                            ? `Quedan ${MAX_TEXTO_OBJETIVO - editando.texto.length} caracteres`
+                            : "Enter para guardar · Esc para dejarlo como estaba"}
+                        </span>
+                        <span className="flex gap-1.5 shrink-0">
+                          <button type="button" onClick={() => { setEditando(null); setAvisoEdicion(null); }}
+                            className="text-[10px] text-neutral-500 hover:text-neutral-800 px-1.5 py-0.5">
+                            Cancelar
+                          </button>
+                          <button type="button" onClick={guardarEdicion}
+                            className="text-[10px] font-medium text-emerald-700 hover:text-emerald-900 border border-emerald-200 rounded-md px-2 py-0.5">
+                            Guardar
+                          </button>
+                        </span>
+                      </div>
+                      {avisoEdicion && <p className="text-[10px] text-amber-700 mt-1">{avisoEdicion}</p>}
+                    </div>
+                  );
+                }
+                return (
+                  <div key={o.indice} className="flex items-start justify-between gap-2 rounded-lg bg-white border border-neutral-200 px-2 py-1">
+                    <span className={`text-[11px] leading-snug whitespace-pre-wrap ${mio ? "text-neutral-700" : "text-neutral-500"}`}>
+                      {o.texto}
+                    </span>
+                    <span className="flex items-center gap-1.5 shrink-0 pt-px">
+                      {canEdit && mio && (
+                        <button type="button" onClick={() => { setEditando({ indice: o.indice, texto: o.texto }); setAvisoEdicion(null); }}
+                          className="text-[10px] text-neutral-500 hover:text-emerald-700" aria-label="Corregir este objetivo">
+                          Editar
+                        </button>
+                      )}
+                      {canEdit && g.terapeutaId === null && yo && (
+                        <button type="button" onClick={() => hacerMio(o)} title="Ponerlo a tu nombre" className="text-[10px] text-neutral-400 hover:text-emerald-700">
+                          mío
+                        </button>
+                      )}
+                      {canEdit && (
+                        <button type="button" onClick={() => quitar(o)} className="text-neutral-400 hover:text-rose-600 leading-none" aria-label={`Quitar ${o.texto}`}>
+                          ×
+                        </button>
+                      )}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
             {canEdit && g.terapeutaId !== null && (
               <div className="flex gap-2">
@@ -402,6 +494,15 @@ export default function InterventionPlanSection({ patientId, canEdit = true }) {
   const [terapeutas, setTerapeutas] = useState([]);
   const [equipo, setEquipo] = useState([]);
   const [yo, setYo] = useState(null);
+  /*
+   * El ROL, para saber si quien mira es dirección (09/09/2026, AV-0080). Sale
+   * de `/api/auth/me` y NO de `/api/team/me`, que devuelve la ficha de equipo
+   * sin rol; es el mismo camino que ya usa `/equipo` por la misma razón.
+   *
+   * Aquí el rol solo sirve para PINTAR: quien decide de verdad quién puede
+   * escribir en un plan es el servidor.
+   */
+  const [rol, setRol] = useState("user");
   useEffect(() => {
     let vivo = true;
     fetch(`/api/pacientes/${patientId}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => {
@@ -411,6 +512,9 @@ export default function InterventionPlanSection({ patientId, canEdit = true }) {
     }).catch(() => {});
     fetch(`/api/team?status=all&limit=200`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (vivo) setEquipo(j?.data?.members ?? []); }).catch(() => {});
     fetch(`/api/team/me`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (vivo) setYo(j?.data?.member?.id ?? null); }).catch(() => {});
+    // El rol va en `data.role`, no en `data.user.role`: la respuesta de
+    // `/api/auth/me` es el usuario, no un sobre con un usuario dentro.
+    fetch(`/api/auth/me`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (vivo) setRol(j?.data?.role ?? "user"); }).catch(() => {});
     return () => { vivo = false; };
   }, [patientId]);
 
@@ -504,6 +608,7 @@ export default function InterventionPlanSection({ patientId, canEdit = true }) {
           equipo={equipo}
           yo={yo}
           canEdit={canEdit}
+          esAdmin={esDireccion(rol)}
         />
         {canEdit && (
           <ObjetivosConIa
