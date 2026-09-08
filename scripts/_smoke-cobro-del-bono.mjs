@@ -7,6 +7,10 @@
  * PENDIENTE**. Si un día alguien lo pone en `completed` «porque ya está dado»,
  * esta prueba se pone roja — y con ella se iría en silencio la mitad de lo que
  * pidió Rosa, que es enterarse de quién no ha pagado.
+ *
+ * Lo segundo es la UNIDAD: el bono se guarda en céntimos y el cobro en euros.
+ * Un `* 100` de más en un cobro pendiente no lo ve nadie hasta que la familia
+ * pregunta por qué debe 15.000 €.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -52,9 +56,18 @@ test("el texto dice de qué bono es y cuántas sesiones", () => {
   assert.equal(textoDelCobroDeBono({}), "Bono de sesiones");
 });
 
-test("el importe y la ficha viajan tal cual", () => {
+test("el bono va en céntimos y el cobro en euros", () => {
+  /*
+   * La costura entre dos módulos con dos unidades (09/09/2026). El bono guarda
+   * 15000 céntimos; `payments.amount` es DECIMAL(12,2) en euros, así que el
+   * cobro tiene que decir 150. Pasarlo tal cual —lo que hacía la primera
+   * versión— dejaba en Cobros y en Morosidad una deuda de 15.000 € por un bono
+   * de 150 €.
+   */
   const c = cobroPendienteDeBono(BASE);
-  assert.equal(c.amount, 15000);
+  assert.equal(c.amount, 150);
+  assert.equal(cobroPendienteDeBono({ ...BASE, amount: 17550 }).amount, 175.5);
+  assert.equal(cobroPendienteDeBono({ ...BASE, amount: 1 }).amount, 0.01);
   assert.equal(c.clientId, "cli-1");
   assert.equal(c.packId, "pk-1");
 });
