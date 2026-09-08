@@ -29,6 +29,8 @@ function Section({ title, count, children, empty }) {
 
 export default function BandejaPage() {
   const [therapistId, setTherapistId] = useState("");
+  // La tabla del equipo entero, para quien coordina (09/09/2026, AV-0078).
+  const [vistaEquipo, setVistaEquipo] = useState(false);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState(null);
@@ -38,20 +40,37 @@ export default function BandejaPage() {
     // vieja no debe pisar a la nueva si llega más tarde.
     let cancelled = false;
     setLoading(true); setErrorMsg(null);
-    const qs = therapistId ? `?therapistId=${therapistId}` : "";
+    const partes = [];
+    if (therapistId) partes.push(`therapistId=${therapistId}`);
+    if (vistaEquipo) partes.push("vista=equipo");
+    const qs = partes.length ? `?${partes.join("&")}` : "";
     fetch(`/api/clinica/bandeja${qs}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => { if (!cancelled) { if (j.ok) setData(j.data); else setErrorMsg(j.error); } })
       .catch((e) => { if (!cancelled) setErrorMsg(e.message); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [therapistId]);
+  }, [therapistId, vistaEquipo]);
 
   const c = data?.counts ?? {};
   const therapists = data?.therapists ?? [];
   const reports = data?.reports ?? [];
   const incidencias = data?.incidencias ?? [];
   const citas = data?.citasToday ?? [];
+  const sinEmpezar = data?.registros?.sinEmpezar ?? [];
+  const aMedias = data?.registros?.aMedias ?? [];
+  const equipo = data?.equipo ?? null;
+  /*
+   * El enlace para escribir el registro de ESA cita: lleva la cita, la fecha y
+   * la profesional, que es lo que hace que se escriba en su sesión y no en una
+   * nueva. La cola la arma `colaDePreparacion` en el resto del CRM; aquí se
+   * escribe a mano para no arrastrar `lib/clinica/prepararSesion.js` entero a
+   * esta pantalla, que solo necesita esto.
+   */
+  const enlaceDelRegistro = (r) =>
+    `/pacientes/${r.patientId}/sesiones/nueva?cita=${encodeURIComponent(r.bookingId)}` +
+    `&fecha=${encodeURIComponent(r.scheduledAt)}` +
+    (data?.therapist?.id ? `&prof=${encodeURIComponent(data.therapist.id)}` : "");
 
   return (
     <div className={`${anchoPantalla("listado")} space-y-5`}>
@@ -63,8 +82,23 @@ export default function BandejaPage() {
         <div>
           <div className="eyebrow">Equipo · Bandeja de trabajo</div>
           <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mt-1">{loading ? "…" : `Bandeja de ${data?.therapist?.name ?? "—"}`}</h1>
-          <p className="text-xs text-neutral-400 mt-1">Lo tuyo pendiente: informes, incidencias y citas de hoy.</p>
+          <p className="text-xs text-neutral-400 mt-1">
+            Lo tuyo de esta semana: registros sin escribir, informes, incidencias y citas de hoy.
+          </p>
         </div>
+        {data?.coordina && (
+          <button
+            type="button"
+            onClick={() => setVistaEquipo((v) => !v)}
+            className={`self-start lg:self-auto text-xs rounded-lg px-3 py-2 border transition-colors ${
+              vistaEquipo
+                ? "border-[var(--color-primary,#1B3A2D)] text-[var(--color-primary,#1B3A2D)] bg-white"
+                : "border-neutral-200 text-neutral-600 bg-white hover:border-neutral-300"
+            }`}
+          >
+            {vistaEquipo ? "Ver solo la mía" : "Ver todo el equipo"}
+          </button>
+        )}
         {data?.canSwitch && therapists.length > 1 && (
           <Select
             value={therapistId || (data?.therapist?.id ?? "")}
@@ -78,7 +112,16 @@ export default function BandejaPage() {
       {errorMsg && <div className="px-4 py-3 rounded-lg bg-rose-50 border border-rose-100 text-xs text-rose-700">{errorMsg}</div>}
 
       {/* Resumen */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* Los registros, LOS PRIMEROS: es la única de las cuatro con trabajo
+            de verdad dentro (AV-0078). */}
+        <div className="bg-white border border-neutral-100 rounded-xl p-4">
+          <div className="text-[10px] uppercase tracking-wider text-neutral-400">Registros</div>
+          <div className="font-display text-2xl text-[var(--ink-900)] mt-1 tabular">{loading ? "—" : c.registrosSinEmpezar ?? 0}</div>
+          <div className="text-[11px] text-neutral-500 mt-0.5">
+            {c.registrosAMedias ? `${c.registrosAMedias} a medias` : "Sin escribir, esta semana"}
+          </div>
+        </div>
         <div className="bg-white border border-neutral-100 rounded-xl p-4">
           <div className="text-[10px] uppercase tracking-wider text-neutral-400">Informes</div>
           <div className="font-display text-2xl text-[var(--ink-900)] mt-1 tabular">{loading ? "—" : c.reports ?? 0}</div>
@@ -96,8 +139,100 @@ export default function BandejaPage() {
         </div>
       </div>
 
-      {!loading && (
+      {!loading && vistaEquipo && equipo && (
+        <div className="bg-white border border-neutral-100 rounded-xl overflow-hidden">
+          <div className="px-4 lg:px-5 py-3 flex items-center justify-between border-b border-neutral-100">
+            <h2 className="eyebrow">Lo que le queda a cada una · esta semana</h2>
+            <span className="text-[10px] text-neutral-400">{equipo.length}</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[560px]">
+              <thead>
+                <tr className="border-b border-neutral-100 text-left text-[11px] uppercase tracking-wide text-neutral-400">
+                  <th className="px-4 py-2.5 font-medium">Profesional</th>
+                  <th className="px-4 py-2.5 font-medium text-right">Registros</th>
+                  <th className="px-4 py-2.5 font-medium text-right">A medias</th>
+                  <th className="px-4 py-2.5 font-medium text-right">Informes</th>
+                  <th className="px-4 py-2.5 font-medium text-right">Incidencias</th>
+                </tr>
+              </thead>
+              <tbody>
+                {equipo.map((m) => (
+                  <tr key={m.id} className="border-b border-neutral-50 last:border-0 hover:bg-neutral-50/60">
+                    <td className="px-4 py-2.5">
+                      <button type="button" onClick={() => { setVistaEquipo(false); setTherapistId(m.id); }}
+                        className="text-[var(--ink-900)] hover:text-[var(--color-primary,#1B3A2D)] hover:underline text-left">
+                        {m.name}
+                      </button>
+                      {m.position && <span className="text-[11px] text-neutral-400"> · {m.position}</span>}
+                    </td>
+                    <td className={`px-4 py-2.5 text-right tabular ${m.counts.registrosSinEmpezar ? "font-semibold text-[var(--ink-900)]" : "text-neutral-300"}`}>
+                      {m.counts.registrosSinEmpezar}
+                    </td>
+                    <td className={`px-4 py-2.5 text-right tabular ${m.counts.registrosAMedias ? "text-neutral-700" : "text-neutral-300"}`}>
+                      {m.counts.registrosAMedias}
+                    </td>
+                    <td className={`px-4 py-2.5 text-right tabular ${m.counts.reports ? "text-neutral-700" : "text-neutral-300"}`}>
+                      {m.counts.reports}
+                    </td>
+                    <td className={`px-4 py-2.5 text-right tabular ${m.counts.incidencias ? "text-neutral-700" : "text-neutral-300"}`}>
+                      {m.counts.incidencias}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="px-4 lg:px-5 py-2.5 text-[10px] text-neutral-400 border-t border-neutral-100">
+            Los registros son de las citas de los últimos 7 días que ya han pasado. Pincha un nombre para ver su bandeja.
+          </p>
+        </div>
+      )}
+
+      {!loading && !vistaEquipo && (
         <>
+          {/* Registros sin escribir (09/09/2026, AV-0078): lo primero, porque
+              es lo que Araceli nombra primero y lo que más se acumula. */}
+          <Section title="Registros sin escribir · esta semana" count={sinEmpezar.length} empty="Ningún registro pendiente de esta semana. 🎉">
+            <ul className="divide-y divide-neutral-100">
+              {sinEmpezar.map((r) => (
+                <li key={r.bookingId} className="px-4 lg:px-5 py-3 flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm text-[var(--ink-900)] font-medium truncate">
+                      {r.patientName ?? "—"}
+                      {r.eventType && <span className="text-neutral-400 font-normal"> · {r.eventType}</span>}
+                    </div>
+                    <div className="text-[11px] text-neutral-400">{fmt(r.scheduledAt)} · {fmtTime(r.scheduledAt)}</div>
+                  </div>
+                  <Link href={enlaceDelRegistro(r)} className="shrink-0 text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline">
+                    Escribirlo
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Section>
+
+          {aMedias.length > 0 && (
+            <Section title="Registros a medias" count={aMedias.length} empty="">
+              <ul className="divide-y divide-neutral-100">
+                {aMedias.map((r) => (
+                  <li key={r.bookingId} className="px-4 lg:px-5 py-3 flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm text-[var(--ink-900)] font-medium truncate">
+                        {r.patientName ?? "—"}
+                        {r.eventType && <span className="text-neutral-400 font-normal"> · {r.eventType}</span>}
+                      </div>
+                      <div className="text-[11px] text-neutral-400">{fmt(r.scheduledAt)} · {fmtTime(r.scheduledAt)} · en borrador</div>
+                    </div>
+                    <Link href={`/pacientes/${r.patientId}/sesiones/${r.sessionId}`} className="shrink-0 text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline">
+                      Rematarlo
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          )}
+
           {/* Informes pendientes */}
           <Section title="Informes pendientes" count={reports.length} empty="Sin informes pendientes. 🎉">
             <ul className="divide-y divide-neutral-100">
