@@ -15,7 +15,8 @@ import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 import { useDialogo } from "@/components/ui/Dialogo.jsx";
 import { partesConProrrateo } from "../../../../lib/billing/prorrateo.js";
 import { cuotasQueEntran, conceptosDeCuotas, importePactado } from "../../../../lib/billing/cuotaParaRellenar.js";
-import { restoDelMes } from "../../../../lib/billing/restoDelMes.js";
+import { restoDelMes, generadoDelMes } from "../../../../lib/billing/restoDelMes.js";
+import { explicaCobro } from "../../../../lib/billing/motivoDelCobro.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -115,6 +116,28 @@ export default function CobrosPage() {
       return c ? { c, inicio } : null;
     })
     .filter(Boolean);
+  /*
+   * ── DE DÓNDE SALE CADA CIFRA (08/09/2026, AV-0085 y AV-0086) ─────────────
+   *
+   * El porqué de cada importe estaba escrito en la nota del cobro y no llegaba
+   * a los ojos de quien cobra. `explicaCobro` parte esa nota en «concepto +
+   * motivos»; el nombre del catálogo manda cuando el cobro trae `conceptId`
+   * (122 de los 159 pendientes de septiembre lo traen) y la nota es el respaldo
+   * para las cuotas compuestas, que nacen sin él a propósito.
+   *
+   * Nada de esto pega a la base: `conceptosCatalogo` ya está cargado.
+   */
+  const nombreDelConcepto = (conceptId) =>
+    conceptosCatalogo.find((c) => String(c.id) === String(conceptId))?.name ?? null;
+  const explicado = (p) => ({
+    ...p,
+    ...explicaCobro({ notes: p.notes, concepto: nombreDelConcepto(p.conceptId) }),
+  });
+  const pendientesExplicados = pendientesDelMes.map(explicado);
+  const cobradosExplicados = cobradosDelMes.filter((c) => c.deCuota).map(explicado);
+  const sumaPendientes =
+    Math.round(pendientesDelMes.reduce((t, p) => t + Number(p.amount || 0), 0) * 100) / 100;
+
   const cuentaCuota = partesConProrrateo(
     // Con el concepto de cada línea: la parte proporcional de una terapia se
     // cuenta con SUS sesiones y no con las del hermano ni las de la otra
@@ -208,6 +231,22 @@ export default function CobrosPage() {
   // servidor los pasa a cobrados en vez de crear otro, y hay que decirlo antes
   // de pulsar — si no, la contable cree que va a salir una fila nueva.
   const [pendientesDelMes, setPendientesDelMes] = useState([]);
+  /*
+   * ── LO QUE EL CRM GENERÓ PARA ESE MES (08/09/2026, AV-0086) ────────────
+   *
+   * Rosa: «hago el cobro por el importe que refleja y luego crea otro por 30
+   * €». No creaba ninguno —en todo septiembre no hay ni un cobro de 30 €—:
+   * lo OFRECÍA, porque el mes cobrado se medía contra la TARIFA del catálogo
+   * y no contra el cobro que el propio CRM había generado, que ya llevaba la
+   * reserva de plaza descontada. Pasaba en 112 familias de septiembre y sumaba
+   * 4.515 € ofrecidos que nadie debe.
+   *
+   * `cobradosDelMes` guarda esos cobros para poder enseñar sus motivos, y
+   * `esperadoDeLaCuota` la tarifa contra la que se comparó, para decirlo sin
+   * inventarse el porqué.
+   */
+  const [cobradosDelMes, setCobradosDelMes] = useState([]);
+  const [esperadoDeLaCuota, setEsperadoDeLaCuota] = useState(null); // { tarifa, generado, pactado }
 
   /*
    * Los pacientes de la familia elegida (01/09/2026, Rodrigo: «cuando un tutor
@@ -255,6 +294,8 @@ export default function CobrosPage() {
     setOrigenCuota(null);
     setParcialDelMes(null);
     setPendientesDelMes([]);
+    setCobradosDelMes([]);
+    setEsperadoDeLaCuota(null);
     setCitasDelMes([]);
     setForm((f) => (f.amount === "" ? f : { ...f, amount: "" }));
     if (!form.clientId || !conceptosCatalogo.length) return;
@@ -339,12 +380,38 @@ export default function CobrosPage() {
       // el»: el prorrateo solo salta al escribir esa fecha (AV-0068).
       setCitasDelMes(Array.isArray(jMes?.data?.citas) ? jMes.data.citas : []);
       const cobrosDelMes = jMes?.data?.cobros ?? [];
+      setCobradosDelMes(cobrosDelMes);
       // La misma regla que el POST de payments: con paciente elegido, solo los
       // pendientes de ese paciente; sin él, todos los de la familia.
       const pendientes = (jMes?.data?.pendientes ?? []).filter(
         (p) => !form.patientId || String(p.patientId || "") === String(form.patientId)
       );
       setPendientesDelMes(pendientes);
+
+      /*
+       * ── EL COBRO GENERADO MANDA (08/09/2026, AV-0086) ────────────────────
+       *
+       * Si el CRM ya generó el cobro de este mes, ESE es el importe de verdad:
+       * lleva dentro el prorrateo, el precio pactado y la reserva de plaza
+       * descontada. Medir contra la tarifa del catálogo es lo que hacía ofrecer
+       * un resto que nadie debe.
+       *
+       * Pero solo si CUBRE todas las cuotas de la familia. Si de dos cuotas el
+       * CRM solo generó una, medir contra esa mitad le diría «este mes ya está
+       * cobrado entero» a quien debe la otra terapia. Sin cobertura se queda la
+       * tarifa, que es lo de siempre, y la pantalla lo dice.
+       */
+      const tarifaDelCatalogo = esperado;
+      const generado = generadoDelMes([...cobrosDelMes, ...pendientes], form.patientId || null);
+      const cubre = generado != null && cuotas.length > 0 && generado.cuotas >= cuotas.length;
+      if (cubre) esperado = generado.importe;
+      setEsperadoDeLaCuota({
+        tarifa: Number(tarifaDelCatalogo) > 0 ? Number(tarifaDelCatalogo) : null,
+        generado: cubre ? generado.importe : null,
+        pactado: pactado !== null,
+        cuotasSinGenerar: generado != null && cuotas.length > 0 ? Math.max(0, cuotas.length - generado.cuotas) : 0,
+      });
+
       const parcial = restoDelMes({ esperado, cobros: cobrosDelMes, patientId: form.patientId || null });
       if (pendientes.length) {
         // EL PENDIENTE MANDA (06/09/2026). Ese cobro ya lleva su importe de
@@ -1112,6 +1179,26 @@ export default function CobrosPage() {
                             su parte se prorratea sola.
                           </p>
                         )}
+                        {/*
+                         * DONDE NACE LA CUENTA DE CABEZA (08/09/2026, AV-0085).
+                         * Rosa sumó 145 + 145 = 290 aquí arriba y abajo le salían
+                         * 375. Los dos números eran correctos y ninguno decía qué
+                         * era. Esta línea corta la suma antes de que se haga, y
+                         * solo sale cuando de verdad no coinciden.
+                         */}
+                        {pendientesDelMes.length > 0 &&
+                          Math.abs(cuentaCuota.total - sumaPendientes) >= 0.01 && (
+                            <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5">
+                              Estos son los precios de <strong>tarifa</strong> y suman{" "}
+                              <span className="tabular">{fmtMoney(cuentaCuota.total)}</span>. No es lo que se cobra
+                              este mes: abajo, en el importe, está{" "}
+                              {pendientesDelMes.length === 1
+                                ? "su cobro pendiente"
+                                : `sus ${pendientesDelMes.length} cobros pendientes`}{" "}
+                              y por qué {pendientesDelMes.length === 1 ? "es" : "son"}{" "}
+                              <span className="tabular">{fmtMoney(sumaPendientes)}</span>.
+                            </p>
+                          )}
                       </div>
                     </FormRow>
                   )}
@@ -1215,23 +1302,46 @@ export default function CobrosPage() {
                     que decir de dónde sale o parece que la cuota ha cambiado.
                     Ver `lib/billing/restoDelMes.js`. */}
                 {form.modo === "cuota" && pendientesDelMes.length > 0 && (
-                  <p className="text-[11px] mt-1.5 text-neutral-500">
-                    {pendientesDelMes.length === 1 ? (
-                      <>
-                        Este mes ya tiene su cobro pendiente en Cobros ({fmtMoney(pendientesDelMes[0].amount)}), y es lo
-                        que se ha puesto arriba: al registrar, ese cobro pasa a cobrado. Si pones MENOS, se parte:
-                        se cobra lo que traen y el resto se queda pendiente de este mes, así que la familia sigue
-                        saliendo en Morosidad por lo que falta.
-                      </>
-                    ) : (
-                      <>
-                        Este mes tiene {pendientesDelMes.length} cobros pendientes en Cobros (suman{" "}
-                        {fmtMoney(pendientesDelMes.reduce((s, p) => s + Number(p.amount || 0), 0))}, que es lo que se ha
-                        puesto arriba): con esa suma exacta se cobran todos; con otro importe se apunta un cobro nuevo y los
-                        pendientes se quedan.
-                      </>
+                  <div className="mt-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2">
+                    <p className="text-[11px] text-neutral-500 mb-1.5">
+                      {pendientesDelMes.length === 1
+                        ? "Este mes ya tiene su cobro pendiente en Cobros. Esto es lo que se cobra:"
+                        : `Este mes ya tiene sus ${pendientesDelMes.length} cobros pendientes en Cobros. Esto es lo que se cobra:`}
+                    </p>
+                    <ul className="space-y-1">
+                      {pendientesExplicados.map((p) => (
+                        <li key={p.id}>
+                          <div className="flex justify-between gap-3 text-[12px] text-neutral-700">
+                            <span className="truncate">{p.concepto ?? "Cuota del mes"}</span>
+                            <span className="tabular font-medium shrink-0">{fmtMoney(p.amount)}</span>
+                          </div>
+                          {p.motivos.length > 0 && (
+                            <p className="text-[10px] text-neutral-500 leading-snug">{p.motivos.join(" · ")}</p>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                    {pendientesDelMes.length > 1 && (
+                      <div className="flex justify-between gap-3 text-[12px] text-neutral-700 mt-1.5 pt-1.5 border-t border-neutral-200">
+                        <span>Total pendiente</span>
+                        <span className="tabular font-semibold">{fmtMoney(sumaPendientes)}</span>
+                      </div>
                     )}
-                  </p>
+                    {/* La frase dice QUÉ HACER, no qué pasa: «pone que si se cambia
+                        el importe se genera un cobro nuevo y se deja el antiguo????»
+                        (Rosa, 08/09/2026). Lo que asusta va después y como
+                        consecuencia, no como amenaza. */}
+                    <p className="text-[11px] text-neutral-700 font-medium mt-1.5">
+                      {pendientesDelMes.length === 1
+                        ? `Para saldarlo, deja los ${fmtMoney(sumaPendientes)} y pulsa Registrar.`
+                        : `Para saldar los ${pendientesDelMes.length}, deja los ${fmtMoney(sumaPendientes)} y pulsa Registrar.`}
+                    </p>
+                    <p className="text-[10px] text-neutral-500 mt-0.5">
+                      {pendientesDelMes.length === 1
+                        ? "Si la familia trae menos, escribe lo que trae: se cobra eso y el resto se queda pendiente de este mes, así que sigue saliendo en Morosidad."
+                        : "Si escribes otra cifra se apunta un cobro aparte y estos siguen pendientes."}
+                    </p>
+                  </div>
                 )}
                 {/* Lo que cubre el pago a cuenta, antes de guardarlo: la queja
                     de la tarea era que «nadie lo ve venir». */}
@@ -1264,20 +1374,68 @@ export default function CobrosPage() {
                   </div>
                 )}
                 {form.modo === "cuota" && parcialDelMes && (
-                  <p className={`text-[11px] mt-1.5 ${parcialDelMes.completo ? "text-amber-700" : "text-neutral-500"}`}>
+                  <div className={`text-[11px] mt-1.5 ${parcialDelMes.completo ? "text-neutral-600" : "text-neutral-500"}`}>
                     {parcialDelMes.completo ? (
                       <>
-                        Este mes ya está cobrado entero ({fmtMoney(parcialDelMes.yaCobrado)}). Si aun así hay que
-                        apuntar otro cobro, escribe el importe a mano.
+                        <p className="text-neutral-700">
+                          Este mes ya está cobrado entero:{" "}
+                          <span className="tabular font-medium">{fmtMoney(parcialDelMes.yaCobrado)}</span>
+                          {esperadoDeLaCuota?.generado != null && ", que es el cobro que generó el CRM para este mes"}.
+                        </p>
+                        {/*
+                         * Los motivos REALES del cobro, no una causa inventada.
+                         * De las 112 familias a las que el CRM ofrecía un resto,
+                         * en 6 no había ninguna reserva de plaza: escribir «ya
+                         * llevaba el descuento» habría vuelto a decir un porqué
+                         * que no cuadra, que es justo lo que hace escribir otra
+                         * vez a quien cobra.
+                         */}
+                        {cobradosExplicados.some((c) => c.motivos.length > 0) && (
+                          <ul className="mt-1 space-y-0.5">
+                            {cobradosExplicados
+                              .filter((c) => c.motivos.length > 0)
+                              .map((c) => (
+                                <li key={c.id} className="text-[10px] text-neutral-500 leading-snug">
+                                  {c.concepto ? `${c.concepto} — ` : ""}
+                                  {c.motivos.join(" · ")}
+                                </li>
+                              ))}
+                          </ul>
+                        )}
+                        {esperadoDeLaCuota?.generado != null &&
+                          esperadoDeLaCuota?.tarifa != null &&
+                          Math.abs(esperadoDeLaCuota.tarifa - esperadoDeLaCuota.generado) >= 0.01 && (
+                            <p className="text-[10px] text-neutral-400 mt-1">
+                              Su {esperadoDeLaCuota.pactado ? "precio pactado" : "tarifa de catálogo"} son{" "}
+                              <span className="tabular">{fmtMoney(esperadoDeLaCuota.tarifa)}</span>: el cobro de este
+                              mes salió por otra cifra, y arriba está por qué.
+                            </p>
+                          )}
+                        <p className="text-[10px] text-neutral-400 mt-1">
+                          Si aun así hay que apuntar otro cobro, escribe el importe a mano.
+                        </p>
                       </>
                     ) : (
-                      <>
+                      <p>
                         Ya cobrado este mes: <span className="tabular">{fmtMoney(parcialDelMes.yaCobrado)}</span>.
                         Queda <span className="tabular font-medium text-neutral-700">{fmtMoney(parcialDelMes.resto)}</span>,
-                        que es lo que se ha puesto arriba.
-                      </>
+                        que es lo que se ha puesto arriba
+                        {esperadoDeLaCuota?.generado == null && esperadoDeLaCuota?.tarifa != null
+                          ? ` para llegar a su ${esperadoDeLaCuota.pactado ? "precio pactado" : "tarifa"} (${fmtMoney(esperadoDeLaCuota.tarifa)})`
+                          : ""}
+                        .
+                      </p>
                     )}
-                  </p>
+                    {/* Con el mes generado a medias no se puede decir que esté
+                        saldado: falta el cobro de la otra cuota. */}
+                    {esperadoDeLaCuota?.cuotasSinGenerar > 0 && (
+                      <p className="text-[10px] text-amber-700 mt-1">
+                        Ojo: de sus cuotas, {esperadoDeLaCuota.cuotasSinGenerar === 1 ? "una" : esperadoDeLaCuota.cuotasSinGenerar}{" "}
+                        no {esperadoDeLaCuota.cuotasSinGenerar === 1 ? "tiene" : "tienen"} cobro generado este mes, así que
+                        esta cuenta va contra la tarifa.
+                      </p>
+                    )}
+                  </div>
                 )}
               </FormRow>
               <FormRow label="Método de pago">

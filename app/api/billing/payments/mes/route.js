@@ -51,7 +51,10 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
         status: "completed",
         periodMonth: { [Op.gte]: `${mes}-01`, [Op.lt]: `${mesSiguiente(mes)}-01` },
       },
-      attributes: ["id", "patientId", "amount", "paidAt", "method"],
+      // `notes`, `conceptId` y `cuotaId` desde el 08/09/2026 (AV-0085/86): el
+      // porqué de cada importe estaba escrito en la nota y no llegaba a la
+      // pantalla, y sin `cuotaId` no se puede saber si el CRM generó el mes.
+      attributes: ["id", "patientId", "amount", "paidAt", "method", "notes", "conceptId", "cuotaId"],
       order: [["paidAt", "DESC"]],
     });
 
@@ -65,7 +68,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
         invoiceId: null,
         periodMonth: { [Op.gte]: `${mes}-01`, [Op.lt]: `${mesSiguiente(mes)}-01` },
       },
-      attributes: ["id", "patientId", "amount"],
+      attributes: ["id", "patientId", "amount", "notes", "conceptId", "cuotaId"],
       order: [["createdAt", "ASC"]],
     });
 
@@ -94,13 +97,28 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     return ok({
       mes,
       citas,
-      pendientes: pendientes.map((p) => ({ id: p.id, patientId: p.patientId ?? null, amount: Number(p.amount) })),
+      pendientes: pendientes.map((p) => ({
+        id: p.id,
+        patientId: p.patientId ?? null,
+        amount: Number(p.amount),
+        notes: p.notes ?? null,
+        conceptId: p.conceptId ?? null,
+        cuotaId: p.cuotaId ?? null,
+        // Todos estos vienen del `where`: son de cuota por definición.
+        deCuota: true,
+      })),
       cobros: filas.map((p) => ({
         id: p.id,
         patientId: p.patientId ?? null,
         amount: Number(p.amount),
         paidAt: p.paidAt,
         method: p.method,
+        notes: p.notes ?? null,
+        conceptId: p.conceptId ?? null,
+        cuotaId: p.cuotaId ?? null,
+        // Lo generó el CRM a partir de una cuota, o lo tecleó alguien a mano.
+        // Un cobro a mano NO cuenta como «el mes ya está generado».
+        deCuota: Boolean(p.cuotaId),
       })),
     });
   } catch (e) {

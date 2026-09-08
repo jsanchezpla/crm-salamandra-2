@@ -57,6 +57,13 @@ test("Registrar cobro avisa del cobro pendiente que va a cobrar en vez de duplic
   // Desde el 07/09/2026 el aviso ya no promete que «no se crea otra fila»:
   // cobrar de menos PARTE el pendiente (lo que traen se cobra, el resto sigue
   // pendiente), y eso hay que decirlo antes de pulsar.
-  assert.match(src, /Si pones MENOS, se parte/);
+  //
+  // Y desde el 08/09/2026 (AV-0085) se dice al revés: primero QUÉ HACER —«deja
+  // los 375 y pulsa Registrar»— y la partición después, como consecuencia y no
+  // como amenaza. Lo que se vigila aquí es que las dos mitades sigan estando,
+  // no las palabras exactas: Rosa escribió porque el aviso contaba qué pasa sin
+  // decirle qué hacer.
+  assert.match(src, /Para saldarlo, deja los/, "falta la frase de qué hacer");
+  assert.match(src, /el resto se queda pendiente de este mes/, "falta decir que cobrar de menos parte el pendiente");
   assert.ok(!/No se crea otra fila/.test(src), "el aviso viejo prometía algo que ya no es verdad");
 });
