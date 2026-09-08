@@ -41,14 +41,32 @@ function trozo(desde, hasta) {
 describe("el bloqueo de la copia nace con su categoría", () => {
   it("el bloqueo deseado lleva categoryKey con categoriaPorEtiqueta", () => {
     const bucle = trozo("for (const r of volcado.reservas)", "const actuales = await m.TeamBlock.findAll");
-    assert.match(bucle, /categoryKey:\s*categoriaPorEtiqueta\(label, categorias\)/);
+    assert.match(bucle, /categoryKey:\s*categoriaPorEtiqueta\(crudo, categorias\)/);
+  });
+
+  it("la categoría se deduce del rótulo CRUDO, no del limpio (08/09/2026)", () => {
+    /*
+     * Desde que el nombre del paciente sale del rótulo, hay dos textos: el que
+     * vino de Organízate (`crudo`) y el que se guarda (`label`, sin el nombre).
+     * La categoría tiene que salir del crudo: un rótulo que solo era el nombre
+     * del niño queda en «Reservado» al limpiarlo, y deducir de ahí lo movería
+     * de `sesion_paciente` a `reservado_paciente` en silencio — 165 bloqueos de
+     * Aumenta— en la primera pasada después de limpiar.
+     */
+    const bucle = trozo("for (const r of volcado.reservas)", "const actuales = await m.TeamBlock.findAll");
+    assert.ok(
+      !/categoriaPorEtiqueta\(\s*label/.test(bucle),
+      "la categoría no puede salir del rótulo ya limpio",
+    );
+    // Y el que se GUARDA sí es el limpio: si no, el nombre volvería en cada copia.
+    assert.match(bucle, /const label = despiece \? despiece\.label : crudo;/);
   });
 
   it("las categorías son las del centro, no las de fábrica", () => {
     assert.match(src, /import \{ categoriasDe, categoriaPorEtiqueta \} from "\.\.\/lib\/citas\/categoriasBloqueo\.js";/);
     assert.match(src, /const categorias = categoriasDe\(tenant\);/);
     assert.ok(
-      !/categoriaPorEtiqueta\(\s*label\s*\)/.test(src),
+      !/categoriaPorEtiqueta\(\s*(?:label|crudo)\s*\)/.test(src),
       "sin segundo argumento caería a las categorías de fábrica",
     );
   });
