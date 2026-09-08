@@ -6,6 +6,7 @@ import { demoForcesFakeAi } from "../../../../../../lib/demo/isDemo.js";
 import { vetoAi } from "../../../../../../lib/ai/aiAccess.js";
 import { logClinicaAudit } from "../../../../../../lib/clinica/audit.js";
 import { pulirInforme, fakePulirInforme } from "../../../../../../lib/clinica/pulirInforme.js";
+import { perfilDelCentro } from "../../../../../../lib/clinica/perfilDelCentro.js";
 
 /**
  * POST /api/clinica/reports/[id]/pulir — la redacción asistida del informe.
@@ -71,7 +72,7 @@ export const POST = withTenant(async (request, rc, ctx) => {
 
     const { propuesta, avisos } = esFake
       ? fakePulirInforme({ contentSections: cs })
-      : await pulirInforme({ contentSections: cs, paciente, apiKey, model: getTenantAnthropicModel(ctx) });
+      : await pulirInforme({ contentSections: cs, paciente, centro: perfilDelCentro(ctx.tenant), apiKey, model: getTenantAnthropicModel(ctx) });
 
     // Se audita QUÉ apartados se propusieron, nunca su texto: el contenido de un
     // informe clínico no se duplica en master.audit_logs.

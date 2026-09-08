@@ -7,6 +7,7 @@ import { demoForcesFakeAi } from "../../../../../../lib/demo/isDemo.js";
 import { vetoAi } from "../../../../../../lib/ai/aiAccess.js";
 import { esErrorDeIa, mensajeDeErrorIa } from "../../../../../../lib/ai/errorLegible.js";
 import { complete } from "../../../../../../lib/outreach/analysis/anthropic.js";
+import { perfilDelCentro } from "../../../../../../lib/clinica/perfilDelCentro.js";
 import {
   MAX_IDEAS,
   promptObjetivos,
@@ -74,7 +75,7 @@ export const POST = withTenant(async (request, rc, ctx) => {
 
     const apiKey = getTenantAnthropicKey(ctx);
     const model = getTenantAnthropicModel(ctx);
-    const { system, user } = promptObjetivos({ ideas, plan, paciente: paciente.toJSON() });
+    const { system, user } = promptObjetivos({ ideas, plan, paciente: paciente.toJSON(), centro: perfilDelCentro(ctx.tenant) });
     const respuesta = await complete({ system, user, model, maxTokens: 1500, apiKey });
 
     const objetivos = parsearObjetivos(respuesta, { yaTiene });

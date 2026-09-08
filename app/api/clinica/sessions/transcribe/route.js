@@ -7,7 +7,8 @@ import { getTenantAnthropicKey } from "../../../../../lib/ai/anthropicKey.js";
 import { getTenantAnthropicModel } from "../../../../../lib/ai/anthropicModel.js";
 import { transcribirVarios, MAX_AUDIO_BYTES } from "../../../../../lib/clinica/whisper.js";
 import { MAX_AUDIOS } from "../../../../../lib/clinica/audios.js";
-import { structureSession } from "../../../../../lib/clinica/structureSession.js";
+import { structureSession } from "../../../../../lib/clinica/structureSession.js";
+import { perfilDelCentro } from "../../../../../lib/clinica/perfilDelCentro.js";
 import {
   bloquesDelRegistro,
   estructuraHistorica,
@@ -210,6 +211,9 @@ export const POST = withTenant(async (request, _rc, ctx) => {
   const tIA = Date.now();
   try {
     const r = await structureSession({
+      // Lo que este centro dice de sí mismo (09/09/2026): sus terapias, a
+      // quién atiende y cómo escribe. Vacío deja el prompt como estaba.
+      centro: perfilDelCentro(ctx.tenant),
       transcription: material,
       apartados,
       escrito,

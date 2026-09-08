@@ -9,6 +9,7 @@ import { transcribirVarios, MAX_AUDIO_BYTES } from "../../../../../lib/clinica/w
 import { MAX_AUDIOS } from "../../../../../lib/clinica/audios.js";
 import { structureTaller } from "../../../../../lib/clinica/structureTaller.js";
 import { materialParaLaIA, MAX_NOTAS, MAX_TRANSCRIPCION } from "../../../../../lib/clinica/registroCompleto.js";
+import { perfilDelCentro } from "../../../../../lib/clinica/perfilDelCentro.js";
 import {
   bloquesDelTaller,
   propuestaDemoTaller,
@@ -156,6 +157,9 @@ export const POST = withTenant(async (request, _rc, ctx) => {
   let r;
   try {
     r = await structureTaller({
+      // Lo que este centro dice de sí mismo (09/09/2026): sus terapias, a
+      // quién atiende y cómo escribe. Vacío deja el prompt como estaba.
+      centro: perfilDelCentro(ctx.tenant),
       transcription: material,
       apartados,
       asistentes,

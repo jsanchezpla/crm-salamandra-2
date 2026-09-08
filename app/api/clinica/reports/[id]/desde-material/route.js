@@ -9,6 +9,7 @@ import { apartadosPara } from "../../../../../../lib/clinica/plantillas.js";
 import { materialParaLaIA, MAX_NOTAS, MAX_TRANSCRIPCION } from "../../../../../../lib/clinica/registroCompleto.js";
 import { bloquesDelInforme } from "../../../../../../lib/clinica/informeMaterial.js";
 import { structureInforme } from "../../../../../../lib/clinica/structureInforme.js";
+import { perfilDelCentro } from "../../../../../../lib/clinica/perfilDelCentro.js";
 
 /**
  * POST /api/clinica/reports/[id]/desde-material — el informe DICTADO
@@ -128,6 +129,9 @@ export const POST = withTenant(async (request, rc, ctx) => {
     const t0 = Date.now();
     try {
       salida = await structureInforme({
+      // Lo que este centro dice de sí mismo (09/09/2026): sus terapias, a
+      // quién atiende y cómo escribe. Vacío deja el prompt como estaba.
+      centro: perfilDelCentro(ctx.tenant),
         transcription: material,
         apartados,
         escrito,

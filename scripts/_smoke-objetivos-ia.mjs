@@ -76,9 +76,25 @@ describe("el prompt", () => {
   const { system, user } = promptObjetivos({ ideas: "turnos de palabra, frases de 3 elementos", plan, paciente });
 
   it("pide SOLO JSON con la forma {objetivos: [...]}", () => {
-    assert.match(system, /SOLO con un objeto JSON/);
+    assert.match(system, /SOLO un objeto JSON válido/);
     assert.match(system, /\{"objetivos": \[string, \.\.\.\]\}/);
     assert.match(system, new RegExp(`${MAX_OBJETIVOS} objetivos`));
+  });
+
+  /*
+   * ── 09/09/2026: ESTE PROMPT YA ES EL DE LA CASA ─────────────────────────
+   * Era el único de los cuatro prompts clínicos que se había quedado fuera de
+   * `estiloClinico.js`: tenía su propia identidad inventada («un centro de
+   * psicología y logopedia infantil»), le pedía al modelo «la terminología que
+   * usa el centro» sin darle ninguna, y despachaba lo de diagnosticar con un
+   * «sin diagnósticos nuevos» de pasada.
+   */
+  it("hereda la voz, la frontera y las prohibiciones de la casa", () => {
+    assert.match(system, /profesional titulada y colegiada/);
+    assert.match(system, /PROHIBIDO, sin excepciones/);
+    assert.match(system, /1\. DIAGNOSTICAR/);
+    // Y ya no lleva la identidad que nos habíamos inventado solo para aquí.
+    assert.doesNotMatch(system, /psicología y logopedia infantil/);
   });
   it("lleva las ideas, el plan y la edad, y NO el nombre del paciente", () => {
     assert.match(user, /turnos de palabra, frases de 3 elementos/);
