@@ -258,3 +258,20 @@ test("la coma que arrastra el nombre del concepto se quita", () => {
   const r = explicaCobro({ notes: "Cuota septiembre 2026 — Cuota Psicología 60x1," });
   assert.equal(r.concepto, "Cuota Psicología 60x1");
 });
+
+test("un motivo pegado con guion normal se separa del concepto", () => {
+  // Literal de producción: el centro escribió la reserva con un « - » en vez
+  // del separador, y el nombre del concepto se llevaba la cola pegada.
+  const r = explicaCobro({
+    notes: "Cuota septiembre 2026 — Cuota Psicología 45x1 - Reserva de plaza ya abonada: −30 €",
+  });
+  assert.equal(r.concepto, "Cuota Psicología 45x1");
+  assert.deepEqual(r.motivos, ["Reserva de plaza ya abonada: −30,00 €"]);
+});
+
+test("pero un guion que NO abre un motivo se queda en el nombre", () => {
+  // Hay conceptos de catálogo con guion dentro; partirlos los dejaría a medias.
+  const r = explicaCobro({ notes: "Cuota septiembre 2026 — Cuota Refuerzo / TT.EE. - 2 días" });
+  assert.equal(r.concepto, "Cuota Refuerzo / TT.EE. - 2 días");
+  assert.deepEqual(r.motivos, []);
+});
