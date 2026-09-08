@@ -131,3 +131,44 @@ describe("lo que no puede romper la pantalla", () => {
     assert.equal(r, null);
   });
 });
+
+describe("ni la de otra profesional (08/09/2026, AV-0083 de Aumenta)", () => {
+  /*
+   * La hora exacta parecía bastante desempate, y no lo es: en Aumenta hay 38
+   * parejas de citas del MISMO paciente al MISMO instante con terapeutas
+   * distintas, y 57 de los 268 pacientes de septiembre los ven dos o más.
+   * Adoptar ahí es abrir a escribir encima de la nota clínica de otra.
+   */
+  it("no adopta la sesión suelta de otra terapeuta a la misma hora", () => {
+    const lista = [sesion({ id: "de-blanca", therapistId: "t-blanca" })];
+    assert.equal(sesionDeLaCita(lista, { bookingId: "b1", scheduledAt: HORA, deLaTerapeuta: "t-raquel" }), null);
+  });
+
+  it("sí adopta la suya", () => {
+    const lista = [sesion({ id: "de-raquel", therapistId: "t-raquel" })];
+    const r = sesionDeLaCita(lista, { bookingId: "b1", scheduledAt: HORA, deLaTerapeuta: "t-raquel" });
+    assert.equal(r.sesion.id, "de-raquel");
+    assert.equal(r.via, "fecha");
+  });
+
+  it("con dos a la misma hora, se lleva la suya y no el empate", () => {
+    const lista = [
+      sesion({ id: "de-blanca", therapistId: "t-blanca" }),
+      sesion({ id: "de-raquel", therapistId: "t-raquel" }),
+    ];
+    // Sin filtro esto era un empate y devolvía null: se perdía la propia.
+    assert.equal(sesionDeLaCita(lista, { bookingId: "b1", scheduledAt: HORA }), null);
+    assert.equal(
+      sesionDeLaCita(lista, { bookingId: "b1", scheduledAt: HORA, deLaTerapeuta: "t-raquel" }).sesion.id,
+      "de-raquel",
+    );
+  });
+
+  it("sin saber de quién es la cita, se comporta como antes", () => {
+    // La cita sin `prof=` en el enlace: no hay con quién comparar, y quitar la
+    // adopción dejaría sin arreglar las sesiones preparadas antes del 01/09.
+    const lista = [sesion({ id: "suelta", therapistId: "t-blanca" })];
+    assert.equal(sesionDeLaCita(lista, { bookingId: "b1", scheduledAt: HORA }).sesion.id, "suelta");
+    assert.equal(sesionDeLaCita(lista, { bookingId: "b1", scheduledAt: HORA, deLaTerapeuta: "" }).sesion.id, "suelta");
+  });
+});

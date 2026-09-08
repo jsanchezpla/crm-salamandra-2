@@ -595,7 +595,13 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
           .then((r) => (r.ok ? r.json() : null))
           .then((j) => j?.data?.sessions ?? [])
           .catch(() => []);
-        hallada = sesionDeLaCita(delPaciente, { bookingId: cita, scheduledAt: fechaDeLaUrl });
+        hallada = sesionDeLaCita(delPaciente, {
+          bookingId: cita,
+          scheduledAt: fechaDeLaUrl,
+          // La profesional de ESTA cita: una sesión suelta de otra a la misma
+          // hora es de otra terapia, no de esta (08/09/2026, AV-0083).
+          deLaTerapeuta: profDeLaCita,
+        });
         if (hallada?.via === "fecha") {
           await fetch(`/api/clinica/sessions/${hallada.sesion.id}`, {
             method: "PATCH",
@@ -617,7 +623,7 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
     return () => {
       vivo = false;
     };
-  }, [id, cita, sessionId, fechaDeLaUrl, abrirPreparacion, router]);
+  }, [id, cita, sessionId, fechaDeLaUrl, abrirPreparacion, profDeLaCita, router]);
 
   /**
    * Cambiar de plantilla rehace la lista de apartados. Lo escrito no se pierde:
