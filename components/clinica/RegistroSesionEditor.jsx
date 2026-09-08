@@ -507,8 +507,11 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
    * cartel que dice de dónde sale.
    *
    * Solo si está vacía, y esa es la regla que no se toca: lo escrito a mano
-   * nunca se pisa. Y no se guarda nada por su cuenta — esto es una propuesta en
-   * pantalla hasta que alguien le dé a guardar (ver `proximasSesionesPendientes`).
+   * nunca se pisa. Y desde el 08/09/2026 (AV-0083), solo de las sesiones de la
+   * MISMA profesional: en un paciente que llevan dos, heredar lo de la otra le
+   * ponía delante el plan de una terapia que no es la suya. Y no se guarda nada
+   * por su cuenta — esto es una propuesta en pantalla hasta que alguien le dé a
+   * guardar (ver `proximasSesionesPendientes`).
    *
    * Espera a que termine de resolverse la sesión: si se adelantara, escribiría
    * en un formulario que `volcarSesion` va a sobrescribir medio segundo después.
@@ -520,7 +523,18 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
     if (String(form.prepText ?? "").trim()) return;
     let vivo = true;
     (async () => {
-      const suyas = await fetch(`/api/clinica/sessions?patientId=${encodeURIComponent(id)}&limit=100`, { cache: "no-store" })
+      /*
+       * Se le pide al servidor que filtre por profesional cuando se sabe quién
+       * es (08/09/2026, AV-0083): el `limit=100` corta por las más nuevas, y en
+       * un paciente compartido eso podía dejar fuera la última sesión SUYA. El
+       * filtro de `proximasSesionesPendientes` sigue puesto igualmente — el
+       * servidor acota, la regla la fija la función.
+       */
+      const firma = firmaDeLaSesion();
+      const suyas = await fetch(
+        `/api/clinica/sessions?patientId=${encodeURIComponent(id)}&limit=100${firma ? `&therapistId=${encodeURIComponent(firma)}` : ""}`,
+        { cache: "no-store" },
+      )
         .then((r) => (r.ok ? r.json() : null))
         .then((j) => j?.data?.sessions ?? [])
         .catch(() => []);
@@ -528,6 +542,9 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
       const previa = proximasSesionesPendientes(suyas, {
         antesDe: cuandoEsLaSesion(),
         excluirId: sessionId,
+        // Solo lo suyo: en un paciente compartido, «Próximas sesiones» de otra
+        // profesional es el plan de OTRA terapia (08/09/2026, AV-0083).
+        deLaTerapeuta: firma,
       });
       if (!previa) return;
       // Se vuelve a mirar sobre el estado de AHORA: entre la petición y esto ha

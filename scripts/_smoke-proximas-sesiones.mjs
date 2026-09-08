@@ -111,3 +111,48 @@ test("lo que llega roto no rompe nada: null y a otra cosa", () => {
   // Una sesión sin fecha legible no puede compararse: fuera.
   assert.equal(proximasSesionesPendientes([sesion("a", "ayer", "Algo")], { antesDe: JUEVES }), null);
 });
+
+/*
+ * ── CADA UNA HEREDA LO SUYO (08/09/2026, AV-0083 de Aumenta) ────────────────
+ * Raquel: «me aparece la preparación de la sesión de Blanca en pacientes que
+ * compartimos». En Aumenta 134 de los 544 pacientes con historia los llevan dos
+ * o más profesionales, y 98 de las 211 notas de «Próximas sesiones» están en
+ * pacientes compartidos: casi la mitad se heredaban al despacho de al lado.
+ */
+const RAQUEL = "t-raquel";
+const BLANCA = "t-blanca";
+
+test("en un paciente compartido, cada una hereda lo que apuntó ella", () => {
+  const lista = [
+    sesion("de-blanca", MIERCOLES, "Repasar praxias", { therapistId: BLANCA }),
+    sesion("de-raquel", MARTES, "Seguir con flexibilidad cognitiva", { therapistId: RAQUEL }),
+  ];
+  // Blanca escribió DESPUÉS: sin el filtro, Raquel se llevaba lo suyo.
+  const r = proximasSesionesPendientes(lista, { antesDe: JUEVES, deLaTerapeuta: RAQUEL });
+  assert.equal(r.texto, "Seguir con flexibilidad cognitiva");
+  assert.equal(r.sesion.id, "de-raquel");
+
+  const b = proximasSesionesPendientes(lista, { antesDe: JUEVES, deLaTerapeuta: BLANCA });
+  assert.equal(b.sesion.id, "de-blanca");
+});
+
+test("si la profesional no tiene sesión previa, abre en blanco antes que con la de otra", () => {
+  const lista = [sesion("de-blanca", MIERCOLES, "Repasar praxias", { therapistId: BLANCA })];
+  assert.equal(proximasSesionesPendientes(lista, { antesDe: JUEVES, deLaTerapeuta: RAQUEL }), null);
+});
+
+test("sin saber quién prepara, se queda como estaba", () => {
+  // Un centro que no firma las sesiones, o una sesión aún sin profesional: ahí
+  // no hay a quién confundir con quién, y quitar la herencia sería una pérdida.
+  const lista = [sesion("de-blanca", MIERCOLES, "Repasar praxias", { therapistId: BLANCA })];
+  assert.equal(proximasSesionesPendientes(lista, { antesDe: JUEVES }).sesion.id, "de-blanca");
+  assert.equal(proximasSesionesPendientes(lista, { antesDe: JUEVES, deLaTerapeuta: "" }).sesion.id, "de-blanca");
+  assert.equal(proximasSesionesPendientes(lista, { antesDe: JUEVES, deLaTerapeuta: null }).sesion.id, "de-blanca");
+});
+
+test("las sesiones viejas sin firmar no se le atribuyen a nadie", () => {
+  // En Aumenta son 4.297 registros importados sin profesional. Dárselos a quien
+  // esté preparando ahora sería adivinar, y es justo el fallo que se arregla.
+  const lista = [sesion("importada", MARTES, "Lo de siempre")];
+  assert.equal(proximasSesionesPendientes(lista, { antesDe: JUEVES, deLaTerapeuta: RAQUEL }), null);
+});
