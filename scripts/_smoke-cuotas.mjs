@@ -564,12 +564,20 @@ describe("textos de factura — el otro nombre del concepto", () => {
     const { aGenerar } = planDeCuotasDelMes({ mes: "2026-09", cuotas: [cuota], conceptos: CON_TEXTO });
     const fila = aGenerar[0];
     assert.equal(fila.notes, "Cuota septiembre 2026 — Cuota Logopedia 45x1 + Cuota T.O. 45x1");
-    assert.equal(fila.invoiceText, "Cuota septiembre 2026 — Terapia 45 min semanales + Terapia 45 min semanales");
+    // Lo impreso es SOLO el concepto: ni el mes, ni el rótulo, ni de dónde sale.
+    assert.equal(fila.invoiceText, "Terapia 45 min semanales + Terapia 45 min semanales");
   });
 
-  it("sin «Texto en la factura» las dos frases coinciden: se imprime el nombre", () => {
+  it("sin «Texto en la factura» se imprime el nombre del concepto, y solo eso", () => {
     const cuota = { id: "q2", clientId: CLIENTE, patientId: null, conceptIds: [LOGO], active: true };
     const { aGenerar } = planDeCuotasDelMes({ mes: "2026-09", cuotas: [cuota], conceptos: CONCEPTOS });
-    assert.equal(aGenerar[0].invoiceText, aGenerar[0].notes);
+    assert.equal(aGenerar[0].invoiceText, "Logopedia 60x2");
+    assert.equal(aGenerar[0].notes, "Cuota septiembre 2026 — Logopedia 60x2");
+  });
+
+  it("una cuota sin conceptos (importe pactado) no imprime nada propio", () => {
+    const cuota = { id: "q3", clientId: CLIENTE, patientId: null, conceptIds: [], amount: 182.11, active: true };
+    const { aGenerar } = planDeCuotasDelMes({ mes: "2026-09", cuotas: [cuota], conceptos: CONCEPTOS });
+    assert.equal(aGenerar[0].invoiceText, null);
   });
 });

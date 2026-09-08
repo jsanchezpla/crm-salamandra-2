@@ -329,15 +329,12 @@ export const POST = withTenant(async (request, _rc, { tenant, tenantModels, hasM
               .filter(Boolean)
               .sort((a, b) => a.parte.indice - b.parte.indice);
             const notaBase = String(original.notes ?? "").trim();
-            const impresoBase = String(original.invoiceText ?? "").trim();
             for (const trozo of trozos) {
               const nota = `${notaBase}${notaBase ? " — " : ""}parte del ${trozo.parte.pct} % de ${Number(c.importeEntero).toFixed(2)} €`;
-              // Y lo mismo en la línea de la factura, que es de media cuota.
-              const impreso = impresoBase
-                ? `${impresoBase} — parte del ${trozo.parte.pct} % de ${Number(c.importeEntero).toFixed(2)} €`
-                : null;
+              // El texto impreso no se toca: es el mismo servicio, y cuánto
+              // cobra esta factura de él ya lo dice su importe.
               if (trozo.parte.indice === 0) {
-                await original.update({ amount: trozo.amount, notes: nota, invoiceText: impreso }, { transaction: t });
+                await original.update({ amount: trozo.amount, notes: nota }, { transaction: t });
                 partIds.set(`${cobroId}:0`, original.id);
               } else {
                 const nueva = await Payment.create(
@@ -352,7 +349,7 @@ export const POST = withTenant(async (request, _rc, { tenant, tenantModels, hasM
                     method: original.method,
                     status: "completed",
                     notes: nota,
-                    invoiceText: impreso,
+                    invoiceText: original.invoiceText,
                     invoiceId: null,
                   },
                   { transaction: t }

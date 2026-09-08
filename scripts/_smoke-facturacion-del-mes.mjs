@@ -219,17 +219,18 @@ describe("lineasDeCuota — la nota del cobro generado ya lleva «Cuota mes»", 
   });
 });
 
-// ── 09/09/2026: la familia no lee los nombres internos de los conceptos ──────
-describe("lineasDeCuota — se imprime el texto de factura, no la nota interna", () => {
-  it("manda `invoiceText` cuando el cobro lo trae", () => {
+// ── 09/09/2026: la familia lee el concepto, y solo el concepto ──────────────
+describe("lineasDeCuota — se imprime el texto de factura, y tal cual", () => {
+  it("manda `invoiceText` y no se le antepone el mes ni nada", () => {
     const generado = cobro("c1", "fam1", 290, {
-      notes: "Cuota septiembre 2026 — Cuota Logopedia 45x1 + Cuota T.O. 45x1",
-      invoiceText: "Cuota septiembre 2026 — Terapia 45 min semanales + Terapia 45 min semanales",
+      notes: "Cuota septiembre 2026 — Cuota Logopedia 45x1 + Cuota T.O. 45x1 — 3 de 4 sesiones",
+      invoiceText: "Terapia 45 min semanales + Terapia 45 min semanales",
     });
     const [linea] = lineasDeCuota({ cobros: [generado], mes: "2026-09", vatRate: 0 });
-    assert.equal(linea.description, "Cuota septiembre 2026 — Terapia 45 min semanales + Terapia 45 min semanales");
-    assert.ok(!/Logopedia|T\.O\./.test(linea.description), "la factura no dice la terapia");
+    assert.equal(linea.description, "Terapia 45 min semanales + Terapia 45 min semanales");
+    assert.ok(!/Logopedia|T\.O\.|sesiones de 4|Cuota septiembre/.test(linea.description));
   });
+
   it("y cae a la nota en los cobros de antes de la columna y en los de a mano", () => {
     const viejo = cobro("c2", "fam1", 145, { notes: "Cuota septiembre 2026 — Cuota Logopedia 45x1" });
     const [l1] = lineasDeCuota({ cobros: [viejo], mes: "2026-09", vatRate: 0 });
@@ -239,9 +240,10 @@ describe("lineasDeCuota — se imprime el texto de factura, no la nota interna",
     const [l2] = lineasDeCuota({ cobros: [vacio], mes: "2026-09", vatRate: 0 });
     assert.equal(l2.description, "Cuota septiembre 2026 — Pagado en recepción");
   });
+
   it("y el cuadre con lo cobrado sigue siendo exacto", () => {
     const lines = lineasDeCuota({
-      cobros: [cobro("c4", "fam1", 190, { invoiceText: "Cuota septiembre 2026 — Terapia 1 h semanal" })],
+      cobros: [cobro("c4", "fam1", 190, { invoiceText: "Terapia 1 h semanal" })],
       mes: "2026-09",
       vatRate: 0,
     });

@@ -280,9 +280,6 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
             paidAt: fecha,
             method,
             notes: [p.notes, rotulo].filter(Boolean).join(" — "),
-            // Mismo apunte en la línea de la factura, si este cobro la tiene
-            // (los anteriores a `invoice_text` se facturan por su nota).
-            ...(p.invoiceText ? { invoiceText: [p.invoiceText, rotulo].filter(Boolean).join(" — ") } : {}),
           });
           cobrados.push(p.id);
           tocados.push(p.id);
@@ -322,10 +319,9 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
           method,
           status: "completed",
           notes: [fila.notes, rotulo].filter(Boolean).join(" — "),
-          // Lo que verá la familia si esto se factura: los mismos conceptos
-          // con su «Texto en la factura». El «Pago a cuenta del …» sí va, que
-          // es lo que explica por qué se cobró antes de tiempo.
-          invoiceText: [fila.invoiceText, rotulo].filter(Boolean).join(" — "),
+          // Lo que verá la familia: el concepto y nada más. El «Pago a cuenta
+          // del …» es de puertas adentro y se queda en la nota.
+          invoiceText: fila.invoiceText ?? null,
         });
         creados.push(p.id);
         tocados.push(p.id);
