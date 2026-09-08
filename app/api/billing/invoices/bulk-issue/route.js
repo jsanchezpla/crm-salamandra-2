@@ -57,7 +57,9 @@ async function recogerLote({ tenantModels, mes, agrupacion = "pagador", metodos 
       // Sin métodos elegidos entran todos, que es lo de siempre.
       ...(metodos.length ? { method: { [Op.in]: metodos } } : {}),
     },
-    attributes: ["id", "clientId", "amount", "method", "paidAt", "notes", "conceptId", "patientId"],
+    // `invoiceText` es lo que se imprime; `notes` es el respaldo para los
+    // cobros anteriores a esa columna y los apuntados a mano.
+    attributes: ["id", "clientId", "amount", "method", "paidAt", "notes", "invoiceText", "conceptId", "patientId"],
     order: [["paidAt", "ASC"]],
   });
 
@@ -327,10 +329,15 @@ export const POST = withTenant(async (request, _rc, { tenant, tenantModels, hasM
               .filter(Boolean)
               .sort((a, b) => a.parte.indice - b.parte.indice);
             const notaBase = String(original.notes ?? "").trim();
+            const impresoBase = String(original.invoiceText ?? "").trim();
             for (const trozo of trozos) {
               const nota = `${notaBase}${notaBase ? " — " : ""}parte del ${trozo.parte.pct} % de ${Number(c.importeEntero).toFixed(2)} €`;
+              // Y lo mismo en la línea de la factura, que es de media cuota.
+              const impreso = impresoBase
+                ? `${impresoBase} — parte del ${trozo.parte.pct} % de ${Number(c.importeEntero).toFixed(2)} €`
+                : null;
               if (trozo.parte.indice === 0) {
-                await original.update({ amount: trozo.amount, notes: nota }, { transaction: t });
+                await original.update({ amount: trozo.amount, notes: nota, invoiceText: impreso }, { transaction: t });
                 partIds.set(`${cobroId}:0`, original.id);
               } else {
                 const nueva = await Payment.create(
@@ -345,6 +352,7 @@ export const POST = withTenant(async (request, _rc, { tenant, tenantModels, hasM
                     method: original.method,
                     status: "completed",
                     notes: nota,
+                    invoiceText: impreso,
                     invoiceId: null,
                   },
                   { transaction: t }

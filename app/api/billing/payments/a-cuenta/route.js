@@ -84,7 +84,7 @@ async function mesesDeLaFamilia({ tenantModels, clientId, desde }) {
   let conceptos = [];
   if (BillingConcept) {
     try {
-      const filas = await BillingConcept.findAll({ attributes: ["id", "name", "unitPrice"] });
+      const filas = await BillingConcept.findAll({ attributes: ["id", "name", "description", "unitPrice"] });
       conceptos = filas.map((c) => ({ id: c.id, name: c.name, unitPrice: c.unitPrice }));
     } catch (err) {
       if (!esTablaAusente(err)) throw err;
@@ -280,6 +280,9 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
             paidAt: fecha,
             method,
             notes: [p.notes, rotulo].filter(Boolean).join(" — "),
+            // Mismo apunte en la línea de la factura, si este cobro la tiene
+            // (los anteriores a `invoice_text` se facturan por su nota).
+            ...(p.invoiceText ? { invoiceText: [p.invoiceText, rotulo].filter(Boolean).join(" — ") } : {}),
           });
           cobrados.push(p.id);
           tocados.push(p.id);
@@ -319,6 +322,10 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
           method,
           status: "completed",
           notes: [fila.notes, rotulo].filter(Boolean).join(" — "),
+          // Lo que verá la familia si esto se factura: los mismos conceptos
+          // con su «Texto en la factura». El «Pago a cuenta del …» sí va, que
+          // es lo que explica por qué se cobró antes de tiempo.
+          invoiceText: [fila.invoiceText, rotulo].filter(Boolean).join(" — "),
         });
         creados.push(p.id);
         tocados.push(p.id);

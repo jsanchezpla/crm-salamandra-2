@@ -47,7 +47,7 @@ async function recoger({ tenantModels, id, por }) {
 
   const cobros = await Payment.findAll({
     where: { invoiceId: factura.id },
-    attributes: ["id", "clientId", "patientId", "conceptId", "amount", "method", "paidAt", "notes", "status", "periodMonth"],
+    attributes: ["id", "clientId", "patientId", "conceptId", "amount", "method", "paidAt", "notes", "invoiceText", "status", "periodMonth"],
     order: [["paidAt", "ASC"]],
   });
   const ficha = await Client.findByPk(factura.clientId, { attributes: ATRIBUTOS_PARA_CONGELAR });

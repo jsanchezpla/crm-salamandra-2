@@ -218,3 +218,33 @@ describe("lineasDeCuota — la nota del cobro generado ya lleva «Cuota mes»", 
     assert.equal(l2.description, "Cuota septiembre 2026");
   });
 });
+
+// ── 09/09/2026: la familia no lee los nombres internos de los conceptos ──────
+describe("lineasDeCuota — se imprime el texto de factura, no la nota interna", () => {
+  it("manda `invoiceText` cuando el cobro lo trae", () => {
+    const generado = cobro("c1", "fam1", 290, {
+      notes: "Cuota septiembre 2026 — Cuota Logopedia 45x1 + Cuota T.O. 45x1",
+      invoiceText: "Cuota septiembre 2026 — Terapia 45 min semanales + Terapia 45 min semanales",
+    });
+    const [linea] = lineasDeCuota({ cobros: [generado], mes: "2026-09", vatRate: 0 });
+    assert.equal(linea.description, "Cuota septiembre 2026 — Terapia 45 min semanales + Terapia 45 min semanales");
+    assert.ok(!/Logopedia|T\.O\./.test(linea.description), "la factura no dice la terapia");
+  });
+  it("y cae a la nota en los cobros de antes de la columna y en los de a mano", () => {
+    const viejo = cobro("c2", "fam1", 145, { notes: "Cuota septiembre 2026 — Cuota Logopedia 45x1" });
+    const [l1] = lineasDeCuota({ cobros: [viejo], mes: "2026-09", vatRate: 0 });
+    assert.equal(l1.description, "Cuota septiembre 2026 — Cuota Logopedia 45x1");
+    // Un texto de factura vacío no borra la nota.
+    const vacio = cobro("c3", "fam1", 50, { notes: "Pagado en recepción", invoiceText: "   " });
+    const [l2] = lineasDeCuota({ cobros: [vacio], mes: "2026-09", vatRate: 0 });
+    assert.equal(l2.description, "Cuota septiembre 2026 — Pagado en recepción");
+  });
+  it("y el cuadre con lo cobrado sigue siendo exacto", () => {
+    const lines = lineasDeCuota({
+      cobros: [cobro("c4", "fam1", 190, { invoiceText: "Cuota septiembre 2026 — Terapia 1 h semanal" })],
+      mes: "2026-09",
+      vatRate: 0,
+    });
+    assert.equal(calculateInvoice({ lines, irpfRate: 0 }).total, 190);
+  });
+});

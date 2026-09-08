@@ -60,7 +60,7 @@ async function main() {
     },
     include: [{ model: Client, as: "client", attributes: ["id", "name", "fiscalName"] }],
   });
-  const conceptos = await BillingConcept.findAll({ attributes: ["id", "name", "unitPrice"] });
+  const conceptos = await BillingConcept.findAll({ attributes: ["id", "name", "description", "unitPrice"] });
   const yaGenerados = cuotas.length
     ? await Payment.findAll({
         where: { cuotaId: { [Op.in]: cuotas.map((c) => c.id) }, periodMonth: primero },
@@ -123,6 +123,7 @@ async function main() {
             method: fila.method || METODO_POR_DEFECTO,
             status: "pending", // generar NO es cobrar
             notes: fila.notes,
+            invoiceText: fila.invoiceText,
           },
           { transaction: t }
         );

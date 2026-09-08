@@ -39,6 +39,7 @@ import {
   importeDeCuota,
   fechaDeCobro,
   notaDeCobro,
+  textosDeFacturaDeConceptos,
   planDeCuotasDelMes,
   limpiarCuota,
   metodosValidos,
@@ -539,5 +540,36 @@ describe("cuadrarBajaYActiva: qué contradice a una cuota activa", () => {
 
   it("sin cambios no inventa campos", () => {
     assert.deepEqual(cuadrarBajaYActiva({ endDate: null, active: true }, {}, { hoy: HOY }), {});
+  });
+});
+
+// ── 09/09/2026: la familia no lee los nombres internos de los conceptos ──────
+describe("textos de factura — el otro nombre del concepto", () => {
+  const CON_TEXTO = [
+    { id: "c1", name: "Cuota Logopedia 45x1", description: "Terapia 45 min semanales", unitPrice: 145 },
+    { id: "c2", name: "Cuota T.O. 45x1", description: "Terapia 45 min semanales", unitPrice: 145 },
+    { id: "c3", name: "Informe extra", description: "  ", unitPrice: 50 },
+  ];
+  const porId = new Map(CON_TEXTO.map((c) => [c.id, c]));
+
+  it("coge el «Texto en la factura» y, si está vacío, el nombre", () => {
+    assert.deepEqual(
+      textosDeFacturaDeConceptos({ conceptIds: ["c1", "c2", "c3"] }, porId),
+      ["Terapia 45 min semanales", "Terapia 45 min semanales", "Informe extra"]
+    );
+  });
+
+  it("el cobro generado lleva las DOS frases: la interna y la que se imprime", () => {
+    const cuota = { id: "q1", clientId: CLIENTE, patientId: null, conceptIds: ["c1", "c2"], active: true };
+    const { aGenerar } = planDeCuotasDelMes({ mes: "2026-09", cuotas: [cuota], conceptos: CON_TEXTO });
+    const fila = aGenerar[0];
+    assert.equal(fila.notes, "Cuota septiembre 2026 — Cuota Logopedia 45x1 + Cuota T.O. 45x1");
+    assert.equal(fila.invoiceText, "Cuota septiembre 2026 — Terapia 45 min semanales + Terapia 45 min semanales");
+  });
+
+  it("sin «Texto en la factura» las dos frases coinciden: se imprime el nombre", () => {
+    const cuota = { id: "q2", clientId: CLIENTE, patientId: null, conceptIds: [LOGO], active: true };
+    const { aGenerar } = planDeCuotasDelMes({ mes: "2026-09", cuotas: [cuota], conceptos: CONCEPTOS });
+    assert.equal(aGenerar[0].invoiceText, aGenerar[0].notes);
   });
 });

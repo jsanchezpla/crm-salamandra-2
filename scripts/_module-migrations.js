@@ -644,6 +644,9 @@ export const MODULES = {
     // Cuándo se devolvió un cobro (07/09/2026): payments.refunded_at. ANTES
     // del despliegue: el modelo pide la columna por nombre.
     "migrate-payments-refunded-at",
+    // El texto con el que el cobro sale impreso en la factura (09/09/2026):
+    // payments.invoice_text. ANTES del despliegue: el modelo la pide.
+    "migrate-payments-invoice-text",
     // Entradas y salidas de caja: lo que pasa por el cajon y no es un cobro.
     // 01/09/2026, ANTES del despliegue.
     "migrate-arqueo-movimientos",

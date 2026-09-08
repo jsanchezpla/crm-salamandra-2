@@ -52,6 +52,25 @@ export function definePayment(sequelize) {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      /**
+       * La línea con la que este cobro sale impreso en la factura (09/09/2026).
+       *
+       * `notes` es de puertas adentro y lleva los nombres internos de los
+       * conceptos («Cuota Logopedia 45x1 + Cuota T.O. 45x1»), que es lo que el
+       * centro necesita ver en Cobros. La familia recibe otra cosa: el «Texto
+       * en la factura» de cada concepto («Terapia 45 min semanales»), que no
+       * dice la terapia — igual que las cuotas del Organízate, donde el
+       * «Concepto factura» es genérico a propósito.
+       *
+       * Se escribe al generar el mes, como FOTO: si en enero se retoca el
+       * texto del concepto, la factura de octubre sigue diciendo lo que se
+       * facturó. NULL en el cobro apuntado a mano y en todo lo anterior a la
+       * columna; `lineasDeCuota` cae entonces a `notes`, que es lo de siempre.
+       */
+      invoiceText: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
       // Cuándo se devolvió el dinero (07/09/2026). Un cobro «Devuelto» son DOS
       // movimientos de caja: entró el día `paidAt` y salió el día `refundedAt`.
       // Sin esta fecha, el resumen por día no sabía dónde apuntar la salida y

@@ -83,7 +83,8 @@ async function recogerCuotas({ tenantModels, hasModule, mes }) {
   let conceptos = [];
   if (BillingConcept) {
     try {
-      conceptos = await BillingConcept.findAll({ attributes: ["id", "name", "unitPrice", "vatRate"] });
+      // `description` es el «Texto en la factura»: de ahí sale `invoiceText`.
+      conceptos = await BillingConcept.findAll({ attributes: ["id", "name", "description", "unitPrice", "vatRate"] });
     } catch (err) {
       if (!esTablaAusente(err)) throw err;
     }
@@ -229,6 +230,9 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
               // PENDIENTE: generar no es cobrar (ver cabecera).
               status: "pending",
               notes: fila.notes,
+              // La línea que verá la familia si esto se factura (09/09/2026):
+              // los mismos conceptos con su «Texto en la factura».
+              invoiceText: fila.invoiceText,
             },
             { transaction: t }
           );
