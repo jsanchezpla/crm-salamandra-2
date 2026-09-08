@@ -116,28 +116,6 @@ export default function CobrosPage() {
       return c ? { c, inicio } : null;
     })
     .filter(Boolean);
-  /*
-   * ── DE DÓNDE SALE CADA CIFRA (08/09/2026, AV-0085 y AV-0086) ─────────────
-   *
-   * El porqué de cada importe estaba escrito en la nota del cobro y no llegaba
-   * a los ojos de quien cobra. `explicaCobro` parte esa nota en «concepto +
-   * motivos»; el nombre del catálogo manda cuando el cobro trae `conceptId`
-   * (122 de los 159 pendientes de septiembre lo traen) y la nota es el respaldo
-   * para las cuotas compuestas, que nacen sin él a propósito.
-   *
-   * Nada de esto pega a la base: `conceptosCatalogo` ya está cargado.
-   */
-  const nombreDelConcepto = (conceptId) =>
-    conceptosCatalogo.find((c) => String(c.id) === String(conceptId))?.name ?? null;
-  const explicado = (p) => ({
-    ...p,
-    ...explicaCobro({ notes: p.notes, concepto: nombreDelConcepto(p.conceptId) }),
-  });
-  const pendientesExplicados = pendientesDelMes.map(explicado);
-  const cobradosExplicados = cobradosDelMes.filter((c) => c.deCuota).map(explicado);
-  const sumaPendientes =
-    Math.round(pendientesDelMes.reduce((t, p) => t + Number(p.amount || 0), 0) * 100) / 100;
-
   const cuentaCuota = partesConProrrateo(
     // Con el concepto de cada línea: la parte proporcional de una terapia se
     // cuenta con SUS sesiones y no con las del hermano ni las de la otra
@@ -247,6 +225,28 @@ export default function CobrosPage() {
    */
   const [cobradosDelMes, setCobradosDelMes] = useState([]);
   const [esperadoDeLaCuota, setEsperadoDeLaCuota] = useState(null); // { tarifa, generado, pactado }
+
+  /*
+   * ── DE DÓNDE SALE CADA CIFRA (08/09/2026, AV-0085 y AV-0086) ─────────────
+   *
+   * El porqué de cada importe estaba escrito en la nota del cobro y no llegaba
+   * a los ojos de quien cobra. `explicaCobro` parte esa nota en «concepto +
+   * motivos»; el nombre del catálogo manda cuando el cobro trae `conceptId`
+   * (122 de los 159 pendientes de septiembre lo traen) y la nota es el respaldo
+   * para las cuotas compuestas, que nacen sin él a propósito.
+   *
+   * Nada de esto pega a la base: `conceptosCatalogo` ya está cargado.
+   */
+  const nombreDelConcepto = (conceptId) =>
+    conceptosCatalogo.find((c) => String(c.id) === String(conceptId))?.name ?? null;
+  const explicado = (p) => ({
+    ...p,
+    ...explicaCobro({ notes: p.notes, concepto: nombreDelConcepto(p.conceptId) }),
+  });
+  const pendientesExplicados = pendientesDelMes.map(explicado);
+  const cobradosExplicados = cobradosDelMes.filter((c) => c.deCuota).map(explicado);
+  const sumaPendientes =
+    Math.round(pendientesDelMes.reduce((t, p) => t + Number(p.amount || 0), 0) * 100) / 100;
 
   /*
    * Los pacientes de la familia elegida (01/09/2026, Rodrigo: «cuando un tutor
