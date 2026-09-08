@@ -456,7 +456,15 @@ async function main() {
           endAt,
           label,
           patientId,
-          categoryKey: categoriaPorEtiqueta(label, categorias),
+          /*
+           * La categoría se deduce del rótulo CRUDO, no del limpio
+           * (08/09/2026): la categoría es lo que quiso decir el centro, y
+           * quitarle el nombre al texto no puede cambiarla. Si un rótulo era
+           * solo el nombre del niño, el limpio queda en «Reservado» y deducir
+           * de ahí lo movería de `sesion_paciente` a `reservado_paciente` en
+           * silencio, en la primera pasada después de limpiar.
+           */
+          categoryKey: categoriaPorEtiqueta(crudo, categorias),
           notes: `${MARCA} · reserva del planning`,
         });
       }
