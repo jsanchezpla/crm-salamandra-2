@@ -56,3 +56,34 @@ describe("traducirNota — solo el trozo de los conceptos", () => {
     assert.equal(traducirNota(traducida, TEXTOS), null);
   });
 });
+
+// ── El ensayo del 09/09/2026: las notas del volcado llevan trazabilidad nuestra
+describe("traducirNota — la trazabilidad interna no se imprime", () => {
+  it("quita los trozos que hablan del Organízate y deja los que explican el importe", () => {
+    assert.equal(
+      traducirNota(
+        "Cuota septiembre 2026 — Cuota Logopedia 60x1 — Reserva de plaza ya abonada: −30 € — " +
+          "Pendiente según Organízate: 350.00 € (Organízate #20232); el CRM tenía 350.00 €",
+        TEXTOS
+      ),
+      "Cuota septiembre 2026 — Terapia 1 h semanal — Reserva de plaza ya abonada: −30 €"
+    );
+  });
+
+  it("también cuando lo único que sobra es de dónde se cobró", () => {
+    assert.equal(
+      traducirNota(
+        "Cuota septiembre 2026 — Cuota Logopedia 45x1 — Cobrado en Organízate el 02/09/2026 (pago 16539, tarjeta)",
+        TEXTOS
+      ),
+      "Cuota septiembre 2026 — Terapia 45 min semanales"
+    );
+  });
+
+  it("y una nota que solo era traza se queda en el mes y el concepto", () => {
+    assert.equal(
+      traducirNota("Cuota septiembre 2026 — Informe extra — Cobrado en Organízate el 02/09/2026", TEXTOS),
+      "Cuota septiembre 2026 — Informe extra"
+    );
+  });
+});

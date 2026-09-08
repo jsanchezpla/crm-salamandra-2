@@ -49,8 +49,24 @@ const log = (m = "") => process.stdout.write(`${m}\n`);
 const SEP = " — ";
 
 /**
- * Traduce el trozo de conceptos de una nota. Devuelve `null` si no hay nada
- * que traducir o si algún nombre no se reconoce (ver cabecera).
+ * Los trozos de la nota que son trazabilidad NUESTRA, no explicación del
+ * importe, y que por tanto no pueden acabar impresos en la factura de una
+ * familia (visto en el ensayo del 09/09/2026):
+ *
+ *   «Pendiente según Organízate: 350.00 € (Organízate #20232…); el CRM tenía…»
+ *   «Cobrado en Organízate el 02/09/2026 (Organízate #20375, pago 16539…)»
+ *
+ * Los puso el volcado de cobros para poder cruzar con el Organízate. Lo que sí
+ * se queda es lo que explica POR QUÉ se cobra eso: «Reserva de plaza ya
+ * abonada: −30 €», «3 de 4 sesiones», «del 11 al 30».
+ */
+const esTrazaInterna = (trozo) => /Organ[íi]zate/i.test(trozo);
+
+/**
+ * La línea de factura de un cobro ya generado, a partir de su nota: el mes,
+ * los conceptos traducidos a su «Texto en la factura» y lo que explique el
+ * importe. Devuelve `null` si no hay nada que cambiar o si algún nombre de
+ * concepto no se reconoce (ver cabecera).
  */
 export function traducirNota(nota, textoPorNombre) {
   const partes = String(nota ?? "").split(SEP);
@@ -58,8 +74,9 @@ export function traducirNota(nota, textoPorNombre) {
   const conceptos = partes[1].split(" + ").map((s) => s.trim());
   if (!conceptos.length || conceptos.some((n) => !textoPorNombre.has(n))) return null;
   const traducidos = conceptos.map((n) => textoPorNombre.get(n));
-  if (traducidos.join(" + ") === partes[1]) return null; // ya decía lo mismo
-  return [partes[0], traducidos.join(" + "), ...partes.slice(2)].join(SEP);
+  const cola = partes.slice(2).filter((t) => !esTrazaInterna(t));
+  const linea = [partes[0], traducidos.join(" + "), ...cola].join(SEP);
+  return linea === nota ? null : linea; // ya decía exactamente esto
 }
 
 async function main() {

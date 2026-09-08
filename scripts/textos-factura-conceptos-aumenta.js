@@ -91,8 +91,14 @@ const TEXTO_DE_FACTURA = {
   "Cuota T.O. 60+45": "1 sesión de 45 min y 1 sesión de 1 h semanales",
 };
 
-/** La descripción que dejó el volcado del 01/09, y que sí se puede pisar. */
-const esDelVolcado = (t) => !String(t ?? "").trim() || /^Cuota mensual \(.*en el Organízate\)/i.test(String(t).trim());
+/**
+ * La descripción que dejó el volcado del 01/09, y que sí se puede pisar. Todas
+ * empiezan por «Cuota mensual (», y de ahí en adelante cambian: unas dicen «…
+ * en el Organízate)», otras «(Zona Pacientes del Organízate)» y algunas
+ * arrastran un «— importe: completar». Se reconoce por el principio, que es lo
+ * único que nadie escribiría a mano.
+ */
+const esDelVolcado = (t) => !String(t ?? "").trim() || /^Cuota mensual \(/i.test(String(t).trim());
 
 async function main() {
   if (!process.env.DATABASE_URL) {
