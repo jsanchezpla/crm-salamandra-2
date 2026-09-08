@@ -183,8 +183,15 @@ describe("cada terapia paga por SUS sesiones", () => {
     );
     assert.equal(partes[0].importe, 114, "3 de 5 sesiones de pedagogía");
     assert.equal(partes[0].rotulo, "desde el 15/09/2026 (3 de 5 sesiones)");
-    assert.equal(partes[1].importe, 38, "1 de 5 sesiones de psicología");
-    assert.equal(total, 152);
+    /*
+     * La psicología tiene UNA cita en todo el mes, y con una no hay patrón que
+     * deducir (AV-0082, esa misma tarde): esa línea vuelve a los días en vez
+     * de cobrar «1 de 5 sesiones» = 38 €, que es el número que aparece cuando
+     * lo que pasa de verdad es que faltan citas por poner.
+     */
+    assert.equal(partes[1].importe, 101.33, "16/30 días");
+    assert.equal(partes[1].rotulo, "desde el 15/09/2026 (16/30 días)");
+    assert.equal(total, 215.33);
   });
 
   it("y no es lo que salía en pantalla, que eran los 16/30 días", () => {
@@ -220,8 +227,55 @@ describe("cada terapia paga por SUS sesiones", () => {
       citasPorClave: { "p:p1": CITAS_ADRIANA },
     });
     assert.equal(aGenerar.length, 1);
-    assert.equal(aGenerar[0].importe, 152, "114 de pedagogía + 38 de psicología");
-    assert.equal(aGenerar[0].rotulo, "desde el 15/09/2026 (4 de 10 sesiones)");
+    assert.equal(aGenerar[0].importe, 215.33, "114 de pedagogía + 101,33 de psicología");
+    // Una fue por sesiones y la otra por días: ninguna fracción describe el
+    // total, así que el rótulo se queda con la fecha y no finge una cuenta.
+    assert.equal(aGenerar[0].rotulo, "desde el 15/09/2026");
+  });
+
+  it("AV-0082: una entrevista inicial no le marca el ritmo a la mensualidad", () => {
+    /*
+     * El caso de Rosa de esa misma tarde: cuota de 182,11 € que salió cobrada
+     * a 36,42 €. La familia tenía UNA cita en septiembre —una entrevista
+     * inicial, que no es ninguno de los dos servicios de su cuota— y de ahí
+     * salió un «1 de 5 sesiones». Por días son 139,62 €, que es lo que se
+     * parece a la verdad mientras la agenda del mes no esté puesta.
+     */
+    const TERAPIA = "4f06876e-09e9-49d8-82f4-a7ce57cd3c04";
+    const GRUPAL = "be4393b3-6c89-4cbf-a2f1-31fd397550f7";
+    const ENTREVISTA = "1856d8a1-7cfb-4691-94db-5adbff83ffd6";
+    const { aGenerar } = planDeCuotasDelMes({
+      mes: "2026-09",
+      cuotas: [{ id: "c2", clientId: "f2", patientId: "p2", conceptIds: [TERAPIA, GRUPAL], amount: 182.11, startDate: "2026-09-08", active: true }],
+      conceptos: [
+        { id: TERAPIA, name: "Terapia 1 h semanal", unitPrice: 190 },
+        { id: GRUPAL, name: "Grupal: 2 sesiones semanales de 1 h", unitPrice: 85 },
+        { id: ENTREVISTA, name: "Entrevista Inicial", unitPrice: 50 },
+      ],
+      citasPorClave: { "p:p2": [{ scheduledAt: "2026-09-08T09:30:00.000Z", conceptId: ENTREVISTA }] },
+    });
+    assert.equal(aGenerar.length, 1);
+    assert.equal(aGenerar[0].importe, 139.62, "182,11 × 23/30, y no los 36,42 € de «1 de 5»");
+    assert.equal(aGenerar[0].rotulo, "desde el 08/09/2026 (23/30 días)");
+  });
+
+  it("una sola sesión en un tramo largo va por días: la agenda está a medias", () => {
+    const sola = [{ scheduledAt: "2026-09-15T17:15:00.000Z", conceptId: PEDAGOGIA }];
+    const { partes } = partesConProrrateo(
+      [{ importe: 190, inicio: "2026-09-15", conceptId: PEDAGOGIA }],
+      { mes: "2026-09", citas: sola }
+    );
+    assert.equal(partes[0].rotulo, "desde el 15/09/2026 (16/30 días)");
+  });
+
+  it("pero en la última semana del mes una sola sesión SÍ es el patrón", () => {
+    const sola = [{ scheduledAt: "2026-09-29T17:15:00.000Z", conceptId: PEDAGOGIA }];
+    const { partes } = partesConProrrateo(
+      [{ importe: 190, inicio: "2026-09-29", conceptId: PEDAGOGIA }],
+      { mes: "2026-09", citas: sola }
+    );
+    assert.equal(partes[0].rotulo, "desde el 29/09/2026 (1 de 5 sesiones)");
+    assert.equal(partes[0].importe, 38);
   });
 
   it("una terapia sin ninguna cita ese mes va por días, no le roba el ritmo a la otra", () => {
