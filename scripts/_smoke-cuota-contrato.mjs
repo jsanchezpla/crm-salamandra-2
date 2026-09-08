@@ -60,6 +60,13 @@ test("`contratoServicios.js` ya no compara contra la constante pelada", () => {
     "la cuota del contrato no puede medirse contra la constante de fábrica",
   );
   assert.match(src, /quotaBytesDe\(ctx\)/);
+  /*
+   * Y que la comparación use la VARIABLE, no la constante (08/09/2026): la
+   * regla de arriba caza la comparación directa, pero no cazaría a alguien que
+   * dejara `quotaBytesDe(ctx)` puesto y aun así midiera contra la constante en
+   * otra línea. Lo que tiene que compararse es el techo ya resuelto.
+   */
+  assert.match(src, /usage \+ realSize > cuota/);
 });
 
 test("ningún otro sitio que sube ficheros compara contra la constante", () => {

@@ -421,17 +421,26 @@ body {
 
    La media se localiza por posición y no por una clase de FullCalendar, que no
    la tiene: con `slotDuration` de 15 minutos las filas van :00 :15 :30 :45, y
-   la media es la tercera de cada cuatro. Vale porque TODAS las agendas del CRM
-   arrancan en hora en punto (`slotMinTime` es 07:00 o 00:00 en las tres
-   vistas); si algún día alguna empezara a y media, esto marcaría la línea
+   la media es la tercera de cada cuatro.
+
+   ⚠️ POR ESO VA COLGADO DE `.agenda-cuartos` Y NO DEL `.fc` PELADO
+   (08/09/2026, corregido el mismo día): «cada cuatro filas es una hora» solo es
+   verdad donde la franja dura un cuarto. El CRM tiene DOS calendarios más —el
+   global y el del panel— que no fijan `slotDuration` y corren con el defecto de
+   FullCalendar, media hora; ahí la cuenta se va al doble y la línea «de hora»
+   caía cada DOS horas. La clase la ponen las dos agendas que sí van a cuartos
+   (`CitasModule` y `AgendaPorTerapeuta`).
+
+   Y sigue dependiendo de que la agenda empiece en hora en punto (`slotMinTime`
+   es 07:00 o 00:00): si algún día alguna empezara a y media, marcaría la línea
    equivocada y habría que quitarlo. */
-.fc .fc-timegrid-slots tr .fc-timegrid-slot {
+.agenda-cuartos .fc .fc-timegrid-slots tr .fc-timegrid-slot {
   border-top: 1px dotted var(--ink-200);
 }
-.fc .fc-timegrid-slots tr:nth-child(4n + 3) .fc-timegrid-slot {
+.agenda-cuartos .fc .fc-timegrid-slots tr:nth-child(4n + 3) .fc-timegrid-slot {
   border-top: 1px solid var(--ink-200);
 }
-.fc .fc-timegrid-slots tr:nth-child(4n + 1) .fc-timegrid-slot {
+.agenda-cuartos .fc .fc-timegrid-slots tr:nth-child(4n + 1) .fc-timegrid-slot {
   border-top: 1px solid var(--ink-300);
 }
 /* En la vista compacta las franjas miden 0.35em: ahí tres niveles de línea se

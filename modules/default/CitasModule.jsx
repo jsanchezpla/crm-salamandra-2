@@ -1183,7 +1183,7 @@ export default function CitasModule({
         no puede desbordar.
       */}
       {tab === "calendar" && (
-        <div className={`flex-1 min-h-0 flex flex-col px-6 lg:px-10 pt-3 pb-4 ${mesesAbiertos ? "meses-abiertos" : ""} ${compacta ? "agenda-compacta" : ""}`}>
+        <div className={`flex-1 min-h-0 flex flex-col px-6 lg:px-10 pt-3 pb-4 agenda-cuartos ${mesesAbiertos ? "meses-abiertos" : ""} ${compacta ? "agenda-compacta" : ""}`}>
           <p className="text-[11px] text-neutral-400 mb-2 lg:hidden shrink-0">
             Toca una cita para ver su ficha. Para crear o mover citas, mejor desde el ordenador.
           </p>

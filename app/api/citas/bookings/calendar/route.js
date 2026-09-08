@@ -7,6 +7,7 @@ import { veTodaLaAgenda, soloLoSuyo, filtroDeProfesionales } from "../../../../.
 import { citasDeTallerQueImparte, conteoDeAsistentes } from "../../../../../lib/clinica/citaDeTaller.js";
 import { colorCitasDe, colorDeCita } from "../../../../../lib/citas/colorCitas.js";
 import { colorTextoSobre } from "../../../../../lib/citas/coloresBloqueo.js";
+import { nombreDeLaCita } from "../../../../../lib/citas/nombreEnLaAgenda.js";
 
 const STATUS_COLOR_DIM = {
   cancelled: "#9ca3af",
@@ -37,7 +38,7 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
   try {
     if (!hasModule("citas")) return forbidden("Módulo citas no activo");
 
-    const { Booking, EventType, TeamMember } = tenantModels;
+    const { Booking, EventType, TeamMember, Patient } = tenantModels;
     const { searchParams } = new URL(request.url);
     const start = searchParams.get("start");
     const end = searchParams.get("end");
@@ -111,6 +112,18 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
     if (teamOn) {
       include.push({ model: TeamMember, as: "teamMember", attributes: ["id", "displayName", "avatarColor"] });
     }
+    /*
+     * El PACIENTE, para poder escribir su nombre en la caja (08/09/2026,
+     * AV-0088). Hasta hoy este endpoint no consultaba la tabla de pacientes, así
+     * que ni teniendo `patient_id` podía pintar al niño: escribía el titular de
+     * la ficha, que en un centro clínico es la madre.
+     *
+     * `required: false`: una cita sin paciente —taller, adulto, una cita suelta—
+     * tiene que seguir saliendo igual.
+     */
+    if (Patient) {
+      include.push({ model: Patient, as: "patient", attributes: ["id", "firstName", "lastName"], required: false });
+    }
 
     const rows = await Booking.findAll({
       where,
@@ -154,7 +167,9 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
 
       return {
         id: b.id,
-        title: rotuloTaller ?? (sesion ? `${sesion} · ${b.clientName}` : b.clientName),
+        // En la rejilla manda el PACIENTE cuando lo hay: es a quien se ve a las
+        // cinco. Sin paciente se queda el nombre de siempre (lib/citas/nombreEnLaAgenda.js).
+        title: rotuloTaller ?? (sesion ? `${sesion} · ${nombreDeLaCita(b)}` : nombreDeLaCita(b)),
         start: startIso.toISOString(),
         end: endIso.toISOString(),
         backgroundColor: color,

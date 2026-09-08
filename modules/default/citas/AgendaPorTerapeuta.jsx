@@ -405,7 +405,7 @@ export default function AgendaPorTerapeuta({
               const enOtroDia = !mismoDia(dia, fecha);
               const diaCorto = dia.toLocaleDateString("es-ES", { weekday: "short" }).replace(".", "");
               return (
-                <div key={m.id} className="flex-1 min-w-[220px] min-h-0 flex flex-col bg-white border border-neutral-100 rounded-xl overflow-hidden agenda-columna">
+                <div key={m.id} className="flex-1 min-w-[220px] min-h-0 flex flex-col bg-white border border-neutral-100 rounded-xl overflow-hidden agenda-columna agenda-cuartos">
                   {/* El día de ESTA columna, encima del nombre (03/09/2026). Se
                       resalta cuando no es el día general para que no pase
                       desapercibido que se está mirando otra fecha. */}
