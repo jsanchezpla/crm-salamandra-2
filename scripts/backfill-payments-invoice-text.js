@@ -37,6 +37,9 @@
  */
 
 import { Sequelize, QueryTypes } from "sequelize";
+// El separador con el que junta `notaDeCobro` se declara UNA vez, y está allí:
+// lo leen esta pieza y el cajón de cobros (ver su cabecera).
+import { SEPARADOR as SEP } from "../lib/billing/motivoDelCobro.js";
 
 const args = process.argv.slice(2);
 const slug = args.find((a) => !a.startsWith("--")) ?? "aumenta";
@@ -46,7 +49,6 @@ const desdeArg = args.find((a) => a.startsWith("--desde="))?.split("=")[1];
 const DESDE = desdeArg && /^\d{4}-\d{2}$/.test(desdeArg) ? `${desdeArg}-01` : "2026-09-01";
 
 const log = (m = "") => process.stdout.write(`${m}\n`);
-const SEP = " — ";
 
 /**
  * La línea de factura de un cobro ya generado, sacada de su nota: SOLO los
@@ -67,12 +69,49 @@ const SEP = " — ";
  * de conceptos o si alguno no se reconoce: mejor quedarse como estaba que
  * imprimir media frase.
  */
+/**
+ * El nombre del catálogo con el que EMPIEZA un trozo, cuando el centro ha
+ * escrito pegado a él (09/09/2026, avisado por la sesión del cajón de cobros):
+ *
+ *   «Cuota Psicología 45x1 - Reserva de plaza ya abonada: −30 €⏎⏎IMPORTANTE:
+ *    SON 145€ DESCONTADO 30€ DE RESERVA… OLGA LO HA ELIMINADO EN CUOTAS.»
+ *   «Cuota Psicología 60x1,⏎04/09/2026 descontar 15 euros de reserva»
+ *
+ * Eso son apuntes internos —uno nombra a una compañera— y no pueden salir
+ * impresos en la factura de una familia, pero el concepto que llevan delante sí
+ * se reconoce. Se coge el nombre MÁS LARGO que encaje: si no, «Cuota HHSS»
+ * ganaría a «Cuota HHSS 1h 30».
+ */
+function nombreConQueEmpieza(trozo, textoPorNombre) {
+  const t = trozo.trimStart();
+  let mejor = null;
+  for (const nombre of textoPorNombre.keys()) {
+    if (!t.startsWith(nombre)) continue;
+    // Lo que sigue tiene que ser un corte, no más nombre: así «Cuota T.O. 45x1»
+    // no se toma por el principio de «Cuota T.O. 45x12» si algún día existiera.
+    const siguiente = t.slice(nombre.length, nombre.length + 1);
+    if (siguiente && /[\w¡-ÿ]/.test(siguiente)) continue;
+    if (!mejor || nombre.length > mejor.length) mejor = nombre;
+  }
+  return mejor;
+}
+
 export function traducirNota(nota, textoPorNombre) {
   const partes = String(nota ?? "").split(SEP);
   if (partes.length < 2) return null; // solo «Cuota septiembre 2026»: sin conceptos
-  const conceptos = partes[1].split(" + ").map((s) => s.trim());
-  if (!conceptos.length || conceptos.some((n) => !textoPorNombre.has(n))) return null;
-  return conceptos.map((n) => textoPorNombre.get(n)).join(" + ");
+  const impresos = [];
+  for (const trozo of partes[1].split(" + ").map((s) => s.trim())) {
+    // Lo normal: el trozo ES el nombre del concepto, tal como lo escribió
+    // `notaDeCobro`.
+    if (textoPorNombre.has(trozo)) { impresos.push(textoPorNombre.get(trozo)); continue; }
+    // Y si no, puede que el centro haya escrito detrás. El concepto se queda;
+    // lo que escribió el centro no se imprime — sigue entero en la nota, y el
+    // cajón de cobros lo enseña a quien cobra (`lib/billing/motivoDelCobro.js`).
+    const nombre = nombreConQueEmpieza(trozo, textoPorNombre);
+    if (!nombre) return null; // no se reconoce: el cobro se queda como estaba
+    impresos.push(textoPorNombre.get(nombre));
+  }
+  return impresos.length ? impresos.join(" + ") : null;
 }
 
 async function main() {
