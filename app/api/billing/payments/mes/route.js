@@ -77,10 +77,11 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
      * según quién la calculara. La regla (`tramoDelMes`) corre igual en el
      * navegador, así que lo único que al cajón le faltaba eran las citas.
      *
-     * Van solo las FECHAS, que es lo único que mira `sesionesDelTramo`: ni
-     * paciente, ni terapeuta, ni motivo. Y se piden con la MISMA pieza que usa
-     * la generación, para que el conjunto de citas sea el mismo y no dos
-     * parecidos.
+     * Van la FECHA y el CONCEPTO que cubre cada cita: ni paciente, ni
+     * terapeuta, ni motivo. El concepto hace falta desde el 08/09/2026 para
+     * que cada terapia de la cuota se prorratee con SUS sesiones. Y se piden
+     * con la MISMA pieza que usa la generación, para que el conjunto de citas
+     * sea el mismo y no dos parecidos.
      */
     const citasPorClave = await citasDelMesParaCuotas({
       tenantModels,
@@ -88,7 +89,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       cuotas: [{ patientId, clientId }],
     });
     const citas = (citasPorClave[claveDeCitas({ patientId, clientId })] ?? [])
-      .map((c) => ({ scheduledAt: c.scheduledAt }));
+      .map((c) => ({ scheduledAt: c.scheduledAt, conceptId: c.conceptId ?? null }));
 
     return ok({
       mes,

@@ -28,7 +28,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { partesConProrrateo, prorrateoDeCuota } from "../lib/billing/prorrateo.js";
-import { tramoDelMes, rotuloDeTramo } from "../lib/billing/cuotas.js";
+import { tramoDelMes, rotuloDeTramo, planDeCuotasDelMes } from "../lib/billing/cuotas.js";
 
 const lee = (r) => readFileSync(new URL(r, import.meta.url), "utf8");
 
@@ -128,13 +128,123 @@ describe("de dónde saca el cajón esas citas", () => {
     assert.match(endpoint, /cuotas: \[\{ patientId, clientId \}\]/);
   });
 
-  it("y solo bajan fechas: ni paciente, ni terapeuta, ni motivo", () => {
+  it("y solo baja la fecha y el concepto: ni paciente, ni terapeuta, ni motivo", () => {
     const bloque = endpoint.slice(endpoint.indexOf("const citasPorClave"), endpoint.indexOf("return ok({"));
-    assert.match(bloque, /\.map\(\(c\) => \(\{ scheduledAt: c\.scheduledAt \}\)\)/);
+    assert.match(bloque, /\.map\(\(c\) => \(\{ scheduledAt: c\.scheduledAt, conceptId: c\.conceptId \?\? null \}\)\)/);
     assert.ok(!/patientName|clientName|notes/.test(bloque));
+  });
+
+  it("y el cajón dice de qué concepto es cada línea, o volvería a mezclarlas", () => {
+    const conConcepto = pagina.match(/conceptId: c\.id/g) ?? [];
+    assert.equal(conConcepto.length, 2, "las dos cuentas del cajón, no solo una");
   });
 
   it("se limpian al cambiar de familia, o se cobraría con las del anterior", () => {
     assert.match(pagina, /setCitasDelMes\(\[\]\);/);
+  });
+});
+
+/*
+ * ── CADA TERAPIA POR SUS SESIONES (08/09/2026, vuelta de Rosa) ─────────────
+ *
+ * «Las cuotas la parte proporcional la sigue calculando mal: 190 € / 5
+ * sesiones = 38 €, por 3 sesiones que son las que da = 114 €, y en el centro
+ * aparece 101,33 €.» El caso es real: ADRIANA empieza el 15/09/2026 con dos
+ * terapias, y en septiembre de 2026 los martes son 1, 8, 15, 22 y 29. Su
+ * agenda tiene tres martes de pedagogía (15, 22 y 29) y uno de psicología.
+ *
+ * Fallaba por dos sitios a la vez, y por eso hacen falta las dos pruebas:
+ * la cuota era «de toda la familia» y las citas del niño no contaban (se caía
+ * a los 16/30 días), y aunque hubieran contado, las cuatro citas valían para
+ * las dos terapias.
+ */
+const PEDAGOGIA = "2f849350-3f5e-4670-a1ad-4ec46aa63236";
+const PSICOLOGIA = "ff5ebadc-96a3-4839-8bdb-cf50f7983516";
+// En UTC, que es como se guardan: las 19:15 y las 16:45 de Madrid en verano.
+const CITAS_ADRIANA = [
+  { scheduledAt: "2026-09-15T14:45:00.000Z", conceptId: PSICOLOGIA },
+  { scheduledAt: "2026-09-15T17:15:00.000Z", conceptId: PEDAGOGIA },
+  { scheduledAt: "2026-09-22T17:15:00.000Z", conceptId: PEDAGOGIA },
+  { scheduledAt: "2026-09-29T17:15:00.000Z", conceptId: PEDAGOGIA },
+];
+const CONCEPTOS = [
+  { id: PEDAGOGIA, name: "Cuota Pedagogía 60x1", unitPrice: 190 },
+  { id: PSICOLOGIA, name: "Cuota Psicología 60x1", unitPrice: 190 },
+];
+
+describe("cada terapia paga por SUS sesiones", () => {
+  it("LA CUENTA DE ROSA: 190 / 5 martes = 38 €, por 3 sesiones = 114 €", () => {
+    const { partes, total } = partesConProrrateo(
+      [
+        { importe: 190, inicio: "2026-09-15", conceptId: PEDAGOGIA },
+        { importe: 190, inicio: "2026-09-15", conceptId: PSICOLOGIA },
+      ],
+      { mes: "2026-09", citas: CITAS_ADRIANA }
+    );
+    assert.equal(partes[0].importe, 114, "3 de 5 sesiones de pedagogía");
+    assert.equal(partes[0].rotulo, "desde el 15/09/2026 (3 de 5 sesiones)");
+    assert.equal(partes[1].importe, 38, "1 de 5 sesiones de psicología");
+    assert.equal(total, 152);
+  });
+
+  it("y no es lo que salía en pantalla, que eran los 16/30 días", () => {
+    assert.equal(prorrateoDeCuota(190, "2026-09-15").importe, 101.33);
+  });
+
+  it("sin decir de qué terapia es, la psicología cobra los martes de la pedagogía", () => {
+    // Lo que pasaba hasta hoy con las dos líneas: los días con cita del niño,
+    // fueran de la terapia que fueran. La de una sola sesión salía por 114 €.
+    const { partes } = partesConProrrateo(
+      [{ importe: 190, inicio: "2026-09-15" }],
+      { mes: "2026-09", citas: CITAS_ADRIANA }
+    );
+    assert.equal(partes[0].rotulo, "desde el 15/09/2026 (3 de 5 sesiones)");
+    assert.equal(partes[0].importe, 114);
+  });
+
+  it("dos hermanos en la misma terapia son 3 martes, no 6 sesiones", () => {
+    const dePedagogia = CITAS_ADRIANA.filter((c) => c.conceptId === PEDAGOGIA);
+    const hermanos = [...dePedagogia, ...dePedagogia.map((c) => ({ ...c, scheduledAt: c.scheduledAt.replace("T17:15", "T16:15") }))];
+    const { partes } = partesConProrrateo(
+      [{ importe: 190, inicio: "2026-09-15", conceptId: PEDAGOGIA }],
+      { mes: "2026-09", citas: hermanos }
+    );
+    assert.equal(partes[0].importe, 114, "contar las 6 citas daba el mes entero");
+  });
+
+  it("generar la cuota da lo mismo que teclearla, también con dos terapias dentro", () => {
+    const { aGenerar } = planDeCuotasDelMes({
+      mes: "2026-09",
+      cuotas: [{ id: "c1", clientId: "f1", patientId: "p1", conceptIds: [PEDAGOGIA, PSICOLOGIA], startDate: "2026-09-15", active: true }],
+      conceptos: CONCEPTOS,
+      citasPorClave: { "p:p1": CITAS_ADRIANA },
+    });
+    assert.equal(aGenerar.length, 1);
+    assert.equal(aGenerar[0].importe, 152, "114 de pedagogía + 38 de psicología");
+    assert.equal(aGenerar[0].rotulo, "desde el 15/09/2026 (4 de 10 sesiones)");
+  });
+
+  it("una terapia sin ninguna cita ese mes va por días, no le roba el ritmo a la otra", () => {
+    const { partes } = partesConProrrateo(
+      [{ importe: 190, inicio: "2026-09-15", conceptId: "7622e67e-75a0-4cfe-b7fa-ef255c37a990" }],
+      { mes: "2026-09", citas: CITAS_ADRIANA }
+    );
+    assert.equal(partes[0].importe, 101.33, "16/30 días");
+  });
+
+  it("citas viejas, sin concepto atado: se cuentan todas, como antes", () => {
+    const viejas = CITAS_ADRIANA.map(({ scheduledAt }) => ({ scheduledAt }));
+    const { partes } = partesConProrrateo(
+      [{ importe: 190, inicio: "2026-09-15", conceptId: PEDAGOGIA }],
+      { mes: "2026-09", citas: viejas }
+    );
+    assert.equal(partes[0].rotulo, "desde el 15/09/2026 (3 de 5 sesiones)");
+  });
+
+  it("y las citas de «toda la familia» son las de sus hijos, no las de la ficha", () => {
+    const fuente = lee("../lib/billing/citasParaProrrateo.js");
+    assert.match(fuente, /quien\.push\(\{ clientId: \{ \[Op\.in\]: familias \} \}\);/);
+    assert.ok(!/familias \}, patientId: null/.test(fuente), "pedir patientId null dejaba la cuota de familia sin sesiones");
+    assert.match(fuente, /attributes: \["patientId", "clientId", "scheduledAt", "cobroConceptId"\]/);
   });
 });

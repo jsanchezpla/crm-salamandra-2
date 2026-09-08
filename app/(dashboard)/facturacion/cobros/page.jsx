@@ -116,7 +116,10 @@ export default function CobrosPage() {
     })
     .filter(Boolean);
   const cuentaCuota = partesConProrrateo(
-    conceptosElegidos.map(({ c, inicio }) => ({ importe: Number(c.unitPrice || 0), inicio })),
+    // Con el concepto de cada línea: la parte proporcional de una terapia se
+    // cuenta con SUS sesiones y no con las del hermano ni las de la otra
+    // terapia de la misma cuota (08/09/2026, Rosa).
+    conceptosElegidos.map(({ c, inicio }) => ({ importe: Number(c.unitPrice || 0), inicio, conceptId: c.id })),
     { mes: form.periodMonth, citas: citasDelMes }
   );
 
@@ -129,7 +132,7 @@ export default function CobrosPage() {
     const partes = (items ?? [])
       .map(({ id, inicio }) => {
         const c = conceptosCatalogo.find((c2) => String(c2.id) === String(id));
-        return c ? { importe: Number(c.unitPrice || 0), inicio } : null;
+        return c ? { importe: Number(c.unitPrice || 0), inicio, conceptId: c.id } : null;
       })
       .filter(Boolean);
     if (!partes.length) return null;
