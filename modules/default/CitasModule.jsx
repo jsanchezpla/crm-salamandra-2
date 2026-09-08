@@ -567,6 +567,9 @@ export default function CitasModule({
               editable: true,
               extendedProps: {
                 esBloqueo: true, bloqueoId: b.id, label: b.label,
+                // De quién es el hueco (08/09/2026). El nombre solo llega si el
+                // servidor ha decidido que esta persona puede verlo.
+                patientId: b.patientId ?? null, patientName: b.patientName ?? null,
                 categoryKey: b.categoryKey ?? null, tallerId: b.tallerId ?? null,
                 categoryLabel: b.categoryLabel ?? null, teamMemberName: b.teamMemberName ?? null,
                 teamMemberId: b.teamMemberId ?? null,
@@ -1440,7 +1443,13 @@ export default function CitasModule({
               teamMemberId: b.teamMemberId ?? "",
               desdeBloqueo: {
                 id: b.id,
-                rotulo: b.label || b.titulo || "bloqueo",
+                /*
+                 * Con el paciente delante (08/09/2026): al convertir un hueco
+                 * reservado, quien lo apunta tiene que ver de quién era sin
+                 * cerrar el drawer para mirarlo. El nombre solo está aquí si el
+                 * servidor se lo mandó a esta persona.
+                 */
+                rotulo: [b.patientName, b.label || b.titulo || "bloqueo"].filter(Boolean).join(" · "),
                 minutos: Math.max(0, Math.round((fin.getTime() - inicio.getTime()) / 60000)),
               },
             });

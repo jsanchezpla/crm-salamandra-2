@@ -61,6 +61,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { getTenantDb } from "../lib/db/tenantDb.js";
 import { categoriasDe, categoriaPorEtiqueta } from "../lib/citas/categoriasBloqueo.js";
+import { despiezarRotulo } from "../lib/citas/rotuloSinNombre.js";
 
 const args = process.argv.slice(2);
 const CONFIRM = args.includes("--confirm");
@@ -393,6 +394,18 @@ async function main() {
       { replacements: { slug: SLUG } },
     );
     const categorias = categoriasDe(tenant);
+    /*
+     * Los pacientes, para sacarles el nombre a los rótulos de reserva. Se leen
+     * UNA vez para toda la pasada: son ~1.200 filas de tres columnas, y hacerlo
+     * por bloqueo serían miles de consultas para lo mismo. Un centro sin la
+     * tabla se queda con la lista vacía y los rótulos tal como vengan.
+     */
+    let pacientesParaRotulos = [];
+    try {
+      pacientesParaRotulos = m.Patient
+        ? await m.Patient.findAll({ attributes: ["id", "firstName", "lastName"], raw: true })
+        : [];
+    } catch { pacientesParaRotulos = []; }
 
     const deseados = new Map();
     for (const r of volcado.reservas) {
@@ -420,7 +433,21 @@ async function main() {
       if (!teamMemberId) continue;
       const startAt = instanteMadrid(r.fecha, r.hora);
       const endAt = sumarMin(startAt, r.dur || 15);
-      const label = etiquetaReserva(r.texto);
+      /*
+       * El nombre del niño NO se copia dentro del rótulo (08/09/2026): si un
+       * paciente y solo uno casa con el texto, se engancha por `patientId` y el
+       * rótulo se guarda sin su nombre. Es la MISMA pieza que limpió lo que ya
+       * estaba (`lib/citas/rotuloSinNombre.js`); si fueran dos, una limpiaría y
+       * la otra repondría en la pasada siguiente.
+       *
+       * Se hace ANTES de la clave de comparación a propósito: la clave lleva el
+       * rótulo dentro, así que limpiarlo después haría que cada pasada creyera
+       * que todos los bloqueos son nuevos.
+       */
+      const crudo = etiquetaReserva(r.texto);
+      const despiece = despiezarRotulo(crudo, pacientesParaRotulos);
+      const label = despiece ? despiece.label : crudo;
+      const patientId = despiece ? despiece.patientId : null;
       const k = `${teamMemberId}|${startAt.toISOString()}|${endAt.toISOString()}|${label}`;
       if (!deseados.has(k)) {
         deseados.set(k, {
@@ -428,6 +455,7 @@ async function main() {
           startAt,
           endAt,
           label,
+          patientId,
           categoryKey: categoriaPorEtiqueta(label, categorias),
           notes: `${MARCA} · reserva del planning`,
         });

@@ -68,3 +68,31 @@ describe("colorDeCita", () => {
     assert.equal(colorTextoSobre("#3F6E5B"), "#FFFFFF");
   });
 });
+
+describe("el paciente de un hueco reservado (08/09/2026)", () => {
+  it("sale el primero en el detalle", () => {
+    // El nombre estaba dentro del rótulo y lo veía cualquiera. Ahora llega por
+    // su enlace y solo a quien puede verlo, y se lee al pulsar.
+    assert.equal(
+      detalleDeBloqueo({ patientName: "Adriana Bustos", label: "RESERVADO, EMPIEZA EL 15/09", categoryLabel: "Reservado", teamMemberName: "Daniela" }),
+      "Adriana Bustos · RESERVADO, EMPIEZA EL 15/09 · Daniela"
+    );
+  });
+
+  it("a quien no puede verlo no le llega, y el detalle se lee igual", () => {
+    // El servidor manda `patientName` vacío: ni un hueco raro ni un separador
+    // suelto donde iba el nombre.
+    assert.equal(
+      detalleDeBloqueo({ patientName: null, label: "RESERVADO, EMPIEZA EL 15/09", categoryLabel: "Reservado", teamMemberName: "Daniela" }),
+      "RESERVADO, EMPIEZA EL 15/09 · Daniela"
+    );
+  });
+
+  it("el título del calendario NO lo lleva", () => {
+    // La regla de Rodrigo del 03/09: en la caja, solo la categoría.
+    assert.equal(
+      rotuloDeBloqueo({ patientName: "Adriana Bustos", categoryLabel: "Reservado", label: "RESERVADO, EMPIEZA EL 15/09" }),
+      "Reservado"
+    );
+  });
+});

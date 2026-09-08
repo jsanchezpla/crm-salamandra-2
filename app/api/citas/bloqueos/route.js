@@ -5,12 +5,14 @@ import { logCitasAudit } from "../../../../lib/citas/audit.js";
 import { buildMadridDate } from "../../../../lib/citas/slots.js";
 import { colorDeBloqueo } from "../../../../lib/citas/coloresBloqueo.js";
 import { categoriaDe, categoriasDe, claveValida } from "../../../../lib/citas/categoriasBloqueo.js";
-// `lib/citas/visibilidad.js` ya no se usa aquí: desde el 14/08/2026 los bloqueos
-// los ve todo el equipo y no siguen la regla de las citas (ver cabecera del GET).
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
 import { esAdministracion as esDeAdministracion, idsDeAdministracion } from "../../../../lib/team/departamentos.js";
 import { aNombreDeQuien, puedeElegirPersona, vetoParaTocar } from "../../../../lib/citas/permisosBloqueos.js";
 import { avisoDeBloqueoLargo } from "../../../../lib/citas/duracionBloqueo.js";
+// `veTodaLaAgenda` vuelve a este fichero (08/09/2026) para lo ÚNICO que ahora
+// depende de quién mira: el nombre del paciente de un hueco reservado. El
+// listado de bloqueos sigue sin recortarse, como desde el 14/08/2026.
+import { veTodaLaAgenda } from "../../../../lib/citas/visibilidad.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
@@ -66,6 +68,15 @@ const ADMIN_ROLES = new Set(["admin", "superadmin"]);
  * el listado de citas enseña nombre, email y teléfono del PACIENTE. Un bloqueo
  * no tiene paciente. Lo que se enseña es que una compañera está de vacaciones el
  * martes, que es información del centro y no de nadie.
+ *
+ * ⚠️ **Esa frase era falsa 381 veces** (08/09/2026). En Aumenta había 381 huecos
+ * de «reserva de plaza» con el nombre y el apellido de un niño escritos EN EL
+ * RÓTULO, o sea que el filtro se levantó apoyándose en algo que no se cumplía
+ * en la reina del módulo. La frase vuelve a ser verdad desde que el nombre vive
+ * en `patientId` y no en el texto: el LISTADO sigue sin recortarse —un bloqueo
+ * sigue siendo la señal de que alguien no está—, pero el NOMBRE del paciente
+ * solo se le manda a quien ya ve la agenda entera, o en los huecos propios.
+ * Lo hace `pacientesDeBloqueos`, y es lo único de aquí que mira quién pregunta.
  *
  * ⚠️ Esto es SOLO lo que se ve. El cálculo de huecos (`lib/citas/ausencias.js`)
  * lee la tabla por su cuenta y sin filtrar, así que esto no abre ni cierra
@@ -206,6 +217,48 @@ async function talleresDelCentro(tenantModels) {
 }
 
 /**
+ * El NOMBRE del paciente de los huecos que se han guardado para alguien
+ * (08/09/2026): `Map idDeBloqueo → "Nombre Apellido"`.
+ *
+ * ── QUIÉN LO RECIBE, QUE ES DE LO QUE VA TODO ESTO ─────────────────────────
+ * Hasta hoy el nombre iba escrito EN EL RÓTULO, o sea que lo veía cualquiera
+ * que viera el bloqueo — y desde el 14/08/2026 los bloqueos los ve todo el
+ * equipo. Ahora va por el enlace, y el enlace SÍ obedece: el nombre viaja a
+ * quien ya ve la agenda entera (agenda compartida o dirección) y, si no, solo
+ * en los huecos de la propia persona. Es la misma regla que las citas, que es
+ * el sitio donde el CRM ya sabe quién puede ver a quién.
+ *
+ * Con una consulta para toda la lista y sin include, por lo mismo que los
+ * talleres: la FK es suave a propósito, para que dar de baja una ficha no
+ * borre horas de la agenda. Un centro sin pacientes devuelve `null`.
+ */
+async function pacientesDeBloqueos(filas, ctx, yo) {
+  const { Patient } = ctx.tenantModels ?? {};
+  const ids = [...new Set(filas.map((f) => f.patientId).filter(Boolean))];
+  if (!Patient || !ids.length) return null;
+  const todaLaAgenda = veTodaLaAgenda({ tenant: ctx.tenant, role: yo?.esAdmin ? "admin" : "user" });
+  try {
+    const pac = await Patient.findAll({
+      where: { id: { [Op.in]: ids } },
+      attributes: ["id", "firstName", "lastName"],
+      raw: true,
+    });
+    const porId = new Map(pac.map((p) => [p.id, `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim()]));
+    const salida = new Map();
+    for (const f of filas) {
+      if (!f.patientId) continue;
+      const puede = todaLaAgenda || (yo?.teamMemberId && f.teamMemberId === yo.teamMemberId);
+      if (!puede) continue;
+      const nombre = porId.get(f.patientId);
+      if (nombre) salida.set(f.id, nombre);
+    }
+    return salida;
+  } catch {
+    return null; // un nombre de más no puede tumbar la agenda
+  }
+}
+
+/**
  * El EQUIPO del centro para el desplegable de «¿quién tiene que leer esto?»
  * (01/09/2026): `{ equipo: [{ id, displayName }], administracion: [id] }` de la
  * gente en activo.
@@ -271,7 +324,7 @@ async function documentosPorBloqueo(tenantModels, ids) {
  * comporta como si el bloqueo no tuviera: sin rótulo y con el color de siempre
  * (ver `lib/citas/categoriasBloqueo.js`).
  */
-function serializa(f, colorGeneral, autores, categorias = [], talleres = null, documentos = null) {
+function serializa(f, colorGeneral, autores, categorias = [], talleres = null, documentos = null, pacientes = null) {
   const cat = categoriaDe(f.categoryKey, categorias);
   return {
     id: f.id,
@@ -294,6 +347,13 @@ function serializa(f, colorGeneral, autores, categorias = [], talleres = null, d
     // llega sin nombre y el bloqueo se lee como uno cualquiera.
     tallerId: f.tallerId ?? null,
     tallerName: talleres?.get(f.tallerId)?.name ?? null,
+    /*
+     * De quién es el hueco (08/09/2026). El id viaja siempre —la pantalla lo
+     * necesita para el desplegable de edición— pero el NOMBRE solo a quien
+     * puede verlo: lo decide `pacientesDeBloqueos`, no esta función.
+     */
+    patientId: f.patientId ?? null,
+    patientName: pacientes?.get(f.id) ?? null,
     // Cuántos documentos cuelgan del tramo (01/09/2026). La agenda le pone un
     // clip al bloqueo que tiene alguno: se ve que hay algo dentro sin abrirlo.
     documentos: documentos?.get(f.id) ?? 0,
@@ -303,6 +363,24 @@ function serializa(f, colorGeneral, autores, categorias = [], talleres = null, d
       centro: colorGeneral,
     }),
   };
+}
+
+/**
+ * El paciente que manda el navegador, comprobado (08/09/2026). Devuelve
+ * `{ patientId }` o `{ err }`.
+ *
+ * Vacío o null LIMPIA el enlace, que es como se corrige un hueco enganchado al
+ * niño equivocado. Un centro sin módulo de pacientes lo ignora en vez de dar
+ * error: el mismo bloqueo tiene que poder crearse en cualquier cliente.
+ */
+async function pacienteDelCuerpo(valor, ctx) {
+  if (valor === null || valor === "" || valor === undefined) return { patientId: null };
+  const { Patient } = ctx.tenantModels ?? {};
+  if (!Patient) return { patientId: null };
+  if (typeof valor !== "string" || !UUID_RE.test(valor)) return { err: "patientId inválido" };
+  const p = await Patient.findByPk(valor, { attributes: ["id"] });
+  if (!p) return { err: "Ese paciente no existe" };
+  return { patientId: p.id };
 }
 
 export const GET = withTenant(async (request, _rc, ctx) => {
@@ -337,13 +415,14 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     const autores = await nombresDeQuienApunto(filas, ctx.tenantModels);
     const talleres = await talleresDelCentro(ctx.tenantModels);
     const documentos = await documentosPorBloqueo(ctx.tenantModels, filas.map((f) => f.id));
+    const pacientes = await pacientesDeBloqueos(filas, ctx, yo);
     // Las categorías, los talleres y el equipo del centro viajan con el listado
     // (01/09/2026): quien pinta la agenda o el formulario necesita esas listas
     // para sus desplegables, y sacarlas de aquí ahorra otras tantas llamadas
     // en cada carga del calendario.
     const { equipo, administracion } = await equipoDelCentro(ctx.tenantModels);
     return ok({
-      bloqueos: filas.map((f) => serializa(f, colorGeneral, autores, categorias, talleres, documentos)),
+      bloqueos: filas.map((f) => serializa(f, colorGeneral, autores, categorias, talleres, documentos, pacientes)),
       yo,
       categorias,
       talleres: [...(talleres?.values() ?? [])],
@@ -404,6 +483,14 @@ export const POST = withTenant(async (request, _rc, ctx) => {
      * cuándo» como «hasta cuándo se repite». El freno está aquí y no solo en la
      * pantalla para que una pestaña vieja tampoco pueda.
      */
+    // De quién es el hueco, si se guarda para alguien (08/09/2026).
+    let patientId = null;
+    if ("patientId" in body) {
+      const r = await pacienteDelCuerpo(body.patientId, ctx);
+      if (r.err) return error(r.err, 422);
+      patientId = r.patientId;
+    }
+
     const largo = avisoDeBloqueoLargo(startAt, endAt);
     if (largo && !body.confirmarLargo) {
       // `errorConDatos` y no `error`: el segundo se come los detalles en
@@ -467,6 +554,7 @@ export const POST = withTenant(async (request, _rc, ctx) => {
       notes,
       categoryKey,
       tallerId,
+      patientId,
       createdById: request.headers.get("x-user-id") || null,
     });
 
@@ -609,6 +697,14 @@ export const PATCH = withTenant(async (request, _rc, ctx) => {
     const categorias = categoriasDe(ctx.tenant);
     if (body.categoryKey !== undefined) {
       cambios.categoryKey = claveValida(body.categoryKey, categorias);
+    }
+
+    // Y de quién es el hueco, con la misma regla (08/09/2026): mandar null lo
+    // desengancha, que es como se corrige uno atado al niño equivocado.
+    if (body.patientId !== undefined) {
+      const r = await pacienteDelCuerpo(body.patientId, ctx);
+      if (r.err) return error(r.err, 422);
+      cambios.patientId = r.patientId;
     }
 
     // Y qué taller se da en el tramo, con la misma regla (01/09/2026).

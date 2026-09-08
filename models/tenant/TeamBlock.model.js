@@ -103,6 +103,25 @@ export function defineTeamBlock(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      /**
+       * DE QUIÉN es el hueco, cuando se guarda para alguien (08/09/2026,
+       * Rodrigo). NULL es lo normal: vacaciones, gestión documental o una
+       * reunión no son de ningún paciente.
+       *
+       * Nació de los 381 huecos de «reserva de plaza» de Aumenta, que llevaban
+       * el nombre del niño escrito EN EL RÓTULO. Un rótulo es texto libre y no
+       * obedece a ningún permiso —ni hoy ni el día que el centro estreche la
+       * agenda—; un enlace sí. Y el 14/08/2026 los bloqueos se abrieron a todo
+       * el equipo justo porque «un bloqueo no tiene paciente»: esta columna es
+       * lo que hace verdad esa frase.
+       *
+       * Sin FK dura, como `tallerId`: el bloqueo tiene que sobrevivir al
+       * borrado de una ficha, y quien lo lee ya tolera que el paciente no esté.
+       */
+      patientId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       notes: {
         type: DataTypes.TEXT,
         allowNull: true,
@@ -153,6 +172,7 @@ export function defineTeamBlock(sequelize) {
         // pisan este rango». Por fecha de fin, que es lo que descarta lo viejo.
         { fields: ["end_at"], name: "team_blocks_end_at_idx" },
         { fields: ["team_member_id"], name: "team_blocks_member_idx" },
+        { fields: ["patient_id"], name: "team_blocks_patient_idx" },
       ],
       validate: {
         finDespuesDelInicio() {

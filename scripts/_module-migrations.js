@@ -424,6 +424,9 @@ export const MODULES = {
     // De quién es el bono dentro de la familia (08/09/2026, AV-0055): sin esto,
     // en una familia con dos hermanos el bono de uno se le gastaba al otro.
     "migrate-session-packs-paciente",
+    // De quién es un hueco reservado (08/09/2026): el nombre del niño sale del
+    // rótulo, que es texto libre, y pasa a viajar por el enlace.
+    "migrate-bloqueos-paciente",
     // «Esta es la valoración inicial» (04/08/2026): la marca del tipo de cita
     // al que se entra SIN firmar contratos, porque es la primera visita.
     "migrate-valoracion-inicial",
