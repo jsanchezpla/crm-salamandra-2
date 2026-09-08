@@ -208,3 +208,53 @@ test("sin cuotaId en la respuesta, la cobertura sale 0 y quien llama se queda co
   assert.equal(g.importe, 160);
   assert.equal(g.cuotas, 0);
 });
+
+/*
+ * ── LO QUE EL CENTRO ESCRIBE A MANO DENTRO DE LA NOTA (09/09/2026) ─────────
+ * La nota es un campo editable y el centro escribe dentro. Estas dos son
+ * LITERALES de producción: los dos únicos cobros de cuota de septiembre con un
+ * apunte a mano metido en el trozo del concepto.
+ */
+test("un párrafo a mano no se pinta como nombre del concepto", () => {
+  const r = explicaCobro({
+    notes:
+      "Cuota septiembre 2026 — Cuota Psicología 45x1 - Reserva de plaza ya abonada: −30 € \n\n" +
+      "IMPORTANTE: SON 145€ DESCONTADO 30€ DE RESERVA. SALIAN POR DUPLICADO COMO SI VINIERA TB A 1 " +
+      "SESION DE PSICOLOGIA DE 1H. OLGA LO HA ELIMINADO EN CUOTAS. — " +
+      "Cobrado en Organízate el 04/09/2026 (Organízate #20502, pago 16584, tarjeta)",
+  });
+  // Antes de hoy, el concepto salía con los 300 caracteres en mayúsculas dentro.
+  assert.ok(r.concepto.length < 70, r.concepto);
+  assert.match(r.concepto, /^Cuota Psicología 45x1/);
+  // Y el aviso del centro NO se pierde: baja a motivo, que es donde se lee.
+  assert.ok(r.motivos.some((m) => m.startsWith("IMPORTANTE")), JSON.stringify(r.motivos));
+  assert.ok(r.motivos.some((m) => m.startsWith("Cobrado en Organízate")), JSON.stringify(r.motivos));
+});
+
+test("con el nombre del catálogo puesto, el apunte a mano tampoco se tira", () => {
+  // Aquí el catálogo gana el nombre y el trozo de la nota se descartaba entero,
+  // llevándose por delante «04/09/2026 descontar 15 euros de reserva» — que es
+  // justo la frase que la persona que cobra necesita ver.
+  const r = explicaCobro({
+    notes:
+      "Cuota septiembre 2026 — Cuota Psicología 60x1, \n04/09/2026 descontar 15 euros de reserva — " +
+      "Cobrado también en Organízate (Organízate #20515): el CRM ya lo tenía cobrado a mano",
+    concepto: "Cuota Psicología 60x1",
+  });
+  assert.equal(r.concepto, "Cuota Psicología 60x1");
+  assert.ok(r.motivos.some((m) => m.includes("descontar 15 euros de reserva")), JSON.stringify(r.motivos));
+});
+
+test("cuando la nota dice lo mismo que el catálogo no se repite", () => {
+  const r = explicaCobro({
+    notes: "Cuota septiembre 2026 — Cuota Logopedia 45x1 — Reserva de plaza ya abonada: −30 €",
+    concepto: "Cuota Logopedia 45x1",
+  });
+  assert.equal(r.concepto, "Cuota Logopedia 45x1");
+  assert.deepEqual(r.motivos, ["Reserva de plaza ya abonada: −30,00 €"]);
+});
+
+test("la coma que arrastra el nombre del concepto se quita", () => {
+  const r = explicaCobro({ notes: "Cuota septiembre 2026 — Cuota Psicología 60x1," });
+  assert.equal(r.concepto, "Cuota Psicología 60x1");
+});
