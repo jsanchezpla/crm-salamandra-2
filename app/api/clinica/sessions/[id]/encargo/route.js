@@ -155,6 +155,7 @@ export const POST = withTenant(async (request, rc, ctx) => {
     const paciente = await Patient.findByPk(s.patientId).catch(() => null);
 
     let texto;
+    let parada = null;
     try {
       const r = await completeConParada({
         // El núcleo clínico va aparte para que Anthropic lo cachee: son los
@@ -167,13 +168,25 @@ export const POST = withTenant(async (request, rc, ctx) => {
         stream: true,
       });
       texto = limpiarRespuesta(r.texto);
+      parada = r.parada;
     } catch (e) {
       if (e.code === "NO_API_KEY") return error("La IA no está configurada (falta la clave de Anthropic).", 503);
       console.error("[clinica:encargo]", e);
       return error("La IA no ha podido escribirlo. Inténtalo de nuevo.", 502);
     }
 
-    if (!texto) return error("La IA no ha escrito nada. Prueba a contarle con más detalle qué necesitas.", 422);
+    /*
+     * Sin texto Y por tope es un caso distinto de «no ha sacado nada»: el
+     * modelo razona antes de escribir y ese razonamiento cuenta en el tope, así
+     * que un encargo enrevesado se puede quedar sin sitio ANTES de la primera
+     * letra. Decirlo aparte evita el «a veces falla» que costó dos semanas en
+     * el registro de sesión.
+     */
+    if (!texto) {
+      return parada === "max_tokens"
+        ? error("La IA se ha quedado sin sitio antes de escribir. Pídele una cosa cada vez, o más corto.", 422)
+        : error("La IA no ha escrito nada. Prueba a contarle con más detalle qué necesitas.", 422);
+    }
 
     // Cuenta lo que pasó y NADA de lo que decía: `master` es un schema
     // compartido y esto es material clínico. Sin nombre de paciente.
@@ -186,7 +199,9 @@ export const POST = withTenant(async (request, rc, ctx) => {
       after: resumenDelEncargo({ destino, claves: dentro, descartadas: fuera, peticion, respuesta: texto }),
     });
 
-    return ok({ texto, usadas: dentro, descartadas: fuera });
+    // `cortado` lo enseña la pantalla: un borrador que se corta a mitad de una
+    // frase parece terminado si nadie lo dice.
+    return ok({ texto, usadas: dentro, descartadas: fuera, cortado: parada === "max_tokens" });
   } catch (err) {
     return serverError(err);
   }

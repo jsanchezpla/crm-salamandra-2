@@ -21,6 +21,7 @@ import assert from "node:assert/strict";
 import {
   DESTINOS,
   MAX_PETICION,
+  MAX_TOKENS,
   clavesPermitidas,
   contextoDelEncargo,
   destinoDelEncargo,
@@ -227,4 +228,14 @@ test("la auditoría cuenta lo que pasó y no dice ni una palabra de lo que decí
   assert.deepEqual(r, { destino: "familia", fuentes: 2, descartadas: 1, peticionChars: 36, respuestaChars: 31 });
   const crudo = JSON.stringify(r);
   assert.ok(!/Hugo|correo|Hola/.test(crudo));
+});
+
+test("el tope de salida deja sitio para PENSAR, no solo para escribir", () => {
+  /*
+   * Medido el 09/09/2026 contra la API: con 2.000 el modelo se gastaba el tope
+   * razonando y devolvía la respuesta VACÍA con `stop_reason: "max_tokens"`.
+   * El razonamiento cuenta en el tope. Es el mismo tropiezo que costó el «a
+   * veces falla» del registro de sesión, que subió de 4.000 a 12.000.
+   */
+  assert.ok(MAX_TOKENS >= 8_000, `un tope de ${MAX_TOKENS} deja al modelo sin sitio antes de la primera letra`);
 });

@@ -86,9 +86,14 @@ export default function EncargoIA({ sesionId, bloques = [], valores = {}, onPega
       const j = await r.json().catch(() => ({}));
       if (!r.ok || !j.ok) throw new Error(j.error || "La IA no ha podido escribirlo");
       setTexto(j.data.texto ?? "");
+      const avisos = [];
+      // Un borrador cortado a mitad de una frase parece terminado si nadie lo
+      // dice: el modelo razona antes de escribir y eso también gasta sitio.
+      if (j.data.cortado) avisos.push("Se ha quedado sin sitio y está cortado: léelo hasta el final.");
       if (j.data.descartadas?.length) {
-        setAviso(`No ha viajado: ${j.data.descartadas.join(", ")}. Lo que va a leer la familia no lleva notas internas.`);
+        avisos.push(`No ha viajado: ${j.data.descartadas.join(", ")}. Lo que va a leer la familia no lleva notas internas.`);
       }
+      setAviso(avisos.join(" ") || null);
     } catch (e) {
       setAviso(e.message);
     } finally {
