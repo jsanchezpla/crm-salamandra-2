@@ -20,6 +20,18 @@ import { mesVigente, debeElMes } from "../../../../lib/billing/cuotas.js";
  *
  * Devuelve además cuántos meses seguidos lleva sin pagar (mirando 6 atrás),
  * que es lo que distingue un despiste de un problema.
+ *
+ * ── Y DICE DE CADA UNA SI TIENE CUOTA ESCRITA (09/09/2026) ─────────────────
+ * Rosa: «no sé si todo es moroso… lo suyo es ver el importe concreto que debe y
+ * a qué pertenece». Aquí conviven dos poblaciones que no se parecen: la familia
+ * con cuota escrita que no ha pagado (de esa se sabe cuánto y de qué) y la que
+ * tiene paciente activo y NINGUNA cuota (de esa no se sabe nada, así que solo se
+ * pueden contar meses). En Aumenta la segunda son 683 de 959, o sea casi toda la
+ * lista. Cada fila viaja con `tieneCuota` y con `conceptos`, y la pantalla las
+ * separa con `lib/billing/morosidad.js`.
+ *
+ * ⚠️ A la población sin cuota NO se le inventa un importe recalculando el mes:
+ * eso se probó el 07/09 y acusó a ~95 familias de deber 30 € que no debían.
  */
 
 const MESES_ATRAS = 6;
@@ -84,6 +96,15 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     const { Cuota } = ctx.tenantModels;
     const cuotasPorCliente = new Map();
     const familiasConCuota = new Set();
+    // Los conceptos de cada cuota, por su nombre INTERNO: es «a qué pertenece»
+    // de la petición de Rosa, y lo que hace que buscar «logopedia» encuentre a
+    // quien la debe. El texto impreso de la factura no vale aquí (en Aumenta no
+    // nombra la terapia a propósito).
+    const nombreDeConcepto = new Map();
+    if (ctx.tenantModels.BillingConcept) {
+      const cs = await ctx.tenantModels.BillingConcept.findAll({ attributes: ["id", "name"], raw: true });
+      for (const c of cs) nombreDeConcepto.set(String(c.id), c.name);
+    }
     if (Cuota) {
       // Con importe y conceptos (07/09/2026): hacen falta para saber cuánto
       // ESPERA el mes y decir «debe 60 €» cuando se pagó a medias.
@@ -199,6 +220,19 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     const clientes = await Client.findAll({ where: { id: { [Op.in]: ids } }, attributes: ["id", "name", "email", "phone"] });
     const nombres = new Map(clientes.map((c) => [String(c.id), c]));
 
+    // De qué es lo que debe. Sale de los conceptos de sus cuotas, sin repetir y
+    // en el orden en que están escritos.
+    const conceptosDe = (cid) => {
+      const vistos = new Set();
+      for (const f of cuotasPorCliente.get(cid) ?? []) {
+        for (const id of Array.isArray(f.conceptIds) ? f.conceptIds : []) {
+          const n = nombreDeConcepto.get(String(id));
+          if (n) vistos.add(n);
+        }
+      }
+      return [...vistos];
+    };
+
     const morosos = [];
     let alDia = 0;
     for (const cid of ids) {
@@ -220,6 +254,8 @@ export const GET = withTenant(async (request, _rc, ctx) => {
           email: cli?.email ?? null,
           phone: cli?.phone ?? null,
           pacientesActivos: porCliente.get(cid) ?? 0,
+          tieneCuota: familiasConCuota.has(cid) || cuotasPorCliente.has(cid),
+          conceptos: conceptosDe(cid),
           mesesSeguidos: 0,
           debe: falta.debe,
           pagado: falta.pagado,
@@ -250,14 +286,28 @@ export const GET = withTenant(async (request, _rc, ctx) => {
         email: cli?.email ?? null,
         phone: cli?.phone ?? null,
         pacientesActivos: porCliente.get(cid) ?? 0,
+        tieneCuota: familiasConCuota.has(cid) || cuotasPorCliente.has(cid),
+        conceptos: conceptosDe(cid),
         mesesSeguidos: seguidos,
         ultimoCobro: ultimo.get(cid) ?? null,
       });
     }
-    // Primero quien más meses acumula: es a quien hay que llamar hoy.
+    // Primero quien más meses acumula: es a quien hay que llamar hoy. Dentro de
+    // cada grupo, la pantalla los separa por si tienen cuota escrita.
     morosos.sort((a, b) => b.mesesSeguidos - a.mesesSeguidos || a.name.localeCompare(b.name));
 
-    return ok({ mes, morosos, alDia, aplicable: true, familias: ids.length, primerMes });
+    const conCuota = morosos.filter((m) => m.tieneCuota).length;
+    return ok({
+      mes,
+      morosos,
+      alDia,
+      aplicable: true,
+      familias: ids.length,
+      primerMes,
+      // Los dos números que la pantalla enseña sin tener que contar filas.
+      conCuota,
+      sinCuota: morosos.length - conCuota,
+    });
   } catch (err) {
     return serverError(err);
   }

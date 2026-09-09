@@ -17,6 +17,7 @@ import { partesConProrrateo } from "../../../../lib/billing/prorrateo.js";
 import { cuotasQueEntran, conceptosDeCuotas, importePactado } from "../../../../lib/billing/cuotaParaRellenar.js";
 import { restoDelMes, generadoDelMes } from "../../../../lib/billing/restoDelMes.js";
 import { explicaCobro } from "../../../../lib/billing/motivoDelCobro.js";
+import { etiquetaDeMoroso, filtrarMorosos, repartirMorosos, resumenDeMorosidad } from "../../../../lib/billing/morosidad.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -599,6 +600,34 @@ export default function CobrosPage() {
 
   useEffect(() => { loadMorosidad(); }, [loadMorosidad]);
 
+  /*
+   * ── EL BUSCADOR TAMBIÉN MUEVE LA MOROSIDAD (09/09/2026) ──────────────────
+   * Rosa: «NO FUNCIONA EL BUSCADOR». Y era verdad a medias: el buscador de
+   * arriba filtra los COBROS —viaja en su petición— y la morosidad se pide
+   * aparte, así que escribir un apellido no cambiaba ni una de sus filas. Con
+   * 683 familias en esa lista, buscar a una era bajar por todas.
+   *
+   * Se filtra aquí y no en el servidor porque la lista llega entera (no se
+   * pagina): es instantáneo y no cuesta una petición por letra.
+   */
+  const morososFiltrados = useMemo(
+    () => filtrarMorosos(morosidad?.morosos ?? [], search),
+    [morosidad, search]
+  );
+  const { conCuota: debenConCuota, sinCuota: debenSinCuota } = useMemo(
+    () => repartirMorosos(morososFiltrados),
+    [morososFiltrados]
+  );
+  const textoMorosidad = useMemo(
+    () => resumenDeMorosidad({
+      conCuota: debenConCuota,
+      sinCuota: debenSinCuota,
+      alDia: morosidad?.alDia ?? 0,
+      familias: morosidad?.familias ?? 0,
+    }),
+    [debenConCuota, debenSinCuota, morosidad]
+  );
+
   async function handleCreate(e) {
     e.preventDefault();
     setSaving(true);
@@ -872,7 +901,13 @@ export default function CobrosPage() {
 
       {/* ── Morosidad ── quién no ha pagado el mes. Mismo criterio que abre los
           documentos del portal, para que Cobros y el área privada no se
-          contradigan. */}
+          contradigan.
+
+          DOS LISTAS Y NO UNA (09/09/2026, Rosa): quien tiene cuota escrita y no
+          la ha pagado es morosidad, y de esa se dice el importe y de qué es;
+          quien tiene paciente activo y NINGUNA cuota no debe nada que nadie haya
+          escrito, así que va aparte y con su nombre. El reparto y las etiquetas
+          viven en `lib/billing/morosidad.js`. */}
       {morosidad?.aplicable && (
         <div className="bg-white border border-neutral-100 rounded-xl overflow-hidden mb-4">
           <div className="px-4 py-3 border-b border-neutral-100 flex flex-wrap items-center gap-3">
@@ -883,9 +918,12 @@ export default function CobrosPage() {
               onChange={(e) => setMesMorosidad(e.target.value)}
               className="rounded-lg px-2.5 py-1 text-xs border border-neutral-200"
             />
-            <span className="text-[11px] text-neutral-400">
-              {morosidad.morosos.length} sin pagar · {morosidad.alDia} al día · {morosidad.familias} familias con paciente activo
-            </span>
+            <span className="text-[11px] text-neutral-400">{textoMorosidad.alDia}</span>
+            {search && (
+              <span className="text-[11px] text-neutral-500 bg-neutral-100 rounded-full px-2 py-0.5">
+                filtrado por «{search}»
+              </span>
+            )}
           </div>
           {morosidad.sinCobros ? (
             <div className="px-4 py-5 text-xs text-amber-800 bg-amber-50/60">
@@ -895,22 +933,40 @@ export default function CobrosPage() {
             </div>
           ) : morosidad.morosos.length === 0 ? (
             <div className="px-4 py-6 text-center text-xs text-neutral-400">Nadie debe este mes.</div>
+          ) : morososFiltrados.length === 0 ? (
+            <div className="px-4 py-6 text-center text-xs text-neutral-400">Nadie que coincida con «{search}».</div>
           ) : (
-            <ul className="divide-y divide-neutral-50 max-h-64 overflow-y-auto">
-              {morosidad.morosos.map((m) => (
-                <li key={m.clientId} className="px-4 py-2.5 flex items-center gap-3 flex-wrap">
-                  <Link href={`/clientes/${m.clientId}`} className="text-xs text-[var(--color-primary,#1B3A2D)] hover:underline min-w-0 flex-1 truncate">
-                    {m.name}
-                  </Link>
-                  <span className="text-[11px] text-neutral-500">{m.phone || m.email || "sin contacto"}</span>
-                  <span className={`text-[11px] px-2 py-0.5 rounded-full ${m.mesesSeguidos >= 3 ? "bg-red-50 text-red-700" : m.mesesSeguidos === 2 ? "bg-amber-50 text-amber-700" : "bg-neutral-100 text-neutral-600"}`}>
-                    {m.mesesSeguidos === 0 && m.debe != null
-                      ? `debe ${fmtMoney(m.debe)}`
-                      : m.mesesSeguidos === 1 ? "1 mes" : `${m.mesesSeguidos} meses`}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <>
+              {debenConCuota.length > 0 && (
+                <>
+                  <div className="px-4 py-1.5 bg-neutral-50 text-[10px] uppercase tracking-wider text-neutral-500">
+                    {textoMorosidad.conCuota}
+                  </div>
+                  <ul className="divide-y divide-neutral-50 max-h-64 overflow-y-auto">
+                    {debenConCuota.map((m) => <FilaMoroso key={m.clientId} m={m} />)}
+                  </ul>
+                </>
+              )}
+              {debenSinCuota.length > 0 && (
+                <>
+                  <div className="px-4 py-2 bg-amber-50/60 border-t border-amber-100">
+                    <div className="text-[10px] uppercase tracking-wider text-amber-800">
+                      {textoMorosidad.sinCuota}
+                    </div>
+                    {/* Sin cuota el CRM no sabe cuánto esperaba cobrar, y decirlo
+                        es más útil que pintar «1 mes» junto a una deuda de
+                        verdad. Es además la lista para ir completándolas. */}
+                    <div className="text-[10px] text-amber-700/80 mt-0.5">
+                      No deben un importe: es que aún no tienen cuota, así que el CRM no sabe qué esperaba cobrarles.
+                      Se arreglan asignándoles una en Facturación → Cuotas.
+                    </div>
+                  </div>
+                  <ul className="divide-y divide-neutral-50 max-h-64 overflow-y-auto">
+                    {debenSinCuota.map((m) => <FilaMoroso key={m.clientId} m={m} />)}
+                  </ul>
+                </>
+              )}
+            </>
           )}
         </div>
       )}
@@ -1594,6 +1650,40 @@ export default function CobrosPage() {
 
       {dialogo}
     </div>
+  );
+}
+
+/**
+ * Una familia de la lista de morosidad (09/09/2026).
+ *
+ * Lo mismo para las dos poblaciones: quien lo mira quiere el nombre, cómo
+ * llamarle y cuánto (o, si no se sabe, por qué no se sabe). Lo que cambia es la
+ * etiqueta, y esa la decide `etiquetaDeMoroso`, con su prueba.
+ */
+function FilaMoroso({ m }) {
+  const etiqueta = etiquetaDeMoroso(m);
+  const color = {
+    importe: "bg-red-50 text-red-700",
+    grave: "bg-red-50 text-red-700",
+    medio: "bg-amber-50 text-amber-700",
+    leve: "bg-neutral-100 text-neutral-600",
+    sinCuota: "bg-amber-50 text-amber-700",
+  }[etiqueta.tono];
+  return (
+    <li className="px-4 py-2.5 flex items-center gap-3 flex-wrap">
+      <Link href={`/clientes/${m.clientId}`} className="text-xs text-[var(--color-primary,#1B3A2D)] hover:underline min-w-0 flex-1 truncate">
+        {m.name}
+      </Link>
+      {/* De qué es lo que debe, que es la otra mitad de lo que pedía Rosa. Solo
+          cuando hay cuota: sin ella no hay concepto que enseñar. */}
+      {m.conceptos?.length > 0 && (
+        <span className="text-[11px] text-neutral-400 truncate max-w-[220px]" title={m.conceptos.join(" · ")}>
+          {m.conceptos.join(" · ")}
+        </span>
+      )}
+      <span className="text-[11px] text-neutral-500">{m.phone || m.email || "sin contacto"}</span>
+      <span className={`text-[11px] px-2 py-0.5 rounded-full ${color}`}>{etiqueta.texto}</span>
+    </li>
   );
 }
 
