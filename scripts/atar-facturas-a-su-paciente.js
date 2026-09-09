@@ -24,6 +24,12 @@
  * hijo aparece en CERO de ellas, y la terapia también en cero. No hay dato con
  * el que desempatar dentro del CRM.
  *
+ * ⚠️ Y por eso hubo que salir de él. El mismo 09/09/2026 se volvió a Organízate,
+ * donde el listado de Facturas exporta «Paciente» y «Cliente» en columnas
+ * distintas, y las 2.964 quedaron atadas con
+ * `atar-facturas-al-paciente-de-organizate.js`. Este script sigue valiendo para
+ * cualquier tenant que llegue con facturas sin paciente y familias de un hijo.
+ *
  * ── QUÉ NO CAMBIA ──────────────────────────────────────────────────────────
  * Poner `patient_id` no toca ni un importe, ni un número de factura, ni el
  * estado, ni Verifactu, ni lo que ve una familia en su portal: es la columna
