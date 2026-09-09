@@ -6,6 +6,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Select from "@/components/ui/Select.jsx";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import PatientBillingSection from "@/components/billing/PatientBillingSection.jsx";
+import ClientBonosSection from "@/components/clients/ClientBonosSection.jsx";
 import SpecialtyPicker from "@/components/clinica/SpecialtyPicker.jsx";
 import TerapeutasPicker from "@/components/clinica/TerapeutasPicker.jsx";
 import NuevaCoordinacionModal from "../../../../components/clinica/NuevaCoordinacionModal.jsx";
@@ -803,6 +804,31 @@ export default function PacienteFichaPage() {
       .catch(() => {});
   }, []);
 
+  /*
+   * Llegar con el informe ya empezado (09/09/2026, Aumenta: «no podemos crear
+   * las sesiones de Diagnóstico»).
+   *
+   * `?informe=diagnostico` lo cuelga la CITA cuando su tipo dice de qué informe
+   * sale (Citas → Tipos de cita). Al abrirse la ficha se va a Informes y se
+   * abre el formulario con ese tipo puesto, que es lo que evita tener que
+   * acordarse de cuál de los siete era.
+   *
+   * Corre UNA vez: se limpia la cola de la URL nada más usarla, para que
+   * recargar la ficha —o volver atrás— no vuelva a abrir el formulario encima
+   * de lo que la terapeuta esté haciendo.
+   */
+  const informePedido = query.get("informe");
+  useEffect(() => {
+    if (!informePedido || !REPORT_TYPES_NUEVOS.includes(informePedido)) return;
+    setActiveTab("informes");
+    // Reiniciar es `informeVacio()` y el tipo se cambia encima, nunca un objeto
+    // a mano: eso es lo que tumbó la ficha 26 días (_smoke-informe-formulario).
+    setReportForm(informeVacio());
+    setReportForm((f) => ({ ...f, reportType: informePedido }));
+    setShowReport(true);
+    router.replace(`/pacientes/${id}`, { scroll: false });
+  }, [informePedido, id, router]);
+
   const publishSession = async (sid) => {
     setBusy(true);
     try {
@@ -1215,6 +1241,20 @@ export default function PacienteFichaPage() {
               )}
             </div>
             <PatientBillingSection patientId={patient.id} clientId={patient.clientId} />
+            {/*
+              * Los bonos DEL NIÑO (09/09/2026, Aumenta: «los bonos se pueden
+              * crear en clientes, el nombre que sale es del cliente y no
+              * paciente… no sabemos cómo ver las sesiones pendientes»).
+              *
+              * Es la misma sección de la ficha de la familia, con su id: aquí
+              * solo salen los bonos que se le pueden gastar a él, se ve lo que
+              * le queda de cada uno, y el que se dé nace ya a su nombre. Sin
+              * esto había que ir a la ficha de quien paga —donde el bono se ve
+              * a nombre de la familia— y acordarse de elegir al hermano bueno.
+              */}
+            {patient.clientId && (
+              <ClientBonosSection clientId={patient.clientId} patientId={patient.id} onCambio={load} />
+            )}
           </div>
         )}
 

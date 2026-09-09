@@ -81,6 +81,26 @@ export function defineSessionPack(sequelize) {
         allowNull: false,
         validate: { min: 1 },
       },
+      /**
+       * Las que ya venían gastadas (09/09/2026, Aumenta: «los bonos abiertos de
+       * Organízate no se tienen en cuenta en CRM»).
+       *
+       * Rompe a medias la regla de arriba —las sesiones se cuentan, no se
+       * guardan— y hace falta: los 229 bonos que llegaron de Organízate se
+       * gastaron en citas de 2023, 2024 y 2025, y el CRM solo tiene la agenda de
+       * 2026 en adelante. Contando citas saldrían todos enteros y un bono
+       * agotado hace dos años diría «le quedan 5».
+       *
+       * Es un SUMANDO, no un contador: se escribe una vez al traer el bono y no
+       * lo mueve nadie más. Lo que se dé de aquí en adelante se sigue contando
+       * desde las citas, que es lo que no miente.
+       */
+      sesionesPrevias: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+        field: "sesiones_previas",
+      },
       /** 'upfront' (pago único) | 'instalment' (fraccionado por meses). */
       pricingMode: {
         type: DataTypes.STRING(20),

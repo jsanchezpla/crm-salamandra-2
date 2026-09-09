@@ -38,6 +38,7 @@ import { useDialogo } from "../ui/Dialogo.jsx";
 import { eurosToCents } from "../../lib/payments/money.js";
 
 import { puedeDarBonos } from "../../lib/citas/quienDaBonos.js";
+import { packsParaPaciente } from "../../lib/citas/bonoDelPaciente.js";
 
 /**
  * El nombre del paciente de un bono, o «otro paciente» si ya no está en la
@@ -63,7 +64,18 @@ function fechaCorta(valor) {
   });
 }
 
-export default function ClientBonosSection({ clientId, onCambio }) {
+/**
+ * `patientId` (09/09/2026, Aumenta: «los bonos se pueden crear en clientes, el
+ * nombre que sale es del cliente y no paciente… no sabemos cómo ver las
+ * sesiones pendientes»).
+ *
+ * La misma sección vale para las dos fichas. En la del PACIENTE se le pasa su
+ * id y entonces: solo se ven los bonos que se le pueden gastar a él (los suyos
+ * y los de la familia, nunca los de un hermano), el que se dé nace ya a su
+ * nombre, y las sesiones que le quedan se leen sin salir de su ficha — que es
+ * donde las buscan, porque el bono es del niño y no de quien paga.
+ */
+export default function ClientBonosSection({ clientId, patientId = null, onCambio }) {
   const [disponible, setDisponible] = useState(false); // ¿este centro tiene Citas?
   const [esAdmin, setEsAdmin] = useState(false);
   const [cliente, setCliente] = useState(null);
@@ -154,7 +166,13 @@ export default function ClientBonosSection({ clientId, onCambio }) {
 
   // Los anulados no se enseñan: dejaron de contar y su rastro vive en la
   // auditoría, no en la ficha.
-  const lista = bonos.filter((b) => b.estado !== "anulado");
+  //
+  // Y en la ficha de un PACIENTE, solo los que se le pueden gastar a él: los
+  // suyos primero y los de la familia después, con la MISMA regla que usa el
+  // servidor para descontar (`packsParaPaciente`). Enseñarle el bono de su
+  // hermano sería prometerle sesiones que no puede usar.
+  const vivos = bonos.filter((b) => b.estado !== "anulado");
+  const lista = patientId ? packsParaPaciente(vivos, patientId) : vivos;
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mt-6">
@@ -175,6 +193,9 @@ export default function ClientBonosSection({ clientId, onCambio }) {
         <DarBonoForm
           cliente={cliente}
           pacientes={pacientes}
+          // En la ficha del paciente el bono nace ya a su nombre: no hay nada
+          // que elegir y no se puede equivocar de hermano.
+          patientFijo={patientId}
           onHecho={() => { setAbierto(false); recargar(); }}
         />
       )}
@@ -206,21 +227,34 @@ export default function ClientBonosSection({ clientId, onCambio }) {
                   * paciente no se dice nada: «de toda la familia» es lo normal
                   * y repetirlo en cada línea sería ruido.
                   */}
-                {b.patientId && (
+                {b.patientId ? (
                   <span className="ml-1.5 text-[11px] text-gray-500">
                     · {nombreDePaciente(pacientes, b.patientId)}
                   </span>
+                ) : (
+                  /* En la ficha del paciente se dice que el bono es de la
+                     familia entera: sin eso parecería suyo, y las sesiones se
+                     las puede gastar cualquiera de sus hermanos. */
+                  patientId && pacientes.length > 1 && (
+                    <span className="ml-1.5 text-[11px] text-gray-400">· de toda la familia</span>
+                  )
                 )}
               </span>
               <span
                 className={`text-sm font-semibold ${b.restantes > 0 ? "text-[var(--color-primary)]" : "text-gray-400"}`}
               >
-                {b.restantes > 0 ? `Le quedan ${b.restantes}` : "Agotado"}
+                {b.restantes > 0
+                  ? `Le quedan ${b.restantes} de ${b.total}`
+                  : "Agotado"}
               </span>
             </div>
             <div className="text-[11px] text-gray-500 mt-0.5 flex items-baseline justify-between gap-3">
               <span>
                 {b.resumen}
+                {/* Las que ya venían gastadas de fuera (09/09/2026): sin
+                    decirlo, «4 de 5 usadas» en un bono sin ninguna cita en el
+                    CRM parecería una cuenta mal hecha. */}
+                {b.previas > 0 && ` (${b.previas} de antes de traerlo)`}
                 {b.modoPago === "instalment" &&
                   (b.cuotas ? ` · a plazos: ${b.cuotas.resumen}` : " · pago fraccionado")}
               </span>
@@ -287,7 +321,7 @@ export default function ClientBonosSection({ clientId, onCambio }) {
  * una familia sin correo también tiene bono, y sus citas se enganchan al
  * elegir el bono en la cita nueva. Se avisa de lo que se pierde sin correo.
  */
-function DarBonoForm({ cliente, pacientes = [], onHecho }) {
+function DarBonoForm({ cliente, pacientes = [], patientFijo = null, onHecho }) {
   const [tipos, setTipos] = useState([]);
   const [eventTypeId, setEventTypeId] = useState("");
   /*
@@ -296,9 +330,21 @@ function DarBonoForm({ cliente, pacientes = [], onHecho }) {
    * familia de un hijo, «toda la familia» y «ese niño» son lo mismo, y dejarlo
    * vacío obligaría a elegir para nada. Con dos o más, se elige a propósito.
    */
-  const [patientId, setPatientId] = useState(pacientes.length === 1 ? pacientes[0].id : "");
+  const [patientId, setPatientId] = useState(
+    patientFijo ?? (pacientes.length === 1 ? pacientes[0].id : "")
+  );
   const [sesiones, setSesiones] = useState("");
   const [importe, setImporte] = useState("");
+  /*
+   * «Este bono no se cobra» (09/09/2026, Aumenta: «en cobros no se refleja el
+   * importe»). El importe era OPCIONAL, y los tres bonos que había dados en
+   * producción estaban los tres sin él — o sea que ninguno apuntó su deuda en
+   * Cobros, que es justo lo que echaban en falta. Ahora hace falta ponerlo, y
+   * quien de verdad regala un bono (o ya lo facturó por otra vía) lo dice a
+   * propósito marcando esto. Un dato que se olvida en silencio no es opcional:
+   * es un agujero.
+   */
+  const [sinCobro, setSinCobro] = useState(false);
   const [nota, setNota] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [err, setErr] = useState(null);
@@ -328,6 +374,10 @@ function DarBonoForm({ cliente, pacientes = [], onHecho }) {
     setErr(null);
     setAvisos([]);
     if (!eventTypeId) { setErr("Elige el tipo de cita"); return; }
+    if (!sinCobro && !(Number(importe) > 0)) {
+      setErr("Pon lo que vale el bono: es lo que hace que su cobro salga como pendiente. Si de verdad no se cobra, marca la casilla.");
+      return;
+    }
 
     setGuardando(true);
     try {
@@ -340,7 +390,7 @@ function DarBonoForm({ cliente, pacientes = [], onHecho }) {
           patientId: patientId || null,
           eventTypeId,
           totalSessions: Number(sesiones) || 1,
-          amount: importe === "" ? null : eurosToCents(importe),
+          amount: sinCobro || importe === "" ? null : eurosToCents(importe),
           notes: nota.trim() || null,
         }),
       });
@@ -396,7 +446,15 @@ function DarBonoForm({ cliente, pacientes = [], onHecho }) {
         * familia tiene MÁS DE UN paciente: con uno solo no hay nada que
         * repartir y el desplegable sería una pregunta con una respuesta.
         */}
-      {pacientes.length > 1 && (
+      {patientFijo && (
+        <p className="text-[11px] text-gray-500">
+          El bono será de{" "}
+          <strong className="text-gray-700">{nombreDePaciente(pacientes, patientFijo)}</strong>: sus sesiones
+          solo se le descuentan a él, no a sus hermanos.
+        </p>
+      )}
+
+      {!patientFijo && pacientes.length > 1 && (
         <div>
           <label className="block text-[11px] font-medium text-gray-500 mb-1">¿De quién es?</label>
           <select value={patientId} onChange={(e) => setPatientId(e.target.value)} className={inputCls}>
@@ -437,14 +495,20 @@ function DarBonoForm({ cliente, pacientes = [], onHecho }) {
             type="number" step="0.01" min={0}
             value={importe}
             onChange={(e) => setImporte(e.target.value)}
-            placeholder="Opcional"
-            className={inputCls}
+            disabled={sinCobro}
+            placeholder={sinCobro ? "sin cobro" : "200"}
+            className={`${inputCls} disabled:bg-gray-100 disabled:text-gray-400`}
           />
         </div>
       </div>
 
       <p className="text-[11px] text-gray-500">
-        {importe && Number(importe) > 0 ? (
+        {sinCobro ? (
+          <>
+            No se le apuntará ningún cobro. Úsalo solo si el bono es un regalo o si ya lo has cobrado por
+            otra vía: si no, la deuda no queda apuntada en ninguna parte.
+          </>
+        ) : Number(importe) > 0 ? (
           <>
             Se le apuntará un cobro de <strong className="text-gray-700">{importe} €</strong>{" "}
             <strong className="text-gray-700">pendiente</strong> en Cobros. Dárselo no es cobrarlo: cuando
@@ -452,11 +516,21 @@ function DarBonoForm({ cliente, pacientes = [], onHecho }) {
           </>
         ) : (
           <>
-            Pon el importe aunque todavía no lo hayas cobrado: es lo que hace que salga como pendiente en
-            Cobros. Sin importe el bono funciona igual, pero la deuda no queda apuntada en ninguna parte.
+            Pon lo que VALE el bono aunque todavía no lo hayas cobrado: es lo que hace que salga como
+            pendiente en Cobros.
           </>
         )}
       </p>
+
+      <label className="flex items-start gap-2 text-[11px] text-gray-500 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={sinCobro}
+          onChange={(e) => setSinCobro(e.target.checked)}
+          className="mt-0.5"
+        />
+        <span>Este bono no se cobra (regalo, o ya facturado aparte)</span>
+      </label>
 
       <div>
         <label className="block text-[11px] font-medium text-gray-500 mb-1">Nota</label>
