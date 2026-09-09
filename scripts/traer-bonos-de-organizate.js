@@ -154,6 +154,31 @@ async function main() {
   );
   if (codigosHechos.size) log(`Ya traídos antes: ${codigosHechos.size}`);
 
+  /*
+   * El cobro que ya trajo el volcado de la Caja, si lo hay: «Bono cobrado en
+   * Organízate el 01/09/2026 (Organízate #280, pago 16489, tarjeta)».
+   *
+   * De él salen el importe DE VERDAD y el día de la compra, que es mejor que
+   * el precio de catálogo: los cinco de septiembre se cobraron a 170, 200, 200,
+   * 220 y 220 € y el catálogo dice 200 o 250. El centro hace descuentos, y
+   * apuntar el precio de tarifa en el bono sería inventarse lo que pagó cada
+   * familia.
+   */
+  const cobrosDeBono = Payment
+    ? await Payment.findAll({
+        where: { notes: { [Op.iLike]: "%Organízate #%" } },
+        attributes: ["id", "amount", "paidAt", "notes", "packId"],
+        raw: true,
+      })
+    : [];
+  const cobroPorCodigo = new Map();
+  for (const c of cobrosDeBono) {
+    if (!/bono/i.test(c.notes ?? "")) continue;
+    const cod = Number(String(c.notes).match(/Organ[íi]zate #(\d+)/)?.[1]);
+    if (cod && !cobroPorCodigo.has(cod)) cobroPorCodigo.set(cod, c);
+  }
+  if (cobroPorCodigo.size) log(`Cobros de bono ya en el CRM: ${cobroPorCodigo.size}`);
+
   const problemas = [];
   const aCrear = [];
   for (const ficha of fichas) {
@@ -172,6 +197,8 @@ async function main() {
       if (!(total > 0) || !Number.isFinite(restantes)) { problemas.push({ cod: bono.codigo, motivo: `sesiones ilegibles («${bono.restantes}/${bono.total}»)` }); continue; }
       const previas = Math.max(0, Math.min(total, total - restantes));
 
+      // Con cobro detrás manda el cobro: es lo que la familia pagó de verdad.
+      const cobro = cobroPorCodigo.get(Number(bono.codigo)) ?? null;
       aCrear.push({
         codigo: Number(bono.codigo),
         patientId: paciente.id,
@@ -181,8 +208,9 @@ async function main() {
         como,
         totalSessions: total,
         sesionesPrevias: previas,
-        amount: importeDelBono(bono),
-        purchasedAt: compradoEl(bono),
+        amount: cobro ? Math.round(Number(cobro.amount) * 100) : importeDelBono(bono),
+        deSuCobro: !!cobro,
+        purchasedAt: cobro?.paidAt ? new Date(cobro.paidAt) : compradoEl(bono),
         notes:
           `Bono de Organízate #${bono.codigo} · ${bono.bono} · caduca el ${bono.caducidad}` +
           (previas ? ` · ${previas} de ${total} sesiones ya gastadas al traerlo (09/09/2026)` : " · sin estrenar al traerlo (09/09/2026)"),
@@ -193,7 +221,7 @@ async function main() {
   const abiertos = aCrear.filter((b) => b.sesionesPrevias < b.totalSessions);
   log(`\nA crear: ${aCrear.length} bonos · ${abiertos.length} con sesiones libres · ${problemas.length} que no se pueden`);
   if (detalle) {
-    for (const b of abiertos) log(`  + #${b.codigo} · ${b.tipoNombre} · ${b.totalSessions - b.sesionesPrevias} de ${b.totalSessions} libres (${b.como})`);
+    for (const b of abiertos) log(`  + #${b.codigo} · ${b.tipoNombre} · ${b.totalSessions - b.sesionesPrevias} de ${b.totalSessions} libres · ${(b.amount / 100).toFixed(2)} €${b.deSuCobro ? " (de su cobro)" : " (de tarifa)"} · ${b.como}`);
     for (const p of problemas) log(`  ✗ #${p.cod}: ${p.motivo}`);
   }
 
