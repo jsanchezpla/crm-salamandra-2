@@ -2097,3 +2097,55 @@ se arrastraban.
 - nutri_laura no tiene a nadie en Administración ni Contabilidad, así que el
   caso que parió la regla (Rocío cerrando la agenda de Laura) sigue igual de
   cerrado.
+
+## Los bonos son del paciente, y de una cita puede salir su informe (09/09/2026)
+
+Cuatro cosas de una misma tanda de Aumenta.
+
+**El nombre del niño nunca llegaba a la pantalla.** `ClientBonosSection` pedía
+los pacientes de la familia a `/api/pacientes` y leía `data` / `data.items`; ese
+endpoint devuelve `{ patients, … }`. La lista llegaba SIEMPRE vacía: el bono se
+pintaba «· otro paciente» desde el día que se puso (08/09) y el desplegable
+«¿de quién es?» no salía nunca, porque la pantalla creía que la familia no tenía
+pacientes. Era media queja: «el nombre que sale es del cliente y no paciente».
+
+**La sección vive también en la ficha del PACIENTE** (`app/(dashboard)/
+pacientes/[id]/page.jsx`, pestaña Resumen, bajo Facturación). Con `patientId`
+solo se listan los bonos que se le pueden gastar —`packsParaPaciente`, la misma
+regla que descuenta en el servidor—, no se repite su nombre en cada línea y el
+bono que se dé nace ya suyo. La ficha de la familia sigue igual.
+
+**El importe deja de ser opcional.** Los tres bonos que había en producción
+estaban los tres sin él, o sea que ninguno apuntó su deuda en Cobros —justo lo
+que pedía Rosa el 08/09 (AV-0070)—. Ahora hace falta, y quien de verdad regala
+un bono marca «este bono no se cobra». Un dato que se olvida en silencio no es
+opcional.
+
+**`session_packs.sesiones_previas`** (`migrate-session-packs-previas.js`, ANTES
+del despliegue): las sesiones que el bono traía gastadas al llegar. Rompe a
+medias la regla de `packs.js` —las sesiones se cuentan, no se guardan— y hace
+falta: los 232 bonos de Organízate se gastaron en citas de 2023-2025 y el CRM
+solo tiene la agenda de 2026 en adelante, así que contándolas saldrían todos
+enteros. Es un SUMANDO que se escribe una vez; lo de aquí en adelante se sigue
+contando desde las citas. `estadoPack` lo suma a `gastadas`.
+
+**`event_types.informe_tipo`** (`migrate-event-types-informe.js`, ANTES del
+despliegue): qué informe clínico sale de un tipo de cita, un valor de
+`REPORT_TYPES` (`lib/clinica/serialize.js`). Con él puesto, la ficha de la cita
+enseña el botón que abre ESE informe del paciente (`/pacientes/[id]?informe=…`,
+que abre la pestaña Informes con el tipo elegido y limpia la cola de la URL);
+sin él —todos los tipos de antes— la cita se comporta igual que siempre. Se
+elige en Citas → Tipos de cita, «De esta cita sale un informe».
+
+⚠️ De paso: `isInitialAssessment` NO viajaba en la respuesta de `/api/citas/
+bookings` ni de `calendar` (no estaba en `attributes`), así que llegaba
+`undefined` al modal y la cita de valoración inicial se preparaba con la
+plantilla de siempre en vez de con la de la entrevista. Ahora viajan las dos.
+
+**Lo corrido en aumenta** (09/09/2026): `traer-bonos-de-organizate.js` trajo
+**232 bonos** de 96 fichas —16 con sesiones libres— y ató a su bono los 5 cobros
+que ya existían; `crear-tipo-cita-diagnostico.js` creó el tipo «DIAGNÓSTICO»
+(60 min, oculto, sin precio) y enganchó al informe de valoración diagnóstica los
+tres «INFORME PARA DIAGNOSTICO» que ya había. El diagnóstico se cobra como bono,
+no como cuota: por eso el tipo va sin concepto —uno de 650 € pegado al tipo se
+copiaría en CADA cita de la valoración—.

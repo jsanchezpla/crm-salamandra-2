@@ -815,10 +815,43 @@ entera; prorratearla devolvería solo una parte de algo ya cobrado del todo.
 Con la cuota de 190 €, 3 de 4 sesiones y el descuento: 112,50 €, que es la
 cuenta del centro. Prueba: `_smoke-cuotas.mjs`.
 
-⚠️ El CRM no puede adivinar qué familias han pagado reserva: el concepto de
-descuento hay que añadirlo a SU cuota. Y el importe corregido a mano en un
-cobro pendiente se pisa en cuanto se edita la cuota (`cambiosDelCobro`), así
-que la corrección buena es la de la cuota, no la del cobro.
+⚠️ El importe corregido a mano en un cobro pendiente se pisa en cuanto se edita
+la cuota (`cambiosDelCobro`), así que la corrección buena es la de la cuota, no
+la del cobro.
+
+## La reserva de plaza vive en la cuota (09/09/2026)
+
+Aumenta: «en cuotas que estamos creando, deja pendiente 30 €».
+
+El 01/09/2026 `descontar-reservas-septiembre.js` restó la reserva a los cobros
+de septiembre YA generados y lo dejó escrito en su nota. Pero la rebaja se quedó
+en el cobro, no en la cuota, y de ahí dos agujeros: **toda cuota nueva generaba
+el mes entero** —la familia pagaba lo suyo menos los 30 € ya adelantados y esos
+30 € quedaban pendientes sin que nadie los debiera—, y **tocar la cuota borraba
+la rebaja**, porque desde el 05/09 el cobro pendiente del mes se rehace solo
+(`sincronizarCobroDelMes`) y volvía a la tarifa entera.
+
+Dos columnas en `billing_cuotas` (`migrate-billing-cuotas-reserva.js`, ANTES del
+despliegue):
+
+- `reserva_abonada` — lo que la familia adelantó (30 €, o 60 si son dos hermanos).
+- `reserva_aplicada_en` — el mes 'AAAA-MM' en el que ya se descontó. **Es lo que
+  hace que se descuente UNA vez**: con el mes puesto, octubre sale entero.
+
+`descuentoDeReserva(cuota, mes, bruto)` (`lib/billing/cuotas.js`) devuelve el
+importe y su frase; `planDeCuotasDelMes` lo resta ENTERO —como los conceptos
+negativos: la reserva se pagó completa aunque el mes de alta sea a medias— y
+nunca deja el cobro bajo cero. El mes se estampa en la cuota **dentro de la
+misma transacción que crea el cobro** (`cuotas/generar` y `cobroDeCuota.js`); un
+cobro intocable —ya cobrado o facturado— NO lo estampa, así que el crédito de la
+familia sigue vivo para el mes siguiente. Cambiar el importe en el PATCH borra la
+marca y la deja otra vez por descontar.
+
+La nota que queda escrita es la MISMA de los 242 cobros de septiembre («Reserva
+de plaza ya abonada: −30 €»), así que `motivoDelCobro.js` la lee sin tocar nada.
+Prueba: `_smoke-cuota-reserva.mjs`. Backfill ya corrido en aumenta el 09/09/2026
+(`backfill-cuotas-reserva.js`): **256 cuotas, 8.160 €**, marcadas como usadas en
+2026-09.
 
 ## Tres arreglos de Cobros y de la factura (07/09/2026, tarde)
 
