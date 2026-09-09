@@ -9,6 +9,14 @@
  * queda enlazado al paciente. El importe/concepto/IVA se ajustan en el editor;
  * aquí solo se crea el esqueleto para no re-teclear el pagador ni el enlace.
  *
+ * ── Y SUS PAGOS (09/09/2026) ───────────────────────────────────────────────
+ * Rosa (Aumenta): «ver los pagos que ha hecho un paciente, de qué manera y en
+ * qué fecha». Una factura es lo que se le ha EMITIDO; un cobro es lo que ha
+ * PAGADO, y no son lo mismo. En Aumenta el hueco era total: de los 283 cobros
+ * que dicen de qué paciente son, NINGUNO tiene factura detrás, así que en la
+ * ficha de un paciente no aparecía ni uno. El dato ya estaba guardado —cada
+ * cobro lleva su fecha y su forma de pago—, solo que no se enseñaba aquí.
+ *
  * Se oculta si el tenant no tiene módulo billing (GET responde 403).
  * Autocontenido: recibe patientId + clientId (pagador por defecto).
  */
@@ -30,12 +38,22 @@ const STATUS_CLS = {
   partially_paid: "bg-amber-50 text-amber-700", overdue: "bg-rose-50 text-rose-700",
   cancelled: "bg-neutral-100 text-neutral-400", rectified: "bg-violet-50 text-violet-700",
 };
+/** Cómo pagó. Los mismos rótulos que la pantalla de Cobros. */
+const METODO = { card: "Tarjeta", transfer: "Transferencia", cash: "Efectivo", direct_debit: "Domiciliación" };
+const ESTADO_COBRO = { completed: "Cobrado", pending: "Pendiente", failed: "Fallido", refunded: "Devuelto" };
+const ESTADO_COBRO_CLS = {
+  completed: "bg-emerald-50 text-emerald-700",
+  pending: "bg-amber-50 text-amber-700",
+  failed: "bg-rose-50 text-rose-700",
+  refunded: "bg-violet-50 text-violet-700",
+};
 const eur = (n) => new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" }).format(Number(n) || 0);
 const fmt = (d) => (d ? new Date(d).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" }) : "—");
 
 export default function PatientBillingSection({ patientId, clientId }) {
   const router = useRouter();
   const [invoices, setInvoices] = useState([]);
+  const [pagos, setPagos] = useState([]);
   const [available, setAvailable] = useState(true);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -75,6 +93,18 @@ export default function PatientBillingSection({ patientId, clientId }) {
       })
       .catch((e) => alive && setError(e.message))
       .finally(() => alive && setLoading(false));
+
+    /*
+     * Y sus COBROS (09/09/2026): lo que ha pagado, cuándo y cómo. Van aparte de
+     * las facturas porque son otra cosa —en Aumenta ninguno de los 283 cobros
+     * con paciente tiene factura detrás— y un fallo aquí no puede dejar la
+     * sección sin facturas: se traga y se queda la lista vacía.
+     */
+    fetch(`/api/billing/payments?patientId=${patientId}&limit=100&sortBy=paidAt&sortDir=desc`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (alive && d?.ok) setPagos(d.data.payments || []); })
+      .catch(() => {});
+
     return () => { alive = false; };
   }, [patientId]);
 
@@ -84,6 +114,12 @@ export default function PatientBillingSection({ patientId, clientId }) {
   const visibles = useMemo(() => facturasDelEjercicio(invoices, ejercicio), [invoices, ejercicio]);
   // Las que se ven y NO son suyas: vienen de la familia sin repartir.
   const deLaFamilia = useMemo(() => visibles.filter(esDeLaFamilia).length, [visibles]);
+  // Lo COBRADO de verdad. Los pendientes salen en la lista pero no suman: un
+  // total que incluyera lo que no ha entrado contestaría mal a «está al día».
+  const pagosCobrados = useMemo(() => {
+    const suyos = pagos.filter((p) => p.status === "completed");
+    return { n: suyos.length, total: suyos.reduce((t, p) => t + Number(p.amount || 0), 0) };
+  }, [pagos]);
 
   // Pagadores frecuentes del paciente (calculados de sus facturas): permiten
   // crear una factura para un pagador recurrente con un clic, sin re-teclearlo.
@@ -259,7 +295,47 @@ export default function PatientBillingSection({ patientId, clientId }) {
           ))}
         </ul>
       )}
-      {invoices.length > 0 && (
+      {/* ── LO QUE HA PAGADO (09/09/2026) ──────────────────────────────────
+          Debajo de las facturas y con su rótulo, porque son dos cosas: arriba
+          lo que se le emitió, aquí lo que entró. Se contesta «¿este niño está
+          al día?» sin salir de la ficha, que es la pregunta que se hace en
+          recepción con la familia delante. */}
+      <div className="mt-4 pt-3 border-t border-neutral-100">
+        <div className="flex items-baseline justify-between gap-2 mb-2">
+          <div className="eyebrow">Pagos</div>
+          {pagosCobrados.total > 0 && (
+            <span className="text-[10px] text-neutral-400">
+              {pagosCobrados.n} cobrados · {eur(pagosCobrados.total)}
+            </span>
+          )}
+        </div>
+        {pagos.length === 0 ? (
+          <p className="text-[11px] text-neutral-400">Sin pagos registrados a nombre de este paciente.</p>
+        ) : (
+          <ul className="divide-y divide-neutral-100">
+            {pagos.map((p) => (
+              <li key={p.id} className="py-2 flex items-center gap-3 text-xs">
+                <span className="text-neutral-400 shrink-0 tabular-nums">{fmt(p.paidAt)}</span>
+                <span className="text-neutral-500 shrink-0">{METODO[p.method] || p.method || "—"}</span>
+                {/* De qué mes es. Es lo que convierte una lista de importes en
+                    una respuesta a «¿ha pagado septiembre?». */}
+                {p.periodMonth && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-neutral-100 text-neutral-500 shrink-0">
+                    {String(p.periodMonth).slice(0, 7)}
+                  </span>
+                )}
+                <span className="text-neutral-400 truncate flex-1 min-w-0">{p.client?.name || ""}</span>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${ESTADO_COBRO_CLS[p.status] || "bg-neutral-100 text-neutral-500"}`}>
+                  {ESTADO_COBRO[p.status] || p.status}
+                </span>
+                <span className="text-neutral-800 font-medium shrink-0 tabular-nums">{eur(p.amount)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {(invoices.length > 0 || pagos.length > 0) && (
         <button onClick={() => router.push("/facturacion/facturas")} className="mt-2 text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline">
           Ver en Facturación →
         </button>

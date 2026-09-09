@@ -11,6 +11,8 @@ import { billingHasPatients } from "../../../../lib/billing/patientLink.js";
 import { dondeEstaElCobroDe } from "../../../../lib/billing/cobroDeCuota.js";
 import { decidirCobroDelPendiente, pendienteQueCasa } from "../../../../lib/billing/cobroParcial.js";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
@@ -25,6 +27,14 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
     if (searchParams.get("invoiceId")) where.invoiceId = searchParams.get("invoiceId");
     if (searchParams.get("status")) where.status = searchParams.get("status");
     if (searchParams.get("method")) where.method = searchParams.get("method");
+    /*
+     * Los cobros de UN paciente (09/09/2026). Rosa: «ver los pagos que ha hecho
+     * un paciente, de qué manera y en qué fecha». Su ficha listaba FACTURAS, que
+     * es otra cosa, y en Aumenta ninguno de los 283 cobros con paciente tiene
+     * factura detrás: allí no aparecía ni uno.
+     */
+    const pacienteFiltro = searchParams.get("patientId");
+    if (pacienteFiltro && UUID_RE.test(pacienteFiltro)) where.patientId = pacienteFiltro;
     // Búsqueda en el SERVIDOR (31/08/2026): el filtro del navegador solo veía
     // los 100 cargados. La regla, en lib/billing/busquedaCobros.js.
     // El paciente del cobro solo se une donde hay tabla de pacientes (Aumenta):
@@ -192,7 +202,6 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
 
     // De quién y de qué terapia es la cuota (31/08/2026): opcionales, y un id
     // que no existe se descarta en vez de romper el cobro — el dinero manda.
-    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     let conceptoValido = null;
     if (typeof conceptId === "string" && UUID_RE.test(conceptId) && BillingConcept) {
       const c = await BillingConcept.findByPk(conceptId, { attributes: ["id"] });
