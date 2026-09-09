@@ -824,9 +824,24 @@ describe("serializarAviso: al cliente le llega EXACTAMENTE esto, ni un campo má
     assert.equal(nuestro.respondidoAt, "2026-08-14T10:00:00.000Z");
     assert.equal(nuestro.mensajes.length, 3);
     assert.equal(nuestro.adjuntos.length, 2);
-    // Y si el cliente insiste después de leerlo nosotros, pendiente se enciende.
-    const insiste = serializarAviso(
+    /*
+     * Y si el cliente insiste DESPUÉS de lo último que hicimos, se enciende.
+     *
+     * «Lo último que hicimos» es abrirlo o contestarlo, lo que sea más
+     * reciente (09/09/2026, AV del buzón de Rodrigo): aquí lo contestamos el
+     * día 14, así que un mensaje suyo del 13 a las 11:00 —posterior a cuando
+     * lo abrimos, pero anterior a cuando le contestamos— NO nos deja nada
+     * pendiente. Antes sí, y por eso había 45 avisos marcados de 100 cuando
+     * los que de verdad seguían vivos eran 9.
+     */
+    const antesDeContestarle = serializarAviso(
       { ...avisoCompleto(), clienteEscribioAt: "2026-08-13T11:00:00.000Z" },
+      { para: "salamandra" }
+    );
+    assert.equal(antesDeContestarle.pendiente, false);
+
+    const insiste = serializarAviso(
+      { ...avisoCompleto(), clienteEscribioAt: "2026-08-15T09:00:00.000Z" },
       { para: "salamandra" }
     );
     assert.equal(insiste.pendiente, true);

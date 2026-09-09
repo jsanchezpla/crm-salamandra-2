@@ -25,6 +25,7 @@ import {
   serializarAviso,
   tieneRespuestaSinVer,
   tienePendienteNuestro,
+  ultimoMovimientoNuestro,
   LIMITES,
 } from "../lib/buzon/buzon.js";
 
@@ -221,6 +222,53 @@ process.stdout.write("\n▶ «Nos ha escrito y no lo hemos mirado» (la campana 
   );
   comprobar("una fila que no existe no revienta", tienePendienteNuestro(null) === false);
 
+  /*
+   * ── CONTESTAR TAMBIÉN ES ATENDER (09/09/2026, Rodrigo) ────────────────────
+   * «Hay conversaciones que han continuado y no lo registras». Al medirlo
+   * salieron 45 avisos marcados como «nos esperan» de 100, cuando los que de
+   * verdad habían seguido eran NUEVE: se puede contestar un aviso sin abrirlo
+   * —el triaje lo hace—, y entonces `leidoAt` se quedaba viejo para siempre.
+   * Un contador que siempre marca 45 se deja de mirar.
+   */
+  comprobar(
+    "contestado sin abrirlo → ya no nos espera",
+    tienePendienteNuestro({
+      clienteEscribioAt: t("2026-09-09T09:00:00Z"),
+      leidoAt: null,
+      respondidoAt: t("2026-09-09T12:00:00Z"),
+    }) === false
+  );
+  comprobar(
+    "y si DESPUÉS de contestar vuelve a escribir, vuelve a esperarnos",
+    tienePendienteNuestro({
+      clienteEscribioAt: t("2026-09-09T15:00:00Z"),
+      leidoAt: null,
+      respondidoAt: t("2026-09-09T12:00:00Z"),
+    }) === true
+  );
+  comprobar(
+    "manda la más reciente de las dos: abrir después de contestar también cuenta",
+    tienePendienteNuestro({
+      clienteEscribioAt: t("2026-09-09T13:00:00Z"),
+      respondidoAt: t("2026-09-09T12:00:00Z"),
+      leidoAt: t("2026-09-09T14:00:00Z"),
+    }) === false
+  );
+
+  comprobar(
+    "el último movimiento nuestro es el más reciente de los dos",
+    ultimoMovimientoNuestro({ leidoAt: t("2026-09-09T09:00:00Z"), respondidoAt: t("2026-09-09T12:00:00Z") }).toISOString() ===
+      new Date(t("2026-09-09T12:00:00Z")).toISOString()
+  );
+  comprobar(
+    "sin haber hecho nada, no hay último movimiento",
+    ultimoMovimientoNuestro({ leidoAt: null, respondidoAt: null }) === null
+  );
+  comprobar(
+    "una fecha rota no cuenta como movimiento",
+    ultimoMovimientoNuestro({ leidoAt: "no soy una fecha", respondidoAt: null }) === null
+  );
+
   // Las dos reglas son independientes: que él tenga algo sin leer no nos pone a
   // nosotros nada pendiente, ni al revés. Si algún día alguien las funde en una,
   // esto lo caza.
@@ -306,6 +354,38 @@ process.stdout.write("\n▶ El correo, con la fila CRUDA de la base\n");
     !/undefined/.test(paraNosotros.subject + paraNosotros.text),
     paraNosotros.subject
   );
+}
+
+
+/* ── El correo de «han vuelto a escribir» (09/09/2026) ───────────────────── */
+{
+  const { seguimientoParaNosotros } = await import("../lib/email/templates/buzon/avisoNuevo.js");
+  const aviso = {
+    numero: 101,
+    asunto: "cobros",
+    cuerpo: "No funciona el apartado de cobros",
+    tenantNombre: "Aumenta",
+    tenantSlug: "aumenta",
+    usuarioNombre: "Olga",
+    usuarioEmail: "olga@ejemplo.com",
+    bloquea: true,
+  };
+  const mensaje = { autorNombre: "Olga", cuerpo: "Sigue pasando esta mañana." };
+  const tpl = seguimientoParaNosotros({ aviso, mensaje, url: "https://admin.ejemplo/admin/buzon" });
+
+  comprobar("el asunto dice que han vuelto a escribir", /han vuelto a escribir/i.test(tpl.subject));
+  comprobar("y lleva la referencia para poder buscarlo", tpl.subject.includes("AV-0101"));
+  comprobar("y de qué cliente es", tpl.subject.includes("Aumenta"));
+  // Lo que hay que leer es lo ÚLTIMO que ha dicho, no el aviso de hace una semana.
+  comprobar("el cuerpo trae el mensaje nuevo", tpl.text.includes("Sigue pasando esta mañana."));
+  comprobar("y no el texto viejo del aviso", !tpl.text.includes("No funciona el apartado de cobros"));
+  comprobar("si le bloquea, se dice", tpl.text.includes("LE BLOQUEA"));
+  comprobar("el html no se queda con undefined dentro", !/undefined/.test(tpl.html));
+
+  // Sin `ref` en la fila (el caso que mandó «· undefined» a producción en agosto).
+  const crudo = seguimientoParaNosotros({ aviso: { numero: 7, asunto: "x", tenantSlug: "t" }, mensaje: {}, url: "u" });
+  comprobar("con la fila cruda sigue saliendo la referencia", crudo.subject.includes("AV-0007"));
+  comprobar("y sin mensaje tampoco dice undefined", !/undefined/.test(crudo.text));
 }
 
 process.stdout.write(`\n${fallos === 0 ? "✓" : "✗"} ${pasadas} bien · ${fallos} mal\n\n`);

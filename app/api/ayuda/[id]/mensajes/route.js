@@ -16,6 +16,7 @@ import {
   MAX_BYTES_POR_FICHERO,
 } from "../../../../../lib/buzon/buzonStorage.js";
 import { quienEscribe } from "../../../../../lib/buzon/quienEscribe.js";
+import { avisarnosDeSeguimiento } from "../../../../../lib/buzon/avisarPorCorreo.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -102,6 +103,18 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       for (const ficha of r.fichas) await crearAdjunto({ ...ficha, mensajeId: mensaje.id });
       falloAdjuntos = r.error;
     }
+
+    /*
+     * Y avisarnos por correo (09/09/2026, Rodrigo: «hay conversaciones que han
+     * continuado y no lo registras»). Hasta hoy solo avisaba el aviso NUEVO:
+     * un «sigue pasando» sobre un hilo ya contestado no mandaba nada, y como
+     * además la bandeja lo tenía escondido, se quedaba semanas sin leer.
+     *
+     * Best-effort y DESPUÉS de guardar, como el correo del alta: un mensaje
+     * guardado sin correo se ve igual en el buzón; un mensaje perdido porque
+     * el correo falló no lo recupera nadie.
+     */
+    avisarnosDeSeguimiento({ aviso, mensaje }).catch(() => {});
 
     const fresco = await leerDelTenant(id, { tenantId: ctx.tenant?.id, tenantSlug: ctx.slug });
     return created({
