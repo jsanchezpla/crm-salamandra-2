@@ -14,6 +14,7 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   CAMPOS,
@@ -214,4 +215,45 @@ test("y el prompt lo dice con todas las letras", () => {
   assert.match(SINTESIS, /UN APARTADO DE DIAGNÓSTICO NUNCA ES DE SÍNTESIS/);
   assert.match(SINTESIS, /se queda VACÍO/);
   assert.match(SINTESIS, /no lo insinúes con un verbo prudente delante/);
+});
+
+/* ── La puerta para escribirlo (09/09/2026) ──────────────────────────────── */
+
+/*
+ * Hasta hoy el perfil solo se podía poner por SQL, y un dato que solo sabe
+ * escribir Salamandra no es un dato del cliente. Estas tres son sobre el texto
+ * de la ruta y de la tarjeta a propósito: lo que defienden no es un cálculo,
+ * es que no se caiga un guard al reordenar el fichero.
+ */
+
+const fuente = (ruta) => readFileSync(new URL(`../${ruta}`, import.meta.url), "utf8");
+
+test("la ruta pide admin, cierra la demo y no guarda el texto en master", () => {
+  const r = fuente("app/api/clinica/perfil/route.js");
+  // Cambia CÓMO redacta la IA en informes que firma una colegiada.
+  assert.match(r, /ADMIN_ROLES\.has\(ctx\.user\?\.role\)/);
+  // Las cuatro demos son públicas y dan sesión de admin a cualquiera.
+  assert.match(r, /assertNotDemoMasterWrite\(ctx\)/);
+  // `master` es un schema COMPARTIDO: del cambio se guarda cuánto ocupa cada
+  // campo, jamás lo que dice.
+  assert.match(r, /before: resumen\(antes\)/);
+  assert.match(r, /after: resumen\(perfil\)/);
+  assert.doesNotMatch(r, /before: \{ *perfil/);
+});
+
+test("vaciarlo BORRA la clave: es lo que devuelve el prompt de antes", () => {
+  // La propiedad de arriba —perfil vacío ⇒ prompt idéntico— depende de que la
+  // ruta no deje `perfil: {}` colgando en los ajustes del cliente.
+  assert.match(fuente("app/api/clinica/perfil/route.js"), /delete clinica\.perfil/);
+  assert.deepEqual(normalizarPerfil({ terapias: "   ", publico: "" }), {});
+});
+
+test("los rótulos de la pantalla salen de CAMPOS, no copiados a mano", () => {
+  // Si la tarjeta se escribiera sus propios rótulos, la ayuda que lee dirección
+  // y el texto que entra en el prompt podrían contar cosas distintas.
+  const card = fuente("modules/config/tarjetas/Modulos.jsx");
+  assert.match(card, /fetch\("\/api\/clinica\/perfil"/);
+  assert.match(card, /\{c\.rotulo\}/);
+  assert.match(card, /\{c\.ayuda\}/);
+  for (const c of CAMPOS) assert.ok(!card.includes(c.rotulo), `«${c.rotulo}» está copiado en la tarjeta`);
 });

@@ -603,3 +603,125 @@ export function CoordinadorasCard({ coordinadoras = [], readOnly, onGuardar }) {
     </div>
   );
 }
+
+/**
+ * EL PERFIL DEL CENTRO PARA LA IA (09/09/2026, Rodrigo: «la IA necesita un
+ * revamp para ser mucho más capaz y tener más conocimiento del centro»).
+ *
+ * Es la puerta que le faltaba a `lib/clinica/perfilDelCentro.js`: sin ella el
+ * texto solo se podía poner por SQL, y entonces «que la IA conozca el centro»
+ * era algo que sabía hacer Salamandra y no el cliente.
+ *
+ * Los rótulos y los topes NO se escriben aquí: vienen del endpoint, que los
+ * saca de `CAMPOS`. Así la ayuda que lee dirección y el texto que entra en el
+ * prompt no pueden contarse cosas distintas.
+ *
+ * Se guardan los cuatro campos de golpe, y vaciarlos del todo deja el prompt
+ * exactamente como estaba antes de escribir nada.
+ */
+export function PerfilDelCentroCard() {
+  const [campos, setCampos] = useState(null);
+  const [perfil, setPerfil] = useState({});
+  const [guardado, setGuardado] = useState({});
+  const [guardando, setGuardando] = useState(false);
+  const [aviso, setAviso] = useState(null);
+
+  useEffect(() => {
+    fetch("/api/clinica/perfil", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!j?.data) return; // 403: sin Clínica la tarjeta no se pinta
+        setCampos(j.data.campos ?? []);
+        setPerfil(j.data.perfil ?? {});
+        setGuardado(j.data.perfil ?? {});
+      })
+      .catch(() => {});
+  }, []);
+
+  async function guardar() {
+    setGuardando(true);
+    setAviso(null);
+    try {
+      const r = await fetch("/api/clinica/perfil", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ perfil }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error(j.error || "No se pudo guardar");
+      setPerfil(j.data.perfil ?? {});
+      setGuardado(j.data.perfil ?? {});
+      setAviso(Object.keys(j.data.perfil ?? {}).length ? "Guardado: la IA ya escribe con esto delante" : "Vaciado: la IA vuelve a escribir como antes");
+    } catch (e) {
+      setAviso(e.message);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  if (campos === null) return null;
+
+  const sinGuardar = campos.some((c) => (perfil[c.clave] ?? "") !== (guardado[c.clave] ?? ""));
+  const escritos = campos.filter((c) => (perfil[c.clave] ?? "").trim()).length;
+
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl p-5" data-testid="perfil-centro">
+      <div className="text-sm font-semibold text-neutral-800">Lo que la IA sabe de vosotros</div>
+      <p className="text-xs text-neutral-400 mt-0.5 max-w-lg">
+        Va delante de todo lo que la IA escribe: registros de sesión, informes, talleres y objetivos
+        del plan. Manda sobre cómo redacta —qué palabras usa, a quién se dirige, cómo sale un
+        objetivo—, pero no puede levantar lo que tiene prohibido. Escrito con vuestras palabras,
+        es lo que más cambia lo que sale.
+      </p>
+      <p className="text-xs text-neutral-400 mt-2 max-w-lg">
+        Es información sobre el centro, no órdenes para la IA. Y no pongáis aquí nada de un paciente
+        concreto: esto viaja en <strong className="text-neutral-500">todos</strong> los documentos,
+        también en los de los demás.
+      </p>
+
+      <div className="mt-4 space-y-4">
+        {campos.map((c) => {
+          const valor = perfil[c.clave] ?? "";
+          return (
+            <div key={c.clave}>
+              <label htmlFor={`perfil-${c.clave}`} className="text-xs font-medium text-neutral-700">
+                {c.rotulo}
+              </label>
+              <p className="text-[11px] text-neutral-400 mt-0.5 max-w-lg">{c.ayuda}</p>
+              <textarea
+                id={`perfil-${c.clave}`}
+                rows={4}
+                maxLength={c.max}
+                value={valor}
+                onChange={(e) => setPerfil((p) => ({ ...p, [c.clave]: e.target.value }))}
+                className="mt-1.5 w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm leading-relaxed focus:outline-none focus:border-neutral-400"
+              />
+              <div className="text-[10px] text-neutral-400 text-right">
+                {valor.length} / {c.max}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-2 flex items-center gap-3">
+        <button
+          onClick={guardar}
+          disabled={guardando || !sinGuardar}
+          className="text-xs font-medium px-3 py-2 rounded-lg text-white disabled:opacity-50"
+          style={{ background: "var(--color-primary, #1B3A2D)" }}
+        >
+          {guardando ? "Guardando…" : "Guardar"}
+        </button>
+        {aviso && <span className="text-[11px] text-neutral-500">{aviso}</span>}
+        {!aviso && sinGuardar && <span className="text-[11px] text-amber-600">Hay cambios sin guardar</span>}
+      </div>
+
+      <div className="mt-2 text-[11px] font-medium">
+        {escritos
+          ? <span className="text-emerald-700">{escritos === 1 ? "Un apartado escrito" : `${escritos} apartados escritos`}: la IA los tiene delante en cada documento.</span>
+          : <span className="text-neutral-400">Sin escribir: la IA redacta con lo genérico, igual que cualquier otro centro.</span>}
+      </div>
+    </div>
+  );
+}
