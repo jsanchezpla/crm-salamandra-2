@@ -334,6 +334,27 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
     }
   }
 
+
+  /**
+   * «Descargar Word» — el mismo informe en un .docx editable (09/09/2026,
+   * AV-0099).
+   *
+   * Laura Garrido pidió el documento editable «para no tener que pasar por una
+   * web de conversión con datos personales dentro», y esa es la razón de que
+   * esté: sin él, retocar un informe fuera del CRM pasa por subir el PDF de un
+   * menor a un conversor de internet.
+   *
+   * Guarda antes, como «Ver PDF» y por lo mismo: el servidor lee el informe de
+   * la base de datos, así que sin guardar bajaría lo de antes. Y no abre
+   * pestaña: un .docx se descarga, no se enseña.
+   */
+  async function descargarWord() {
+    setErrorMsg(null);
+    setAviso(null);
+    if (!(await guardar())) return;
+    window.location.assign(`/api/clinica/reports/${report.id}/word?v=${Date.now()}`);
+  }
+
   /**
    * «Enviar al paciente» — también guarda antes (01/09/2026).
    *
@@ -722,6 +743,14 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
               className="ml-auto text-xs px-3 py-2 rounded-lg border border-neutral-200 text-neutral-700 hover:border-neutral-400 disabled:opacity-50"
             >
               Ver PDF
+            </button>
+            <button
+              onClick={descargarWord}
+              disabled={guardando}
+              title="Guarda y descarga el informe como documento de Word, para seguir escribiéndolo fuera del CRM."
+              className="text-xs px-3 py-2 rounded-lg border border-neutral-200 text-neutral-700 hover:border-neutral-400 disabled:opacity-50"
+            >
+              Descargar Word
             </button>
             <button
               onClick={guardar}
