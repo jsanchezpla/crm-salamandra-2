@@ -109,7 +109,20 @@ export default function ClientBonosSection({ clientId, patientId = null, onCambi
         setDisponible(hayCitas);
         setCliente(ficha?.data ?? null);
         setBonos(Array.isArray(ficha?.data?.bonos) ? ficha.data.bonos : []);
-        const lista = Array.isArray(pacs?.data) ? pacs.data : Array.isArray(pacs?.data?.items) ? pacs.data.items : [];
+        /*
+         * `/api/pacientes` devuelve `{ patients, total, page… }` (09/09/2026).
+         * Aquí se leía `data` o `data.items`, que no existen, así que la lista
+         * llegaba SIEMPRE vacía: el nombre del niño del bono se pintaba como
+         * «otro paciente» desde el día que se puso, y el desplegable de «¿de
+         * quién es?» no salía nunca porque creía que la familia tenía cero
+         * pacientes. Es media queja de Aumenta: «el nombre que sale es del
+         * cliente y no paciente».
+         */
+        const d = pacs?.data;
+        const lista = Array.isArray(d?.patients) ? d.patients
+          : Array.isArray(d) ? d
+          : Array.isArray(d?.items) ? d.items
+          : [];
         setPacientes(lista);
         // Dirección o quien lleve Facturación (07/09/2026): la misma regla que el endpoint.
         const mods = Array.isArray(yo?.data?.enabledModules) ? yo.data.enabledModules : [];
@@ -227,18 +240,20 @@ export default function ClientBonosSection({ clientId, patientId = null, onCambi
                   * paciente no se dice nada: «de toda la familia» es lo normal
                   * y repetirlo en cada línea sería ruido.
                   */}
-                {b.patientId ? (
+                {/* De quién es, salvo en su propia ficha: ahí el nombre ya está
+                    en la cabecera y repetirlo en cada línea es ruido. */}
+                {b.patientId && b.patientId !== patientId ? (
                   <span className="ml-1.5 text-[11px] text-gray-500">
                     · {nombreDePaciente(pacientes, b.patientId)}
                   </span>
-                ) : (
+                ) : !b.patientId ? (
                   /* En la ficha del paciente se dice que el bono es de la
                      familia entera: sin eso parecería suyo, y las sesiones se
                      las puede gastar cualquiera de sus hermanos. */
                   patientId && pacientes.length > 1 && (
                     <span className="ml-1.5 text-[11px] text-gray-400">· de toda la familia</span>
                   )
-                )}
+                ) : null}
               </span>
               <span
                 className={`text-sm font-semibold ${b.restantes > 0 ? "text-[var(--color-primary)]" : "text-gray-400"}`}
@@ -449,8 +464,8 @@ function DarBonoForm({ cliente, pacientes = [], patientFijo = null, onHecho }) {
       {patientFijo && (
         <p className="text-[11px] text-gray-500">
           El bono será de{" "}
-          <strong className="text-gray-700">{nombreDePaciente(pacientes, patientFijo)}</strong>: sus sesiones
-          solo se le descuentan a él, no a sus hermanos.
+          <strong className="text-gray-700">{nombreDePaciente(pacientes, patientFijo)}</strong>: las sesiones
+          solo se descuentan en sus citas, no en las de sus hermanos.
         </p>
       )}
 
@@ -466,8 +481,8 @@ function DarBonoForm({ cliente, pacientes = [], patientFijo = null, onHecho }) {
             ))}
           </select>
           <p className="text-[11px] text-gray-400 mt-1">
-            Si eliges a uno, sus sesiones solo se le descuentan a él. «De toda la familia» vale para
-            cualquiera de los hermanos, que es como funcionaban los bonos hasta ahora.
+            Si eliges a alguien, las sesiones solo se descuentan en sus citas. «De toda la familia» vale
+            para cualquiera de los hermanos, que es como funcionaban los bonos hasta ahora.
           </p>
         </div>
       )}
