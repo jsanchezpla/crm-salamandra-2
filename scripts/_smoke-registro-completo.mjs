@@ -194,10 +194,17 @@ describe("El prompt: lo que se le pide a Claude", () => {
     const conPaciente = promptDeRegistro(bloques, {
       paciente: { firstName: "Marta", lastName: "Ruiz", birthDate: "2017-03-12", specialties: ["logopedia"] },
     });
-    assert.ok(/EL PACIENTE/.test(conPaciente));
+    /*
+     * Se busca el rótulo ENTERO y no «EL PACIENTE» a secas (09/09/2026): desde
+     * que el saber clínico entra en el prompt, esas dos palabras aparecen
+     * también dentro de él («EL PACIENTE ADULTO»), y la comprobación corta daba
+     * un falso positivo.
+     */
+    const ROTULO = /EL PACIENTE \(sin nombre/;
+    assert.ok(ROTULO.test(conPaciente));
     assert.ok(conPaciente.includes("logopedia"));
     assert.ok(!conPaciente.includes("Marta"), "el nombre del paciente no sale del CRM");
-    assert.ok(!/EL PACIENTE/.test(prompt), "sin paciente, el prompt es el de siempre");
+    assert.ok(!ROTULO.test(prompt), "sin paciente, el prompt es el de siempre");
   });
 
   it("el mensaje lleva la transcripción y, si lo hay, lo ya escrito como contexto", () => {

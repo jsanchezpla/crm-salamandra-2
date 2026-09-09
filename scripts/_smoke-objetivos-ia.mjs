@@ -73,7 +73,20 @@ describe("el prompt", () => {
     consultationReasons: "Dificultades de lenguaje expresivo",
     objectives: ["Ampliar vocabulario"],
   };
-  const { system, user } = promptObjetivos({ ideas: "turnos de palabra, frases de 3 elementos", plan, paciente });
+  const { system, systemCacheado, user } = promptObjetivos({
+    ideas: "turnos de palabra, frases de 3 elementos",
+    plan,
+    paciente,
+  });
+  /*
+   * Desde el 09/09/2026 el prompt viene PARTIDO: `systemCacheado` es el núcleo
+   * que no cambia entre llamadas —y que Anthropic cachea— y `system` es lo de
+   * esta petición. Lo que el modelo lee es la suma de los dos, así que es sobre
+   * la suma sobre lo que hay que comprobar el prompt.
+   */
+  const prompt = `${systemCacheado}
+
+${system}`;
 
   it("pide SOLO JSON con la forma {objetivos: [...]}", () => {
     assert.match(system, /SOLO un objeto JSON válido/);
@@ -90,11 +103,30 @@ describe("el prompt", () => {
    * «sin diagnósticos nuevos» de pasada.
    */
   it("hereda la voz, la frontera y las prohibiciones de la casa", () => {
-    assert.match(system, /profesional titulada y colegiada/);
-    assert.match(system, /PROHIBIDO, sin excepciones/);
-    assert.match(system, /1\. DIAGNOSTICAR/);
+    assert.match(prompt, /profesional titulada y colegiada/);
+    assert.match(prompt, /PROHIBIDO, sin excepciones/);
+    assert.match(prompt, /1\. DIAGNOSTICAR/);
     // Y ya no lleva la identidad que nos habíamos inventado solo para aquí.
-    assert.doesNotMatch(system, /psicología y logopedia infantil/);
+    assert.doesNotMatch(prompt, /psicología y logopedia infantil/);
+  });
+
+  it("y el saber clínico va en la mitad CACHEABLE, no en la de cada llamada", () => {
+    /*
+     * Es lo que hace que meterle 20.000 tokens de saber clínico cueste 1,40 $
+     * al mes y no 20: una caché de prompt es un prefijo, así que todo lo que no
+     * cambia tiene que estar en `systemCacheado` y nada de lo que cambia puede
+     * colarse ahí. Si el núcleo llevara la edad del paciente, cada llamada
+     * sería una escritura de caché —que cuesta el DOBLE que una entrada
+     * normal— y no se acertaría nunca.
+     */
+    assert.match(systemCacheado, /SABER CLÍNICO/);
+    assert.match(systemCacheado, /profesional titulada y colegiada/);
+    assert.doesNotMatch(systemCacheado, /7 años/, "la edad del paciente NO puede ir en el núcleo");
+    assert.doesNotMatch(systemCacheado, /turnos de palabra/, "ni las ideas de esta sesión");
+    assert.match(system, /EL PACIENTE \(sin nombre/);
+    // Y el núcleo es el MISMO para dos pacientes distintos: si no, no hay caché.
+    const otro = promptObjetivos({ ideas: "otra cosa", plan: {}, paciente: { birthDate: "2010-01-01" } });
+    assert.equal(otro.systemCacheado, systemCacheado);
   });
   it("lleva las ideas, el plan y la edad, y NO el nombre del paciente", () => {
     assert.match(user, /turnos de palabra, frases de 3 elementos/);

@@ -75,8 +75,15 @@ export const POST = withTenant(async (request, rc, ctx) => {
 
     const apiKey = getTenantAnthropicKey(ctx);
     const model = getTenantAnthropicModel(ctx);
-    const { system, user } = promptObjetivos({ ideas, plan, paciente: paciente.toJSON(), centro: perfilDelCentro(ctx.tenant) });
-    const respuesta = await complete({ system, user, model, maxTokens: 1500, apiKey });
+    const { system, systemCacheado, user } = promptObjetivos({
+      ideas,
+      plan,
+      paciente: paciente.toJSON(),
+      centro: perfilDelCentro(ctx.tenant),
+    });
+    // `systemCacheado` es el núcleo clínico, el mismo que usan el registro y el
+    // informe: viaja aparte para que Anthropic lo cachee (09/09/2026).
+    const respuesta = await complete({ system, systemCacheado, user, model, maxTokens: 1500, apiKey });
 
     const objetivos = parsearObjetivos(respuesta, { yaTiene });
     if (!objetivos.length) return error("La IA no ha devuelto objetivos válidos. Inténtalo de nuevo con otras ideas.", 502);
