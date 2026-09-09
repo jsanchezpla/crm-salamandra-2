@@ -122,13 +122,27 @@ export function DaySection({
               P {fmtGNumber(macros.protein)} · C {fmtGNumber(macros.carbs)} · G {fmtGNumber(macros.fat)}
             </span>
           )}
-          {isExtra && onDeleteMeal && (
+          {/*
+              QUITAR UNA COMIDA DEL MENÚ (09/09/2026, AV-0095). Laura: «si quiero
+              dar un menú solo con comidas y cenas (sin desayunos, snacks), ¿cómo
+              lo descarto para que en el PDF no me aparezca?».
+
+              No se podía: la equis salía solo en las comidas «extra», y las
+              cinco de siempre se siembran con el plan y se imprimen aunque estén
+              vacías. Ahora se puede quitar cualquiera.
+
+              Y quitarla no rompe nada: `DayView` pinta SIEMPRE las cinco
+              secciones, exista o no su fila, y `ensureSectionMeal` la vuelve a
+              crear sola en cuanto se le mete algo. O sea que se deshace poniendo
+              cualquier cosa dentro.
+          */}
+          {onDeleteMeal && meal && (
             <button
               type="button"
-              onClick={() => onDeleteMeal(meal)}
+              onClick={() => onDeleteMeal(meal, { estandar: !isExtra })}
               className="text-gray-300 hover:text-red-600"
-              aria-label={`Eliminar ${sectionName}`}
-              title="Eliminar esta comida extra"
+              aria-label={`Quitar ${sectionName} de este día`}
+              title={isExtra ? "Eliminar esta comida extra" : "Quitar del menú: no saldrá en el PDF de este día"}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} className="w-3.5 h-3.5"><path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" /></svg>
             </button>

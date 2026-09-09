@@ -143,6 +143,13 @@ function ObjetivosPorTerapeuta({ objetivos, onChange, terapeutas, equipo, yo, ca
               {g.especialidad && <span className="text-neutral-400 font-normal"> · {rotuloEspecialidad(g.especialidad)}</span>}
               {g.esYo && <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700">tú</span>}
             </div>
+            {/* Qué hace ahí ese montón (09/09/2026, AV-0097): sin esta línea,
+                «Sin terapeuta» parece un fallo y no un pendiente con arreglo. */}
+            {g.terapeutaId === null && g.objetivos.length > 0 && (
+              <div className="text-[10px] text-neutral-400 mb-1.5">
+                Escritos antes de repartir los objetivos por terapeuta. Con «Ponérmelo» te los llevas al tuyo sin reescribirlos.
+              </div>
+            )}
             <div className="space-y-1 mb-2">
               {g.objetivos.length === 0 && <span className="text-xs text-neutral-300">Sin objetivos todavía</span>}
               {g.objetivos.map((o) => {
@@ -195,9 +202,25 @@ function ObjetivosPorTerapeuta({ objetivos, onChange, terapeutas, equipo, yo, ca
                           Editar
                         </button>
                       )}
+                      {/*
+                          SE VE (09/09/2026, AV-0097). Laura: «metí los objetivos
+                          en el plan y ahora me salen en el apartado sin
+                          terapeuta, ¿hay alguna forma de ponerlo en el mío sin
+                          borrar todo y volver a redactarlo?».
+
+                          Y la había desde el 07/09: este mismo botón. Pero era
+                          la palabra «mío» en gris de 10 px entre «Editar» y la
+                          ×, o sea invisible. Una función que nadie encuentra no
+                          existe: se pidió construir lo que ya estaba hecho.
+                      */}
                       {canEdit && g.terapeutaId === null && yo && (
-                        <button type="button" onClick={() => hacerMio(o)} title="Ponerlo a tu nombre" className="text-[10px] text-neutral-400 hover:text-emerald-700">
-                          mío
+                        <button
+                          type="button"
+                          onClick={() => hacerMio(o)}
+                          title="Llevártelo a tu apartado sin reescribirlo"
+                          className="text-[10px] px-2 py-0.5 rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 whitespace-nowrap"
+                        >
+                          Ponérmelo
                         </button>
                       )}
                       {canEdit && (

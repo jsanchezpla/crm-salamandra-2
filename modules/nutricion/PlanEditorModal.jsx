@@ -379,8 +379,18 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
     }));
   }
 
-  async function deleteMeal(meal) {
-    if (!window.confirm(`¿Eliminar la comida "${meal.name}"? Esto borra sus opciones y alimentos.`)) return;
+  async function deleteMeal(meal, { estandar = false } = {}) {
+    /*
+     * Dos avisos distintos, porque son dos cosas distintas (09/09/2026,
+     * AV-0095). Quitar una comida EXTRA la borra y se acabó. Quitar una de las
+     * cinco de siempre es decir «este día no hay desayuno»: no sale en el PDF,
+     * pero la sección sigue en pantalla y vuelve sola en cuanto se le mete
+     * algo. Decirlo evita el miedo a pulsar.
+     */
+    const aviso = estandar
+      ? `¿Quitar "${meal.name}" de este día? No saldrá en el PDF.\n\nLa sección sigue aquí y vuelve sola si le pones algo. Si tenía comida escrita, se borra.`
+      : `¿Eliminar la comida "${meal.name}"? Esto borra sus opciones y alimentos.`;
+    if (!window.confirm(aviso)) return;
     const { ok } = await apiDelete(`/api/nutricion/plans/${plan.id}/meals/${meal.id}`);
     if (!ok) {
       setToast({ kind: "err", text: "No se pudo eliminar la comida" });
@@ -886,7 +896,7 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
                 onUpdateRecipe={(meal, option, pmor, updates) => updateOptionRecipe(meal, option, pmor, updates)}
                 onDeleteRecipe={(meal, option, pmor) => deleteOptionRecipe(meal, option, pmor)}
                 onDeleteFood={(meal, option, line) => deleteFoodLine(meal, option, line)}
-                onDeleteMeal={(meal) => deleteMeal(meal)}
+                onDeleteMeal={(meal, opciones) => deleteMeal(meal, opciones)}
               />
             ) : dayMeals.length === 0 ? (
               <div className="border border-dashed border-gray-200 rounded-lg p-8 text-center text-sm text-gray-400">
