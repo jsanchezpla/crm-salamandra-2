@@ -527,7 +527,9 @@ function DarBonoForm({ cliente, pacientes = [], patientFijo = null, onHecho }) {
           <>
             Se le apuntará un cobro de <strong className="text-gray-700">{importe} €</strong>{" "}
             <strong className="text-gray-700">pendiente</strong> en Cobros. Dárselo no es cobrarlo: cuando
-            pague, se marca ahí como cobrado. Si no paga, sale en Morosidad.
+            pague, se marca cobrado desde <strong className="text-gray-700">«Editar»</strong> en esa fila de
+            Cobros — no con «Registrar cobro», que apuntaría uno nuevo y dejaría este vivo. Si no paga, sale
+            en Morosidad.
           </>
         ) : (
           <>
