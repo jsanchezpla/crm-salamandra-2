@@ -1318,6 +1318,12 @@ function DrawerGenerar({ onClose, onDone }) {
                             {f.nombre}
                             {f.paciente && <span className="text-neutral-400"> · {f.paciente}</span>}
                             {f.rotulo && <span className="text-amber-600"> · {f.rotulo}</span>}
+                            {/* La reserva se dice ANTES de generar (09/09/2026,
+                                Rodrigo): un recibo más barato de lo esperado
+                                tiene que explicarse aquí, no al cobrarlo. */}
+                            {f.reserva > 0 && (
+                              <span className="text-emerald-700"> · −{fmtMoney(f.reserva)} de reserva</span>
+                            )}
                           </span>
                           <span className="text-neutral-400">{METODO_CORTO[f.method] ?? "—"}</span>
                           <span className="font-semibold tabular text-neutral-900">{fmtMoney(f.importe)}</span>

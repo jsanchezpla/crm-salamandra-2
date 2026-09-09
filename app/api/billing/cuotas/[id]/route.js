@@ -1,7 +1,7 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, errorConDatos, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { logBillingAudit, datosPeticion } from "../../../../../lib/billing/audit.js";
-import { limpiarCuota, cuadrarBajaYActiva, cobroSePuedeRehacer } from "../../../../../lib/billing/cuotas.js";
+import { limpiarCuota, cuadrarBajaYActiva, cobroSePuedeRehacer, mesVigente } from "../../../../../lib/billing/cuotas.js";
 import { sincronizarCobroDelMes } from "../../../../../lib/billing/cobroDeCuota.js";
 
 /**
@@ -50,17 +50,25 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
     }
 
     /*
-     * Cambiar la reserva ya abonada la deja OTRA VEZ por descontar
-     * (09/09/2026). Si estaba puesta en 30 €, se generó septiembre y luego
-     * alguien la corrige a 60, el cobro pendiente de septiembre se rehace unas
-     * líneas más abajo y tiene que hacerlo con la cifra nueva. Solo cuando el
-     * importe CAMBIA de verdad: el cajón reenvía el campo en cada edición, y
-     * borrar la marca siempre haría que el descuento se repitiera en octubre.
+    /*
+     * ── UNA RESERVA GASTADA NO VUELVE (09/09/2026, Rodrigo) ───────────────
+     *
+     * Corregir el importe de la reserva la deja otra vez por descontar, para
+     * que el recibo del mes en curso se rehaga con la cifra buena: se puso 30
+     * y eran 60 porque son dos hermanos.
+     *
+     * Pero SOLO si todavía no se ha gastado o se gastó en el mes en curso. Una
+     * reserva que se descontó en septiembre no puede volver a descontarse en
+     * octubre por haberle tocado un número a la cuota: sería quitarle 30 € al
+     * recibo de una familia que ya los disfrutó, y nadie lo vería hasta el
+     * cierre. Septiembre se corrige en su cobro, que para eso está «Editar».
      */
     if ("reservaAbonada" in valores) {
       const antesReserva = cuota.reservaAbonada == null ? null : Number(cuota.reservaAbonada);
       const ahoraReserva = valores.reservaAbonada == null ? null : Number(valores.reservaAbonada);
-      if (antesReserva !== ahoraReserva) valores.reservaAplicadaEn = null;
+      const gastadaEn = cuota.reservaAplicadaEn ? String(cuota.reservaAplicadaEn) : null;
+      const seGastoEnUnMesCerrado = gastadaEn && gastadaEn !== mesVigente();
+      if (antesReserva !== ahoraReserva && !seGastoEnUnMesCerrado) valores.reservaAplicadaEn = null;
     }
 
     // La baja escrita sin apagar la cuota (o al revés) deja la fila diciendo

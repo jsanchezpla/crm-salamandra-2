@@ -122,6 +122,35 @@ describe("el plan del mes con reserva", () => {
   });
 });
 
+describe("una reserva gastada no se descuenta dos veces", () => {
+  /*
+   * Lo que Rodrigo no quiere volver a oír: «me está cobrando 30 € de menos
+   * porque se ha quedado los de la reserva». Con el mes escrito, cualquier otro
+   * mes va entero — da igual cuántas veces se genere o se rehaga el cobro.
+   */
+  it("gastada en septiembre: octubre, noviembre y diciembre van enteros", () => {
+    const c = cuotaBase({ reservaAbonada: 30, reservaAplicadaEn: "2026-09" });
+    for (const mes of ["2026-10", "2026-11", "2026-12"]) {
+      assert.equal(descuentoDeReserva(c, mes, 145), null, `${mes} tendría que ir entero`);
+      assert.equal(plan(c, mes).aGenerar[0].importe, 145);
+    }
+  });
+
+  it("volver a generar el MISMO mes no la descuenta otra vez", () => {
+    const c = cuotaBase({ reservaAbonada: 30, reservaAplicadaEn: "2026-09" });
+    const uno = plan(c).aGenerar[0];
+    const dos = plan(c).aGenerar[0];
+    assert.equal(uno.importe, 115);
+    assert.equal(dos.importe, 115); // el descuento es de ese mes, no un contador
+  });
+
+  it("sin reserva escrita no se descuenta nada en ningún mes", () => {
+    for (const mes of ["2026-09", "2026-10", "2027-01"]) {
+      assert.equal(plan(cuotaBase(), mes).aGenerar[0].importe, 145);
+    }
+  });
+});
+
 describe("la nota la sabe leer el cajón de cobrar", () => {
   it("la reserva sale como MOTIVO, no como nombre del concepto", () => {
     const { aGenerar } = plan(cuotaBase({ reservaAbonada: 30 }));

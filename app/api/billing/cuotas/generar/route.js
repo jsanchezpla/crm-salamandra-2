@@ -123,6 +123,9 @@ const vista = (f) => ({
   paidAt: f.paidAt,
   conceptos: f.conceptos,
   rotulo: f.rotulo,
+  // La reserva que se le va a descontar a ESTE recibo (09/09/2026, Rodrigo:
+  // que no haya que descubrirla después mirando por qué el importe no cuadra).
+  reserva: f.reservaAplicada?.importe ?? null,
   motivo: f.motivo ?? null,
 });
 
