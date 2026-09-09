@@ -254,13 +254,17 @@ async function main() {
      * El cobro que ya trajo el volcado de la Caja, atado a su bono. No se crea
      * ninguno: el dinero ya está apuntado y apuntarlo otra vez sería cobrarlo
      * dos veces.
+     *
+     * ⚠️ Se ata POR ID, nunca buscando la nota con un LIKE. La primera versión
+     * hizo `notes ILIKE '%Organízate #<código>%'` y pescó 188 cobros de CUOTA de
+     * más: los códigos de bono son de tres cifras y las líneas de caja de
+     * cinco, así que «#20» casa dentro de «#20182». Los códigos ya vienen
+     * leídos con su regex unos cuantos renglones más arriba.
      */
-    if (Payment) {
-      const [n] = await Payment.update(
-        { packId: pack.id },
-        { where: { packId: null, notes: { [Op.iLike]: `%Organízate #${b.codigo}%` } } }
-      );
-      cobrosAtados += n;
+    const cobro = cobroPorCodigo.get(b.codigo);
+    if (Payment && cobro && !cobro.packId) {
+      await Payment.update({ packId: pack.id }, { where: { id: cobro.id } });
+      cobrosAtados++;
     }
   }
   log(`\n✓ ${creados} bonos creados · ${cobrosAtados} cobros atados a su bono`);
