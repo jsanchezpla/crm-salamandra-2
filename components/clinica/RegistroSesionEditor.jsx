@@ -112,6 +112,7 @@ import {
 } from "@/lib/clinica/prepararSesion.js";
 import ApartadosEditor from "@/components/clinica/ApartadosEditor.jsx";
 import MaterialIA, { ACEPTA_AUDIO } from "@/components/clinica/MaterialIA.jsx";
+import EncargoIA from "@/components/clinica/EncargoIA.jsx";
 import PropuestaIA from "@/components/clinica/PropuestaIA.jsx";
 import {
   aFormulario,
@@ -1375,6 +1376,23 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
               onChange={(e) => setForm({ ...form, internalNotes: e.target.value })}
             />
           </div>
+
+          {/* Pedirle algo a la IA con lo que ya hay escrito (09/09/2026,
+              AV-0077 de Araceli). Va aquí abajo, después del registro entero,
+              porque es lo que se hace CUANDO ya has escrito: si estuviera
+              arriba, invitaría a pedirle un correo antes de contarle la sesión.
+              Y se abre a mano: cada llamada la paga el centro. */}
+          <EncargoIA
+            sesionId={sesion?.id ?? null}
+            bloques={bloques}
+            valores={form}
+            onPegar={(clave, texto) =>
+              setForm((f) => {
+                const antes = String(f[clave] ?? "").trim();
+                return { ...f, [clave]: antes ? `${antes}\n\n${texto}` : texto };
+              })
+            }
+          />
 
           <div className="flex flex-wrap items-center gap-2 justify-end">
             <p className="text-[11px] text-neutral-500 mr-auto">
