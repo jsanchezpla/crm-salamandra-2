@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { Op } from "sequelize";
-import { whereDeBusquedaCobros, patronDePalabra } from "../lib/billing/busquedaCobros.js";
+import { whereDeBusquedaCobros, patronDePalabra, joinsSinColumnas } from "../lib/billing/busquedaCobros.js";
 
 test("todas las palabras, cada una en cualquiera de los campos", () => {
   const where = whereDeBusquedaCobros("garcia f-2026");
@@ -59,4 +59,49 @@ test("sin nada que buscar, null — y un pegote enorme se corta a seis palabras"
   assert.equal(whereDeBusquedaCobros(null), null);
   const where = whereDeBusquedaCobros("a b c d e f g h");
   assert.equal(where[Op.and].length, 6);
+});
+
+// ── Los JOIN de la suma, sin columnas (09/09/2026) ──────────────────────────
+// Buscar en Cobros daba un 500: la consulta que suma los totales repetía los
+// includes CON sus atributos, y `SUM(...)` junto a `invoice.id` sin GROUP BY
+// lo rechaza PostgreSQL. Lo que se fija aquí es que el JOIN se conserva y las
+// columnas desaparecen, incluidas las del include anidado.
+
+const INCLUDES = [
+  {
+    model: "Invoice", as: "invoice",
+    attributes: ["id", "number", "total", "status", "clientId", "issueDate"],
+    include: [{ model: "Client", as: "client", attributes: ["id", "name"] }],
+  },
+  { model: "Client", as: "client", attributes: ["id", "name"] },
+  { model: "Patient", as: "patient", attributes: ["id", "firstName", "lastName"], required: false },
+];
+
+test("los JOIN de la suma se quedan sin columnas, también los anidados", () => {
+  const secos = joinsSinColumnas(INCLUDES);
+  assert.equal(secos.length, 3);
+  for (const inc of secos) assert.deepEqual(inc.attributes, []);
+  // El `client` que cuelga de `invoice` es el que rompía la consulta.
+  assert.deepEqual(secos[0].include[0].attributes, []);
+});
+
+test("la asociación se conserva entera: solo se vacían los atributos", () => {
+  const secos = joinsSinColumnas(INCLUDES);
+  assert.equal(secos[0].model, "Invoice");
+  assert.equal(secos[0].as, "invoice");
+  assert.equal(secos[0].include[0].as, "client");
+  // `required: false` es lo que evita que el JOIN de pacientes esconda cobros.
+  assert.equal(secos[2].required, false);
+});
+
+test("los includes de entrada no se tocan", () => {
+  joinsSinColumnas(INCLUDES);
+  assert.deepEqual(INCLUDES[0].attributes, ["id", "number", "total", "status", "clientId", "issueDate"]);
+  assert.deepEqual(INCLUDES[0].include[0].attributes, ["id", "name"]);
+});
+
+test("sin includes no revienta", () => {
+  assert.deepEqual(joinsSinColumnas([]), []);
+  assert.deepEqual(joinsSinColumnas(undefined), []);
+  assert.deepEqual(joinsSinColumnas(null), []);
 });

@@ -6,7 +6,7 @@ import { updateInvoiceStatus } from "../../../../lib/billing/updateInvoiceStatus
 import { parseSortOrder } from "../../../../lib/billing/parseSort.js";
 import { getTenantStripeConfig } from "../../../../lib/payments/stripeConfig.js";
 import { urlPanelStripe } from "../../../../lib/billing/cobroDesdeStripe.js";
-import { whereDeBusquedaCobros } from "../../../../lib/billing/busquedaCobros.js";
+import { whereDeBusquedaCobros, joinsSinColumnas } from "../../../../lib/billing/busquedaCobros.js";
 import { billingHasPatients } from "../../../../lib/billing/patientLink.js";
 import { dondeEstaElCobroDe } from "../../../../lib/billing/cobroDeCuota.js";
 import { decidirCobroDelPendiente, pendienteQueCasa } from "../../../../lib/billing/cobroParcial.js";
@@ -126,7 +126,14 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
       if (estadoPedido && estadoPedido !== estado) return 0;
       const [fila] = await Payment.findAll({
         where: { ...where, status: estado },
-        include: busqueda ? include : [],
+        /*
+         * Los JOIN de la búsqueda, pero SIN sus columnas (09/09/2026): aquí lo
+         * único que se selecciona es la suma, y una consulta que además trajera
+         * `invoice.id` sin GROUP BY la rechaza PostgreSQL. Eso es lo que hacía
+         * que buscar en Cobros diera un 500 desde el 07/09. La regla, con su
+         * porqué, en `lib/billing/busquedaCobros.js`.
+         */
+        include: busqueda ? joinsSinColumnas(include) : [],
         attributes: [[fn("COALESCE", fn("SUM", col("Payment.amount")), 0), "s"]],
         raw: true,
         ...(busqueda ? { subQuery: false } : {}),
