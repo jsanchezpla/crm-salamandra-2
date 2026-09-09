@@ -365,6 +365,14 @@ const navigation = [
           { key: "team-productividad", label: "Productividad", href: "/equipo/productividad", adminOnly: true, requiresAll: ["team_avanzado", "clinica"] },
           { key: "team-incidencias", label: "Incidencias", href: "/equipo/incidencias", requiresAll: ["team_avanzado", "clinica"] },
           { key: "team-bandeja", label: "Bandeja de trabajo", href: "/equipo/bandeja", requiresAll: ["team_avanzado", "clinica"] },
+          // Auditorías de desempeño (09/09/2026, AV-0100): módulo PROPIO, que se
+          // vende aparte, con `moduleKey: "auditorias"` a secas y SIN
+          // `requiresAll` con `team_avanzado`. Es a propósito: lo compra
+          // cualquier centro con varias personas y alguien que dirige, tenga o
+          // no las pantallas de gestión clínica. Y SIN `adminOnly`, porque cada
+          // persona entra a ver LAS SUYAS ya cerradas; quién ve qué lo decide
+          // `lib/team/auditoriaDesempeno.js`, y el endpoint dice lo mismo.
+          { key: "team-auditorias", label: "Auditorías", href: "/equipo/auditorias", moduleKey: "auditorias" },
           // Actividad: registro legible de auditoría de TODO el CRM. Sin
           // moduleKey a propósito (hereda la visibilidad del grupo Equipo:
           // team O clinica); la API es solo-admin igualmente.

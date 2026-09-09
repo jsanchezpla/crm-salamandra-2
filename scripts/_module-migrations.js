@@ -802,6 +802,11 @@ export const MODULES = {
   // internas, adjuntos, SLA y portal público de seguimiento.
   support: ["migrate-support-module"],
 
+  // Auditoría mensual de desempeño (09/09/2026, AV-0100). Depende de
+  // `team_members`, que crea el módulo Equipo; la migración se salta sola el
+  // schema que no tenga esa tabla y lo dice en vez de callarlo.
+  auditorias: ["migrate-auditorias-module"],
+
   // Email marketing por Amazon SES (06/09/2026): las siete tablas del sprint 1.
   // Aparte del correo transaccional (Resend) a propósito: docs/modules/mailing.md.
   mailing: [

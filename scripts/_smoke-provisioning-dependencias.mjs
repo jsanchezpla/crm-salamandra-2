@@ -102,6 +102,10 @@ const NO_SE_VENDEN_SOLOS = [
   "productos_avanzado",
   "inventory",
   "documents",
+  // Auditorías de desempeño (09/09/2026, AV-0100): la columna del auditado es
+  // NOT NULL con FK a `team_members`, así que sin Equipo no hay a quién
+  // auditar. Exige `team` y no `team_avanzado` a propósito.
+  "auditorias",
 ];
 
 /** Lo que se vende solo pero pierde algo (solo parciales). */
@@ -886,10 +890,11 @@ describe("matrizCompleta / sinEstudiar: la tabla del back-office, lo más roto a
         pesos.filter((p) => p === 1).length,
         pesos.filter((p) => p === 2).length,
       ],
-      // 16 rojos desde el 03/09/2026: `productos_avanzado` (exige el básico)
-      // e `inventory` (que sube de ámbar al colgar de Productos) sobre los 14
-      // del 29/08. Un ámbar menos por eso, y un verde más: `productos`.
-      [16, 7, 5]
+      // 17 rojos desde el 09/09/2026: `auditorias` (exige Equipo) sobre los 16
+      // del 03/09, que a su vez sumaron `productos_avanzado` (exige el básico)
+      // e `inventory` (que subió de ámbar al colgar de Productos) sobre los 14
+      // del 29/08.
+      [17, 7, 5]
     );
   });
 
