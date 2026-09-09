@@ -62,6 +62,18 @@
  * los pone `montarCitaDeTaller`— y los demás bloqueos se retiran sin crear
  * nada. Se cuenta aparte para que se vea.
  *
+ * ── Y SI ESA HORA YA TIENE CITA (09/09/2026, escarmentado) ──────────────────
+ * Lo mismo vale contra lo que YA ESTÁ EN LA BASE, y esto costó 154 citas
+ * duplicadas antes de verse: el 03/09 se convirtieron los bloqueos de Apoyo al
+ * estudio y Mente Activa, el 07/09 el armazón del curso los volvió a poner
+ * ENCIMA de esas mismas horas, y al pasar otra vez se creó una segunda cita en
+ * cada una. En la agenda salían dos cajas iguales, una detrás de otra, sin un
+ * solo error por ninguna parte.
+ *
+ * Así que antes de crear nada se mira si ese grupo ya tiene una cita a esa hora
+ * exacta. Si la tiene, el bloqueo sobra: se retira y no se crea una segunda.
+ * Se limpia lo ya duplicado con `quitar-citas-de-taller-duplicadas.js`.
+ *
  * ── USO ─────────────────────────────────────────────────────────────────────
  *   node --env-file=.env.local scripts/convertir-bloqueos-en-citas-de-taller.js <slug>
  *   … --alias "hhss|h\.h\.s\.s=Habilidades sociales"   (repetible)
@@ -226,15 +238,33 @@ for (const b of bloqueos) {
 const sobrantes = [];
 const yaVisto = new Set();
 const plan2 = [];
+
+/*
+ * Lo que YA hay en la base para los grupos a los que va a caer algo: un hueco
+ * ocupado no se vuelve a ocupar. Se lee de una vez y no cita a cita, que son
+ * cientos.
+ */
+const huecosOcupados = new Set();
+const gruposDelPlan = [...new Set(plan.map((p) => p.grupo.id))];
+if (gruposDelPlan.length) {
+  const yaHay = await Booking.findAll({
+    where: { tallerGrupoId: gruposDelPlan },
+    attributes: ["tallerGrupoId", "scheduledAt"],
+    raw: true,
+  });
+  for (const c of yaHay) huecosOcupados.add(`${c.tallerGrupoId}|${new Date(c.scheduledAt).toISOString()}`);
+}
+
 for (const p of plan) {
   const k = `${p.grupo.id}|${new Date(p.b.startAt).toISOString()}`;
-  if (yaVisto.has(k)) sobrantes.push(p);
+  // Duplicado dentro de esta misma pasada, o contra una cita que ya existía.
+  if (yaVisto.has(k) || huecosOcupados.has(k)) sobrantes.push(p);
   else { yaVisto.add(k); plan2.push(p); }
 }
 plan.length = 0;
 plan.push(...plan2);
 
-process.stdout.write(`\n  Bloqueos leídos: ${bloqueos.length} · de otra cosa: ${ajenos} · a convertir: ${plan.length} · con dudas: ${dudas.length}${sobrantes.length ? ` · duplicados a retirar: ${sobrantes.length}` : ""}\n\n`);
+process.stdout.write(`\n  Bloqueos leídos: ${bloqueos.length} · de otra cosa: ${ajenos} · a convertir: ${plan.length} · con dudas: ${dudas.length}${sobrantes.length ? ` · sobran (esa hora ya tiene cita): ${sobrantes.length}` : ""}\n\n`);
 
 const porGrupo = new Map();
 for (const p of plan) porGrupo.set(p.grupo.id, (porGrupo.get(p.grupo.id) ?? 0) + 1);
@@ -315,8 +345,8 @@ for (const p of plan) {
   }
 }
 
-// Y los duplicados de una clase que ya tiene su cita: se retiran, sin crear
-// nada y sin tocar la cita de al lado.
+// Y los bloqueos de una clase que ya tiene su cita —de esta pasada o de una
+// anterior—: se retiran, sin crear nada y sin tocar la cita que ya estaba.
 let retirados = 0;
 for (const p of sobrantes) {
   try {
