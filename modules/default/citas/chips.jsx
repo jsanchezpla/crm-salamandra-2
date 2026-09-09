@@ -7,6 +7,7 @@
 
 
 import { formatMoney } from "@/lib/payments/money.js";
+import { haceCuanto } from "@/lib/utils/haceCuanto.js";
 export const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
 
@@ -49,15 +50,11 @@ export function toTimeInput(d) {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
+// La cuenta vive en lib/utils/haceCuanto.js desde el 09/09/2026 (AV-0091):
+// aquí se contaban horas y se dividían entre 24, y el lunes salía como «ayer»
+// si lo mirabas el miércoles.
 export function fmtRelative(value) {
-  if (!value) return "";
-  const min = Math.floor((Date.now() - new Date(value).getTime()) / 60000);
-  if (min < 1) return "ahora mismo";
-  if (min < 60) return `hace ${min} min`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `hace ${h} h`;
-  const d = Math.floor(h / 24);
-  return d === 1 ? "ayer" : `hace ${d} días`;
+  return haceCuanto(value);
 }
 
 export function StatusChip({ value }) {

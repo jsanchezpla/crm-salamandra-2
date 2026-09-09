@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import HelpTooltip from "../../components/ui/HelpTooltip.jsx";
+import { haceCuanto } from "../../lib/utils/haceCuanto.js";
 
 /**
  * Bandeja del módulo Formularios.
@@ -33,16 +34,6 @@ function fmtFecha(valor) {
     " · " + d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
 }
 
-function haceCuanto(valor) {
-  if (!valor) return "";
-  const minutos = Math.floor((Date.now() - new Date(valor).getTime()) / 60000);
-  if (minutos < 1) return "ahora mismo";
-  if (minutos < 60) return `hace ${minutos} min`;
-  const horas = Math.floor(minutos / 60);
-  if (horas < 24) return `hace ${horas} h`;
-  const dias = Math.floor(horas / 24);
-  return dias === 1 ? "ayer" : `hace ${dias} días`;
-}
 
 export default function FormulariosModule() {
   const [tab, setTab] = useState("pending");

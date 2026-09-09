@@ -32,16 +32,10 @@ export function fmtFecha(valor) {
   );
 }
 
-export function haceCuanto(valor) {
-  if (!valor) return "";
-  const minutos = Math.floor((Date.now() - new Date(valor).getTime()) / 60000);
-  if (minutos < 1) return "ahora mismo";
-  if (minutos < 60) return `hace ${minutos} min`;
-  const horas = Math.floor(minutos / 60);
-  if (horas < 24) return `hace ${horas} h`;
-  const dias = Math.floor(horas / 24);
-  return dias === 1 ? "ayer" : `hace ${dias} días`;
-}
+// La cuenta vive en lib/utils/haceCuanto.js desde el 09/09/2026 (AV-0091):
+// aquí se contaban horas y se dividían entre 24, y el lunes salía como «ayer»
+// si lo mirabas el miércoles.
+export { haceCuanto } from "@/lib/utils/haceCuanto.js";
 
 /** Tiempo que queda (o que se ha pasado) hasta una fecha límite del SLA. */
 export function plazo(dueAt) {

@@ -28,6 +28,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { haceCuanto } from "@/lib/utils/haceCuanto.js";
 
 const ABSOLUTE_OPTS = {
   day: "2-digit",
@@ -54,16 +55,8 @@ function fmtShort(d) {
 }
 
 function fmtRelative(d, ahora) {
-  const ms = ahora - d.getTime();
-  if (ms < 0) return "en el futuro";
-  const min = Math.floor(ms / 60_000);
-  if (min < 1) return "hace un momento";
-  if (min < 60) return min === 1 ? "hace 1 minuto" : `hace ${min} minutos`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return h === 1 ? "hace 1 hora" : `hace ${h} horas`;
-  const days = Math.floor(h / 24);
-  if (days === 1) return "ayer";
-  return `hace ${days} días`;
+  // La cuenta vive en lib/utils/haceCuanto.js desde el 09/09/2026 (AV-0091).
+  return haceCuanto(d, { ahora, largo: true });
 }
 
 export default function TimestampRelative({ date, className = "" }) {

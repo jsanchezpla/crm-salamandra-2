@@ -339,38 +339,61 @@ export function RecipeInOptionRow({ pmor, onUpdate, onDelete }) {
   );
 }
 
+/**
+ * Cuántas recetas se enseñan de golpe. Eran OCHO, y con 1.084 en el recetario
+ * eso significaba que escribiendo «a» salían ocho que empiezan por A y ninguna
+ * más: parecía que el recetario solo tenía esas (AV-0096, Laura, 09/09/2026).
+ *
+ * 50 es lo que deja el endpoint por página y lo que cabe desplazando el
+ * desplegable sin que tarde en pintarse.
+ */
+const RECETAS_A_LA_VEZ = 50;
+
 export function AddRecipeRow({ onAdd }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState([]);
+  const [total, setTotal] = useState(0);
   const [open, setOpen] = useState(false);
+  const [cargando, setCargando] = useState(false);
   const timer = useRef(null);
 
+  /*
+   * Con la caja VACÍA también se busca (AV-0096): «a veces no recuerdo una
+   * receta en concreto y necesito previsualizarla en el desplegable». Antes
+   * hacía falta acertar la primera letra para ver algo.
+   */
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
+    // Se busca si el desplegable está abierto O si hay algo escrito. Colgarlo
+    // solo del foco dejaba la caja muda cuando se escribe sin haberla enfocado
+    // (autocompletar, pegar, volver con el tabulador).
+    if (!open && !q.trim()) return undefined;
+    setCargando(true);
     timer.current = setTimeout(async () => {
       const query = q.trim();
-      if (query.length < 1) { setResults([]); setOpen(false); return; }
       try {
-        const r = await fetch(`/api/nutricion/recipes?q=${encodeURIComponent(query)}&limit=8`);
+        const r = await fetch(`/api/nutricion/recipes?q=${encodeURIComponent(query)}&limit=${RECETAS_A_LA_VEZ}`);
         const j = await r.json();
         setResults(j.items ?? []);
-        setOpen(true);
-      } catch { /* noop */ }
+        setTotal(Number(j.total ?? (j.items ?? []).length));
+      } catch { /* noop */ } finally {
+        setCargando(false);
+      }
     }, 300);
     return () => timer.current && clearTimeout(timer.current);
-  }, [q]);
+  }, [q, open]);
 
   return (
     <div className="relative">
       <input
-        type="text" value={q} onChange={(e) => setQ(e.target.value)}
-        onFocus={() => results.length && setOpen(true)}
+        type="text" value={q} onChange={(e) => { setQ(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
         placeholder="+ Añadir receta del recetario…"
         className="w-full px-2.5 py-1.5 text-xs rounded-md border border-dashed border-[var(--color-primary)]/40 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
       />
       {open && <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />}
-      {open && results.length > 0 && (
-        <div className="absolute z-30 mt-1 w-full max-h-52 overflow-y-auto bg-white border border-gray-200 rounded-md shadow-lg">
+      {open && (results.length > 0 || cargando) && (
+        <div className="absolute z-30 mt-1 w-full max-h-80 overflow-y-auto bg-white border border-gray-200 rounded-md shadow-lg">
           {results.map((r) => (
             <button
               key={r.id} type="button"
@@ -381,6 +404,21 @@ export function AddRecipeRow({ onAdd }) {
               <span className="text-[10px] text-gray-400 shrink-0">{r.ingredientCount} ing.</span>
             </button>
           ))}
+          {/* Decir cuántas quedan fuera: sin esto, ver 50 se lee como «el
+              recetario tiene 50», que es justo lo que pasaba con ocho. */}
+          {total > results.length && (
+            <div className="px-3 py-2 text-[10px] text-gray-400 border-t border-gray-100 sticky bottom-0 bg-white">
+              {results.length} de {total} recetas. Escribe algo más para acotar.
+            </div>
+          )}
+          {cargando && results.length === 0 && (
+            <div className="px-3 py-2 text-[10px] text-gray-400">Buscando…</div>
+          )}
+        </div>
+      )}
+      {open && !cargando && results.length === 0 && q.trim() && (
+        <div className="absolute z-30 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg px-3 py-2 text-[11px] text-gray-400">
+          Ninguna receta se llama así.
         </div>
       )}
     </div>
