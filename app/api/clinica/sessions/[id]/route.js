@@ -1,4 +1,5 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
+import { diaDeMadrid } from "../../../../../lib/clinica/loMio.js";
 import { ok, error, forbidden, notFound } from "../../../../../lib/utils/apiResponse.js";
 import { serializeSession } from "../../../../../lib/clinica/serialize.js";
 import { logClinicaAudit, auditSummary } from "../../../../../lib/clinica/audit.js";
@@ -117,6 +118,33 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
   // Los apartados vienen de un navegador: se limpian antes de guardarlos.
   if ("contentSections" in updates) updates.contentSections = limpiarContentSections(updates.contentSections);
   if ("sessionDate" in updates && updates.sessionDate) updates.sessionDate = new Date(updates.sessionDate);
+
+  /*
+   * ── MOVER LA FECHA DESATA LA CITA VIEJA (09/09/2026, AV-0094) ─────────────
+   * Blanca: «escribí el registro con la fecha mal, la corregí al día que fue, y
+   * la bandeja me lo sigue pidiendo».
+   *
+   * Y era cierto, con un mecanismo silencioso: la sesión seguía atada
+   * (`booking_id`) a la cita del día EQUIVOCADO. La bandeja busca el registro
+   * de una cita por dos caminos —el `booking_id`, y una sesión suelta del mismo
+   * paciente el mismo día (`lib/clinica/loMio.js`)—, y el segundo descarta a
+   * propósito las sesiones que ya son de otra cita. Así que la cita del día
+   * bueno no encontraba su registro por ninguno de los dos y se quedaba
+   * pidiéndolo para siempre. En producción había 3 sesiones así.
+   *
+   * Cambiar la fecha de un registro es decir «esto no pasó ese día»: la
+   * atadura a una cita de ese día deja de valer y se suelta. Suelta es como
+   * están 23.000 de las 23.342 sesiones de Aumenta, y la bandeja las encuentra
+   * igual por el día. No se re-ata a la cita nueva a propósito: si ese día hubo
+   * dos citas del mismo paciente, elegir por su cuenta sería adivinar.
+   */
+  if (updates.sessionDate && s.bookingId && !("bookingId" in updates)) {
+    const cita = await ctx.tenantModels.Booking?.findByPk(s.bookingId, { attributes: ["id", "scheduledAt"] });
+    if (cita && diaDeMadrid(cita.scheduledAt) !== diaDeMadrid(updates.sessionDate)) {
+      updates.bookingId = null;
+    }
+  }
+
   if (Object.keys(updates).length === 0) return ok(serializeSession(s));
   await s.update(updates);
   await logClinicaAudit({

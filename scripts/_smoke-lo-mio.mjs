@@ -174,3 +174,26 @@ test("LA RATIO, que es el criterio que no caduca cada lunes", () => {
   assert.equal(ingenua, 3);
   assert.equal(buena, 0);
 });
+
+test("una sesión atada a OTRA cita no cuenta como el registro de esta (AV-0094)", () => {
+  /*
+   * El caso de Blanca: escribió el registro con la fecha mal, lo corrigió al
+   * día bueno, y la bandeja se lo seguía pidiendo. La sesión seguía atada a la
+   * cita del día equivocado, y por eso el camino del día no la miraba.
+   *
+   * La regla se queda como está —una sesión que ya es de otra cita no es el
+   * registro de esta—, porque lo contrario haría que un registro sirviera para
+   * dos citas. Lo que cambia es que mover la fecha SUELTA la atadura, y esta
+   * prueba fija las dos mitades de esa decisión.
+   */
+  const cita = { id: "cita-3", patientId: "p1", teamMemberId: "t1", scheduledAt: "2026-09-03T10:00:00+02:00", status: "confirmed" };
+  const atadaAOtra = { id: "s1", patientId: "p1", therapistId: "t1", sessionDate: "2026-09-03", bookingId: "cita-10", status: "registered" };
+  assert.equal(registroDeLaCita(cita, [atadaAOtra]), null, "una sesión de otra cita no puede tapar esta");
+
+  // Y en cuanto se suelta (que es lo que hace ahora el PATCH), se encuentra.
+  const suelta = { ...atadaAOtra, bookingId: null };
+  const hallado = registroDeLaCita(cita, [suelta]);
+  assert.ok(hallado, "soltarla tiene que hacer que la bandeja la encuentre");
+  assert.equal(hallado.via, "dia");
+  assert.equal(hallado.sesion.id, "s1");
+});
