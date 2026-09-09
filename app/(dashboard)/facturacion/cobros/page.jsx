@@ -457,6 +457,8 @@ export default function CobrosPage() {
 
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  // Ver el efecto que escribe la dirección: la primera pasada no escribe.
+  const primeraUrl = useRef(true);
   const [filterMethod, setFilterMethod] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const { sortKey, sortDir, toggle: toggleSort } = useSortState("paidAt", "desc");
@@ -513,6 +515,16 @@ export default function CobrosPage() {
    */
   useEffect(() => {
     if (typeof window === "undefined") return;
+    /*
+     * ⚠️ LA PRIMERA PASADA NO ESCRIBE, Y ES LO QUE HACE QUE ESTO FUNCIONE.
+     * Al montar, este efecto corre con el estado todavía en blanco, así que
+     * escribiría una dirección VACÍA encima de la que traía los filtros — y el
+     * efecto de al lado, que es quien los lee, ya no encontraría nada. Visto
+     * pasar en producción: entrar con `?q=vega` dejaba la URL pelada y el
+     * buscador en blanco. Se salta esa pasada y se escribe de la segunda en
+     * adelante, cuando el estado ya es el de verdad.
+     */
+    if (primeraUrl.current) { primeraUrl.current = false; return; }
     const sp = new URLSearchParams(window.location.search);
     if (sp.get("abrir")) return; // llegó con una orden; no se pisa
     const pon = (k, v) => (v ? sp.set(k, v) : sp.delete(k));
