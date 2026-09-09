@@ -446,7 +446,11 @@ export default function AgendaPorTerapeuta({
                       // del centro: ocho columnas de 24 horas, cada una con
                       // su propia barra, no se leen.
                       slotDuration="00:15:00"
-                      slotLabelInterval="01:00:00"
+                      // Con número en cada cuarto, como el calendario grande
+                      // (09/09/2026, AV-0089). Aquí importa más todavía: esta
+                      // es la pantalla de combinar horarios de la que se
+                      // quejaba Olga.
+                      slotLabelInterval="00:15:00"
                       snapDuration="00:15:00"
                       displayEventEnd={false}
                       eventMinHeight={8}

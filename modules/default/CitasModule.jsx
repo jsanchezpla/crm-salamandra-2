@@ -1340,7 +1340,16 @@ export default function CitasModule({
              * CSS, en app/globals.css (`.fc-timegrid-slot`).
              */
             slotDuration="00:15:00"
-            slotLabelInterval="01:00:00"
+            /*
+             * Y la REGLA numerada de cuarto en cuarto (09/09/2026, AV-0089).
+             * Olga: «que la agenda enseñe las marcas cada 15 minutos y no solo
+             * cada hora, porque hay descansos de 15 y terapias de 45 y así es
+             * más fácil colocar una cita». Las líneas ya iban a cuartos desde
+             * el 08/09 (AV-0073), pero sin número al lado había que contarlas.
+             * La hora sigue siendo el ancla: los cuartos salen más pequeños y
+             * en gris claro, y en la vista compacta no salen (app/globals.css).
+             */
+            slotLabelInterval="00:15:00"
             snapDuration="00:15:00"
             // Si sobra alto, las franjas se reparten lo que haya; con «Ajustar»
             // puesto (arriba) es lo que hace que la jornada quepa sin barra.

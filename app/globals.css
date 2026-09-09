@@ -443,9 +443,29 @@ body {
 .agenda-cuartos .fc .fc-timegrid-slots tr:nth-child(4n + 1) .fc-timegrid-slot {
   border-top: 1px solid var(--ink-300);
 }
+/* ── Y LA REGLA, NUMERADA (09/09/2026, AV-0089) ────────────────────────────
+   Olga: «que la agenda enseñe las marcas cada 15 minutos y no solo cada hora,
+   porque hay descansos de 15 y terapias de 45». Las líneas ya estaban desde el
+   08/09; lo que faltaba era el número al lado, así que había que ir contando
+   rayas para saber si un hueco empezaba a y cuarto o a y media.
+
+   `slotLabelInterval` a 15 minutos lo pone en las dos agendas de cuartos. Aquí
+   se decide la JERARQUÍA, que es lo que evita que doce números por hora se
+   conviertan en ruido: la hora en punto se queda como estaba —es el ancla— y
+   los tres cuartos salen más pequeños y en gris claro. Se distinguen por
+   `data-time`, que FullCalendar escribe en cada franja: la hora acaba en
+   «:00:00» y los cuartos no. */
+.agenda-cuartos .fc .fc-timegrid-slot-label:not([data-time$=":00:00"]) .fc-timegrid-slot-label-cushion {
+  font-size: 0.58rem;
+  color: var(--ink-300);
+}
 /* En la vista compacta las franjas miden 0.35em: ahí tres niveles de línea se
    convierten en una trama. Se deja solo la hora, que es lo único legible a esa
-   altura y lo que se pidió al hacerla («ver el día completo»). */
+   altura y lo que se pidió al hacerla («ver el día completo»). Y por lo mismo,
+   los números de los cuartos tampoco caben: se esconden. */
+.agenda-compacta .fc .fc-timegrid-slot-label:not([data-time$=":00:00"]) .fc-timegrid-slot-label-cushion {
+  display: none;
+}
 .agenda-compacta .fc .fc-timegrid-slots tr .fc-timegrid-slot { border-top-color: transparent; }
 .agenda-compacta .fc .fc-timegrid-slots tr:nth-child(4n + 1) .fc-timegrid-slot {
   border-top: 1px solid var(--ink-200);
