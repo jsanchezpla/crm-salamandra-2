@@ -489,6 +489,53 @@ export default function CobrosPage() {
     setShowForm(true);
   }, []);
 
+  /*
+   * ── LA PANTALLA SE GUARDA EN SU DIRECCIÓN (09/09/2026) ───────────────────
+   * Rosa: «interesante sería poder mantener una parte de CRM abierta mientras
+   * consultas algo (ej. incidencia sin salirte poder abrir otro menú)». El caso
+   * es el de recepción: estás en Cobros con una familia delante, te preguntan
+   * por una incidencia y, para mirarla, pierdes lo que tenías puesto.
+   *
+   * Con el buscador, los filtros y el mes de la morosidad escritos en la
+   * dirección pasan dos cosas, y las dos son justo lo que ella pedía:
+   *
+   *   · el botón de ATRÁS del navegador te devuelve la pantalla tal como la
+   *     dejaste, no en blanco;
+   *   · Ctrl+clic en cualquier entrada del menú abre lo otro en una pestaña
+   *     nueva y esta se queda intacta, con su filtro puesto.
+   *
+   * `replaceState` y no `push`: escribir cada tecla en el historial dejaría el
+   * botón de atrás inservible, que es lo contrario de lo que se busca.
+   *
+   * No toca el enlace de «Cobrar el mes» que llega con `abrir=cuota`: ese lo lee
+   * el efecto de arriba UNA vez al montar, y para entonces esto aún no ha
+   * escrito nada.
+   */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get("abrir")) return; // llegó con una orden; no se pisa
+    const pon = (k, v) => (v ? sp.set(k, v) : sp.delete(k));
+    pon("q", searchInput.trim());
+    pon("metodo", filterMethod);
+    pon("estado", filterStatus);
+    pon("morosidad", mesMorosidad === mesVigente() ? "" : mesMorosidad);
+    const cadena = sp.toString();
+    window.history.replaceState(null, "", cadena ? `?${cadena}` : window.location.pathname);
+  }, [searchInput, filterMethod, filterStatus, mesMorosidad]);
+
+  // …y se lee al entrar, que es la otra mitad: sin esto la dirección guardada
+  // no serviría de nada al abrirla en una pestaña nueva.
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const q = sp.get("q");
+    if (q) { setSearchInput(q); setSearch(q.trim().toLowerCase()); }
+    if (sp.get("metodo")) setFilterMethod(sp.get("metodo"));
+    if (sp.get("estado")) setFilterStatus(sp.get("estado"));
+    const m = sp.get("morosidad");
+    if (m && /^\d{4}-(0[1-9]|1[0-2])$/.test(m)) setMesMorosidad(m);
+  }, []);
+
   useEffect(() => {
     fetch("/api/auth/me", { cache: "no-store" }).then((r) => r.json()).then((j) => j.ok && setMe(j.data)).catch(() => {});
     // Las fichas ya no se bajan aquí (28/08/2026). Este `limit=300` recibía 200,
