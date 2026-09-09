@@ -147,7 +147,14 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
     // de la ficha. Sequelize solo trae los atributos pedidos: sin él, el total
     // llegaría como `undefined` y la etiqueta saldría a medias.
     const include = [
-      { model: EventType, as: "eventType", attributes: ["id", "name", "slug", "color", "sessionsCount"] },
+      /*
+       * `isInitialAssessment` e `informeTipo` viajan porque de ellos vive lo
+       * que la cita OFRECE al abrirla: la plantilla con la que nace el registro
+       * y el informe que sale de esa cita (09/09/2026). Sin ellos en la lista
+       * de atributos llegaban `undefined` al modal y la cita de valoración
+       * inicial se preparaba con la plantilla de siempre.
+       */
+      { model: EventType, as: "eventType", attributes: ["id", "name", "slug", "color", "sessionsCount", "isInitialAssessment", "informeTipo"] },
     ];
     if (tenantHasModule("team")) {
       include.push({ model: TeamMember, as: "teamMember", attributes: ["id", "displayName"] });

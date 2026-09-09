@@ -2,6 +2,9 @@ import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { filtrarTipos, tipoSinDinero } from "../../../../lib/citas/dinero.js";
+// De qué cita sale qué informe (09/09/2026): la lista de tipos válidos es la
+// del módulo clínico, y se lee de allí para que no se separen.
+import { REPORT_TYPES } from "../../../../lib/clinica/serialize.js";
 import {
   normalizeString,
   slugify,
@@ -186,6 +189,11 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     const conceptId =
       typeof body.conceptId === "string" && UUID_RE.test(body.conceptId.trim()) ? body.conceptId.trim() : null;
 
+    // De qué cita sale qué informe (09/09/2026). Se valida contra la lista de
+    // tipos de informe del módulo clínico: guardar uno inventado dejaría un
+    // botón que no abre nada.
+    const informeTipo = REPORT_TYPES.includes(String(body.informeTipo ?? "")) ? String(body.informeTipo) : null;
+
     const isInitialAssessment = Boolean(body.isInitialAssessment);
     if (isInitialAssessment) {
       await EventType.update({ isInitialAssessment: false }, { where: { isInitialAssessment: true } });
@@ -216,6 +224,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       isInitialAssessment,
       isHidden,
       conceptId,
+      informeTipo,
       active,
       order,
     });

@@ -2,6 +2,9 @@ import { Op } from "sequelize";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, noContent, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { tipoSegunRol } from "../../../../../lib/citas/dinero.js";
+// De qué cita sale qué informe (09/09/2026): los tipos válidos son los del
+// módulo clínico, leídos de allí para que no se separen.
+import { REPORT_TYPES } from "../../../../../lib/clinica/serialize.js";
 import {
   normalizeString,
   isValidSlug,
@@ -225,6 +228,17 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
         return error("conceptId inválido");
       }
       updates.conceptId = v || null;
+    }
+    /*
+     * De qué cita sale qué informe (09/09/2026, Aumenta: «no podemos crear las
+     * sesiones de Diagnóstico»). Vacío lo quita; un tipo que no está en
+     * `REPORT_TYPES` se rechaza en vez de guardarse, porque dejaría un botón
+     * en la cita que no abre ningún informe.
+     */
+    if ("informeTipo" in body) {
+      const v = typeof body.informeTipo === "string" ? body.informeTipo.trim() : "";
+      if (v && !REPORT_TYPES.includes(v)) return error("Ese tipo de informe no existe", 422);
+      updates.informeTipo = v || null;
     }
     if ("active" in body) updates.active = Boolean(body.active);
     // Oculto: fuera de la agenda pública, visible solo para quien tenga bono

@@ -107,7 +107,10 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
     // `sessionsCount` para poder pintar «3/10»: el número de sesión lo lleva la
     // cita, pero el total es del tipo de cita.
     const include = [
-      { model: EventType, as: "eventType", attributes: ["id", "name", "color", "sessionsCount"] },
+      // Con `isInitialAssessment` e `informeTipo`, por lo mismo que en
+      // `/api/citas/bookings` (09/09/2026): de ellos viven la plantilla del
+      // registro y el informe que ofrece la cita al abrirla.
+      { model: EventType, as: "eventType", attributes: ["id", "name", "color", "sessionsCount", "isInitialAssessment", "informeTipo"] },
     ];
     if (teamOn) {
       include.push({ model: TeamMember, as: "teamMember", attributes: ["id", "displayName", "avatarColor"] });

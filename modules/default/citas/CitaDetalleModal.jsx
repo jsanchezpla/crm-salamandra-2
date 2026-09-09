@@ -16,6 +16,8 @@ import PanelTallerCita from "../../../components/citas/PanelTallerCita.jsx";
 import SesionTallerDrawer from "../../../components/clinica/SesionTallerDrawer.jsx";
 import { colaDePreparacion } from "../../../lib/clinica/prepararSesion.js";
 import { PLANTILLA_ENTREVISTA } from "../../../lib/clinica/plantillas.js";
+// Cómo se llama el informe que sale de esta cita (09/09/2026).
+import { REPORT_TYPE_LABEL } from "../../../lib/clinica/serialize.js";
 import { citaNoSeDio } from "../../../lib/clinica/borradorDeCita.js";
 import { fichaDeLaCita } from "../../../lib/citas/fichaDeLaCita.js";
 import { esRecuperable, rotuloFalta, citasQuePuedenRecuperar } from "../../../lib/citas/recuperacionFalta.js";
@@ -888,6 +890,26 @@ export function CitaDetalleModal({
                             className="shrink-0 text-[12px] px-2 py-1 rounded-md border border-neutral-200 text-neutral-600 hover:border-neutral-400 hover:text-neutral-800 transition-colors"
                           >
                             {sesionDeEstaCita ? "Seguir con la sesión" : "Preparar sesión"}
+                          </a>
+                        )}
+                        {/*
+                          El informe que sale de ESTA cita (09/09/2026, Aumenta:
+                          «no podemos crear las sesiones de Diagnóstico»). El
+                          tipo de cita dice cuál es (Citas → Tipos de cita, «De
+                          esta cita sale un informe»), y esto abre la ficha del
+                          paciente en Informes con ese tipo ya elegido y su
+                          guion puesto. Sin eso había que ir a la ficha, abrir
+                          Informes y acordarse de cuál de los siete era.
+                        */}
+                        {openBooking.eventType?.informeTipo && (
+                          <a
+                            href={`/pacientes/${openBooking.patientId}?informe=${encodeURIComponent(openBooking.eventType.informeTipo)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Abre la ficha del paciente con el informe de esta cita empezado, con su guion puesto"
+                            className="shrink-0 text-[12px] px-2 py-1 rounded-md border border-neutral-200 text-neutral-600 hover:border-neutral-400 hover:text-neutral-800 transition-colors"
+                          >
+                            {REPORT_TYPE_LABEL[openBooking.eventType.informeTipo] ?? "Informe"}
                           </a>
                         )}
                       </>

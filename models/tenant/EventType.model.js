@@ -259,6 +259,28 @@ export function defineEventType(sequelize) {
         allowNull: true,
         field: "concept_id",
       },
+      /*
+       * ── DE ESTA CITA SALE ESTE INFORME (09/09/2026) ──────────────────────
+       *
+       * Aumenta: «no podemos crear las sesiones de Diagnóstico». El centro
+       * vende valoraciones diagnósticas y desde el 05/09 el informe de
+       * valoración diagnóstica existe con su guion de 25 apartados; lo que
+       * faltaba era la cita, y algo que uniera la una con el otro.
+       *
+       * Guarda un tipo de `REPORT_TYPES` (`lib/clinica/serialize.js`). Con él
+       * puesto, la cita enseña el botón que abre ESE informe del paciente ya
+       * elegido; sin él —los 69 tipos de Aumenta y los de todos los demás— la
+       * cita se comporta exactamente como antes.
+       *
+       * Es un puntero por valor y no una FK: `clinical_reports` es del módulo
+       * Clínica y esto del de Citas, y hay schemas con lo uno y sin lo otro
+       * (el mismo motivo que `tallerGrupoId` y `conceptId`).
+       */
+      informeTipo: {
+        type: DataTypes.STRING(32),
+        allowNull: true,
+        field: "informe_tipo",
+      },
       active: {
         type: DataTypes.BOOLEAN,
         allowNull: false,

@@ -6,6 +6,9 @@ import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import Select from "../../../../components/ui/Select.jsx";
 import { eurosToCents, centsToEuros, formatMoney } from "../../../../lib/payments/money.js";
 import { slugify } from "../../../../lib/citas/validation.js";
+// Los informes que puede haber detrás de una cita (09/09/2026). La lista es la
+// del módulo clínico: se lee de allí para que no se separen.
+import { REPORT_TYPES_NUEVOS, REPORT_TYPE_LABEL } from "../../../../lib/clinica/serialize.js";
 import {
   TIPOS as TIPOS_PREGUNTA,
   ETIQUETA_TIPO,
@@ -50,6 +53,8 @@ const EMPTY_FORM = {
   formQuestions: [],
   // La primera visita: se entra sin firmar contratos. Solo una por cliente.
   isInitialAssessment: false,
+  // Qué informe clínico sale de esta cita (09/09/2026). "" = ninguno.
+  informeTipo: "",
   // Fuera de la agenda pública: solo lo ve quien tenga bono activo de este tipo.
   isHidden: false,
   active: true,
@@ -359,6 +364,7 @@ export default function CitasTiposPage() {
         instalmentMonths: data.instalmentMonths ?? "",
         formQuestions: Array.isArray(data.formQuestions) ? data.formQuestions : [],
         isInitialAssessment: !!data.isInitialAssessment,
+        informeTipo: data.informeTipo ?? "",
         isHidden: !!data.isHidden,
         active: !!data.active,
         order: data.order ?? 0,
@@ -428,6 +434,7 @@ export default function CitasTiposPage() {
       instalmentMonths: form.instalmentPrice ? Number(form.instalmentMonths) || null : null,
       formQuestions: form.formQuestions ?? [],
       isInitialAssessment: !!form.isInitialAssessment,
+      informeTipo: form.informeTipo || null,
       isHidden: !!form.isHidden,
       active: !!form.active,
       order: Number(form.order),
@@ -839,6 +846,31 @@ export default function CitasTiposPage() {
                   </span>
                 </span>
               </label>
+
+              {/*
+                * De esta cita sale este informe (09/09/2026, Aumenta: «no
+                * podemos crear las sesiones de Diagnóstico»). La valoración
+                * diagnóstica tenía su informe con guion propio desde el 05/09 y
+                * no había forma de llegar a él desde la cita: había que ir a la
+                * ficha, abrir Informes y acordarse de cuál de los siete tipos
+                * era. Con esto puesto, la cita enseña el botón que lo abre.
+                */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-medium text-neutral-500">De esta cita sale un informe</label>
+                <Select
+                  value={form.informeTipo}
+                  onChange={(v) => updateForm("informeTipo", v)}
+                  options={[
+                    { value: "", label: "Ninguno" },
+                    ...REPORT_TYPES_NUEVOS.map((t) => ({ value: t, label: REPORT_TYPE_LABEL[t] })),
+                  ]}
+                />
+                <p className="text-[10px] text-neutral-400 leading-snug">
+                  En la cita aparecerá el botón para escribir ese informe del paciente, con su guion ya
+                  puesto. Es lo que ata una valoración diagnóstica con su informe. «Ninguno» = la cita se
+                  registra como una sesión normal, que es lo de siempre.
+                </p>
+              </div>
 
               {/* Oculto y asignado a dedo (05/08/2026, Rodrigo). Para quien paga
                   por fuera de la pasarela (transferencia del extranjero, Bizum):
