@@ -23,7 +23,7 @@ import {
   bloqueDelCentro,
   prohibicionesDelCentro,
 } from "../lib/clinica/perfilDelCentro.js";
-import { estiloClinico, VOZ, FRONTERA } from "../lib/clinica/estiloClinico.js";
+import { estiloClinico, VOZ, FRONTERA, SINTESIS, esApartadoDeSintesis } from "../lib/clinica/estiloClinico.js";
 import { promptDeRegistro } from "../lib/clinica/registroCompleto.js";
 import { promptObjetivos } from "../lib/clinica/objetivosIa.js";
 
@@ -151,4 +151,67 @@ test("la terminología ya no es solo de neuro y logopedia", () => {
   // Y sigue estando lo de siempre.
   assert.ok(FRONTERA.includes("conciencia fonológica"));
   assert.ok(FRONTERA.includes("memoria de trabajo"));
+});
+
+/* ── EL DIAGNÓSTICO ES UN DATO, NO UNA SÍNTESIS (09/09/2026) ─────────────── */
+
+test("los apartados de diagnóstico NO se marcan para elaborar", () => {
+  /*
+   * EL AGUJERO QUE ESTO CIERRA, y era real y estaba desplegado. La plantilla
+   * del informe de valoración diagnóstica que pidió Aumenta (AV-0045) tiene
+   * «Diagnóstico principal», «Diagnósticos asociados o comórbidos» y
+   * «Diagnósticos diferenciales considerados». La regex de síntesis casa con
+   * «diagnostic», así que los tres salían marcados [SÍNTESIS] — y la
+   * instrucción de síntesis dice que esos apartados se escriben «aunque nadie
+   * los haya dictado expresamente».
+   *
+   * O sea que al modelo se le ordenaba ELABORAR el diagnóstico de un paciente
+   * mientras PROHIBIDO nº1 se lo impedía. Dos instrucciones contradictorias, y
+   * cuál gana no se puede dejar a suertes.
+   */
+  for (const label of [
+    "Diagnóstico principal",
+    "Diagnósticos asociados o comórbidos",
+    "Diagnósticos diferenciales considerados",
+    "Según DSM-5-TR: denominación y código",
+    "Según CIE-11: denominación y código",
+    "Conclusión diagnóstica",
+    "Diagnostico principal", // sin tilde, como lo escribiría un centro
+  ]) {
+    assert.equal(esApartadoDeSintesis({ label }), false, label);
+  }
+});
+
+test("pero la impresión y la sospecha clínica SÍ se elaboran", () => {
+  /*
+   * Eso es interpretación, va con sus marcas de hipótesis, y es justo lo que se
+   * le pide al modelo. Cerrarlo también sería tirar el niño con el agua: la
+   * plantilla diagnóstica lo dice ella sola en la pista de «Sospecha clínica»
+   * —«cuando la valoración no permite confirmar un diagnóstico»—, o sea que ese
+   * apartado existe PARA la hipótesis.
+   *
+   * Ojo al orden de las dos reglas: «Impresión diagnóstica» lleva la palabra
+   * «diagnóstica» dentro. Si se preguntara primero por el dato, caería del lado
+   * del dato y el modelo dejaría en blanco justo el apartado que se le pide.
+   * Una impresión se lee como una hipótesis; un diagnóstico, como un hecho.
+   */
+  for (const label of [
+    "Impresión clínica",
+    "Impresión diagnóstica",
+    "Hipótesis diagnóstica",
+    "Sospecha clínica, perfil de riesgo o necesidad de seguimiento",
+    "Integración clínica y psicopedagógica",
+    "Orientaciones y seguimiento",
+    "Plan de intervención: contexto escolar",
+    "Propuesta de actuación",
+    "Próximas sesiones",
+  ]) {
+    assert.equal(esApartadoDeSintesis({ label }), true, label);
+  }
+});
+
+test("y el prompt lo dice con todas las letras", () => {
+  assert.match(SINTESIS, /UN APARTADO DE DIAGNÓSTICO NUNCA ES DE SÍNTESIS/);
+  assert.match(SINTESIS, /se queda VACÍO/);
+  assert.match(SINTESIS, /no lo insinúes con un verbo prudente delante/);
 });
