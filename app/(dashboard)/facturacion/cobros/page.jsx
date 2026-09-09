@@ -1339,7 +1339,7 @@ export default function CobrosPage() {
                     <p className="text-[10px] text-neutral-500 mt-0.5">
                       {pendientesDelMes.length === 1
                         ? "Si la familia trae menos, escribe lo que trae: se cobra eso y el resto se queda pendiente de este mes, así que sigue saliendo en Morosidad."
-                        : "Si escribes otra cifra se apunta un cobro aparte y estos siguen pendientes."}
+                        : "Si la familia paga solo uno, escribe justo lo que pide ese y se salda ese; con una cifra que no sea la de ninguno se apunta un cobro aparte y estos siguen pendientes."}
                     </p>
                   </div>
                 )}

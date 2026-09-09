@@ -550,7 +550,7 @@ function PestanaMeses({ filas, meses, onGenerar, onAbrirCobro }) {
                     }
                     const estilo = ESTADO[c.estado] ?? ESTADO.pending;
                     return (
-                      <td key={m} className="px-1 py-2 text-center">
+                      <td key={m} className="px-1 py-2 text-center relative group">
                         <button
                           onClick={() => onAbrirCobro(f, c)}
                           title={`${estilo.rotulo}${c.facturaNumero ? ` · factura ${c.facturaNumero}` : ""}`}
@@ -559,6 +559,26 @@ function PestanaMeses({ filas, meses, onGenerar, onAbrirCobro }) {
                           {fmtMoney(c.importe)}
                           {c.facturaNumero && <span className="block text-[9.5px] opacity-70 truncate">{c.facturaNumero}</span>}
                         </button>
+                        {/*
+                          REHACER ESE MES (09/09/2026, AV-0082 de Aumenta). Rosa se
+                          encontró un cobro de 36,42 € que había calculado el CRM con
+                          una regla vieja: «eso ha salido solo, yo no lo he puesto».
+                          Arreglada la regla, el cobro viejo se quedaba con su número
+                          y había que rehacerlo a mano con la calculadora. Esto lo
+                          vuelve a calcular con lo que dice la cuota HOY. Solo sale
+                          mientras el cobro no es dinero ni papel: en cuanto está
+                          cobrado o facturado, el servidor no lo toca.
+                        */}
+                        {c.sePuedeRehacer && (
+                          <button
+                            type="button"
+                            onClick={() => onGenerar(f, m)}
+                            title="Rehacer este mes con lo que dice la cuota hoy"
+                            className="absolute top-0 right-0 w-4 h-4 rounded-full bg-white border border-neutral-300 text-[9px] leading-none text-neutral-500 opacity-0 group-hover:opacity-100 hover:text-neutral-800 hover:border-neutral-500 transition"
+                          >
+                            ↻
+                          </button>
+                        )}
                       </td>
                     );
                   })}
@@ -582,7 +602,10 @@ function PestanaMeses({ filas, meses, onGenerar, onAbrirCobro }) {
         <Leyenda clase={ESTADO.pending.clase} texto="Pendiente" />
         <Leyenda clase={ESTADO.failed.clase} texto="Fallido" />
         <Leyenda clase={ESTADO.refunded.clase} texto="Devuelto" />
-        <span className="text-neutral-400">· Pulsa un mes para ver, corregir o borrar su cobro; el «+» lo crea.</span>
+        <span className="text-neutral-400">
+          · Pulsa un mes para ver, corregir o borrar su cobro; el «+» lo crea, y el ↻ de la esquina
+          lo vuelve a calcular con lo que dice la cuota hoy.
+        </span>
       </div>
       <p className="text-[11.5px] text-neutral-400">
         Debajo del importe sale el número de la factura en la que acabó ese mes. Un mes sin nada es un

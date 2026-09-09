@@ -23,7 +23,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { decidirCobroDelPendiente } from "../lib/billing/cobroParcial.js";
+import { decidirCobroDelPendiente, pendienteQueCasa } from "../lib/billing/cobroParcial.js";
 
 describe("cobrar menos de lo que pide la fila", () => {
   it("EL CASO DEL FALLO: 100 € de un pendiente de 160 € deja 60 € pendientes", () => {
@@ -91,5 +91,51 @@ describe("lo que no se puede decidir no se parte", () => {
     const r = decidirCobroDelPendiente();
     assert.equal(r.accion, "cobrar-entero");
     assert.equal(r.restoPendiente, 0);
+  });
+});
+
+/*
+ * ── CUÁL DE LOS PENDIENTES SE ESTÁ PAGANDO (09/09/2026, AV-0085 de Aumenta) ─
+ *
+ * Con dos pendientes del mes —260 € de logopedia y 115 € de terapia
+ * ocupacional— Rosa cobró 260 y el CRM apuntó un cobro NUEVO en vez de saldar
+ * el de 260: la familia quedó con 260 € cobrados y 375 € pendientes a la vez,
+ * contada como pagada y como morosa. Si el importe casa con uno, es ese.
+ */
+describe("cuál de los pendientes se está pagando", () => {
+  const pendientes = [
+    { id: "logo", amount: "260.00" },
+    { id: "to", amount: "115.00" },
+  ];
+
+  it("el importe dice cuál es, sin adivinar nada", () => {
+    assert.equal(pendienteQueCasa(pendientes, 260)?.id, "logo");
+    assert.equal(pendienteQueCasa(pendientes, 115)?.id, "to");
+  });
+
+  it("los DECIMAL llegan como texto y siguen casando", () => {
+    assert.equal(pendienteQueCasa([{ id: "x", amount: "47.50" }], "47.5")?.id, "x");
+  });
+
+  it("una cifra que no es la de ninguno no elige por su cuenta", () => {
+    assert.equal(pendienteQueCasa(pendientes, 100), null);
+    assert.equal(pendienteQueCasa(pendientes, 375), null); // la suma la cobra el camino de arriba
+  });
+
+  it("con dos iguales manda el orden en que llegan (el más antiguo)", () => {
+    const iguales = [{ id: "primero", amount: 145 }, { id: "segundo", amount: 145 }];
+    assert.equal(pendienteQueCasa(iguales, 145).id, "primero");
+  });
+
+  it("sin importe, sin pendientes o con basura no elige nada", () => {
+    assert.equal(pendienteQueCasa(pendientes, 0), null);
+    assert.equal(pendienteQueCasa(pendientes, null), null);
+    assert.equal(pendienteQueCasa([], 260), null);
+    assert.equal(pendienteQueCasa(null, 260), null);
+  });
+
+  it("un céntimo de diferencia no es el mismo cobro", () => {
+    assert.equal(pendienteQueCasa(pendientes, 260.02), null);
+    assert.equal(pendienteQueCasa(pendientes, 259.999)?.id, "logo");
   });
 });

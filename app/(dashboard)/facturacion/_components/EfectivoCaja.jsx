@@ -18,9 +18,10 @@
  * partida es lo contado en el último cierre anterior al periodo.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { hoyVigente, mesVigente } from "@/lib/billing/cuotas.js";
 import { fmtMoney } from "./Kpi.jsx";
+import CobroDrawer from "./CobroDrawer.jsx";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition";
@@ -42,6 +43,12 @@ function fmtFecha(iso) {
   return m ? `${m[3]}/${m[2]}/${m[1]}` : String(iso ?? "");
 }
 
+/** La hora del cobro, en Madrid: el servidor va en UTC y el cajón, no. */
+function fmtHora(iso) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" });
+}
+
 export default function EfectivoCaja({ cajaId, onApuntar }) {
   const [desde, setDesde] = useState(primeroDeMes());
   const [hasta, setHasta] = useState(hoy());
@@ -49,6 +56,28 @@ export default function EfectivoCaja({ cajaId, onApuntar }) {
   const [cargando, setCargando] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const [soloConMovimiento, setSoloConMovimiento] = useState(true);
+  /*
+   * ── QUIÉN PAGÓ EN EFECTIVO CADA DÍA (09/09/2026, AV-0084 de Aumenta) ──────
+   * Rosa: «imagínate que no me cuadra con la cifra total de efectivo, entonces
+   * tengo que poder filtrar por pacientes que han pagado en efectivo… sin
+   * necesidad de descargarlo en Excel, ya que si falla algo puedes verlo».
+   * El día se despliega y enseña de qué está hecho: los cobros en efectivo, y
+   * también las entradas y salidas apuntadas, que son las que no cuadran a
+   * ojo. Pulsar un cobro abre el cajón de siempre para corregirlo.
+   */
+  const [abiertos, setAbiertos] = useState(() => new Set());
+  const [verTodos, setVerTodos] = useState(false);
+  const [movimientos, setMovimientos] = useState([]);
+  const [cobroAbierto, setCobroAbierto] = useState(null);
+
+  const alternar = useCallback((fecha) => {
+    setAbiertos((previos) => {
+      const siguiente = new Set(previos);
+      if (siguiente.has(fecha)) siguiente.delete(fecha);
+      else siguiente.add(fecha);
+      return siguiente;
+    });
+  }, []);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -67,7 +96,23 @@ export default function EfectivoCaja({ cajaId, onApuntar }) {
     }
   }, [desde, hasta, cajaId]);
 
+  // Los apuntes de caja del periodo, para poder decir por CONCEPTO de dónde
+  // salió cada salida. El resumen solo trae sus totales por día.
+  const cargarMovimientos = useCallback(async () => {
+    if (!cajaId) { setMovimientos([]); return; }
+    try {
+      const qs = new URLSearchParams({ cajaId, desde, hasta });
+      const r = await fetch(`/api/arqueo/movimientos?${qs}`, { cache: "no-store" });
+      const j = await r.json();
+      setMovimientos(j.ok ? (j.data?.movimientos ?? []) : []);
+    } catch {
+      setMovimientos([]);
+    }
+  }, [cajaId, desde, hasta]);
+
   useEffect(() => { cargar(); }, [cargar]);
+  useEffect(() => { cargarMovimientos(); }, [cargarMovimientos]);
+  useEffect(() => { setAbiertos(new Set()); }, [desde, hasta, cajaId]);
 
   // Un día sin efectivo ni apuntes no cambia el cajón: se puede esconder sin
   // que el saldo de las demás filas deje de cuadrar (cada fila lleva el suyo).
@@ -78,6 +123,11 @@ export default function EfectivoCaja({ cajaId, onApuntar }) {
   const partida = datos?.saldoInicial ?? null;
   const totalEntrado = Number(datos?.total?.efectivo?.importe ?? 0) + Number(datos?.total?.movimientos?.entradas ?? 0);
   const totalSalido = Number(datos?.total?.movimientos?.salidas ?? 0);
+
+  // Solo lo del CAJÓN: los cobros en efectivo de ese día (las devoluciones
+  // vienen en negativo, como en el resumen) y los apuntes de entrada y salida.
+  const efectivoDe = (d) => (d.lista ?? []).filter((c) => c.method === "cash");
+  const movimientosDe = (fecha) => movimientos.filter((mv) => String(mv.date).slice(0, 10) === fecha);
 
   return (
     <div className="space-y-4">
@@ -93,6 +143,10 @@ export default function EfectivoCaja({ cajaId, onApuntar }) {
         <label className="flex items-center gap-2 text-[12.5px] text-neutral-600">
           <input type="checkbox" checked={soloConMovimiento} onChange={(e) => setSoloConMovimiento(e.target.checked)} />
           Ocultar los días en que no se movió el cajón
+        </label>
+        <label className="flex items-center gap-2 text-[12.5px] text-neutral-600">
+          <input type="checkbox" checked={verTodos} onChange={(e) => setVerTodos(e.target.checked)} />
+          Ver quién pagó en efectivo
         </label>
         {onApuntar && (
           <button
@@ -163,20 +217,80 @@ export default function EfectivoCaja({ cajaId, onApuntar }) {
               )}
               {!cargando && dias.map((d) => {
                 const e = d.efectivoDelDia ?? { cobrado: 0, entradas: 0, salidas: 0, queda: 0 };
+                const cobros = efectivoDe(d);
+                const apuntes = movimientosDe(d.fecha);
+                const desplegable = cobros.length > 0 || apuntes.length > 0;
+                const abierto = desplegable && (verTodos || abiertos.has(d.fecha));
                 return (
-                  <tr key={d.fecha} className="border-t border-neutral-100">
-                    <td className="px-3 py-2 text-neutral-700">{fmtDia(d.fecha)}</td>
-                    <td className="px-3 py-2 text-right tabular text-neutral-600">
-                      {e.cobrado !== 0 ? fmtMoney(e.cobrado) : <span className="text-neutral-300">—</span>}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular text-neutral-600">
-                      {e.entradas !== 0 ? fmtMoney(e.entradas) : <span className="text-neutral-300">—</span>}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular">
-                      {e.salidas !== 0 ? <span className="text-rose-600">− {fmtMoney(e.salidas)}</span> : <span className="text-neutral-300">—</span>}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular font-semibold text-neutral-800">{fmtMoney(e.queda)}</td>
-                  </tr>
+                  <Fragment key={d.fecha}>
+                    <tr
+                      className={`border-t border-neutral-100 ${desplegable ? "cursor-pointer hover:bg-neutral-50" : ""}`}
+                      onClick={desplegable ? () => alternar(d.fecha) : undefined}
+                    >
+                      <td className="px-3 py-2 text-neutral-700">
+                        {desplegable ? (
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className={`text-neutral-400 transition-transform ${abierto ? "rotate-90" : ""}`}>›</span>
+                            {fmtDia(d.fecha)}
+                          </span>
+                        ) : (
+                          <span className="pl-4">{fmtDia(d.fecha)}</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular text-neutral-600">
+                        {e.cobrado !== 0 ? fmtMoney(e.cobrado) : <span className="text-neutral-300">—</span>}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular text-neutral-600">
+                        {e.entradas !== 0 ? fmtMoney(e.entradas) : <span className="text-neutral-300">—</span>}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular">
+                        {e.salidas !== 0 ? <span className="text-rose-600">− {fmtMoney(e.salidas)}</span> : <span className="text-neutral-300">—</span>}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular font-semibold text-neutral-800">{fmtMoney(e.queda)}</td>
+                    </tr>
+
+                    {abierto && (
+                      <tr className="bg-neutral-50/60">
+                        <td colSpan={5} className="px-3 pb-3 pt-1">
+                          <ul className="divide-y divide-neutral-100 rounded-lg border border-neutral-100 bg-white">
+                            {cobros.map((c) => (
+                              <li key={c.id} className="flex items-center gap-3 px-3 py-1.5">
+                                <span className="text-[11px] text-neutral-400 w-12 shrink-0 tabular">{fmtHora(c.paidAt)}</span>
+                                <button
+                                  type="button"
+                                  onClick={(ev) => { ev.stopPropagation(); setCobroAbierto(c); }}
+                                  className="min-w-0 flex-1 text-left text-[12px] text-neutral-700 hover:underline"
+                                >
+                                  {c.patientName || c.clientName || "Sin nombre"}
+                                  {c.patientName && c.clientName && (
+                                    <span className="text-neutral-400"> · paga {c.clientName}</span>
+                                  )}
+                                  {c.devolucion && <span className="text-rose-600"> · devuelto</span>}
+                                </button>
+                                <span className={`text-[12px] tabular shrink-0 ${c.amount < 0 ? "text-rose-600" : "text-neutral-700"}`}>
+                                  {fmtMoney(c.amount)}
+                                </span>
+                              </li>
+                            ))}
+                            {apuntes.map((mv) => (
+                              <li key={mv.id} className="flex items-center gap-3 px-3 py-1.5">
+                                <span className="text-[11px] text-neutral-400 w-12 shrink-0">
+                                  {mv.direction === "out" ? "salida" : "entrada"}
+                                </span>
+                                <span className="min-w-0 flex-1 text-[12px] text-neutral-700 truncate">
+                                  {mv.concept}
+                                  {mv.createdBy?.displayName && <span className="text-neutral-400"> · {mv.createdBy.displayName}</span>}
+                                </span>
+                                <span className={`text-[12px] tabular shrink-0 ${mv.direction === "out" ? "text-rose-600" : "text-neutral-700"}`}>
+                                  {mv.direction === "out" ? "− " : ""}{fmtMoney(mv.amount)}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })}
             </tbody>
@@ -189,8 +303,18 @@ export default function EfectivoCaja({ cajaId, onApuntar }) {
         {partida
           ? `Se parte de los ${fmtMoney(partida.importe)} contados al cerrar el ${fmtFecha(partida.fecha)}.`
           : "No hay ningún cierre anterior a estas fechas con dinero contado, así que se empieza en cero: cierra la caja un día y a partir de ahí el saldo se arrastra solo."}
-        {" "}Un cobro pendiente no cuenta hasta que entra.
+        {" "}Un cobro pendiente no cuenta hasta que entra. Pulsa un día para ver quién pagó en
+        efectivo y qué entró o salió del cajón.
       </p>
+
+      {cobroAbierto && (
+        <CobroDrawer
+          cobroId={cobroAbierto.id}
+          resumen={cobroAbierto}
+          onClose={() => setCobroAbierto(null)}
+          onCambiado={() => { cargar(); cargarMovimientos(); }}
+        />
+      )}
     </div>
   );
 }

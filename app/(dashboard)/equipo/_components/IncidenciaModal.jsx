@@ -793,8 +793,28 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
           {/* Comentarios (solo existentes) */}
           {!isNew && (
             <div className="border-t border-neutral-100 pt-3">
-              <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-2">Comentarios</div>
-              <div className="space-y-2 mb-2 max-h-40 overflow-y-auto">
+              {/*
+                EL HILO ENTERO, SIN CAJA CON SCROLL (09/09/2026, AV-0098 de
+                Aumenta). Elena: «no me salen todos los comentarios, me sale
+                solo uno; si alguien añade otro ya no me deja verlo».
+
+                Los datos estaban bien —los 115 comentarios del centro se
+                guardan completos y la pantalla los pedía todos—: lo que
+                escondía el segundo era este mismo recuadro. Tenía 160 px de
+                alto y su propio scroll, así que con dos comentarios de tres
+                líneas el de abajo quedaba fuera y no había ninguna señal de
+                que hubiera más; con la rueda encima del recuadro se movía el
+                hilo y con la rueda fuera se movía el modal, que es la peor
+                combinación posible.
+
+                Ahora crecen todos y el que scrollea es el modal, que ya lo
+                hacía. El número al lado del rótulo es la comprobación de un
+                vistazo: si la lista dice tres y aquí ves tres, están todos.
+              */}
+              <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-2">
+                Comentarios{(inc?.comments ?? []).length > 0 ? ` · ${(inc?.comments ?? []).length}` : ""}
+              </div>
+              <div className="space-y-2 mb-2">
                 {(inc?.comments ?? []).length === 0 && <p className="text-[11px] text-neutral-400">Sin comentarios.</p>}
                 {(inc?.comments ?? []).map((c, i) => (
                   <div key={i} className="rounded-lg bg-neutral-50 border border-neutral-100 px-3 py-2">

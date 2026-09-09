@@ -9,7 +9,7 @@ import { urlPanelStripe } from "../../../../lib/billing/cobroDesdeStripe.js";
 import { whereDeBusquedaCobros } from "../../../../lib/billing/busquedaCobros.js";
 import { billingHasPatients } from "../../../../lib/billing/patientLink.js";
 import { dondeEstaElCobroDe } from "../../../../lib/billing/cobroDeCuota.js";
-import { decidirCobroDelPendiente } from "../../../../lib/billing/cobroParcial.js";
+import { decidirCobroDelPendiente, pendienteQueCasa } from "../../../../lib/billing/cobroParcial.js";
 
 export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule }) => {
   try {
@@ -286,6 +286,28 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
         }
         payment = pendientes[0];
         cobradosPendientes = pendientes.map((p) => p.id);
+      } else if (pendientes.length > 1) {
+        /*
+         * ── Y SI PAGA SOLO UNO DE ELLOS (09/09/2026, AV-0085 de Aumenta) ────
+         * Con varios pendientes y un importe que no es la suma, esto creaba un
+         * cobro NUEVO y los dejaba a los dos ahí: una familia acabó con 260 €
+         * cobrados y 375 € pendientes del mismo mes, contada como pagada y como
+         * morosa a la vez. Si lo que traen casa con lo que pide UNO de los
+         * pendientes, se está pagando ese y se salda ese. La regla y el
+         * desempate, en `lib/billing/cobroParcial.js`.
+         */
+        const suyo = pendienteQueCasa(pendientes, importe);
+        if (suyo) {
+          await suyo.update({
+            status: "completed",
+            paidAt,
+            method,
+            notes: notes ? `${suyo.notes ? `${suyo.notes} — ` : ""}${notes}` : suyo.notes,
+            conceptId: conceptoValido ?? suyo.conceptId ?? null,
+          });
+          payment = suyo;
+          cobradosPendientes = [suyo.id];
+        }
       }
     }
 
