@@ -49,6 +49,20 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
       if (!pagador) return error("La ficha del pagador no existe", 422);
     }
 
+    /*
+     * Cambiar la reserva ya abonada la deja OTRA VEZ por descontar
+     * (09/09/2026). Si estaba puesta en 30 €, se generó septiembre y luego
+     * alguien la corrige a 60, el cobro pendiente de septiembre se rehace unas
+     * líneas más abajo y tiene que hacerlo con la cifra nueva. Solo cuando el
+     * importe CAMBIA de verdad: el cajón reenvía el campo en cada edición, y
+     * borrar la marca siempre haría que el descuento se repitiera en octubre.
+     */
+    if ("reservaAbonada" in valores) {
+      const antesReserva = cuota.reservaAbonada == null ? null : Number(cuota.reservaAbonada);
+      const ahoraReserva = valores.reservaAbonada == null ? null : Number(valores.reservaAbonada);
+      if (antesReserva !== ahoraReserva) valores.reservaAplicadaEn = null;
+    }
+
     // La baja escrita sin apagar la cuota (o al revés) deja la fila diciendo
     // dos cosas a la vez. Quién contradice a quién lo decide `lib/billing/
     // cuotas.js` (`cuadrarBajaYActiva`), con su prueba: aquí solo se aplica.

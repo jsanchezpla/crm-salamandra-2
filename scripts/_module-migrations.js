@@ -424,6 +424,11 @@ export const MODULES = {
     // De quién es el bono dentro de la familia (08/09/2026, AV-0055): sin esto,
     // en una familia con dos hermanos el bono de uno se le gastaba al otro.
     "migrate-session-packs-paciente",
+    // Lo que el bono ya traía gastado (09/09/2026): los 229 bonos de Organízate
+    // se usaron en citas de 2023-2025 y el CRM solo tiene la agenda de 2026 en
+    // adelante, así que contando citas saldrían todos enteros. ANTES del
+    // despliegue: el modelo pide la columna por nombre.
+    "migrate-session-packs-previas",
     // De quién es un hueco reservado (08/09/2026): el nombre del niño sale del
     // rótulo, que es texto libre, y pasa a viajar por el enlace.
     "migrate-bloqueos-paciente",
@@ -467,6 +472,14 @@ export const MODULES = {
      * rellene los conceptos de sus tipos. Ver `lib/citas/dineroDeLaCita.js`.
      */
     "migrate-citas-cobro-de-la-cita",
+    /*
+     * De qué cita sale qué informe (09/09/2026, Aumenta: «no podemos crear las
+     * sesiones de Diagnóstico»): `event_types.informe_tipo`. El modelo la
+     * declara, así que sin ella toda lectura de tipos de cita daría 42703: VA
+     * ANTES del despliegue. Todo NULL: un tipo sin esto se comporta como
+     * siempre.
+     */
+    "migrate-event-types-informe",
   ],
 
   calendar: ["migrate-calendar-citas-fks"],
@@ -639,6 +652,10 @@ export const MODULES = {
     // Quién paga la cuota cuando no es la familia (07/09/2026):
     // billing_cuotas.payer_client_id. ANTES del despliegue: el modelo la pide.
     "migrate-billing-cuotas-pagador",
+    // La reserva de plaza ya pagada, dentro de la cuota (09/09/2026): sin ella
+    // toda cuota nueva deja 30 € pendientes que nadie debe. ANTES del
+    // despliegue: el modelo pide las dos columnas por nombre.
+    "migrate-billing-cuotas-reserva",
     // El cobro pendiente que sale de un bono (08/09/2026, AV-0070).
     "migrate-cobro-de-bono",
     // Cuándo se devolvió un cobro (07/09/2026): payments.refunded_at. ANTES

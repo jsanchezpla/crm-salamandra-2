@@ -63,6 +63,24 @@ export function defineCuota(sequelize) {
       // Hasta cuándo (la baja). NULL = sigue vigente.
       endDate: { type: DataTypes.DATEONLY, allowNull: true, field: "end_date" },
       active: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+      /*
+       * La reserva de plaza que la familia YA pagó por adelantado (09/09/2026,
+       * Aumenta: «en cuotas que estamos creando, deja pendiente 30 €»).
+       *
+       * En verano se cobran 30 € por guardar la plaza del curso siguiente, y
+       * ese dinero se descuenta del PRIMER mes que se cobre. Hasta hoy eso no
+       * estaba en ninguna parte: se hizo con un script contra los cobros de
+       * septiembre ya generados, así que cada cuota nueva volvía a cobrar el
+       * mes entero y quedaban 30 € pendientes que nadie debía.
+       *
+       * `reservaAbonada` es el dinero (30 €, o 60 si son dos hermanos) y
+       * `reservaAplicadaEn` el mes 'AAAA-MM' en el que ya se descontó — que es
+       * lo que garantiza que se descuente UNA vez y octubre salga entero.
+       * Nunca se borra al aplicarla: la cuota tiene que poder explicar por qué
+       * su primer mes fue más barato.
+       */
+      reservaAbonada: { type: DataTypes.DECIMAL(12, 2), allowNull: true, field: "reserva_abonada" },
+      reservaAplicadaEn: { type: DataTypes.STRING(7), allowNull: true, field: "reserva_aplicada_en" },
       notes: { type: DataTypes.TEXT, allowNull: true },
     },
     {

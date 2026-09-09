@@ -59,6 +59,9 @@ const mesActual = () => mesVigente();
 const CUOTA_VACIA = () => ({
   conceptIds: [],
   amount: "",
+  // La reserva de plaza que ya pagó en verano y hay que descontarle del primer
+  // mes (09/09/2026). Vacío = no pagó ninguna, que es lo normal.
+  reservaAbonada: "",
   payerClientId: "",
   method: "transfer",
   dayOfMonth: "",
@@ -537,7 +540,23 @@ export default function CuotasPage() {
                         <span className="ml-1 text-[10px] text-amber-600" title="Tiene un importe pactado: manda sobre el precio de los conceptos">· pactado</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right font-semibold tabular text-neutral-900">{fmtMoney(importeDe(c))}</td>
+                    <td className="px-4 py-3 text-right font-semibold tabular text-neutral-900">
+                      {fmtMoney(importeDe(c))}
+                      {/* La reserva de plaza que todavía no se ha descontado
+                          (09/09/2026): es lo que hace que el primer mes salga
+                          más barato, y se dice aquí para que no parezca un
+                          error cuando el cobro no cuadre con este importe. */}
+                      {Number(c.reservaAbonada) > 0 && !c.reservaAplicadaEn && (
+                        <div className="text-[10px] font-normal text-emerald-700" title="Se le descontará del primer mes que se genere, una sola vez">
+                          −{fmtMoney(Number(c.reservaAbonada))} de reserva
+                        </div>
+                      )}
+                      {Number(c.reservaAbonada) > 0 && c.reservaAplicadaEn && (
+                        <div className="text-[10px] font-normal text-neutral-400" title="La reserva ya se descontó: los meses siguientes van con la cuota entera">
+                          reserva usada en {mesLegible(c.reservaAplicadaEn)}
+                        </div>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-xs text-neutral-500">{METODO_CORTO[c.method] ?? "—"}</td>
                     <td className="px-4 py-3 text-xs text-neutral-500">{c.dayOfMonth ? `día ${c.dayOfMonth}` : "—"}</td>
                     <td className="px-4 py-3 text-xs text-neutral-500">
@@ -701,6 +720,7 @@ function DrawerCuota({ conceptos, cuota = null, inicial = null, ivaSugerido = 21
       ? {
           conceptIds: Array.isArray(cuota.conceptIds) ? cuota.conceptIds.map(String) : [],
           amount: cuota.amount ?? "",
+          reservaAbonada: cuota.reservaAbonada ?? "",
           method: cuota.method ?? "transfer",
           dayOfMonth: cuota.dayOfMonth ?? "",
           startDate: String(cuota.startDate ?? "").slice(0, 10),
@@ -769,6 +789,7 @@ function DrawerCuota({ conceptos, cuota = null, inicial = null, ivaSugerido = 21
       const cuerpo = {
         conceptIds: form.conceptIds,
         amount: form.amount === "" ? null : Number(form.amount),
+        reservaAbonada: form.reservaAbonada === "" ? null : Number(form.reservaAbonada),
         method: form.method || null,
         dayOfMonth: form.dayOfMonth === "" ? null : Number(form.dayOfMonth),
         startDate: form.startDate,
@@ -994,6 +1015,39 @@ function DrawerCuota({ conceptos, cuota = null, inicial = null, ivaSugerido = 21
                   options={METODOS} className={inputCls} />
                 <p className="text-[10px] text-neutral-400">Es lo que permite generar «solo las de banco».</p>
               </div>
+            </div>
+
+            {/*
+              * La reserva de plaza ya pagada (09/09/2026, Aumenta: «en cuotas
+              * que estamos creando, deja pendiente 30 €»). Las familias pagan
+              * 30 € en verano para guardar la plaza del curso, y ese dinero se
+              * descuenta del primer mes; hasta hoy no había dónde decirlo, así
+              * que el mes salía entero y quedaban 30 € pendientes que nadie
+              * debía. Se descuenta UNA vez y el mes en el que se gastó queda
+              * escrito en la cuota.
+              */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">
+                Reserva ya abonada
+              </label>
+              <input type="number" step="0.01" min="0" value={form.reservaAbonada} placeholder="0,00"
+                onChange={(e) => setForm((f) => ({ ...f, reservaAbonada: e.target.value }))} className={inputCls} />
+              <p className="text-[10px] text-neutral-400">
+                {cuota?.reservaAplicadaEn ? (
+                  <>
+                    Ya descontada en <strong className="text-neutral-500">{mesLegible(cuota.reservaAplicadaEn)}</strong>.
+                    Los meses siguientes salen con la cuota entera. Si cambias el importe, vuelve a quedar por descontar.
+                  </>
+                ) : Number(form.reservaAbonada) > 0 ? (
+                  <>
+                    Se le descontarán{" "}
+                    <strong className="text-neutral-500">{fmtMoney(Number(form.reservaAbonada))}</strong> del PRIMER mes
+                    que se genere. Una sola vez: el resto del curso, cuota entera.
+                  </>
+                ) : (
+                  <>Lo que pagó por adelantado para guardar la plaza (30 € en Aumenta). Vacío = no pagó ninguna.</>
+                )}
+              </p>
             </div>
 
             <div className="grid grid-cols-3 gap-3">

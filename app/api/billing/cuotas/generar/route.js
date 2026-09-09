@@ -171,7 +171,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
 export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
-    const { Payment } = tenantModels;
+    const { Payment, Cuota } = tenantModels;
     const body = await request.json();
 
     const mes = body?.mes;
@@ -217,7 +217,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
             lock: t.LOCK.UPDATE,
           });
           if (existe) return null;
-          return Payment.create(
+          const nuevo = await Payment.create(
             {
               clientId: fila.clientId,
               patientId: fila.patientId,
@@ -236,6 +236,20 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
             },
             { transaction: t }
           );
+          /*
+           * La reserva de plaza se descuenta UNA vez (09/09/2026): el mes en el
+           * que se gasta queda escrito en la cuota, dentro de la MISMA
+           * transacción que crea el cobro. Si se marcara aparte y esto fallara,
+           * quedaría una reserva dada por gastada sin cobro que la gastara —o
+           * al revés, un cobro rebajado que volvería a rebajar el mes que viene.
+           */
+          if (fila.reservaAplicada && Cuota) {
+            await Cuota.update(
+              { reservaAplicadaEn: fila.reservaAplicada.mes },
+              { where: { id: fila.cuotaId }, transaction: t }
+            );
+          }
+          return nuevo;
         });
         if (!cobro) {
           saltados.push({ ...vista(fila), resultado: "repetida", motivo: "ya tenía cobro de este mes" });
