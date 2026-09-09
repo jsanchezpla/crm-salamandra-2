@@ -4,6 +4,7 @@ import { ok, error, forbidden, notFound, serverError } from "../../../../../../l
 import { logClinicaAudit } from "../../../../../../lib/clinica/audit.js";
 import { serializeReport } from "../../../../../../lib/clinica/serialize.js";
 import { redactarDesdeSesiones, resumenRedaccion } from "../../../../../../lib/clinica/redactarInforme.js";
+import { normalizarObjetivos } from "../../../../../../lib/clinica/objetivosDelPlan.js";
 
 /**
  * POST /api/clinica/reports/[id]/desde-sesiones — redacta el borrador del
@@ -72,7 +73,18 @@ export const POST = withTenant(async (request, rc, ctx) => {
       return error("Ninguna de las sesiones elegidas sirve: tienen que ser de este paciente y estar registradas", 422);
     }
 
-    const nuevas = redactarDesdeSesiones(cs, sesiones);
+    /*
+     * Los objetivos, del PLAN del paciente y no de cada sesión (09/09/2026,
+     * AV-0099). Si no tiene plan o su plan no tiene objetivos, `null` deja que
+     * se caiga a los de las sesiones, que es lo que hacía hasta hoy.
+     */
+    const { InterventionPlan } = ctx.tenantModels;
+    const plan = InterventionPlan
+      ? await InterventionPlan.findOne({ where: { patientId: informe.patientId }, attributes: ["objectives"] }).catch(() => null)
+      : null;
+    const objetivosDelPlan = plan ? normalizarObjetivos(plan.objectives).map((o) => o.texto) : null;
+
+    const nuevas = redactarDesdeSesiones(cs, sesiones, { objetivosDelPlan });
     const aporte = resumenRedaccion(cs, nuevas);
     await informe.update({ contentSections: nuevas });
 
