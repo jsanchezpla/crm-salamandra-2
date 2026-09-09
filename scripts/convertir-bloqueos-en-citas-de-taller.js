@@ -39,10 +39,34 @@
  *   · si sigue habiendo duda, hay que decirlo: `--grupo "regex del rótulo=uuid
  *     del grupo"`. Lo que no se resuelve se LISTA y no se toca.
  *
+ * ── CUANDO EL RÓTULO NO BASTA: `--serie` (09/09/2026) ───────────────────────
+ * En Aumenta hay TRES series de tardes distintas rotuladas exactamente igual
+ * («TALLER H.H.S.S», de Estefanía los jueves, de Laura los martes y de Silvia
+ * los miércoles): con `--grupo` no hay regex que las separe, porque el texto es
+ * el mismo. Lo que sí las separa es la SERIE —quién, qué día, a qué hora y
+ * cuánto dura—, que es como se reconoce un taller semanal mirando la agenda.
+ *
+ * `--serie "regex=uuid"` casa contra esta clave, que se imprime en la lista de
+ * dudas para poder copiarla:
+ *
+ *     Silvia Pérez Hernández · miércoles · 17:15 · 90m · TALLER H.H.S.S
+ *
+ * Gana sobre `--grupo`: es más específica.
+ *
+ * ── DOS BLOQUEOS PARA LA MISMA CLASE (09/09/2026) ───────────────────────────
+ * Un taller que dan DOS personas está en la agenda dos veces, una por cada una:
+ * el martes a las 18:15 hay un bloqueo de Daniela y otro de Laura, y son la
+ * misma hora con los mismos niños. Convertir los dos dejaría la tarde
+ * duplicada. Así que, cuando varios bloqueos caen en el MISMO grupo a la MISMA
+ * hora, se crea UNA cita —que ya lleva dentro a los dos terapeutas del grupo,
+ * los pone `montarCitaDeTaller`— y los demás bloqueos se retiran sin crear
+ * nada. Se cuenta aparte para que se vea.
+ *
  * ── USO ─────────────────────────────────────────────────────────────────────
  *   node --env-file=.env.local scripts/convertir-bloqueos-en-citas-de-taller.js <slug>
  *   … --alias "hhss|h\.h\.s\.s=Habilidades sociales"   (repetible)
  *   … --grupo "apoyo.*2=<uuid>"                        (repetible)
+ *   … --serie "Silvia.*miércoles.*90m=<uuid>"          (repetible, manda sobre --grupo)
  *   … --desde 2025-09-01 --hasta 2026-12-31            (por fecha de inicio)
  *   … --confirm                                        escribe
  *
@@ -57,7 +81,7 @@ import { terapeutasDeGrupo } from "../lib/clinica/grupoDeTaller.js";
 import { logCitasAudit } from "../lib/citas/audit.js";
 
 const argv = process.argv.slice(2);
-const conValor = new Set(["--alias", "--grupo", "--desde", "--hasta"]);
+const conValor = new Set(["--alias", "--grupo", "--serie", "--desde", "--hasta"]);
 const flags = new Set(argv.filter((a) => a.startsWith("--") && !conValor.has(a)));
 const [slug] = argv.filter((a, i) => !a.startsWith("--") && !conValor.has(argv[i - 1]));
 const valores = (k) => argv.map((a, i) => (a === k ? argv[i + 1] : null)).filter(Boolean);
@@ -76,6 +100,7 @@ const parsear = (lista, que) => lista.map((v) => {
 });
 const aliases = parsear(valores("--alias"), "--alias");
 const forzados = parsear(valores("--grupo"), "--grupo");
+const porSerie = parsear(valores("--serie"), "--serie");
 const desde = valores("--desde")[0] ? new Date(`${valores("--desde")[0]}T00:00:00+02:00`) : null;
 const hasta = valores("--hasta")[0] ? new Date(`${valores("--hasta")[0]}T23:59:59+02:00`) : null;
 
@@ -114,6 +139,24 @@ for (const t of talleres) {
   }
 }
 
+const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+const enMadrid = (d, o) => new Date(d).toLocaleString("es-ES", { timeZone: "Europe/Madrid", ...o });
+
+/**
+ * La CLAVE DE SERIE de un bloqueo: quién, qué día de la semana, a qué hora y
+ * cuánto dura, más el rótulo. Es lo que distingue dos tardes que se llaman
+ * igual, y lo que se le pasa a `--serie`.
+ *
+ * El día de la semana se saca de la fecha YA en Madrid, no del UTC: en verano
+ * un bloqueo de las 00:30 sería del día anterior.
+ */
+function claveDeSerie(b, minutos, quien) {
+  const f = enMadrid(b.startAt, { year: "numeric", month: "2-digit", day: "2-digit" }).split("/").reverse().join("-");
+  const dia = DIAS[new Date(`${f}T12:00:00Z`).getUTCDay()];
+  const hora = enMadrid(b.startAt, { hour: "2-digit", minute: "2-digit" });
+  return `${quien ?? "(centro)"} · ${dia} · ${hora} · ${minutos}m · ${String(b.label ?? "").trim()}`;
+}
+
 /** ¿De qué taller es este rótulo? Por nombre del taller o por alias. */
 function tallerDelRotulo(label) {
   const n = norm(label);
@@ -125,8 +168,15 @@ function tallerDelRotulo(label) {
   return talleres.find((t) => n.includes(norm(t.name))) ?? null;
 }
 
-/** ¿Y qué grupo? Forzado, único, o el de la misma duración. */
-function grupoDelBloqueo(taller, label, minutos) {
+/** ¿Y qué grupo? Por serie, forzado por rótulo, único, o el de la misma duración. */
+function grupoDelBloqueo(taller, label, minutos, serie) {
+  // La serie va primero: es más específica que el rótulo, y existe justo para
+  // los casos en los que el rótulo no distingue.
+  for (const f of porSerie) if (f.re.test(serie)) {
+    const g = grupos.find((x) => x.id === f.valor);
+    if (!g) die(`--serie apunta a un grupo que no existe: ${f.valor}`);
+    return { grupo: g };
+  }
   for (const f of forzados) if (f.re.test(label)) {
     const g = grupos.find((x) => x.id === f.valor);
     if (!g) die(`--grupo apunta a un grupo que no existe: ${f.valor}`);
@@ -138,6 +188,13 @@ function grupoDelBloqueo(taller, label, minutos) {
   if (mismaDuracion.length === 1) return { grupo: mismaDuracion[0] };
   return { grupo: null, porQue: candidatos.length ? `${candidatos.length} grupos y ninguno (o varios) dura ${minutos} min` : "el taller no tiene grupos" };
 }
+
+// Quién es cada profesional, para poder nombrarlo en la clave de serie.
+const quienEs = new Map(
+  models.TeamMember
+    ? (await models.TeamMember.findAll({ attributes: ["id", "displayName"], raw: true })).map((m) => [m.id, m.displayName])
+    : []
+);
 
 // ── Los bloqueos ────────────────────────────────────────────────────────────
 const where = {};
@@ -152,14 +209,32 @@ for (const b of bloqueos) {
   if (!taller) { ajenos++; continue; }
   const minutos = Math.round((new Date(b.endAt) - new Date(b.startAt)) / 60000);
   if (!(minutos >= 15 && minutos <= 480)) { dudas.push({ b, porQue: `dura ${minutos} min: no parece una sesión` }); continue; }
-  const { grupo, porQue } = grupoDelBloqueo(taller, b.label, minutos);
-  if (!grupo) { dudas.push({ b, porQue }); continue; }
+  const serie = claveDeSerie(b, minutos, quienEs.get(b.teamMemberId));
+  const { grupo, porQue } = grupoDelBloqueo(taller, b.label, minutos, serie);
+  if (!grupo) { dudas.push({ b, serie, porQue }); continue; }
   const tipo = tipoDe.get(grupo.id);
-  if (!tipo) { dudas.push({ b, porQue: `el grupo «${grupo.name}» no tiene tipo de cita (scripts/backfill-talleres-tipos-cita.js)` }); continue; }
-  plan.push({ b, taller, grupo, tipo, minutos });
+  if (!tipo) { dudas.push({ b, serie, porQue: `el grupo «${grupo.name}» no tiene tipo de cita (scripts/backfill-talleres-tipos-cita.js)` }); continue; }
+  plan.push({ b, taller, grupo, tipo, minutos, serie });
 }
 
-process.stdout.write(`\n  Bloqueos leídos: ${bloqueos.length} · de otra cosa: ${ajenos} · a convertir: ${plan.length} · con dudas: ${dudas.length}\n\n`);
+/*
+ * Una clase, UNA cita. Un taller que dan dos personas está dos veces en la
+ * agenda —un bloqueo por cada una— y las dos son la misma hora con los mismos
+ * niños. La primera crea la cita (que ya lleva a los dos terapeutas dentro) y
+ * las demás se retiran sin crear nada.
+ */
+const sobrantes = [];
+const yaVisto = new Set();
+const plan2 = [];
+for (const p of plan) {
+  const k = `${p.grupo.id}|${new Date(p.b.startAt).toISOString()}`;
+  if (yaVisto.has(k)) sobrantes.push(p);
+  else { yaVisto.add(k); plan2.push(p); }
+}
+plan.length = 0;
+plan.push(...plan2);
+
+process.stdout.write(`\n  Bloqueos leídos: ${bloqueos.length} · de otra cosa: ${ajenos} · a convertir: ${plan.length} · con dudas: ${dudas.length}${sobrantes.length ? ` · duplicados a retirar: ${sobrantes.length}` : ""}\n\n`);
 
 const porGrupo = new Map();
 for (const p of plan) porGrupo.set(p.grupo.id, (porGrupo.get(p.grupo.id) ?? 0) + 1);
@@ -171,7 +246,11 @@ for (const [gid, n] of porGrupo) {
 }
 if (dudas.length) {
   process.stdout.write(`\n  Sin tocar, por dudas:\n`);
-  for (const { b, porQue } of dudas) process.stdout.write(`    ? «${b.label}» ${fecha(b.startAt)} · ${porQue}\n`);
+  for (const { b, serie, porQue } of dudas) {
+    process.stdout.write(`    ? ${fecha(b.startAt)} · ${porQue}\n`);
+    // La clave, entera y copiable: es lo que hay que darle a --serie.
+    if (serie) process.stdout.write(`      serie: ${serie}\n`);
+  }
 }
 
 if (!confirm) {
@@ -236,6 +315,18 @@ for (const p of plan) {
   }
 }
 
-process.stdout.write(`\n  Convertidos: ${hechas} de ${plan.length} · asistentes apuntados: ${asistentesTotal}\n\n`);
+// Y los duplicados de una clase que ya tiene su cita: se retiran, sin crear
+// nada y sin tocar la cita de al lado.
+let retirados = 0;
+for (const p of sobrantes) {
+  try {
+    await p.b.destroy();
+    retirados++;
+  } catch (err) {
+    process.stdout.write(`  ✗ no se pudo retirar el bloqueo duplicado ${fecha(p.b.startAt)} «${p.b.label}»: ${err.message}\n`);
+  }
+}
+
+process.stdout.write(`\n  Convertidos: ${hechas} de ${plan.length} · asistentes apuntados: ${asistentesTotal}${sobrantes.length ? ` · duplicados retirados: ${retirados} de ${sobrantes.length}` : ""}\n\n`);
 await sequelize.close();
 await master.close();
