@@ -405,13 +405,32 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       const partes = getMadridParts(scheduledAt);
       const inicio = partes.hour * 60 + partes.minute;
       const fin = inicio + duration;
-      const choca = bloqueos.find((b) => {
+      const chocan = bloqueos.filter((b) => {
         const t = minutosOcupados(b, partes);
         return t && inicio < t.fin && fin > t.inicio;
       });
-      if (choca) {
+      if (chocan.length) {
+        /*
+         * ── CUÁNTOS SON, Y NO SOLO CÓMO SE LLAMA EL PRIMERO ────────────────
+         * (09/09/2026, AV-0092). Olga: «no me deja programar la nueva cita
+         * porque aparece todavía como libre pacientes» — después de haber
+         * quitado ese hueco.
+         *
+         * El aviso decía el rótulo de UNO de los bloqueos, así que al haber dos
+         * encima del mismo cuarto de hora se borraba uno, volvía a salir el
+         * mismo texto y parecía que el CRM no se había enterado. Y en Aumenta
+         * los bloqueos apilados existen: el 09/09 había un viernes con OCHO en
+         * el mismo tramo de 15:30 a 15:45.
+         *
+         * Decir cuántos hay convierte «esto no funciona» en «ah, quedaba otro».
+         */
+        const cuantos = chocan.length;
+        const rotulos = [...new Set(chocan.map((b) => b.label).filter(Boolean))];
+        const detalle = cuantos === 1
+          ? `(${rotulos[0] ?? "sin etiqueta"})`
+          : `por ${cuantos} huecos a la vez (${rotulos.join(", ") || "sin etiqueta"}): si has quitado uno, quedan los demás`;
         return error(
-          `Ese tramo está bloqueado (${choca.label}). Vuelve a enviarlo confirmando si quieres crearla igualmente.`,
+          `Ese tramo está bloqueado ${detalle}. Vuelve a enviarlo confirmando si quieres crearla igualmente.`,
           409
         );
       }
