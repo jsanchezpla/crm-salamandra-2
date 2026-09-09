@@ -36,6 +36,7 @@ import {
   importePactado,
   huellaLineas,
   sePuedeRellenar,
+  conceptoEnUnaLinea,
 } from "../lib/billing/cuotaParaRellenar.js";
 
 const LOGO = "11111111-1111-4111-8111-111111111111";
@@ -183,5 +184,42 @@ describe("cuándo se puede pisar lo que hay escrito", () => {
   it("los espacios de más en el texto no cuentan como haberlo tocado", () => {
     const conEspacios = [linea("  Logopedia  ", 190), puestas[1]];
     assert.equal(huellaLineas(conEspacios), huellaLineas(puestas));
+  });
+});
+
+describe("el concepto en una sola línea (el reparto entre pagadores)", () => {
+  const linea = (description, unitPrice) => ({ description, unitPrice, quantity: 1 });
+
+  it("una cuota de un concepto pone su texto, no «Cuota»", () => {
+    assert.equal(conceptoEnUnaLinea([linea("Psicología infantil", 190)]), "Psicología infantil");
+  });
+
+  it("dos conceptos se juntan con « + »", () => {
+    assert.equal(
+      conceptoEnUnaLinea([linea("Psicología", 190), linea("Pedagogía", 120)]),
+      "Psicología + Pedagogía"
+    );
+  });
+
+  it("el mismo concepto dos veces se dice una (dos líneas, un rótulo)", () => {
+    assert.equal(conceptoEnUnaLinea([linea("Psicología", 190), linea("Psicología", 190)]), "Psicología");
+  });
+
+  it("sin líneas devuelve null, para que la pantalla deje lo que tenía", () => {
+    assert.equal(conceptoEnUnaLinea([]), null);
+    assert.equal(conceptoEnUnaLinea(null), null);
+  });
+
+  it("una línea sin texto no cuenta", () => {
+    assert.equal(conceptoEnUnaLinea([{ description: "   ", unitPrice: 10 }]), null);
+    assert.equal(
+      conceptoEnUnaLinea([{ description: "   " }, linea("Logopedia", 60)]),
+      "Logopedia"
+    );
+  });
+
+  it("un texto larguísimo se recorta: el campo es de una línea", () => {
+    const largo = conceptoEnUnaLinea([linea("A".repeat(500), 10)]);
+    assert.equal(largo.length, 200);
   });
 });

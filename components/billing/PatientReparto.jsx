@@ -13,11 +13,13 @@
  *      se borran los borradores ya creados (no se queda a medias).
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { hoyVigente } from "@/lib/billing/cuotas.js";
 import Select from "@/components/ui/Select.jsx";
 import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
 import { repartoIgual, repartoPorPorcentajes, porcentajesCuadran } from "@/lib/billing/repartoImportes.js";
+import { conceptoEnUnaLinea, conceptosDeCuotas, cuotasQueEntran } from "@/lib/billing/cuotaParaRellenar.js";
+import { lineaDesdeConcepto } from "@/lib/billing/conceptosCatalogo.js";
 import { GUARDIAN_RELATIONSHIP_LABEL } from "@/lib/clients/guardians.js";
 
 const eur = (n) => new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" }).format(Number(n) || 0);
@@ -30,6 +32,8 @@ export default function PatientReparto({ patientId, defaultPayerClientId, onClos
   // matemática del cierre al céntimo vive en lib/billing/repartoImportes.js.
   const [porPct, setPorPct] = useState(false);
   const [concept, setConcept] = useState("Cuota");
+  // De dónde salió el texto de arriba, para poder decirlo en pantalla.
+  const [deSuCuota, setDeSuCuota] = useState(null);
   const [period, setPeriod] = useState("");
   const [total, setTotal] = useState("");
   const [singlePayer, setSinglePayer] = useState(defaultPayerClientId || "");
@@ -56,6 +60,56 @@ export default function PatientReparto({ patientId, defaultPayerClientId, onClos
       .catch(() => { if (vivo) setTutores([]); });
     return () => { vivo = false; };
   }, [defaultPayerClientId]);
+  /*
+   * EL CONCEPTO LO PONE SU CUOTA (09/09/2026, Rodrigo: «cuando le doy a varios
+   * pagadores, el concepto debería ser el mismo que el seleccionado
+   * automáticamente, no poner Cuota en texto libre. Debería poderse cambiar
+   * como texto libre por supuesto, pero debería ser inicialmente el mismo que
+   * el asignado auto al paciente»).
+   *
+   * Se pregunta lo MISMO que el formulario de factura y por el mismo orden
+   * (`lib/billing/cuotaParaRellenar.js`): la cuota asignada del paciente —las
+   * suyas y las de su familia, nunca la de un hermano— y, si su familia no
+   * tiene ninguna, la aprendida de la ficha, que es lo último que se le cobró.
+   * Los textos son los del catálogo, o sea los que saldrían impresos.
+   *
+   * Se pide aquí dentro y no se recibe hecho del formulario para que valga
+   * también cuando el reparto se abre desde la ficha del paciente, que es el
+   * otro sitio desde donde se abre.
+   *
+   * En cuanto alguien escribe en el campo no se vuelve a tocar (`tocado`): la
+   * respuesta puede llegar después de la primera tecla.
+   */
+  const tocado = useRef(false);
+  useEffect(() => {
+    if (!defaultPayerClientId) return;
+    let vivo = true;
+    const pedir = async (url) => {
+      const r = await fetch(url, { cache: "no-store" }).catch(() => null);
+      if (!r?.ok) return null;
+      return r.json().catch(() => null);
+    };
+    (async () => {
+      const [jConceptos, jCuotas] = await Promise.all([
+        pedir("/api/billing/conceptos"),
+        pedir(`/api/billing/cuotas?clientId=${encodeURIComponent(defaultPayerClientId)}`),
+      ]);
+      const catalogo = jConceptos?.data?.conceptos ?? [];
+      if (!vivo || !catalogo.length) return;
+      let ids = conceptosDeCuotas(cuotasQueEntran(jCuotas?.data?.cuotas ?? [], patientId));
+      if (!ids.length) {
+        const jFicha = await pedir(`/api/billing/fichas?id=${encodeURIComponent(defaultPayerClientId)}`);
+        ids = Array.isArray(jFicha?.data?.cuotaConceptIds) ? jFicha.data.cuotaConceptIds : [];
+      }
+      const texto = conceptoEnUnaLinea(
+        ids.map((id) => lineaDesdeConcepto(catalogo.find((c) => String(c.id) === String(id)))).filter(Boolean)
+      );
+      if (!vivo || !texto || tocado.current) return;
+      setDeSuCuota(texto);
+      setConcept(texto);
+    })();
+    return () => { vivo = false; };
+  }, [defaultPayerClientId, patientId]);
   const rotuloTutor = (g) => `${GUARDIAN_RELATIONSHIP_LABEL[g.relationship] ?? GUARDIAN_RELATIONSHIP_LABEL.tutor} · ${g.name}${g.dni === null || g.dni === "" ? " (sin DNI)" : ""}`;
   function elegirPagador(i, valor) {
     if (valor.startsWith("tutor:")) {
@@ -235,7 +289,14 @@ export default function PatientReparto({ patientId, defaultPayerClientId, onClos
         <div className="grid grid-cols-2 gap-3 mb-3">
           <div>
             <label className={labelCls}>Concepto</label>
-            <input className={inputCls} value={concept} onChange={(e) => setConcept(e.target.value)} />
+            <input
+              className={inputCls}
+              value={concept}
+              onChange={(e) => { tocado.current = true; setConcept(e.target.value); }}
+            />
+            {deSuCuota && concept === deSuCuota && (
+              <p className="text-[10px] text-neutral-400 mt-0.5">De su cuota. Cámbialo si esta factura dice otra cosa.</p>
+            )}
           </div>
           <div>
             <label className={labelCls}>Periodo (opcional)</label>
