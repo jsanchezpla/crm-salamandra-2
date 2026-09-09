@@ -35,6 +35,17 @@ export default function PatientExternalContactsSection({ patientId }) {
   const [abriendo, setAbriendo] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [ocupado, setOcupado] = useState(null);
+  /*
+   * ── Y SE PUEDEN CORREGIR (09/09/2026, AV-0102 de Aumenta) ────────────────
+   * Silvia: «se guarda el nombre del profesional y su profesión, pero no sale
+   * su correo de contacto». El hueco existía y estaba vacío —del Organízate
+   * vinieron los nombres y nada más: de 1.031 contactos, uno tenía correo—,
+   * pero aquí solo se podía AÑADIR o QUITAR. Para meterle el correo a una
+   * tutora había que borrarla y volver a crearla, y eso deja las actas que la
+   * nombraban sin contacto. Con la edición, el nombre y el correo se arreglan
+   * sin romper el historial (el PATCH ya estaba en la API desde el 02/08).
+   */
+  const [editando, setEditando] = useState(null); // id del contacto en edición
 
   const cargar = useCallback(() => {
     if (!patientId) return;
@@ -56,20 +67,24 @@ export default function PatientExternalContactsSection({ patientId }) {
 
   useEffect(cargar, [cargar]);
 
-  async function crear(e) {
+  async function guardar(e) {
     e.preventDefault();
     if (!form.name.trim()) return;
     setGuardando(true);
     setError(null);
     try {
-      const r = await fetch(`/api/pacientes/${patientId}/contactos`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
+      const r = await fetch(
+        editando ? `/api/pacientes/${patientId}/contactos/${editando}` : `/api/pacientes/${patientId}/contactos`,
+        {
+          method: editando ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        }
+      );
       const j = await r.json().catch(() => ({}));
-      if (!r.ok || !j.ok) throw new Error(j.error || "No se pudo añadir");
+      if (!r.ok || !j.ok) throw new Error(j.error || (editando ? "No se pudo guardar" : "No se pudo añadir"));
       setForm(NUEVO);
+      setEditando(null);
       setAbriendo(false);
       cargar();
     } catch (err) {
@@ -77,6 +92,20 @@ export default function PatientExternalContactsSection({ patientId }) {
     } finally {
       setGuardando(false);
     }
+  }
+
+  /** Abre el mismo formulario con el contacto dentro. */
+  function editar(c) {
+    setForm({
+      name: c.name ?? "",
+      role: c.role ?? "",
+      phone: c.phone ?? "",
+      email: c.email ?? "",
+      entity: c.entity ?? "",
+    });
+    setEditando(c.id);
+    setAbriendo(true);
+    setError(null);
   }
 
   async function borrar(c) {
@@ -114,7 +143,14 @@ export default function PatientExternalContactsSection({ patientId }) {
         </div>
         <button
           type="button"
-          onClick={() => setAbriendo((v) => !v)}
+          onClick={() => {
+            // Cerrar también sale de la edición: si no, «Cancelar» dejaba el
+            // formulario cargado y el siguiente «+ Añadir» editaba sin querer.
+            setAbriendo((v) => {
+              if (v) { setEditando(null); setForm(NUEVO); }
+              return !v;
+            });
+          }}
           className="text-[11px] font-medium px-3 py-1.5 rounded-lg text-white shrink-0"
           style={{ background: "var(--color-primary, #1B3A2D)" }}
         >
@@ -127,7 +163,7 @@ export default function PatientExternalContactsSection({ patientId }) {
       )}
 
       {abriendo && (
-        <form onSubmit={crear} className="border border-neutral-100 rounded-lg p-3 mb-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <form onSubmit={guardar} className="border border-neutral-100 rounded-lg p-3 mb-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="sm:col-span-2">
             <label className="block text-[10px] uppercase tracking-wider text-neutral-400 mb-1">Nombre *</label>
             <input className={input} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} autoFocus />
@@ -165,7 +201,7 @@ export default function PatientExternalContactsSection({ patientId }) {
               className="text-xs font-medium px-4 py-2 rounded-lg text-white disabled:opacity-40"
               style={{ background: "var(--color-primary, #1B3A2D)" }}
             >
-              {guardando ? "Guardando…" : "Guardar contacto"}
+              {guardando ? "Guardando…" : editando ? "Guardar cambios" : "Guardar contacto"}
             </button>
           </div>
         </form>
@@ -192,14 +228,23 @@ export default function PatientExternalContactsSection({ patientId }) {
                   {c.email && <span className="break-all">{c.email}</span>}
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => borrar(c)}
-                disabled={ocupado === c.id}
-                className="text-[11px] text-neutral-400 hover:text-red-600 disabled:opacity-40 shrink-0"
-              >
-                Quitar
-              </button>
+              <div className="flex items-center gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => editar(c)}
+                  className="text-[11px] text-neutral-400 hover:text-neutral-800"
+                >
+                  Editar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => borrar(c)}
+                  disabled={ocupado === c.id}
+                  className="text-[11px] text-neutral-400 hover:text-red-600 disabled:opacity-40"
+                >
+                  Quitar
+                </button>
+              </div>
             </li>
           ))}
         </ul>
