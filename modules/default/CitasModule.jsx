@@ -235,6 +235,59 @@ export default function CitasModule({
     setCalView({ view, date: fechaColumnas.toISOString() });
     setPorTerapeuta(false);
   }
+  /*
+   * ── LA VISTA POR TERAPEUTA VIVE EN LA DIRECCIÓN (09/09/2026) ─────────────
+   * Rosa (Aumenta): «si estoy en la agenda de una terapeuta y doy consultar una
+   * cita, luego se sale de esa agenda y tengo que volver a clickar».
+   *
+   * Pasaba porque `porTerapeuta` era un interruptor de la pantalla y nada más:
+   * al salir de Citas —a la ficha del paciente desde una cita— y volver, la
+   * pantalla se montaba otra vez en el calendario grande, con su día perdido.
+   * Quien reparte la agenda de seis personas entra y sale decenas de veces al
+   * día.
+   *
+   * Mismo remedio que en Cobros (`f05befab`): el estado se escribe en la
+   * dirección. Con eso el botón de ATRÁS devuelve las columnas donde estaban, y
+   * de paso el enlace se puede compartir o dejar en favoritos.
+   *
+   * ⚠️ LA PRIMERA PASADA NO ESCRIBE. Al montar, este efecto corre con el estado
+   * en blanco y borraría la dirección que traía los parámetros antes de que el
+   * de abajo pueda leerlos. Es exactamente el fallo que se vio en producción con
+   * Cobros el mismo día (`e5f46a67`): entrar con la URL puesta dejaba la
+   * pantalla vacía.
+   */
+  const primeraUrlCitas = useRef(true);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (primeraUrlCitas.current) { primeraUrlCitas.current = false; return; }
+    const sp = new URLSearchParams(window.location.search);
+    // Los enlaces que llegan con una orden (abrir una cita concreta) mandan
+    // ellos: no se les pisa la dirección.
+    if (sp.get("cita") || sp.get("abrir")) return;
+    if (porTerapeuta) {
+      sp.set("vista", "porTerapeuta");
+      sp.set("dia", toDateInput(fechaColumnas));
+    } else {
+      sp.delete("vista");
+      sp.delete("dia");
+    }
+    const cadena = sp.toString();
+    window.history.replaceState(null, "", cadena ? `?${cadena}` : window.location.pathname);
+  }, [porTerapeuta, fechaColumnas]);
+
+  // …y se lee al entrar, que es la otra mitad: sin esto la dirección guardada
+  // no serviría de nada al volver ni al abrirla en otra pestaña.
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get("vista") !== "porTerapeuta") return;
+    const dia = sp.get("dia");
+    if (dia && /^\d{4}-\d{2}-\d{2}$/.test(dia)) {
+      const d = new Date(`${dia}T12:00:00`);
+      if (!Number.isNaN(d.getTime())) setFechaColumnas(d);
+    }
+    setPorTerapeuta(true);
+  }, []);
+
   useEffect(() => {
     try { setCompacta(localStorage.getItem("citas.compacta") === "1"); } catch { /* sin memoria, arranca normal */ }
   }, []);
