@@ -517,6 +517,8 @@ export default function InterventionPlanSection({ patientId, canEdit = true }) {
   const [terapeutas, setTerapeutas] = useState([]);
   const [equipo, setEquipo] = useState([]);
   const [yo, setYo] = useState(null);
+  // Lo que se puede traer de la entrevista inicial (09/09/2026, AV-0103).
+  const [trayendo, setTrayendo] = useState(false);
   /*
    * El ROL, para saber si quien mira es dirección (09/09/2026, AV-0080). Sale
    * de `/api/auth/me` y NO de `/api/team/me`, que devuelve la ficha de equipo
@@ -597,6 +599,41 @@ export default function InterventionPlanSection({ patientId, canEdit = true }) {
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
+  /**
+   * Trae de la entrevista inicial lo que el Plan tenga vacío (AV-0103).
+   *
+   * No guarda: rellena el formulario y lo dice. Como el resto de la pestaña,
+   * hasta «Guardar plan» no sale de la pantalla.
+   */
+  async function traerDeLaEntrevista() {
+    setTrayendo(true);
+    setErr(null);
+    setAviso(null);
+    try {
+      const r = await fetch(`/api/pacientes/${patientId}/plan/desde-entrevista`, { cache: "no-store" });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j.error || "No se ha podido leer la entrevista inicial");
+      if (!j.data.hayEntrevista) {
+        setAviso("Este paciente no tiene entrevista inicial escrita, así que no hay de dónde traerlo.");
+        return;
+      }
+      const rellena = j.data.rellena ?? {};
+      if (!Object.keys(rellena).length) {
+        setAviso("No hay nada que traer: el motivo de consulta y la información previa ya están escritos.");
+        return;
+      }
+      setForm((f) => ({ ...f, ...rellena }));
+      const que = Object.keys(rellena)
+        .map((k) => (k === "consultationReasons" ? "el motivo de consulta" : "la información previa"))
+        .join(" y ");
+      setAviso(`Traído ${que} de la entrevista inicial. Revísalo y pulsa «Guardar plan». ${j.data.resumen?.diagnostico ?? ""}`);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setTrayendo(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       {err && <div className="text-xs text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{err}</div>}
@@ -605,6 +642,34 @@ export default function InterventionPlanSection({ patientId, canEdit = true }) {
       <Cumplimiento datos={cumplimiento} />
 
       <div className="bg-white border border-neutral-200 rounded-xl p-5 space-y-4">
+        {/*
+            TRAER DE LA ENTREVISTA INICIAL (09/09/2026, AV-0103). Silvia pidió
+            «el botón de la IA en el Plan para que se rellenen diagnóstico,
+            motivo de consulta e información previa», y esto no es un trabajo
+            para la IA: el motivo y los antecedentes ya están escritos, palabra
+            por palabra, en la entrevista. Traerlos no cuesta un céntimo de la
+            cuenta del centro y no puede inventarse nada.
+
+            El diagnóstico no se trae, y el botón lo dice al pulsarlo: la
+            entrevista tiene una IMPRESIÓN clínica, que es una hipótesis, y
+            volcarla en un campo llamado «Diagnóstico» la convertiría en un
+            diagnóstico por el camino.
+        */}
+        {canEdit && (
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={traerDeLaEntrevista}
+              disabled={trayendo}
+              className="text-[11px] px-2.5 py-1.5 rounded-lg border border-neutral-200 text-neutral-600 hover:border-neutral-400 disabled:opacity-50"
+            >
+              {trayendo ? "Buscando…" : "Traer de la entrevista inicial"}
+            </button>
+            <span className="text-[10px] text-neutral-400">
+              Rellena el motivo de consulta y la información previa con lo que ya escribisteis. No pisa lo que tengas puesto.
+            </span>
+          </div>
+        )}
         <div className="grid md:grid-cols-2 gap-4">
           <div>
             <label className="text-[10px] uppercase tracking-wider text-neutral-400">Diagnóstico</label>
