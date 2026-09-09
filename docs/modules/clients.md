@@ -589,6 +589,49 @@ en un `try`: una consulta que no pueda correr en un schema (una columna que
 aún no tiene) se apunta en stderr y se salta, en vez de tumbar la pantalla.
 Prueba: `scripts/_smoke-clients-urgentes-cuotas.mjs`.
 
+## Las familias cuyo tutor no tiene DNI, también (09/09/2026)
+
+Desde el 08/09 la factura sale sola a nombre del **tutor principal** y con su
+DNI (`lib/billing/razonSocial.js`, ver `billing.md`): 859 de las 1.098 familias
+de Aumenta, y otras 2 llevan la razón social escrita a mano, que también está
+bien. Las 237 que quedan siguen facturando a nombre de la ficha —que
+muchas veces es el nombre del niño— y se arreglan **solas** en cuanto alguien
+escriba ese DNI en «Padres y tutores», sin elegir nada más. El problema era
+saber cuáles son: 95 no tienen ningún tutor y esas ya salían en las dos
+carpetas de «sin tutor», pero **142 lo tienen apuntado sin DNI y no salían en
+ninguna pantalla**, ni en rojo ni en gris. Rodrigo, 09/09: «la solución es la
+A, meter la carpeta nueva».
+
+`tutor_sin_dni` es de familia, va en el bloque gris y pregunta tres cosas, que
+son las mismas que decide `razonSocialAutomatica()` al facturar:
+
+1. la ficha **tiene tutor apuntado** (`guardians` no vacío) — la que no lo
+   tiene ya sale en «Sin tutor y sin ningún dato de contacto» o en «Familias
+   sin tutor»;
+2. **ninguno de ellos se puede facturar**: hace falta id, nombre y DNI, que es
+   lo que exige `tutorPrincipalDe`;
+3. y **nadie ha escrito la razón social a mano** (`fiscal_name` o
+   `fiscal_tax_id`): eso es una decisión tomada —una empresa, una fundación—,
+   y son las 2 de arriba, que no tienen ningún hueco que rellenar.
+
+El detalle de la fila son los **nombres** de sus tutores, para saber a quién
+pedirle el DNI; ningún documento baja al navegador, que es la misma regla de
+`opcionesDeRazonSocial`. Lleva `requiere: "cuotas"` no porque la consulta
+necesite esa tabla, sino porque sin Facturación no hay factura y el DNI del
+tutor no le hace falta a nadie.
+
+Dos cosas a propósito. **No se calla por las carpetas de arriba** (como la de
+reservas de plaza): es otro hueco, 90 de las 142 están además mudas y 17 sin
+correo, y rellenarles el teléfono no les pone el DNI — callándose, 107
+volverían a ser invisibles justo para lo que se hizo la carpeta. Y **las
+facturas ya emitidas no cambian**: llevan su foto fiscal congelada, y una
+factura emitida no se reescribe, se rectifica.
+
+Comprobado en producción el 09/09/2026 corriendo el SQL de la propia carpeta
+contra `crm_aumenta`: 142 familias, 11 de ellas archivadas (se esconden, como
+en el resto de carpetas), 131 a la vista. Prueba:
+`scripts/_smoke-clients-urgentes-tutor-sin-dni.mjs`.
+
 ## «Fichas a completar» no reclama datos de fichas archivadas (25/08/2026)
 
 Lo pidió Lau (Aumenta) el 14/08: la pantalla le sacaba una y otra vez gente que
@@ -766,7 +809,7 @@ Las dos estaban en `lib/clients/urgentes.js` y las dos son de cualquier
    obliga a escribir el schema — que es la otra trampa, la del `searchPath`
    (ver `docs/modules/pacientes.md`).
 
-Lo fija `scripts/_smoke-clients-urgentes-bajas.mjs` (25 comprobaciones), que
+Lo fija `scripts/_smoke-clients-urgentes-bajas.mjs` (27 comprobaciones), que
 además compara el WHERE del listado con el del recuento carpeta por carpeta —la
 regla de que el número y las filas salgan de la misma fuente— y que cada carpeta
 sigue callándose lo que ya enseña otra por encima.

@@ -384,7 +384,7 @@ describe("cómo se averigua qué tablas tiene el schema", () => {
 });
 
 describe("lo que NO se ha cambiado sin querer", () => {
-  it("las catorce carpetas siguen siendo las mismas, con su bloque (la de reservas de plaza es opcional)", async () => {
+  it("las quince carpetas siguen siendo las mismas, con su bloque (la de reservas de plaza es opcional)", async () => {
     assert.deepEqual(
       CARPETAS.map((c) => [c.key, c.bloquea, c.entidad, !!c.opcional]),
       [
@@ -404,6 +404,10 @@ describe("lo que NO se ha cambiado sin querer", () => {
         ["citas_sin_cuota", true, "client", false],
         ["citas_sin_cobro", false, "client", false],
         ["cuota_no_cuadra", false, "client", false],
+        // 09/09/2026: las familias cuyo tutor no tiene DNI, que facturaban a
+        // nombre de la ficha sin salir en ninguna pantalla. También se esconde
+        // sin Facturación: `requiere: "cuotas"`.
+        ["tutor_sin_dni", false, "client", false],
         ["paciente_sin_familia", true, "patient", false],
         ["ficha_duplicada", false, "patient", false],
       ]

@@ -116,6 +116,13 @@ Lo de «ambos» ya estaba hecho: es `fiscal_split` (06/09/2026), que emite una
 factura por tutor con el nombre y el DNI de cada uno. No se pone solo — es la
 excepción y la marca la familia en su ficha.
 
+**A quién le falta el DNI se ve en «Fichas a completar»** (09/09/2026): la
+carpeta `tutor_sin_dni` de `lib/clients/urgentes.js` enseña las familias con
+tutor apuntado y sin DNI de ninguno —142 en Aumenta—, que son las que siguen
+facturando a nombre de la ficha. Escribir el DNI las saca de la carpeta y
+arregla sus facturas siguientes; las emitidas no cambian. El detalle en
+`clients.md`.
+
 ## Envío de facturas por email (2026-07-27)
 
 `POST /api/billing/invoices/[id]/send` ya NO se limita a marcar la factura:
