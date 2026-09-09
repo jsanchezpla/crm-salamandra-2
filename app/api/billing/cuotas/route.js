@@ -4,7 +4,7 @@ import { ok, created, error, forbidden, serverError } from "../../../../lib/util
 import { logBillingAudit, datosPeticion } from "../../../../lib/billing/audit.js";
 import { limpiarCuota, metodosValidos } from "../../../../lib/billing/cuotas.js";
 import { sincronizarCobrosDelMes } from "../../../../lib/billing/cobroDeCuota.js";
-import { billingHasPatients } from "../../../../lib/billing/patientLink.js";
+import { cuotasConPacientes } from "../../../../lib/billing/cuotasConPacientes.js";
 
 /**
  * GET/POST /api/billing/cuotas — las cuotas asignadas (01/09/2026).
@@ -21,16 +21,9 @@ import { billingHasPatients } from "../../../../lib/billing/patientLink.js";
  * familias no puede convertirse en 40 cuotas repetidas por un doble clic.
  */
 
-/** El paciente solo se incluye si el tenant tiene módulo asistencial. */
-function includePaciente(tenantModels, hasModule) {
-  if (!billingHasPatients(hasModule) || !tenantModels.Patient) return [];
-  return [{ model: tenantModels.Patient, as: "patient", attributes: ["id", "firstName", "lastName"] }];
-}
-
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
-    const { Cuota, Client } = tenantModels;
     const { searchParams } = new URL(request.url);
 
     const where = {};
@@ -47,16 +40,6 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     const metodos = metodosValidos(searchParams.getAll("metodo"));
     if (metodos.length) where.method = { [Op.in]: metodos };
 
-    const cuotas = await Cuota.findAll({
-      where,
-      include: [
-        { model: Client, as: "client", attributes: ["id", "name", "fiscalName", "taxId", "fiscalTaxId"] },
-        { model: Client, as: "payer", attributes: ["id", "name", "fiscalName"], required: false },
-        ...includePaciente(tenantModels, hasModule),
-      ],
-      order: [["active", "DESC"], ["startDate", "DESC"]],
-    });
-
     /*
      * A cada cuota se le cuelgan los pacientes DE SU FAMILIA (01/09/2026).
      *
@@ -64,16 +47,11 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
      * nada en 259 de las 274 cuotas de Aumenta: las del volcado del Organizate
      * son de la familia y tienen `patientId` a NULL. La regla de que una cuota
      * sin paciente cubre a los pacientes de su familia vive en
-     * `lib/billing/cuotaPacientes.js`, con su prueba.
-     *
-     * Una sola consulta para todas las familias de la pagina, no una por fila.
-     * Solo viajan id y nombre, que es lo que la pantalla pinta y busca.
+     * `lib/billing/cuotaPacientes.js`, con su prueba; el cómo se traen, en
+     * `lib/billing/cuotasConPacientes.js` (lo comparten esta pantalla y la de
+     * tipos de cuota, 09/09/2026).
      */
-    const familiaPacientes = await pacientesPorFamilia(tenantModels, hasModule, cuotas);
-    const filas = cuotas.map((c) => ({
-      ...c.toJSON(),
-      familiaPacientes: familiaPacientes.get(String(c.clientId)) ?? [],
-    }));
+    const filas = await cuotasConPacientes({ tenantModels, hasModule, where });
 
     return ok({ cuotas: filas, total: filas.length });
   } catch (err) {
@@ -184,34 +162,4 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
 function valoresImporte(body) {
   const v = body?.amount;
   return v === null || v === undefined || v === "" ? null : String(v);
-}
-
-/**
- * Los pacientes de cada familia que aparece en la lista, en UNA consulta.
- * Mapa clientId -> [{ id, firstName, lastName }]. Vacio si el centro no tiene
- * modulo asistencial (una gestoria no tiene pacientes) o si la tabla no esta.
- */
-async function pacientesPorFamilia(tenantModels, hasModule, cuotas) {
-  const mapa = new Map();
-  if (!billingHasPatients(hasModule) || !tenantModels.Patient) return mapa;
-  const ids = [...new Set(cuotas.map((c) => c.clientId).filter(Boolean))];
-  if (!ids.length) return mapa;
-  try {
-    const filas = await tenantModels.Patient.findAll({
-      where: { clientId: ids },
-      attributes: ["id", "firstName", "lastName", "clientId"],
-      order: [["firstName", "ASC"]],
-      raw: true,
-    });
-    for (const p of filas) {
-      const clave = String(p.clientId);
-      if (!mapa.has(clave)) mapa.set(clave, []);
-      mapa.get(clave).push({ id: p.id, firstName: p.firstName, lastName: p.lastName });
-    }
-  } catch (err) {
-    // Tenant sin tabla de pacientes migrada: la pantalla sigue como estaba.
-    const code = err?.parent?.code || err?.original?.code;
-    if (code !== "42P01") throw err;
-  }
-  return mapa;
 }

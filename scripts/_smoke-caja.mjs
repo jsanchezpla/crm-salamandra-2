@@ -37,6 +37,8 @@ import {
   resumenDelDia,
   cobrosDelDia,
   haEntrado,
+  saldoDiarioEfectivo,
+  fondoSugerido,
 } from "../lib/billing/caja.js";
 
 const CAJA = "11111111-1111-1111-1111-111111111111";
@@ -296,5 +298,81 @@ describe("las devoluciones: entró un día, salió otro", () => {
     const r = resumenDelDia({ cobros: [{ id: "viejo", amount: 80, method: "cash", status: "refunded" }], fondoInicial: 100 });
     assert.equal(r.efectivo.importe, 0);
     assert.equal(r.enCaja, 100);
+  });
+});
+
+/*
+ * ── LO QUE QUEDA EN EL CAJÓN, DÍA A DÍA (09/09/2026) ───────────────────────
+ *
+ * Aumenta: «que se vea cada día lo que queda en caja a golpe de vista, una vez
+ * restadas las salidas». El resumen por día ya decía cuánto ENTRÓ; lo que no
+ * decía es cuánto HAY, y no se puede sacar sumando la columna de efectivo:
+ * el cajón arrastra el saldo del día anterior y las salidas lo bajan.
+ *
+ * Lo que se fija aquí: el arrastre (cada día parte del anterior), que la
+ * tarjeta y el banco NO entran en el cajón, y que las salidas restan una vez.
+ */
+describe("el efectivo que queda en el cajón", () => {
+  const dia = (fecha, { cash = 0, card = 0, entradas = 0, salidas = 0 } = {}) => ({
+    fecha,
+    ...resumenDelDia({
+      cobros: [
+        ...(cash ? [{ amount: cash, method: "cash", status: "completed" }] : []),
+        ...(card ? [{ amount: card, method: "card", status: "completed" }] : []),
+      ],
+      movimientos: [
+        ...(entradas ? [{ direction: "in", amount: entradas }] : []),
+        ...(salidas ? [{ direction: "out", amount: salidas }] : []),
+      ],
+    }),
+  });
+
+  it("arrastra el saldo de un día al siguiente", () => {
+    const filas = saldoDiarioEfectivo(
+      [dia("2026-09-01", { cash: 100 }), dia("2026-09-02", { cash: 50 }), dia("2026-09-03")],
+      200
+    );
+    assert.deepEqual(filas.map((f) => f.efectivoDelDia.queda), [300, 350, 350]);
+  });
+
+  it("las salidas restan (y solo una vez)", () => {
+    const [uno] = saldoDiarioEfectivo([dia("2026-09-01", { cash: 100, salidas: 30 })], 0);
+    assert.equal(uno.efectivoDelDia.cobrado, 100);
+    assert.equal(uno.efectivoDelDia.salidas, 30);
+    assert.equal(uno.efectivoDelDia.movimiento, 70);
+    assert.equal(uno.efectivoDelDia.queda, 70);
+  });
+
+  it("la tarjeta no pasa por el cajón", () => {
+    const [uno] = saldoDiarioEfectivo([dia("2026-09-01", { cash: 20, card: 480 })], 0);
+    assert.equal(uno.efectivoDelDia.queda, 20);
+  });
+
+  it("un día sin nada no mueve el saldo, pero lo dice", () => {
+    const [uno] = saldoDiarioEfectivo([dia("2026-09-01")], 125.5);
+    assert.equal(uno.efectivoDelDia.movimiento, 0);
+    assert.equal(uno.efectivoDelDia.queda, 125.5);
+  });
+
+  it("sin días, no hay saldo que arrastrar", () => {
+    assert.deepEqual(saldoDiarioEfectivo([], 100), []);
+  });
+
+  it("los céntimos se redondean una vez por día, no al final", () => {
+    const filas = saldoDiarioEfectivo(
+      [dia("2026-09-01", { cash: 0.1 }), dia("2026-09-02", { cash: 0.2 })],
+      0
+    );
+    assert.deepEqual(filas.map((f) => f.efectivoDelDia.queda), [0.1, 0.3]);
+  });
+
+  it("el fondo del cierre siguiente sale del conteo, no de los apuntes", () => {
+    // Recordatorio de la regla del 07/09/2026: un cierre importado (a cero y
+    // sin autor) no propone fondo; uno contado por alguien, sí.
+    assert.equal(fondoSugerido({ closeDate: "2026-07-31", countedAmount: 0, hechoPorUnaPersona: false }), null);
+    assert.deepEqual(
+      fondoSugerido({ closeDate: "2026-09-08", countedAmount: 240.75, hechoPorUnaPersona: true }),
+      { importe: 240.75, fecha: "2026-09-08" }
+    );
   });
 });

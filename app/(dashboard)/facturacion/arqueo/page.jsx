@@ -6,6 +6,7 @@ import { fondoSugerido } from "@/lib/billing/caja.js";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import MovimientosCaja from "../_components/MovimientosCaja.jsx";
 import ResumenCaja from "../_components/ResumenCaja.jsx";
+import EfectivoCaja from "../_components/EfectivoCaja.jsx";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -248,6 +249,8 @@ export default function ArqueoPage() {
               ["cierres", "Cierres"],
               ["movimientos", "Entradas y salidas"],
               ["resumen", "Resumen por día"],
+              // Lo que QUEDA en el cajón, arrastrando el saldo (09/09/2026).
+              ["efectivo", "Efectivo en caja"],
             ].map(([k, lbl]) => (
               <button
                 key={k}
@@ -271,6 +274,7 @@ export default function ArqueoPage() {
 
       {vista === "movimientos" && <MovimientosCaja cajaId={cajaId} cajas={cajas} />}
       {vista === "resumen" && <ResumenCaja cajaId={cajaId} />}
+      {vista === "efectivo" && <EfectivoCaja cajaId={cajaId} onApuntar={() => setVista("movimientos")} />}
 
       {vista === "cierres" && cierres.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
