@@ -37,6 +37,7 @@ import {
   huellaLineas,
   sePuedeRellenar,
   conceptoEnUnaLinea,
+  tramosDeCuotas,
 } from "../lib/billing/cuotaParaRellenar.js";
 
 const LOGO = "11111111-1111-4111-8111-111111111111";
@@ -221,5 +222,65 @@ describe("el concepto en una sola línea (el reparto entre pagadores)", () => {
   it("un texto larguísimo se recorta: el campo es de una línea", () => {
     const largo = conceptoEnUnaLinea([linea("A".repeat(500), 10)]);
     assert.equal(largo.length, 200);
+  });
+});
+
+/*
+ * ── LAS FECHAS DEL TRAMO SALEN DE LA CUOTA (10/09/2026, Rodrigo) ───────────
+ *
+ * «La cuota de logopedia me está intentando cobrar 145 en lugar de los 116»:
+ * el cajón sabía prorratear, pero solo si alguien tecleaba la fecha de alta
+ * que la cuota ya tenía guardada.
+ */
+describe("tramosDeCuotas", () => {
+  const cuota = (extra) => ({ conceptIds: ["c1"], startDate: "2026-09-01", endDate: null, ...extra });
+
+  it("trae el alta cuando cae a mitad de mes, que es cuando prorratea", () => {
+    assert.deepEqual(tramosDeCuotas([cuota({ startDate: "2026-09-10" })], "2026-09"), [
+      { inicio: "2026-09-10", fin: "" },
+    ]);
+  });
+
+  it("y el día 1 no sale: ese mes es entero y llenaría la pantalla de fechas", () => {
+    assert.deepEqual(tramosDeCuotas([cuota()], "2026-09"), [{ inicio: "", fin: "" }]);
+  });
+
+  it("la baja igual, y el último día del mes tampoco sale", () => {
+    assert.deepEqual(tramosDeCuotas([cuota({ endDate: "2026-09-18" })], "2026-09"), [
+      { inicio: "", fin: "2026-09-18" },
+    ]);
+    assert.deepEqual(tramosDeCuotas([cuota({ endDate: "2026-09-30" })], "2026-09"), [
+      { inicio: "", fin: "" },
+    ]);
+  });
+
+  it("una fecha de otro mes no es de este tramo", () => {
+    assert.deepEqual(tramosDeCuotas([cuota({ startDate: "2025-01-15" })], "2026-09"), [
+      { inicio: "", fin: "" },
+    ]);
+  });
+
+  it("va en el MISMO orden que conceptosDeCuotas: cada línea con su cuota", () => {
+    const cuotas = [
+      { conceptIds: ["a", "b"], startDate: "2026-09-10" },
+      { conceptIds: ["c"], startDate: "2026-09-04" },
+    ];
+    assert.deepEqual(conceptosDeCuotas(cuotas), ["a", "b", "c"]);
+    assert.deepEqual(tramosDeCuotas(cuotas, "2026-09"), [
+      { inicio: "2026-09-10", fin: "" },
+      { inicio: "2026-09-10", fin: "" },
+      { inicio: "2026-09-04", fin: "" },
+    ]);
+  });
+
+  it("aguanta una fecha con hora, una cuota sin conceptos y un mes ilegible", () => {
+    assert.deepEqual(tramosDeCuotas([cuota({ startDate: "2026-09-10T00:00:00.000Z" })], "2026-09"), [
+      { inicio: "2026-09-10", fin: "" },
+    ]);
+    assert.deepEqual(tramosDeCuotas([{ conceptIds: null, startDate: "2026-09-10" }], "2026-09"), []);
+    assert.deepEqual(tramosDeCuotas([cuota({ startDate: "2026-09-10" })], "septiembre"), [
+      { inicio: "", fin: "" },
+    ]);
+    assert.deepEqual(tramosDeCuotas(null, "2026-09"), []);
   });
 });

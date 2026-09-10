@@ -15,6 +15,8 @@ import {
   yaCobradoDelMes,
   restoDelMes,
   restoQueSeQuedaPendiente,
+  esDeOtroServicio,
+  cobrosDeOtroServicio,
 } from "../lib/billing/restoDelMes.js";
 
 test("el caso del encargo: 50 de 120 cobrados, quedan 70", () => {
@@ -142,4 +144,65 @@ test("sin importe esperado —una familia sin cuota conocida— no se inventa de
     assert.equal(restoQueSeQuedaPendiente({ esperado: 100, importe }), 0, `importe=${String(importe)}`);
   }
   assert.equal(restoQueSeQuedaPendiente(), 0);
+});
+
+/*
+ * ── LO DE OTRO SERVICIO NO PAGA LA CUOTA (10/09/2026, Rodrigo) ─────────────
+ *
+ * Leo: 50 € cobrados de la entrevista inicial, y el cajón pedía 95 € de una
+ * cuota de logopedia de 145 €. La entrevista inicial no está en ninguna cuota
+ * de Aumenta.
+ */
+const LOGO = "concepto-logopedia";
+const ENTREVISTA = "concepto-entrevista";
+
+test("un cobro de otro concepto no cuenta contra la cuota", () => {
+  const cobros = [{ id: "1", amount: 50, conceptId: ENTREVISTA, patientId: "leo" }];
+  const r = restoDelMes({ esperado: 116, cobros, patientId: "leo", conceptIds: [LOGO] });
+  assert.equal(r.yaCobrado, 0);
+  assert.equal(r.resto, 116);
+  assert.equal(r.hayParcial, false);
+});
+
+test("y sin decir de qué conceptos es la cuota, todo cuenta, como siempre", () => {
+  const cobros = [{ id: "1", amount: 50, conceptId: ENTREVISTA, patientId: "leo" }];
+  assert.equal(restoDelMes({ esperado: 145, cobros, patientId: "leo" }).resto, 95);
+});
+
+test("lo tecleado a mano —sin concepto— sigue saldando el mes", () => {
+  const cobros = [
+    { id: "1", amount: 50, conceptId: ENTREVISTA, patientId: "leo" },
+    { id: "2", amount: 45, conceptId: null, patientId: "leo" },
+  ];
+  const r = restoDelMes({ esperado: 116, cobros, patientId: "leo", conceptIds: [LOGO] });
+  assert.equal(r.yaCobrado, 45, "el pago a cuenta de la cuota sí cuenta");
+  assert.equal(r.resto, 71);
+});
+
+test("y el que se queda fuera se puede nombrar, para que no parezca perdido", () => {
+  const cobros = [
+    { id: "1", amount: 50, conceptId: ENTREVISTA, patientId: "leo" },
+    { id: "2", amount: 45, conceptId: LOGO, patientId: "leo" },
+    { id: "3", amount: 30, conceptId: ENTREVISTA, patientId: "otro" },
+  ];
+  const fuera = cobrosDeOtroServicio(cobros, "leo", [LOGO]);
+  assert.deepEqual(fuera.map((c) => c.id), ["1"], "ni lo de la cuota ni lo de otro hermano");
+});
+
+test("esDeOtroServicio: sin conceptos, o sin concepto en el cobro, no descarta", () => {
+  assert.equal(esDeOtroServicio({ conceptId: ENTREVISTA }, null), false);
+  assert.equal(esDeOtroServicio({ conceptId: ENTREVISTA }, []), false);
+  assert.equal(esDeOtroServicio({ conceptId: null }, [LOGO]), false);
+  assert.equal(esDeOtroServicio({ conceptId: LOGO }, [LOGO]), false);
+  assert.equal(esDeOtroServicio({ conceptId: ENTREVISTA }, [LOGO]), true);
+});
+
+test("cobrosQueCuentan sigue sin traer lo de un hermano", () => {
+  const cobros = [
+    { id: "1", amount: 50, patientId: "leo" },
+    { id: "2", amount: 60, patientId: "hermana" },
+    { id: "3", amount: 70, patientId: null },
+  ];
+  assert.deepEqual(cobrosQueCuentan(cobros, "leo").map((c) => c.id), ["1", "3"]);
+  assert.equal(yaCobradoDelMes(cobros, "leo"), 120);
 });

@@ -364,3 +364,71 @@ describe("y el cajón enseña la cuenta que ha hecho", () => {
     assert.ok(conFin.length >= 2, "las dos cuentas del cajón tienen que llevar el fin");
   });
 });
+
+/*
+ * ── EL PATRÓN NO PUEDE SER MÁS GRANDE QUE EL RITMO (10/09/2026, Rodrigo) ───
+ *
+ * Leo Machio, logopedia «45x1» que empieza el jueves 10 de septiembre y sigue
+ * los miércoles 16, 23 y 30. Cuatro sesiones, una por semana. Contar todos los
+ * días de la semana con cita daba un patrón de dos días y un mes de 9
+ * sesiones: 4 de 9, 64,44 € de una cuota de 145 €. La cuenta del centro son
+ * 4 de 5 miércoles, 116 €.
+ */
+const cita = (d, conceptId) => ({ scheduledAt: `${d}T13:30:00.000Z`, conceptId });
+const LEO = ["2026-09-10", "2026-09-16", "2026-09-23", "2026-09-30"].map((d) => cita(d));
+
+describe("la primera sesión en otro día no convierte una terapia semanal en dos", () => {
+  it("Leo: 4 de 5 sesiones, 116 € de 145 €", () => {
+    const t = tramoDelMes("2026-09", { startDate: "2026-09-10" }, { citas: LEO });
+    assert.deepEqual(t.sesiones, { enElTramo: 4, enElMes: 5 });
+    assert.equal(Math.round(145 * t.factor * 100) / 100, 116);
+    assert.equal(rotuloDeTramo(t), "desde el 10/09/2026 (4 de 5 sesiones)");
+  });
+
+  it("y la misma cuenta la hace la generación del mes", () => {
+    const plan = planDeCuotasDelMes({
+      mes: "2026-09",
+      cuotas: [{ id: "1", clientId: "f1", patientId: "leo", conceptIds: ["logo"], startDate: "2026-09-10" }],
+      conceptos: [{ id: "logo", name: "Cuota Logopedia 45x1", unitPrice: 145 }],
+      citasPorClave: { "p:leo": LEO.map((c) => ({ ...c, conceptId: "logo" })) },
+    });
+    assert.equal(plan.aGenerar[0].importe, 116);
+    assert.equal(plan.aGenerar[0].rotulo, "desde el 10/09/2026 (4 de 5 sesiones)");
+  });
+
+  it("un «45x2» de verdad sigue contando sus DOS días de la semana", () => {
+    // Martes y jueves desde el 8: 7 sesiones sobre 5 martes + 4 jueves.
+    const dos = ["2026-09-08", "2026-09-10", "2026-09-15", "2026-09-17", "2026-09-22", "2026-09-24", "2026-09-29"]
+      .map((d) => cita(d));
+    const t = tramoDelMes("2026-09", { startDate: "2026-09-08" }, { citas: dos });
+    assert.deepEqual(t.sesiones, { enElTramo: 7, enElMes: 9 });
+  });
+
+  it("y un «60x1» de los viernes se sigue midiendo sobre los 4 viernes del mes", () => {
+    const t = tramoDelMes("2026-09", { startDate: "2026-09-11" }, { citas: VIERNES });
+    assert.deepEqual(t.sesiones, { enElTramo: 3, enElMes: 4 });
+  });
+
+  it("empatados, manda el día de la última sesión: es el ritmo que ya se asentó", () => {
+    const t = tramoDelMes("2026-09", { startDate: "2026-09-10" }, { citas: [cita("2026-09-10"), cita("2026-09-16")] });
+    assert.deepEqual(t.sesiones, { enElTramo: 2, enElMes: 5 }, "los miércoles, no los jueves");
+  });
+});
+
+describe("y el cajón ya no espera a que alguien teclee la fecha", () => {
+  const pagina = lee("../app/(dashboard)/facturacion/cobros/page.jsx");
+
+  it("«Empezó el» y «Acabó el» salen de la cuota", () => {
+    assert.match(pagina, /tramosDeCuotas\(cuotas, form\.periodMonth\)/);
+    assert.match(pagina, /\.\.\.\(tramos\?\.\[i\] \?\? \{\}\)/);
+  });
+
+  it("pero un cobro suelto de una cita no hereda el tramo de la mensualidad", () => {
+    assert.match(pagina, /tramos = null;/);
+  });
+
+  it("y lo cobrado de otro servicio no salda la cuota", () => {
+    assert.match(pagina, /conceptIds: conceptosDelCobro/);
+    assert.match(pagina, /cobrosDeOtroServicio\(cobrosDelMes/);
+  });
+});

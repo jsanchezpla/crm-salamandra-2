@@ -14,8 +14,8 @@ import FacturarMesDrawer from "../_components/FacturarMesDrawer.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 import { useDialogo } from "@/components/ui/Dialogo.jsx";
 import { partesConProrrateo } from "../../../../lib/billing/prorrateo.js";
-import { cuotasQueEntran, conceptosDeCuotas, importePactado } from "../../../../lib/billing/cuotaParaRellenar.js";
-import { restoDelMes, generadoDelMes, restoQueSeQuedaPendiente } from "../../../../lib/billing/restoDelMes.js";
+import { cuotasQueEntran, conceptosDeCuotas, importePactado, tramosDeCuotas } from "../../../../lib/billing/cuotaParaRellenar.js";
+import { restoDelMes, generadoDelMes, restoQueSeQuedaPendiente, cobrosDeOtroServicio } from "../../../../lib/billing/restoDelMes.js";
 import { explicaCobro } from "../../../../lib/billing/motivoDelCobro.js";
 import { etiquetaDeMoroso, filtrarMorosos, repartirMorosos, resumenDeMorosidad } from "../../../../lib/billing/morosidad.js";
 import { exigeMetodo } from "../../../../lib/billing/caja.js";
@@ -313,6 +313,13 @@ export default function CobrosPage() {
    */
   const [cobradosDelMes, setCobradosDelMes] = useState([]);
   const [esperadoDeLaCuota, setEsperadoDeLaCuota] = useState(null); // { tarifa, generado, pactado }
+  /*
+   * Lo que este mes se le cobró de OTRO servicio (10/09/2026, Rodrigo): la
+   * entrevista inicial de Leo. No cuenta contra la cuota, pero se nombra: un
+   * cobro que desaparece de la cuenta sin decir nada se lee como un cobro
+   * perdido. Ver `lib/billing/restoDelMes.js`.
+   */
+  const [aparteDelMes, setAparteDelMes] = useState([]);
 
   /*
    * ── DE DÓNDE SALE CADA CIFRA (08/09/2026, AV-0085 y AV-0086) ─────────────
@@ -333,6 +340,9 @@ export default function CobrosPage() {
   });
   const pendientesExplicados = pendientesDelMes.map(explicado);
   const cobradosExplicados = cobradosDelMes.filter((c) => c.deCuota).map(explicado);
+  const aparteExplicados = aparteDelMes.map(explicado);
+  const sumaAparte =
+    Math.round(aparteDelMes.reduce((s, c) => s + Number(c.amount || 0), 0) * 100) / 100;
   const sumaPendientes =
     Math.round(pendientesDelMes.reduce((t, p) => t + Number(p.amount || 0), 0) * 100) / 100;
 
@@ -451,6 +461,7 @@ export default function CobrosPage() {
     setPendientesDelMes([]);
     setCobradosDelMes([]);
     setEsperadoDeLaCuota(null);
+    setAparteDelMes([]);
     setCitasDelMes([]);
     setReservaDelMes(0);
     setForm((f) => (f.amount === "" ? f : { ...f, amount: "" }));
@@ -480,6 +491,14 @@ export default function CobrosPage() {
           : null
       );
       let ids = conceptosDeCuotas(cuotas);
+      /*
+       * Y CON SUS FECHAS (10/09/2026, Rodrigo). La cuota de Leo empieza el 10
+       * de septiembre y así está guardada: el cajón pedía 145 € de un mes que
+       * vale 116 € porque el prorrateo solo saltaba si alguien se acordaba de
+       * teclear «Empezó el». Va en el mismo orden que `ids` y solo trae las
+       * fechas que prorratean de verdad (`tramosDeCuotas`).
+       */
+      let tramos = tramosDeCuotas(cuotas, form.periodMonth);
       let deLasCitas = null;
       /*
        * ── LO QUE DICEN SUS CITAS DE ESE MES (04/09/2026, Aumenta) ───────────
@@ -524,6 +543,7 @@ export default function CobrosPage() {
         if (enCatalogo && !ids.some((id) => String(id) === String(laCita.conceptId))) {
           ids = [String(laCita.conceptId)];
           deLasCitas = null;
+          tramos = null; // un diagnóstico no es el mes de la cuota: no se prorratea
           suelta = { conceptId: String(laCita.conceptId), fuente: laCita.fuente, nombre: enCatalogo.name };
         }
       }
@@ -539,8 +559,8 @@ export default function CobrosPage() {
       setOrigenCuota(deLasCitas);
 
       const items = ids
-        .filter((id) => conceptosCatalogo.some((c) => String(c.id) === String(id)))
-        .map((id) => ({ id: String(id), inicio: "", fin: "" }));
+        .map((id, i) => ({ id: String(id), inicio: "", fin: "", ...(tramos?.[i] ?? {}) }))
+        .filter((it) => conceptosCatalogo.some((c) => String(c.id) === String(it.id)));
       setLineasCuota(items);
 
       // El importe pactado (`amount` escrito en la cuota) manda sobre la suma
@@ -624,7 +644,18 @@ export default function CobrosPage() {
         cuotasSinGenerar: generado != null && cuotas.length > 0 ? Math.max(0, cuotas.length - generado.cuotas) : 0,
       });
 
-      const parcial = restoDelMes({ esperado, cobros: cobrosDelMes, patientId: form.patientId || null });
+      /*
+       * Y SOLO LO QUE PAGA ESTA CUOTA (10/09/2026): los 50 € de una entrevista
+       * inicial son de otro servicio y no van saldando la mensualidad.
+       */
+      const conceptosDelCobro = items.map((it) => it.id);
+      setAparteDelMes(cobrosDeOtroServicio(cobrosDelMes, form.patientId || null, conceptosDelCobro));
+      const parcial = restoDelMes({
+        esperado,
+        cobros: cobrosDelMes,
+        patientId: form.patientId || null,
+        conceptIds: conceptosDelCobro,
+      });
       if (pendientes.length) {
         // EL PENDIENTE MANDA (06/09/2026). Ese cobro ya lleva su importe de
         // verdad —prorrateado, pactado o el de la tarifa—, así que se propone
@@ -1943,6 +1974,18 @@ export default function CobrosPage() {
                       </p>
                     )}
                   </div>
+                )}
+                {/* LO QUE SE COBRÓ APARTE (10/09/2026, Rodrigo). No cuenta
+                    contra la cuota —una entrevista inicial no es media
+                    mensualidad— pero se nombra, o parece que ese cobro se ha
+                    perdido. Ver `lib/billing/restoDelMes.js`. */}
+                {form.modo === "cuota" && aparteExplicados.length > 0 && (
+                  <p className="text-[11px] text-neutral-500 mt-1.5">
+                    Este mes ya se le cobraron{" "}
+                    <span className="tabular">{fmtMoney(sumaAparte)}</span> de{" "}
+                    {aparteExplicados.map((c) => c.concepto ?? "otro servicio").join(", ")}: va aparte y no
+                    descuenta de esta cuota.
+                  </p>
                 )}
               </FormRow>
               <FormRow label="Método de pago *">
