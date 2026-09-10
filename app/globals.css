@@ -417,7 +417,14 @@ body {
    Tres niveles, que es lo que deja contar de un vistazo:
      · la HORA en punto, línea sólida y oscura: el ancla;
      · la MEDIA, sólida y más suave: parte la hora por la mitad;
-     · los CUARTOS, punteados: se ven, pero no compiten.
+     · los CUARTOS, a rayas: se ven, pero no compiten.
+
+   Subidas de tono el 10/09/2026 (Rodrigo: «bastante más intensas y
+   visibles»). Los tres grises eran de la familia de los BORDES —200 y 300—,
+   pensados para no molestar, y a la hora de contar cuartos se desvanecían.
+   Ahora los cuartos y la media son el gris medio de la paleta (400) y la hora
+   en punto salta hasta el 600, casi el del texto: así se leen como una regla
+   graduada y no como el fondo de una tabla.
 
    La media se localiza por posición y no por una clase de FullCalendar, que no
    la tiene: con `slotDuration` de 15 minutos las filas van :00 :15 :30 :45, y
@@ -435,13 +442,13 @@ body {
    es 07:00 o 00:00): si algún día alguna empezara a y media, marcaría la línea
    equivocada y habría que quitarlo. */
 .agenda-cuartos .fc .fc-timegrid-slots tr .fc-timegrid-slot {
-  border-top: 1px dotted var(--ink-200);
+  border-top: 1px dashed var(--ink-400);
 }
 .agenda-cuartos .fc .fc-timegrid-slots tr:nth-child(4n + 3) .fc-timegrid-slot {
-  border-top: 1px solid var(--ink-200);
+  border-top: 1px solid var(--ink-400);
 }
 .agenda-cuartos .fc .fc-timegrid-slots tr:nth-child(4n + 1) .fc-timegrid-slot {
-  border-top: 1px solid var(--ink-300);
+  border-top: 1px solid var(--ink-600);
 }
 /* ── Y LA REGLA, NUMERADA (09/09/2026, AV-0089) ────────────────────────────
    Olga: «que la agenda enseñe las marcas cada 15 minutos y no solo cada hora,
@@ -467,8 +474,16 @@ body {
   display: none;
 }
 .agenda-compacta .fc .fc-timegrid-slots tr .fc-timegrid-slot { border-top-color: transparent; }
+/* La media hora hay que apagarla APARTE (10/09/2026): su regla lleva
+   `:nth-child`, que pesa más que el `tr` pelado de la línea de arriba, así que
+   la de compacta no la tapaba. Con los grises de antes daba igual —no se
+   veía—; al subir el tono se coló, y en compacta la hora mide 22 px: la media
+   partía en dos cada hora y volvía trama lo que se quería limpio. */
+.agenda-compacta .fc .fc-timegrid-slots tr:nth-child(4n + 3) .fc-timegrid-slot {
+  border-top-color: transparent;
+}
 .agenda-compacta .fc .fc-timegrid-slots tr:nth-child(4n + 1) .fc-timegrid-slot {
-  border-top: 1px solid var(--ink-200);
+  border-top: 1px solid var(--ink-500);
 }
 /* Vista compacta («Ajustar», 02/09/2026, AV-0012 de Aumenta): las franjas
    bajan a un mínimo pequeño y `expandRows` las estira hasta llenar el alto que
