@@ -86,7 +86,9 @@ export default function CobrosPage() {
   // La fecha de inicio va POR CONCEPTO (31/08/2026, Rodrigo): empezó el 13
   // con logopedia y el 17 con psicología, y cada servicio paga lo suyo.
   const [conceptosCatalogo, setConceptosCatalogo] = useState([]);
-  const [lineasCuota, setLineasCuota] = useState([]); // [{ id, inicio }]
+  // `fin` desde el 10/09/2026: el tramo del mes tiene dos extremos. Ver el
+  // «Acabó el» del cajón, más abajo.
+  const [lineasCuota, setLineasCuota] = useState([]); // [{ id, inicio, fin }]
   /*
    * De dónde salió lo que hay puesto (04/09/2026): `{ fuente: "citas", citas: n,
    * mes }` cuando lo han dicho las CITAS de ese mes. Se enseña bajo los
@@ -112,16 +114,16 @@ export default function CobrosPage() {
   const [citasDelMes, setCitasDelMes] = useState([]);
 
   const conceptosElegidos = lineasCuota
-    .map(({ id, inicio }) => {
+    .map(({ id, inicio, fin }) => {
       const c = conceptosCatalogo.find((c2) => String(c2.id) === String(id));
-      return c ? { c, inicio } : null;
+      return c ? { c, inicio, fin: fin ?? "" } : null;
     })
     .filter(Boolean);
   const cuentaCuota = partesConProrrateo(
     // Con el concepto de cada línea: la parte proporcional de una terapia se
     // cuenta con SUS sesiones y no con las del hermano ni las de la otra
     // terapia de la misma cuota (08/09/2026, Rosa).
-    conceptosElegidos.map(({ c, inicio }) => ({ importe: Number(c.unitPrice || 0), inicio, conceptId: c.id })),
+    conceptosElegidos.map(({ c, inicio, fin }) => ({ importe: Number(c.unitPrice || 0), inicio, fin, conceptId: c.id })),
     { mes: form.periodMonth, citas: citasDelMes }
   );
 
@@ -132,9 +134,9 @@ export default function CobrosPage() {
   // importe ESPERADO del mes para restarle lo que ya se cobró (04/09/2026).
   function totalDeItems(items) {
     const partes = (items ?? [])
-      .map(({ id, inicio }) => {
+      .map(({ id, inicio, fin }) => {
         const c = conceptosCatalogo.find((c2) => String(c2.id) === String(id));
-        return c ? { importe: Number(c.unitPrice || 0), inicio, conceptId: c.id } : null;
+        return c ? { importe: Number(c.unitPrice || 0), inicio, fin: fin ?? "", conceptId: c.id } : null;
       })
       .filter(Boolean);
     if (!partes.length) return null;
@@ -150,7 +152,7 @@ export default function CobrosPage() {
   // pactado con la familia, deja de mandar (y el aviso de pantalla se va).
   function addConceptoCuota(id) {
     if (!id) return;
-    const items = [...lineasCuota, { id, inicio: "" }];
+    const items = [...lineasCuota, { id, inicio: "", fin: "" }];
     setLineasCuota(items);
     setCuotaDeLaFamilia(null);
     aplicarImporteCuota(items);
@@ -161,8 +163,10 @@ export default function CobrosPage() {
     setCuotaDeLaFamilia(null);
     aplicarImporteCuota(items);
   }
-  function cambiarInicioConcepto(idx, fecha) {
-    const items = lineasCuota.map((it, i) => (i === idx ? { ...it, inicio: fecha } : it));
+  // Las dos fechas del tramo por la misma puerta: «Empezó el» y «Acabó el»
+  // hacen exactamente lo mismo por sus dos extremos (10/09/2026).
+  function cambiarFechaConcepto(idx, campo, fecha) {
+    const items = lineasCuota.map((it, i) => (i === idx ? { ...it, [campo]: fecha } : it));
     setLineasCuota(items);
     setCuotaDeLaFamilia(null);
     aplicarImporteCuota(items);
@@ -192,6 +196,27 @@ export default function CobrosPage() {
   // elegida se descarta por el turno. La aprendida solo se pide si NO tiene
   // cuota asignada, que es cuando de verdad se usa.
   const [cuotaDeLaFamilia, setCuotaDeLaFamilia] = useState(null); // { n, pactado, delPaciente }
+  /*
+   * ── A DÓNDE LLEVA «CAMBIAR EL IMPORTE» (10/09/2026, Rodrigo) ─────────────
+   *
+   * Qué cuotas tiene la familia, aparte de lo que se esté tecleando: esto NO se
+   * borra al recomponer los conceptos a mano —`cuotaDeLaFamilia` sí, porque
+   * deja de describir lo que hay en pantalla—, y el botón tiene que seguir ahí
+   * justo cuando alguien está peleándose con el importe.
+   *
+   * Con UNA cuota lleva a su ficha (`?cuota=<id>`), que se abre sola al llegar.
+   * Con varias no se puede adivinar cuál se quiere tocar, así que deja la lista
+   * de Cuotas filtrada por el nombre de la familia y se elige a la vista. Sin
+   * cuota conocida no hay botón: no habría nada que abrir.
+   */
+  const [cuotasFamilia, setCuotasFamilia] = useState(null); // { ids, nombre }
+  const enlaceALaCuota = (() => {
+    const ids = cuotasFamilia?.ids ?? [];
+    if (ids.length === 1) return `/facturacion/cuotas?cuota=${encodeURIComponent(ids[0])}`;
+    if (!ids.length) return null;
+    const nombre = cuotasFamilia?.nombre;
+    return nombre ? `/facturacion/cuotas?busca=${encodeURIComponent(nombre)}` : "/facturacion/cuotas";
+  })();
 
   /*
    * ── LO QUE YA SE COBRÓ DE ESTE MES (04/09/2026, Rodrigo) ──────────────────
@@ -292,6 +317,7 @@ export default function CobrosPage() {
     // Primero limpiar, siempre: más vale el importe en blanco que el de otra familia.
     setLineasCuota([]);
     setCuotaDeLaFamilia(null);
+    setCuotasFamilia(null);
     setOrigenCuota(null);
     setParcialDelMes(null);
     setPendientesDelMes([]);
@@ -315,6 +341,12 @@ export default function CobrosPage() {
        * con su prueba; Facturas ya la usaba.
        */
       const cuotas = cuotasQueEntran(todas, form.patientId);
+      // Aparte y para el botón «Cambiar el importe»: ver `enlaceALaCuota`.
+      setCuotasFamilia(
+        cuotas.length
+          ? { ids: cuotas.map((c) => String(c.id)), nombre: cuotas[0]?.client?.name ?? null }
+          : null
+      );
       let ids = conceptosDeCuotas(cuotas);
       let deLasCitas = null;
       /*
@@ -352,7 +384,7 @@ export default function CobrosPage() {
 
       const items = ids
         .filter((id) => conceptosCatalogo.some((c) => String(c.id) === String(id)))
-        .map((id) => ({ id: String(id), inicio: "" }));
+        .map((id) => ({ id: String(id), inicio: "", fin: "" }));
       setLineasCuota(items);
 
       // El importe pactado (`amount` escrito en la cuota) manda sobre la suma
@@ -1261,7 +1293,7 @@ export default function CobrosPage() {
                   {conceptosCatalogo.length > 0 && (
                     <FormRow label="Conceptos de la cuota">
                       <div className="space-y-1.5">
-                        {conceptosElegidos.map(({ c, inicio }, i) => {
+                        {conceptosElegidos.map(({ c, inicio, fin }, i) => {
                           const parte = cuentaCuota.partes[i];
                           return (
                             <div key={i} className="text-xs bg-neutral-50 border border-neutral-100 rounded-lg px-2.5 py-1.5 space-y-1">
@@ -1291,18 +1323,46 @@ export default function CobrosPage() {
                                   </button>
                                 </span>
                               </div>
-                              {/* Cada servicio con SU fecha: empezó el 13 con logopedia,
-                                  el 17 con psicología… y cada uno paga lo suyo. */}
+                              {/* Cada servicio con SU tramo: empezó el 13 con logopedia,
+                                  el 17 con psicología… y cada uno paga lo suyo. Y «Acabó
+                                  el» para el que deja de venir a mitad de mes (10/09/2026,
+                                  Rodrigo: «para los pacientes que fallan a final de mes
+                                  pero han empezado bien»). */}
                               <div className="flex items-center gap-2">
-                                <label className="text-[10px] text-neutral-400 shrink-0">Empezó el</label>
-                                <input type="date" value={inicio} onChange={(e) => cambiarInicioConcepto(i, e.target.value)}
-                                  className="flex-1 rounded-md border border-neutral-200 bg-white px-1.5 py-0.5 text-[11px] text-neutral-600 focus:outline-none focus:border-neutral-400" />
-                                {parte.prorrateo && (
-                                  <span className="text-[10px] text-neutral-400 shrink-0">
-                                    {parte.prorrateo.diasCobrados}/{parte.prorrateo.diasDelMes} días (de {fmtMoney(parte.importeCompleto)})
-                                  </span>
-                                )}
+                                <label className="flex items-center gap-1.5 flex-1 min-w-0">
+                                  <span className="text-[10px] text-neutral-400 shrink-0">Empezó el</span>
+                                  <input type="date" value={inicio} max={fin || undefined}
+                                    onChange={(e) => cambiarFechaConcepto(i, "inicio", e.target.value)}
+                                    className="flex-1 min-w-0 rounded-md border border-neutral-200 bg-white px-1.5 py-0.5 text-[11px] text-neutral-600 focus:outline-none focus:border-neutral-400" />
+                                </label>
+                                <label className="flex items-center gap-1.5 flex-1 min-w-0">
+                                  <span className="text-[10px] text-neutral-400 shrink-0">Acabó el</span>
+                                  <input type="date" value={fin} min={inicio || undefined}
+                                    onChange={(e) => cambiarFechaConcepto(i, "fin", e.target.value)}
+                                    className="flex-1 min-w-0 rounded-md border border-neutral-200 bg-white px-1.5 py-0.5 text-[11px] text-neutral-600 focus:outline-none focus:border-neutral-400" />
+                                </label>
                               </div>
+                              {/*
+                               * LO QUE DE VERDAD HA DIVIDIDO (10/09/2026, Rodrigo: «no me
+                               * divide por la cantidad de citas que tiene el niño ese mes
+                               * sino por la cantidad de días»). El importe ya salía por
+                               * sesiones desde el 07/09 —cuando hay citas de ese servicio
+                               * en el tramo—, pero esta línea decía «20/30 días» pasara lo
+                               * que pasara, así que la cuenta que se leía nunca era la que
+                               * se había hecho. Ahora dice la que se hizo, y cuando cae en
+                               * los días teniendo citas delante, dice por qué.
+                               */}
+                              {parte.prorrateo && (
+                                <p className="text-[10px] text-neutral-400">
+                                  {parte.prorrateo.sesiones
+                                    ? `${parte.prorrateo.sesiones.enElTramo} de ${parte.prorrateo.sesiones.enElMes} sesiones`
+                                    : `${parte.prorrateo.diasCobrados}/${parte.prorrateo.diasDelMes} días`}
+                                  {" "}(de {fmtMoney(parte.importeCompleto)})
+                                  {!parte.prorrateo.sesiones && citasDelMes.length > 0 && (
+                                    <> · por días: en ese tramo no hay citas suyas suficientes para contar sesiones</>
+                                  )}
+                                </p>
+                              )}
                             </div>
                           );
                         })}
@@ -1316,10 +1376,23 @@ export default function CobrosPage() {
                           ]}
                         />
                         {conceptosElegidos.length > 0 && (
-                          <p className="text-[10px] text-neutral-400">
-                            La fecha «Empezó el» solo hace falta si ese servicio empezó a mitad de mes:
-                            su parte se prorratea sola.
-                          </p>
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-[10px] text-neutral-400">
+                              Las fechas solo hacen falta si ese servicio empezó —o acabó— a mitad de mes:
+                              su parte se prorratea sola.
+                            </p>
+                            {/*
+                             * EL BOTÓN QUE LLEVA A LA CUOTA (10/09/2026, Rodrigo: «un
+                             * botoncito pequeño que lleve a configuración dentro de
+                             * facturación y a la cuota concreta para editarle el
+                             * valor»). Aquí es donde se ve que el importe está mal, y
+                             * hasta hoy había que salir a Cuotas y buscar la familia a
+                             * mano entre 278. Con una sola cuota abre su ficha; con
+                             * varias no se puede adivinar cuál, y deja la lista
+                             * filtrada por el nombre de la familia.
+                             */}
+                            {enlaceALaCuota && <BotonCuota href={enlaceALaCuota} />}
+                          </div>
                         )}
                         {/*
                          * DONDE NACE LA CUENTA DE CABEZA (08/09/2026, AV-0085).
@@ -1625,6 +1698,20 @@ export default function CobrosPage() {
               <FormRow label="Importe (€) *">
                 <input required type="number" min="0.01" step="0.01" value={editing.amount}
                   onChange={(e) => setEditing((p) => ({ ...p, amount: e.target.value }))} className={inputCls} />
+                {/*
+                 * Y desde aquí también se llega a la cuota (10/09/2026): este
+                 * cajón es el que se abre cuando el importe de un cobro no
+                 * cuadra, y cambiarlo aquí arregla ESTE mes pero no el que
+                 * viene. El que viene sale de la cuota.
+                 */}
+                {editing.cuotaId && (
+                  <div className="flex items-center justify-between gap-2 mt-1.5">
+                    <p className="text-[10px] text-neutral-400">
+                      Esto cambia solo este cobro. Para los meses siguientes, cambia la cuota.
+                    </p>
+                    <BotonCuota href={`/facturacion/cuotas?cuota=${encodeURIComponent(editing.cuotaId)}`} />
+                  </div>
+                )}
               </FormRow>
               <FormRow label="Método de pago">
                 <Select value={editing.method} onChange={(v) => setEditing((p) => ({ ...p, method: v }))}
@@ -1770,6 +1857,31 @@ function FilaMoroso({ m }) {
       <span className="text-[11px] text-neutral-500">{m.phone || m.email || "sin contacto"}</span>
       <span className={`text-[11px] px-2 py-0.5 rounded-full ${color}`}>{etiqueta.texto}</span>
     </li>
+  );
+}
+
+/**
+ * El botoncito que abre la cuota para cambiarle el importe (10/09/2026,
+ * Rodrigo). Sale en los dos cajones —registrar y editar— porque el importe
+ * raro se ve en los dos, y hasta hoy había que salir a Cuotas y buscar la
+ * familia a mano entre las 278 del centro.
+ *
+ * En una pestaña nueva a propósito: quien está cobrando no puede perder lo que
+ * lleva tecleado por ir a mirar una tarifa.
+ */
+function BotonCuota({ href, children = "Cambiar el importe" }) {
+  return (
+    <Link
+      href={href}
+      target="_blank"
+      title="Abrir la cuota para cambiarle el importe"
+      className="shrink-0 inline-flex items-center gap-1 rounded-md border border-neutral-200 px-1.5 py-0.5 text-[10px] text-neutral-500 hover:border-neutral-400 hover:text-neutral-800 transition-colors"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3 h-3">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+      </svg>
+      {children}
+    </Link>
   );
 }
 

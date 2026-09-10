@@ -302,3 +302,65 @@ describe("cada terapia paga por SUS sesiones", () => {
     assert.match(fuente, /attributes: \["patientId", "clientId", "scheduledAt", "cobroConceptId"\]/);
   });
 });
+
+/*
+ * ── «ACABÓ EL…» Y LA CUENTA QUE SE LEE (10/09/2026, Rodrigo) ────────────────
+ *
+ * Dos cosas del mismo encargo:
+ *
+ *   · «Aparte de Empezó el… también tiene que haber Acabó el…, para los
+ *     pacientes que fallan a final de mes pero han empezado bien.»
+ *   · «Cuando le doy a empezó el… no me divide por la cantidad de citas que
+ *     tiene el niño ese mes sino por la cantidad de días.»
+ *
+ * Lo segundo no era el cálculo —desde el 07/09 el importe sale por sesiones—:
+ * era la línea de debajo del campo, que decía «20/30 días» pasara lo que
+ * pasara. La cuenta que se leía no era la que se había hecho.
+ */
+describe("el mes que se corta por abajo", () => {
+  it("acabar el 20 con citas los viernes son 3 de 4 sesiones, no 20 de 30 días", () => {
+    const { partes } = partesConProrrateo(
+      [{ importe: 190, inicio: "", fin: "2026-09-20" }],
+      { mes: "2026-09", citas: VIERNES }
+    );
+    assert.equal(partes[0].importe, 142.5);
+    assert.equal(partes[0].rotulo, "hasta el 20/09/2026 (3 de 4 sesiones)");
+    assert.notEqual(partes[0].importe, 126.67, "126,67 € es la cuenta por días");
+  });
+
+  it("empezar y acabar dentro del mes cuenta solo las sesiones de en medio", () => {
+    const { partes } = partesConProrrateo(
+      [{ importe: 190, inicio: "2026-09-08", fin: "2026-09-20" }],
+      { mes: "2026-09", citas: VIERNES }
+    );
+    assert.equal(partes[0].rotulo, "del 08/09/2026 al 20/09/2026 (2 de 4 sesiones)");
+    assert.equal(partes[0].importe, 95);
+  });
+});
+
+describe("y el cajón enseña la cuenta que ha hecho", () => {
+  const pagina = lee("../app/(dashboard)/facturacion/cobros/page.jsx");
+
+  it("dice «sesiones» cuando ha ido por sesiones", () => {
+    assert.match(pagina, /parte\.prorrateo\.sesiones\.enElTramo\} de \$\{parte\.prorrateo\.sesiones\.enElMes\} sesiones/);
+  });
+
+  it("y ya no dice «días» en todos los casos, que era el fallo", () => {
+    assert.doesNotMatch(
+      pagina,
+      /\{parte\.prorrateo\.diasCobrados\}\/\{parte\.prorrateo\.diasDelMes\} días \(de /,
+      "esa línea salía igual aunque el importe se hubiera calculado por sesiones"
+    );
+  });
+
+  it("el campo «Acabó el» está, y escribe en la misma línea que «Empezó el»", () => {
+    assert.match(pagina, /Acabó el/);
+    assert.match(pagina, /cambiarFechaConcepto\(i, "fin", e\.target\.value\)/);
+    assert.match(pagina, /cambiarFechaConcepto\(i, "inicio", e\.target\.value\)/);
+  });
+
+  it("y las dos fechas viajan a la cuenta, o «Acabó el» no cobraría nada", () => {
+    const conFin = pagina.match(/inicio,\s*fin[,:]/g) ?? [];
+    assert.ok(conFin.length >= 2, "las dos cuentas del cajón tienen que llevar el fin");
+  });
+});

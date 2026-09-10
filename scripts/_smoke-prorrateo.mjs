@@ -71,3 +71,40 @@ test("sin fecha (o con fecha rota) la parte va entera y no rompe el total", () =
   assert.equal(r.partes[2].prorrateo, null);
   assert.equal(r.total, 275);
 });
+
+/*
+ * ── «ACABÓ EL…» (10/09/2026, Rodrigo) ────────────────────────────────────────
+ * «Aparte de Empezó el… también tiene que haber Acabó el…, para los pacientes
+ * que fallan a final de mes pero han empezado bien.»
+ */
+test("acabar el 15 de septiembre cobra 15 de 30 días", () => {
+  const r = partesConProrrateo([{ importe: 190, inicio: "", fin: "2026-09-15" }], { mes: "2026-09" });
+  assert.equal(r.partes[0].prorrateo.diasCobrados, 15);
+  assert.equal(r.partes[0].importe, 95);
+  assert.equal(r.partes[0].rotulo, "hasta el 15/09/2026 (15/30 días)");
+});
+
+test("empezó Y acabó dentro del mes: solo el trozo de en medio", () => {
+  const r = partesConProrrateo([{ importe: 300, inicio: "2026-09-11", fin: "2026-09-20" }], { mes: "2026-09" });
+  assert.equal(r.partes[0].prorrateo.diasCobrados, 10);
+  assert.equal(r.partes[0].importe, 100);
+  assert.equal(r.partes[0].rotulo, "del 11/09/2026 al 20/09/2026 (10/30 días)");
+});
+
+test("acabar el último día del mes no es prorratear nada", () => {
+  const r = partesConProrrateo([{ importe: 190, inicio: "", fin: "2026-09-30" }], { mes: "2026-09" });
+  assert.equal(r.partes[0].importe, 190);
+  assert.equal(r.partes[0].prorrateo, null);
+  assert.equal(r.partes[0].rotulo, null);
+});
+
+test("sin decir el mes, «Acabó el» se lo saca de su propia fecha", () => {
+  const r = partesConProrrateo([{ importe: 190, fin: "2026-09-15" }]);
+  assert.equal(r.partes[0].importe, 95);
+});
+
+test("una fecha de fin ilegible no cambia nada: el mes va entero", () => {
+  const r = partesConProrrateo([{ importe: 190, inicio: "", fin: "chapuza" }], { mes: "2026-09" });
+  assert.equal(r.partes[0].importe, 190);
+  assert.equal(r.partes[0].prorrateo, null);
+});

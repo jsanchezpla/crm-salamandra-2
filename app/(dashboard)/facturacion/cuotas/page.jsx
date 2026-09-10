@@ -14,7 +14,7 @@
  * Cobros cuando el dinero entra de verdad — Morosidad y el portal miran eso.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import Select from "@/components/ui/Select.jsx";
@@ -154,6 +154,39 @@ export default function CuotasPage() {
   }, [filtroMetodo, contarSinGenerar]);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  /*
+   * ── ENTRAR DIRECTO A UNA CUOTA (10/09/2026, Rodrigo) ──────────────────────
+   *
+   * «Un botoncito pequeño que lleve a configuración dentro de facturación y a
+   * la cuota concreta para editarle el valor.» El botón está en el cajón de
+   * Cobros —que es donde se ve el importe raro— y trae aquí como
+   * /facturacion/cuotas?cuota=<id>: en cuanto la lista está cargada se abre el
+   * drawer de esa cuota, con el importe delante.
+   *
+   * `?busca=<nombre>` es el respaldo para cuando la familia tiene varias: no
+   * se puede adivinar cuál se quiere tocar, así que se deja la lista filtrada
+   * por su nombre y se elige a la vista.
+   *
+   * `window.location` y no `useSearchParams`: se lee UNA vez y no obliga a
+   * suspender la página, igual que hace Cobros. Una cuota que ya no existe no
+   * abre nada y deja la pantalla de siempre.
+   */
+  useEffect(() => {
+    const texto = new URLSearchParams(window.location.search).get("busca");
+    if (texto) setBusca(texto);
+  }, []);
+
+  const cuotaAbierta = useRef(false);
+  useEffect(() => {
+    if (cuotaAbierta.current || !cuotas.length) return;
+    const id = new URLSearchParams(window.location.search).get("cuota");
+    if (!id) { cuotaAbierta.current = true; return; }
+    const c = cuotas.find((x) => String(x.id) === String(id));
+    if (!c) return; // aún no ha llegado, o ya no existe: no se abre nada
+    cuotaAbierta.current = true;
+    setEditando(c);
+  }, [cuotas]);
 
   useEffect(() => {
     fetch("/api/billing/conceptos", { cache: "no-store" })
