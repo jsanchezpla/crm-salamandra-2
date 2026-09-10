@@ -55,6 +55,79 @@ export default function ConfiguracionPage() {
   const [nuevoConcepto, setNuevoConcepto] = useState(CONCEPTO_VACIO);
   const [guardandoConcepto, setGuardandoConcepto] = useState(false);
 
+  /*
+   * ── A QUÉ TIPO DE CITA VA APAREJADA CADA CUOTA (10/09/2026, Rodrigo) ──────
+   *
+   * «En la configuración de cuotas debería poder editar a qué tipo de cita va
+   * aparejada la cuota.» El enlace existe desde el 04/09 —el concepto se pone
+   * en el tipo y baja solo a cada cita que se crea con él—, pero solo se podía
+   * tocar en Citas → Tipos: hay que saber que está allí, y quien lleva la
+   * facturación no entra en esa pantalla. Aquí se ve al lado de la cuota y se
+   * cambia sin salir.
+   *
+   * De dónde salió: de los 70 tipos activos de Aumenta solo 18 tenían cuota
+   * puesta (medido el 10/09/2026), y el de DIAGNÓSTICO no. Por eso cobrar desde
+   * una cita de diagnóstico proponía la cuota mensual de la familia.
+   *
+   * Varios tipos pueden llevar la MISMA cuota (LOGOPEDIA 45 y LOGOPEDIA 45
+   * ONLINE cobran lo mismo), así que es una lista y no un desplegable.
+   *
+   * `null` mientras no se sabe, o cuando el centro no tiene Citas (403): la
+   * columna no se enseña y la pantalla se queda exactamente como estaba.
+   */
+  const [tiposCita, setTiposCita] = useState(null);
+  // Los tipos de cita solo los edita dirección (lo exige su PATCH): a quien
+  // lleva la facturación se le enseñan, pero de solo lectura.
+  const esAdmin = me?.role === "admin" || me?.role === "superadmin";
+
+  useEffect(() => {
+    fetch("/api/citas/event-types", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setTiposCita(j?.ok && Array.isArray(j.data) ? j.data : null))
+      .catch(() => {});
+  }, []);
+
+  const tiposDelConcepto = (conceptoId) =>
+    (tiposCita ?? []).filter((t) => String(t.conceptId ?? "") === String(conceptoId));
+
+  /*
+   * Guarda el enlace por el LADO DEL TIPO, que es donde vive la columna
+   * (`event_types.concept_id`). Uno a uno y con PATCH, el mismo endpoint que
+   * usa Citas → Tipos: así no hay dos formas de escribir lo mismo. Lo que falla
+   * se cuenta, no se traga.
+   */
+  async function guardarTiposDelConcepto(concepto) {
+    if (!esAdmin || !Array.isArray(concepto?.tipoIds) || !tiposCita) return;
+    const antes = tiposDelConcepto(concepto.id).map((t) => String(t.id));
+    const ahora = concepto.tipoIds.map(String);
+    const quitados = antes.filter((id) => !ahora.includes(id));
+    const puestos = ahora.filter((id) => !antes.includes(id));
+    if (!quitados.length && !puestos.length) return;
+
+    const escribir = async (id, conceptId) => {
+      const r = await fetch(`/api/citas/event-types/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conceptId }),
+      });
+      if (!r.ok) throw new Error("No se pudo cambiar el tipo de cita");
+    };
+    await Promise.all([
+      ...quitados.map((id) => escribir(id, null)),
+      ...puestos.map((id) => escribir(id, concepto.id)),
+    ]);
+    // La lista en memoria, al día: sin esto la columna seguiría diciendo lo de
+    // antes hasta recargar la pagina.
+    setTiposCita((ts) =>
+      (ts ?? []).map((t) => {
+        const id = String(t.id);
+        if (quitados.includes(id)) return { ...t, conceptId: null };
+        if (puestos.includes(id)) return { ...t, conceptId: concepto.id };
+        return t;
+      })
+    );
+  }
+
   useEffect(() => {
     fetch("/api/billing/conceptos?todos=1", { cache: "no-store" })
       .then((r) => r.json())
@@ -113,6 +186,9 @@ export default function ConfiguracionPage() {
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "No se pudo guardar el concepto");
+      // Y a qué tipos de cita va aparejada (10/09/2026). Va DESPUÉS de guardar
+      // el concepto: si el PATCH del tipo falla, al menos el precio está puesto.
+      await guardarTiposDelConcepto(c);
       setConceptos((cs) => ordenarPorNombre(cs.map((x) => (x.id === c.id ? j.data : x))));
       setEditandoConcepto(null);
     } catch (e) { setErrorMsg(e.message); }
@@ -324,6 +400,9 @@ export default function ConfiguracionPage() {
                 <th className="text-right px-2 py-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">IVA %</th>
                 <th className="text-left px-2 py-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Categoría</th>
                 <th className="text-left px-2 py-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Period.</th>
+                {tiposCita && (
+                  <th className="text-left px-2 py-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Tipo de cita</th>
+                )}
                 <th className="px-2 py-2" />
               </tr>
             </thead>
@@ -354,6 +433,65 @@ export default function ConfiguracionPage() {
                     <input className={inputCls} value={editandoConcepto.periodicity ?? ""}
                       onChange={(e) => setEditandoConcepto((v) => ({ ...v, periodicity: e.target.value }))} />
                   </td>
+                  {/* Los tipos de cita que cobran ESTA cuota: se quitan con la
+                      ✕ y se añaden del desplegable, como los conceptos de un
+                      cobro. Un tipo que ya lleva otra cuota se avisa al elegir:
+                      cambiarlo es quitarsela a aquella. */}
+                  {tiposCita && (
+                    <td className="px-2 py-2 min-w-[200px]">
+                      {!esAdmin ? (
+                        <span className="text-[11px] text-neutral-400">Solo lo cambia dirección</span>
+                      ) : (
+                        <div className="space-y-1">
+                          {(editandoConcepto.tipoIds ?? []).map((id) => {
+                            const t = tiposCita.find((x) => String(x.id) === String(id));
+                            return (
+                              <div key={id} className="flex items-center justify-between gap-2 text-[11px] bg-white border border-neutral-200 rounded-lg px-2 py-1">
+                                <span className="truncate">{t ? `${t.name} (${t.duration} min)` : "—"}</span>
+                                <button
+                                  type="button"
+                                  title="Quitarle esta cuota a este tipo de cita"
+                                  aria-label="Quitar el tipo de cita"
+                                  onClick={() => setEditandoConcepto((v) => ({
+                                    ...v,
+                                    tipoIds: (v.tipoIds ?? []).filter((x) => String(x) !== String(id)),
+                                  }))}
+                                  className="shrink-0 grid place-items-center w-5 h-5 rounded-full border border-neutral-200 text-neutral-500 text-[10px] leading-none hover:border-red-300 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            );
+                          })}
+                          <Select
+                            value=""
+                            onChange={(v) => {
+                              if (!v) return;
+                              setEditandoConcepto((prev) => ({
+                                ...prev,
+                                tipoIds: [...new Set([...(prev.tipoIds ?? []).map(String), String(v)])],
+                              }));
+                            }}
+                            className={inputCls}
+                            searchable
+                            options={[
+                              { value: "", label: (editandoConcepto.tipoIds ?? []).length ? "Añadir otro tipo…" : "Sin tipo de cita" },
+                              ...tiposCita
+                                .filter((t) => !(editandoConcepto.tipoIds ?? []).map(String).includes(String(t.id)))
+                                .map((t) => ({
+                                  value: String(t.id),
+                                  label: `${t.name} (${t.duration} min)${
+                                    t.conceptId && String(t.conceptId) !== String(editandoConcepto.id)
+                                      ? ` · hoy cobra ${conceptos.find((x) => String(x.id) === String(t.conceptId))?.name ?? "otra cuota"}`
+                                      : ""
+                                  }`,
+                                })),
+                            ]}
+                          />
+                        </div>
+                      )}
+                    </td>
+                  )}
                   <td className="px-2 py-2 text-right whitespace-nowrap">
                     <button onClick={guardarConcepto} disabled={!String(editandoConcepto.name ?? "").trim()}
                       className="text-[11px] font-semibold text-[var(--color-primary,#1B3A2D)] hover:underline disabled:opacity-40 mr-2">Guardar</button>
@@ -376,10 +514,18 @@ export default function ConfiguracionPage() {
                   <td className="px-2 py-2 text-right tabular-nums">{Number(c.vatRate)}</td>
                   <td className="px-2 py-2 text-neutral-500">{c.category || "—"}</td>
                   <td className="px-2 py-2 text-neutral-500">{c.periodicity || "—"}</td>
+                  {tiposCita && (
+                    <td className="px-2 py-2 text-neutral-500 text-[11px] max-w-[220px] break-words">
+                      {tiposDelConcepto(c.id).map((t) => t.name).join(", ") || "—"}
+                    </td>
+                  )}
                   <td className="px-2 py-2 text-right whitespace-nowrap">
                     {puedeFacturar && (
                       <>
-                        <button onClick={() => setEditandoConcepto({ ...c })} className="text-[11px] text-neutral-500 hover:text-neutral-800 mr-2">Editar</button>
+                        <button
+                          onClick={() => setEditandoConcepto({ ...c, tipoIds: tiposDelConcepto(c.id).map((t) => String(t.id)) })}
+                          className="text-[11px] text-neutral-500 hover:text-neutral-800 mr-2"
+                        >Editar</button>
                         <button onClick={() => alternarConcepto(c)} className="text-[11px] text-neutral-500 hover:text-neutral-800 mr-2">
                           {c.active ? "Apagar" : "Encender"}
                         </button>
@@ -390,7 +536,7 @@ export default function ConfiguracionPage() {
                 </tr>
               ))}
               {conceptos.length === 0 && (
-                <tr><td colSpan={7} className="px-2 py-6 text-center text-neutral-400 text-sm">Sin conceptos todavía. Da de alta el primero aquí debajo.</td></tr>
+                <tr><td colSpan={tiposCita ? 8 : 7} className="px-2 py-6 text-center text-neutral-400 text-sm">Sin conceptos todavía. Da de alta el primero aquí debajo.</td></tr>
               )}
             </tbody>
           </table>

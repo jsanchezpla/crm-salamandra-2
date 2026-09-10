@@ -875,6 +875,10 @@ export default function CitasModule({
             clientId: cita.props.clientId,
             patientId: cita.props.patientId ?? null,
             mes: mesDeLaCita(cita.startStr),
+            // Y DE QUÉ CITA se viene (10/09/2026): Cobros pregunta qué se cobra
+            // por ella y, si su cuota no es la mensual de la familia —un
+            // diagnóstico, un informe—, rellena esa.
+            bookingId: cita.id,
           }));
         },
       },

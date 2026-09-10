@@ -67,6 +67,18 @@ describe("a dónde lleva el botón", () => {
       `/facturacion/cobros?abrir=cuota&cliente=${FAMILIA}&paciente=${HUGO}&mes=2026-09`
     );
   });
+  /*
+   * Y DE QUÉ CITA SE VIENE (10/09/2026, Rodrigo: «cuando voy a pagar el mes
+   * desde la cita de Diagnóstico va a pagar automáticamente Pedagogía 60x1 en
+   * lugar de Diagnóstico de 650 euros»). Sin la cita en el enlace, Cobros no
+   * puede saber si se pulsó en la sesión de siempre o en la valoración.
+   */
+  it("lleva la cita de la que se viene", () => {
+    assert.equal(
+      urlCobrarMes({ clientId: FAMILIA, patientId: HUGO, mes: "2026-09", bookingId: "b1" }),
+      `/facturacion/cobros?abrir=cuota&cliente=${FAMILIA}&paciente=${HUGO}&mes=2026-09&cita=b1`
+    );
+  });
   it("sin paciente va la familia entera; sin mes válido no se manda mes", () => {
     assert.equal(
       urlCobrarMes({ clientId: FAMILIA, mes: "2026-9" }),
@@ -102,7 +114,7 @@ describe("el botón entero", () => {
     assert.ok(b);
     assert.equal(b.rotulo, "Cobrar mes");
     assert.equal(b.mes, "2026-09");
-    assert.equal(b.href, `/facturacion/cobros?abrir=cuota&cliente=${FAMILIA}&paciente=${HUGO}&mes=2026-09`);
+    assert.equal(b.href, `/facturacion/cobros?abrir=cuota&cliente=${FAMILIA}&paciente=${HUGO}&mes=2026-09&cita=b1`);
     assert.match(b.titulo, /septiembre de 2026/);
   });
   it("sin módulo de Facturación no sale, aunque el mes esté sin cobrar", () => {

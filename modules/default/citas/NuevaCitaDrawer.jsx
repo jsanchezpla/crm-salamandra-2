@@ -791,12 +791,29 @@ export function NuevaCitaDrawer({
                     // Los talleres van marcados: es un tipo de cita más, pero se
                     // comporta distinto (no lleva paciente) y quien lo elige
                     // tiene que saberlo antes de pulsarlo, no después.
-                    ...eventTypes.map((e) => ({
-                      value: e.id,
-                      label: e.tallerGrupoId
-                        ? `Taller · ${e.name} (${e.duration} min)`
-                        : `${e.name} (${e.duration} min)`,
-                    })),
+                    /*
+                     * CON SU PRECIO AL LADO (10/09/2026, Rodrigo: «en el tipo
+                     * de cita, a los administradores, debería salirle al lado
+                     * del nombre del tipo el precio de la misma»). Es el del
+                     * concepto que cubre ese tipo, o sea lo que se va a cobrar
+                     * por la cita, y es lo que distingue «DIAGNÓSTICO · 650 €»
+                     * de la sesión de todas las semanas.
+                     *
+                     * Solo lo ve dirección y no hace falta preguntarlo aquí: el
+                     * servidor borra `concepto.unitPrice` de la respuesta a
+                     * quien no puede ver dinero (`lib/citas/dinero.js`), así
+                     * que a los demás les sale el tipo a secas, como hasta hoy.
+                     */
+                    ...eventTypes.map((e) => {
+                      const precio = e.concepto?.unitPrice;
+                      const conPrecio = precio != null ? ` · ${Number(precio).toFixed(2)} €` : "";
+                      return {
+                        value: e.id,
+                        label: e.tallerGrupoId
+                          ? `Taller · ${e.name} (${e.duration} min)${conPrecio}`
+                          : `${e.name} (${e.duration} min)${conPrecio}`,
+                      };
+                    }),
                   ]}
                   className={inputCls}
                   /*

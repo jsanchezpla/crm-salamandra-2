@@ -10,7 +10,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { cobrosQueCuentan, yaCobradoDelMes, restoDelMes } from "../lib/billing/restoDelMes.js";
+import {
+  cobrosQueCuentan,
+  yaCobradoDelMes,
+  restoDelMes,
+  restoQueSeQuedaPendiente,
+} from "../lib/billing/restoDelMes.js";
 
 test("el caso del encargo: 50 de 120 cobrados, quedan 70", () => {
   const r = restoDelMes({ esperado: 120, cobros: [{ patientId: null, amount: 50 }] });
@@ -105,4 +110,36 @@ test("entradas raras no revientan", () => {
   assert.equal(yaCobradoDelMes(null), 0);
   assert.equal(yaCobradoDelMes([{ amount: "abc" }, null, undefined]), 0);
   assert.deepEqual(cobrosQueCuentan(null, "marta"), []);
+});
+
+/* ── Lo que se queda a deber cuando traen menos (10/09/2026) ──────────────── */
+
+test("el caso del encargo: piden 650 y traen 325, quedan 325 pendientes", () => {
+  assert.equal(restoQueSeQuedaPendiente({ esperado: 650, importe: 325 }), 325);
+});
+
+test("con una fila pendiente detrás no se propone nada: la parte el servidor", () => {
+  // Si aquí se dijera «faltan 60» y además el POST parte la fila, la familia
+  // acabaría debiendo esos 60 dos veces.
+  assert.equal(restoQueSeQuedaPendiente({ esperado: 160, importe: 100, hayPendiente: true }), 0);
+});
+
+test("pagando lo que se pide, o de más, no queda nada", () => {
+  assert.equal(restoQueSeQuedaPendiente({ esperado: 190, importe: 190 }), 0);
+  assert.equal(restoQueSeQuedaPendiente({ esperado: 190, importe: 250 }), 0);
+});
+
+test("los céntimos se redondean y un resto de redondeo no es una deuda", () => {
+  assert.equal(restoQueSeQuedaPendiente({ esperado: 145.55, importe: 45.5 }), 100.05);
+  assert.equal(restoQueSeQuedaPendiente({ esperado: 120.004, importe: 120 }), 0);
+});
+
+test("sin importe esperado —una familia sin cuota conocida— no se inventa deuda", () => {
+  for (const esperado of [null, undefined, "", 0, "no es un número", NaN]) {
+    assert.equal(restoQueSeQuedaPendiente({ esperado, importe: 50 }), 0, `esperado=${String(esperado)}`);
+  }
+  for (const importe of [null, undefined, "", 0, "x"]) {
+    assert.equal(restoQueSeQuedaPendiente({ esperado: 100, importe }), 0, `importe=${String(importe)}`);
+  }
+  assert.equal(restoQueSeQuedaPendiente(), 0);
 });

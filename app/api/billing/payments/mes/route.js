@@ -64,7 +64,12 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       where: {
         ...deLaFamilia,
         status: "pending",
-        cuotaId: { [Op.ne]: null },
+        // Los de BONO no (`packId`): se saldan dando el bono, no cobrando el
+        // mes. Lo demás sí, desde el 10/09/2026 — era `cuotaId != null` y
+        // escondía los pendientes que no nacieron de una cuota asignada (los
+        // del volcado de Organízate y el resto de un pago a medias), que son
+        // deuda igual y hay que verlos al cobrar. Ver el POST de cobros.
+        packId: null,
         invoiceId: null,
         periodMonth: { [Op.gte]: `${mes}-01`, [Op.lt]: `${mesSiguiente(mes)}-01` },
       },
@@ -104,8 +109,10 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
         notes: p.notes ?? null,
         conceptId: p.conceptId ?? null,
         cuotaId: p.cuotaId ?? null,
-        // Todos estos vienen del `where`: son de cuota por definición.
-        deCuota: true,
+        // Si lo generó el CRM desde una cuota asignada. Desde el 10/09/2026 ya
+        // no es siempre `true`: aquí entran también pendientes sin cuota
+        // detrás, y `generadoDelMes` no puede contarlos como mes generado.
+        deCuota: Boolean(p.cuotaId),
       })),
       cobros: filas.map((p) => ({
         id: p.id,

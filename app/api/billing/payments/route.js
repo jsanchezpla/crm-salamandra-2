@@ -164,7 +164,25 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
 
     const { Payment, Invoice, Client, BillingConcept } = tenantModels;
     const body = await request.json();
-    const { invoiceId, clientId, periodMonth, amount, paidAt, method, notes, patientId, conceptId, conceptIds } = body;
+    const {
+      invoiceId, clientId, periodMonth, amount, paidAt, method, notes, patientId, conceptId, conceptIds,
+      /*
+       * ── DOS BANDERAS DEL CAJÓN DE COBROS (10/09/2026, Rodrigo) ───────────
+       *
+       * `suelto`  este cobro NO es la cuota del mes: es lo de UNA cita que la
+       *           cuota mensual no cubre (un diagnóstico de 650 €, un informe).
+       *           Sin esto, el bloque de abajo cogía el cobro pendiente de la
+       *           mensualidad y lo daba por cobrado con los 650 €: la familia
+       *           quedaba al día debiendo su mes.
+       *
+       * `restoPendiente`  lo que falta cuando traen menos de lo que se les
+       *           pidió y no hay una fila pendiente que partir («si me pagan la
+       *           mitad, debería quedar pendiente de pago lo restante»). Nace
+       *           otra fila PENDIENTE del mismo mes por esa cantidad.
+       */
+      suelto,
+      restoPendiente,
+    } = body;
 
     // COBRO SIN FACTURA (sprint Aumenta 2026-07, punto 8): en el centro se
     // cobra primero y se factura después, así que exigir factura obligaba a
@@ -228,7 +246,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     // Si el cobro parcial ha partido la fila pendiente, con qué se ha quedado
     // pendiente: la pantalla lo dice al terminar.
     let partido = null;
-    if (!invoiceId && mes && clientId) {
+    if (!invoiceId && mes && clientId && suelto !== true) {
       // El pendiente del mes puede estar a nombre del PAGADOR de la cuota y no
       // de la familia (07/09/2026): sin esto no se encontraba y se creaba un
       // cobro NUEVO encima, con el pendiente de la fundación intacto y la caja
@@ -238,7 +256,20 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
           ...(await dondeEstaElCobroDe({ tenantModels, clientId })),
           periodMonth: mes,
           status: "pending",
-          cuotaId: { [Op.ne]: null },
+          /*
+           * ── YA NO SE EXIGE QUE VENGA DE UNA CUOTA (10/09/2026) ───────────
+           * Era `cuotaId != null`, y eso dejaba fuera los pendientes que NO
+           * nacieron de una cuota asignada: los siete que trajo el volcado de
+           * Organízate (1.550 € en producción a día de hoy) y los que deja el
+           * resto de un pago a medias desde este mismo cajón. Cobrarlos creaba
+           * un cobro NUEVO y el pendiente se quedaba ahí para siempre —el
+           * mismo fallo que se arregló en junio para los de cuota—.
+           *
+           * Lo que sigue fuera es el pendiente de un BONO (`packId`): ese se
+           * salda dando el bono, no cobrando el mes, y darlo por cobrado aquí
+           * dejaría sesiones pagadas que nadie pagó.
+           */
+          packId: null,
           invoiceId: null,
           stripePaymentIntentId: null,
           bankTransactionId: null,
@@ -329,7 +360,9 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       }
     }
 
+    let nacioNuevo = false;
     if (!payment) {
+      nacioNuevo = true;
       payment = await Payment.create({
         invoiceId: invoiceId || null,
         // Con factura, el cliente se hereda de ella; sin factura viene en el body.
@@ -342,6 +375,44 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
         notes: notes || null,
         patientId: pacienteValido,
         conceptId: conceptoValido,
+      });
+    }
+
+    /*
+     * ── Y LO QUE FALTA SE QUEDA PENDIENTE (10/09/2026, Rodrigo: «si me pagan
+     *    la mitad, debería quedar pendiente de pago lo restante») ────────────
+     *
+     * Cuando hay una fila pendiente detrás, esto ya lo hace `partir`
+     * (`lib/billing/cobroParcial.js`) y aquí no entra. Falta el otro camino, que
+     * es el de siempre en lo que no viene de una cuota: un diagnóstico de 650 €
+     * del que traen 325, o el primer mes de una familia recién dada de alta. El
+     * cobro se guardaba por lo que traían y los otros 325 € no quedaban en
+     * ninguna parte.
+     *
+     * Nace sin `cuotaId`: no sale de una cuota asignada, así que el índice
+     * único de «un solo pendiente por cuota y mes» ni le aplica. Y hereda el
+     * MÉTODO del cobro: por donde entró la primera mitad es por donde se espera
+     * la segunda. (El pendiente que genera una cuota puede quedarse «sin
+     * decidir» desde d95bbcf3, pero eso necesita que `payments.method` ya no
+     * sea NOT NULL —lo hace `migrate-payments-metodo-opcional.js`—, y aquí no
+     * hace falta esperar a esa migración para dejar la deuda escrita.)
+     */
+    let resto = null;
+    const restoPedido = Math.round((Number(restoPendiente) || 0) * 100) / 100;
+    if (nacioNuevo && !invoiceId && mes && clientId && restoPedido > 0 && restoPedido < 1_000_000) {
+      resto = await Payment.create({
+        invoiceId: null,
+        clientId: payment.clientId,
+        patientId: pacienteValido,
+        conceptId: conceptoValido,
+        periodMonth: mes,
+        amount: restoPedido,
+        paidAt,
+        method,
+        status: "pending",
+        notes: [notes, `Resto sin cobrar de ${String(mes).slice(0, 7)}: se cobraron ${Number(amount).toFixed(2)} € de ${(Number(amount) + restoPedido).toFixed(2)} €`]
+          .filter(Boolean)
+          .join(" — "),
       });
     }
 
@@ -374,7 +445,13 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       before: null,
       after: resumenImporte(payment),
     });
-    return created({ ...payment.toJSON(), cobradosPendientes, partido });
+    return created({
+      ...payment.toJSON(),
+      cobradosPendientes,
+      partido,
+      // Lo que se ha quedado a deber, para que la pantalla lo pueda decir.
+      resto: resto ? { id: resto.id, amount: Number(resto.amount) } : null,
+    });
   } catch (err) {
     return serverError(err);
   }

@@ -26,6 +26,20 @@ import { loQueSeCobraDe } from "../../../../lib/citas/dineroDeLaCita.js";
  * El mes se interpreta en la hora del CENTRO. El contenedor corre en
  * `Europe/Madrid` desde el 19/08/2026 precisamente para que «septiembre» sea
  * septiembre aquí y no un mes que empieza a las 22:00 del 31 de agosto.
+ *
+ * ── Y CON `&booking=<id>`, LO QUE SE COBRA POR ESA CITA (10/09/2026) ────────
+ * Rodrigo: «cuando voy a pagar el mes desde la cita de Diagnóstico (60 min) va
+ * a pagar automáticamente Pedagogía 60x1 en lugar de Diagnóstico de 650
+ * euros». Devuelve `deLaCita: { conceptId, fuente }`, y `fuente` dice de dónde
+ * sale, que no es un detalle:
+ *
+ *   · `cita` — la cita nació atada a ese concepto y lleva su foto dentro.
+ *   · `tipo` — la cita es anterior a que su tipo tuviera cuota (o se apuntó
+ *     sin ella), así que se mira lo que dice HOY su tipo de cita. Medido en
+ *     producción el 10/09/2026: de los 70 tipos activos de Aumenta solo 18
+ *     tienen concepto, y las cinco citas de DIAGNÓSTICO de septiembre nacieron
+ *     todas con `cobro_modo` a NULL. Sin este respaldo, arreglar el tipo no
+ *     arreglaría ni una sola de las citas ya apuntadas.
  */
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   try {
@@ -69,8 +83,48 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       order: [["scheduledAt", "ASC"]],
     });
 
-    return ok({ ...loQueSeCobraDe(citas), citas: citas.length });
+    return ok({
+      ...loQueSeCobraDe(citas),
+      citas: citas.length,
+      deLaCita: await conceptoDeLaCita({ tenantModels, bookingId: sp.get("booking"), clientId }),
+    });
   } catch (err) {
     return serverError(err);
   }
 });
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Qué concepto del catálogo cubre ESTA cita, para el cobro que se abre desde
+ * ella. `null` cuando no se pide cita, cuando no es de esa familia —una id
+ * pescada a mano no puede sacar el dinero de otra— o cuando ni la cita ni su
+ * tipo dicen nada.
+ *
+ * No devuelve el importe a propósito: el cajón de Cobros lo saca del catálogo,
+ * que es el precio de HOY y el que se ve línea a línea en pantalla.
+ */
+async function conceptoDeLaCita({ tenantModels, bookingId, clientId }) {
+  const id = (bookingId ?? "").trim();
+  if (!UUID_RE.test(id)) return null;
+  const { Booking, EventType } = tenantModels;
+  if (!Booking) return null;
+
+  const cita = await Booking.findByPk(id, {
+    attributes: ["id", "clientId", "eventTypeId", "cobroModo", "cobroConceptId"],
+  });
+  if (!cita || String(cita.clientId ?? "") !== String(clientId)) return null;
+
+  // Lo que la cita lleva escrito manda: es la foto de lo que se pactó el día
+  // que se apuntó, y puede no ser lo que hoy diga su tipo.
+  if (cita.cobroModo === "cuota" && cita.cobroConceptId) {
+    return { conceptId: String(cita.cobroConceptId), fuente: "cita" };
+  }
+  // Un cobro libre o una cita sin coste ya dicen lo suyo: no hay concepto del
+  // catálogo que buscar, y suponerle uno sería inventarse el dinero.
+  if (cita.cobroModo) return null;
+
+  if (!EventType || !cita.eventTypeId) return null;
+  const tipo = await EventType.findByPk(cita.eventTypeId, { attributes: ["id", "conceptId"] });
+  return tipo?.conceptId ? { conceptId: String(tipo.conceptId), fuente: "tipo" } : null;
+}

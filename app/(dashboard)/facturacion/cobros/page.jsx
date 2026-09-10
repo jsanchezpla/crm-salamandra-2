@@ -15,7 +15,7 @@ import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 import { useDialogo } from "@/components/ui/Dialogo.jsx";
 import { partesConProrrateo } from "../../../../lib/billing/prorrateo.js";
 import { cuotasQueEntran, conceptosDeCuotas, importePactado } from "../../../../lib/billing/cuotaParaRellenar.js";
-import { restoDelMes, generadoDelMes } from "../../../../lib/billing/restoDelMes.js";
+import { restoDelMes, generadoDelMes, restoQueSeQuedaPendiente } from "../../../../lib/billing/restoDelMes.js";
 import { explicaCobro } from "../../../../lib/billing/motivoDelCobro.js";
 import { etiquetaDeMoroso, filtrarMorosos, repartirMorosos, resumenDeMorosidad } from "../../../../lib/billing/morosidad.js";
 import { exigeMetodo } from "../../../../lib/billing/caja.js";
@@ -72,7 +72,9 @@ export default function CobrosPage() {
   // `method` en blanco a propósito (10/09/2026): registrar un cobro es decir
   // por dónde entró el dinero, y proponer «Transferencia» hacía que se quedara
   // puesta por inercia. Lo elegido se conserva para el siguiente cobro del rato.
-  const [form, setForm] = useState({ modo: "factura", invoiceId: "", clientId: "", patientId: "", periodMonth: mesVigente(), amount: "", method: "", paidAt: hoyVigente(), notes: "" });
+  // Y `modo` empieza en «cuota» (10/09/2026, Rodrigo): el centro cobra la
+  // mensualidad y factura al cierre, así que la factura es la excepción.
+  const [form, setForm] = useState({ modo: "cuota", invoiceId: "", clientId: "", patientId: "", periodMonth: mesVigente(), amount: "", method: "", paidAt: hoyVigente(), notes: "" });
   // Los pacientes de la familia elegida, para poder cobrar lo de UNO. Vacío
   // cuando el centro no tiene módulo asistencial (el endpoint responde 403) o
   // cuando esa ficha no tiene pacientes: entonces el selector no se enseña.
@@ -108,6 +110,24 @@ export default function CobrosPage() {
    * puede ni confirmar ni corregir.
    */
   const [origenCuota, setOrigenCuota] = useState(null);
+  /*
+   * ── DE QUÉ CITA SE VIENE (10/09/2026, Rodrigo) ────────────────────────────
+   *
+   * «Cuando voy a pagar el mes desde la cita de Diagnóstico (60 min) va a pagar
+   * automáticamente Pedagogía 60x1 en lugar de Diagnóstico de 650 euros.»
+   *
+   * El cajón rellenaba siempre con la cuota MENSUAL de la familia, así que daba
+   * igual desde qué cita se hubiera pulsado «Cobrar». `citaOrigen` es la cita de
+   * la que se viene (`?cita=` del enlace) y `cuotaDeLaCita` lo que se cobra por
+   * ELLA cuando su cuota NO es de las mensuales de la familia: un diagnóstico,
+   * un informe, una valoración. Entonces el cobro es SUELTO —no salda el
+   * pendiente del mes ni se mide contra la cuota— y la pantalla lo dice.
+   *
+   * Se sueltan en cuanto se cambia de familia o de paciente a mano: a partir de
+   * ahí ya no se está cobrando lo de esa cita.
+   */
+  const [citaOrigen, setCitaOrigen] = useState(null);
+  const [cuotaDeLaCita, setCuotaDeLaCita] = useState(null); // { conceptId, fuente, nombre }
   /*
    * El reparto de un pago a cuenta (07/09/2026): qué meses cubre el dinero que
    * traen. Lo calcula el SERVIDOR (`GET /api/billing/payments/a-cuenta`) con la
@@ -287,6 +307,47 @@ export default function CobrosPage() {
     Math.round(pendientesDelMes.reduce((t, p) => t + Number(p.amount || 0), 0) * 100) / 100;
 
   /*
+   * ── SI TRAEN MENOS, EL RESTO SE QUEDA PENDIENTE (10/09/2026, Rodrigo: «si me
+   *    pagan la mitad, debería quedar pendiente de pago lo restante») ─────────
+   *
+   * Con un cobro pendiente detrás esto ya lo hace el servidor: la fila se parte
+   * y el resto sigue pendiente (`lib/billing/cobroParcial.js`), y entonces aquí
+   * no hay nada que preguntar. Lo que faltaba es el otro camino, que es el de
+   * todo lo que no viene de una cuota generada: un diagnóstico de 650 € del que
+   * traen 325, o el primer mes de una familia recién dada de alta. Ahí el cobro
+   * se guardaba por lo que traían y lo que faltaba no quedaba en ninguna parte.
+   *
+   * `loQueTocaba` es contra lo que se compara: el resto del mes si ya había algo
+   * cobrado, o la suma de los conceptos que hay puestos.
+   */
+  const loQueTocaba = (() => {
+    if (form.modo !== "cuota") return 0;
+    // Ya había algo cobrado este mes: lo que falta ya está calculado, y con el
+    // importe de verdad (el generado, el pactado o la tarifa).
+    if (parcialDelMes && !parcialDelMes.completo && parcialDelMes.resto > 0) return parcialDelMes.resto;
+    /*
+     * EL PRECIO PACTADO MANDA SOBRE EL CATÁLOGO. Sin esto, una familia con
+     * 175 € pactados y 190 € de tarifa salía debiendo 15 € en CADA cobro
+     * normal: la casilla se ofrecía sola por la diferencia. Se vio en la demo
+     * a la primera prueba.
+     */
+    if (esperadoDeLaCuota?.pactado && esperadoDeLaCuota.tarifa != null) return esperadoDeLaCuota.tarifa;
+    // Si no, lo que suman los conceptos que se están viendo, con su prorrateo:
+    // es lo que el usuario tiene delante y lo que puede corregir con la ✕.
+    return Number(cuentaCuota.total) || 0;
+  })();
+  const restoQueQueda = restoQueSeQuedaPendiente({
+    esperado: loQueTocaba,
+    importe: form.amount,
+    // Con un pendiente detrás lo parte el servidor; con un cobro suelto de una
+    // cita, ese pendiente es de la mensualidad y no cuenta contra esto.
+    hayPendiente: !cuotaDeLaCita && pendientesDelMes.length > 0,
+  });
+  // Puesto de serie: es lo que pidió que pasara. Se puede quitar para el cobro
+  // de menos que se pactó (un descuento, una sesión que no se cobra).
+  const [dejarResto, setDejarResto] = useState(true);
+
+  /*
    * Los pacientes de la familia elegida (01/09/2026, Rodrigo: «cuando un tutor
    * tiene dos pacientes y cada uno está en una cuota distinta, al poner a uno
    * me salen las dos»). Se piden aparte de las cuotas porque contestan a
@@ -331,6 +392,7 @@ export default function CobrosPage() {
     setCuotaDeLaFamilia(null);
     setCuotasFamilia(null);
     setOrigenCuota(null);
+    setCuotaDeLaCita(null);
     setParcialDelMes(null);
     setPendientesDelMes([]);
     setCobradosDelMes([]);
@@ -371,23 +433,47 @@ export default function CobrosPage() {
        * suposición a partir del pasado: si en octubre empezó logopedia, las
        * citas de octubre lo saben y el cobro de septiembre no.
        */
-      if (!cuotas.length) {
+      /*
+       * Y SE PREGUNTA TAMBIÉN CUANDO SE VIENE DE UNA CITA (10/09/2026): no para
+       * rellenar el mes, sino para saber qué se cobra por ESA cita. Es la misma
+       * ruta y el mismo viaje.
+       */
+      let suelta = null;
+      if (!cuotas.length || citaOrigen) {
         const jCitas = await pedir(
           `/api/citas/cobro-del-mes?clientId=${encodeURIComponent(form.clientId)}` +
             `&mes=${encodeURIComponent(form.periodMonth)}` +
-            (form.patientId ? `&patientId=${encodeURIComponent(form.patientId)}` : "")
+            (form.patientId ? `&patientId=${encodeURIComponent(form.patientId)}` : "") +
+            (citaOrigen ? `&booking=${encodeURIComponent(citaOrigen)}` : "")
         );
         if (turno !== turnoCuota.current) return;
         const conCuota = (jCitas?.data?.cuotas ?? []).filter((l) => l.conceptId);
-        if (conCuota.length) {
+        if (!cuotas.length && conCuota.length) {
           ids = conCuota.map((l) => l.conceptId);
           deLasCitas = { fuente: "citas", citas: jCitas?.data?.citas ?? 0, mes: form.periodMonth };
         }
+        /*
+         * LA CUOTA DE ESA CITA MANDA CUANDO NO ES UNA DE LAS MENSUALES. Un
+         * diagnóstico de 650 € no está en la cuota de pedagogía de la familia,
+         * y es lo que se viene a cobrar. Si SÍ está (se pulsó «Cobrar» en una
+         * sesión de su terapia de siempre), no se toca nada: se cobra el mes,
+         * que es lo de antes.
+         */
+        const laCita = jCitas?.data?.deLaCita ?? null;
+        const enCatalogo = laCita
+          ? conceptosCatalogo.find((c) => String(c.id) === String(laCita.conceptId))
+          : null;
+        if (enCatalogo && !ids.some((id) => String(id) === String(laCita.conceptId))) {
+          ids = [String(laCita.conceptId)];
+          deLasCitas = null;
+          suelta = { conceptId: String(laCita.conceptId), fuente: laCita.fuente, nombre: enCatalogo.name };
+        }
       }
+      setCuotaDeLaCita(suelta);
       // El respaldo es para quien NO tiene cuota asignada. Una cuota asignada
       // con importe pero sin conceptos manda igual: rellenarla con lo que se
       // le cobró hace meses sería contar otra historia.
-      if (!cuotas.length && !deLasCitas) {
+      if (!cuotas.length && !deLasCitas && !suelta) {
         const jFicha = await pedir(`/api/billing/fichas?id=${encodeURIComponent(form.clientId)}`);
         if (turno !== turnoCuota.current) return;
         ids = Array.isArray(jFicha?.data?.cuotaConceptIds) ? jFicha.data.cuotaConceptIds : [];
@@ -404,7 +490,9 @@ export default function CobrosPage() {
       // TODAS sus cuotas lo tienen escrito; mezclado con las que van «a lo que
       // digan sus conceptos» no se puede sumar sin mentir, y ahí manda el
       // catálogo — que es lo que el usuario ve línea a línea.
-      const pactado = importePactado(cuotas);
+      // Con un cobro suelto de una cita NO manda el pactado: lo pactado es la
+      // mensualidad, y esto es un diagnóstico. Su precio es el del catálogo.
+      const pactado = suelta ? null : importePactado(cuotas);
       let esperado;
       if (pactado !== null) { esperado = pactado; setForm((f) => ({ ...f, amount: String(pactado) })); }
       else esperado = aplicarImporteCuota(items);
@@ -446,6 +534,27 @@ export default function CobrosPage() {
        * cobrado entero» a quien debe la otra terapia. Sin cobertura se queda la
        * tarifa, que es lo de siempre, y la pantalla lo dice.
        */
+      /*
+       * NADA DE ESTO VALE PARA UN COBRO SUELTO (10/09/2026). Lo cobrado y lo
+       * pendiente del mes son de la CUOTA MENSUAL; medir contra ellos los
+       * 650 € de un diagnóstico diría «ya cobrado este mes: 145 €, queda 505»,
+       * que no es ni verdad ni entendible. El importe se queda en el del
+       * catálogo y la pantalla explica que esto va aparte.
+       */
+      if (suelta) {
+        setParcialDelMes(null);
+        setEsperadoDeLaCuota(null);
+        if (cuotas.length) {
+          setCuotaDeLaFamilia({
+            n: cuotas.length,
+            pactado: importePactado(cuotas),
+            delPaciente: Boolean(form.patientId) && cuotas.length < todas.length,
+            deLaFamiliaEntera: Boolean(form.patientId) && cuotas.every((c) => !c.patientId),
+          });
+        }
+        return;
+      }
+
       const tarifaDelCatalogo = esperado;
       const generado = generadoDelMes([...cobrosDelMes, ...pendientes], form.patientId || null);
       const cubre = generado != null && cuotas.length > 0 && generado.cuotas >= cuotas.length;
@@ -497,7 +606,7 @@ export default function CobrosPage() {
         });
       }
     })();
-  }, [form.clientId, form.patientId, form.modo, form.periodMonth, conceptosCatalogo]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [form.clientId, form.patientId, form.modo, form.periodMonth, conceptosCatalogo, citaOrigen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -534,6 +643,9 @@ export default function CobrosPage() {
     const clientId = sp.get("cliente") || "";
     const patientId = sp.get("paciente") || "";
     const mes = sp.get("mes") || "";
+    // De qué CITA se viene (10/09/2026): lo que se cobra por ella puede no ser
+    // la cuota mensual de la familia. Ver `cuotaDeLaCita`.
+    if (clientId && sp.get("cita")) setCitaOrigen(sp.get("cita"));
     setForm((f) => ({
       ...f,
       modo: "cuota",
@@ -824,13 +936,25 @@ export default function CobrosPage() {
           conceptId: !porFactura && conceptosElegidos.length === 1 ? conceptosElegidos[0].c.id : null,
           // La composición entera, para que la ficha APRENDA su cuota: lo que
           // se le acaba de cobrar es lo que se le rellenará el mes que viene.
-          conceptIds: !porFactura && conceptosElegidos.length ? conceptosElegidos.map(({ c }) => c.id) : null,
+          // Un cobro SUELTO de una cita no se aprende (10/09/2026): cobrarle un
+          // diagnóstico una vez no convierte el diagnóstico en su mensualidad.
+          conceptIds:
+            !porFactura && !cuotaDeLaCita && conceptosElegidos.length
+              ? conceptosElegidos.map(({ c }) => c.id)
+              : null,
+          // Esto es lo de UNA cita y no la cuota del mes (un diagnóstico, un
+          // informe): que no dé por cobrado el pendiente de la mensualidad.
+          suelto: Boolean(cuotaDeLaCita),
+          // Y lo que falta, si falta y se quiere reclamar.
+          restoPendiente: !porFactura && dejarResto && restoQueQueda > 0 ? restoQueQueda : null,
         }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error");
       setForm((f) => ({ ...f, invoiceId: "", clientId: "", patientId: "", amount: "", notes: "" }));
       setLineasCuota([]);
+      setCitaOrigen(null);
+      setDejarResto(true);
       setShowForm(false);
       load();
       loadMorosidad();
@@ -1258,7 +1382,13 @@ export default function CobrosPage() {
                   factura dejaba ese dinero sin registrar. */}
               <FormRow label="¿De qué es el cobro?">
                 <div className="flex gap-2">
-                  {[["factura", "De una factura"], ["cuota", "Cuota del mes"], ["cuenta", "A cuenta"]].map(([k, lbl]) => (
+                  {/* LA CUOTA DEL MES, PRIMERA Y PUESTA (10/09/2026, Rodrigo:
+                      «debería salir antes CUOTA DEL MES que DE UNA FACTURA…,
+                      la default debería ser CUOTA DEL MES»). Es el flujo real
+                      del centro —se cobra la mensualidad y se factura al
+                      cierre—, así que era el botón que había que pulsar
+                      siempre antes de empezar. */}
+                  {[["cuota", "Cuota del mes"], ["factura", "De una factura"], ["cuenta", "A cuenta"]].map(([k, lbl]) => (
                     <button
                       key={k}
                       type="button"
@@ -1283,7 +1413,7 @@ export default function CobrosPage() {
                     <SelectorCliente
                       fuente="billing"
                       value={form.clientId}
-                      onChange={(v) => setForm((f) => ({ ...f, clientId: v, patientId: "" }))}
+                      onChange={(v) => { setCitaOrigen(null); setForm((f) => ({ ...f, clientId: v, patientId: "" })); }}
                       className={inputCls}
                       opcionesFijas={[{ value: "", label: "Selecciona cliente..." }]}
                     />
@@ -1299,7 +1429,7 @@ export default function CobrosPage() {
                     <FormRow label="¿De qué paciente?">
                       <Select
                         value={form.patientId}
-                        onChange={(v) => setForm((f) => ({ ...f, patientId: v }))}
+                        onChange={(v) => { setCitaOrigen(null); setForm((f) => ({ ...f, patientId: v })); }}
                         className={inputCls}
                         options={[
                           { value: "", label: "Toda la familia" },
@@ -1430,7 +1560,7 @@ export default function CobrosPage() {
                          * era. Esta línea corta la suma antes de que se haga, y
                          * solo sale cuando de verdad no coinciden.
                          */}
-                        {pendientesDelMes.length > 0 &&
+                        {pendientesDelMes.length > 0 && !cuotaDeLaCita &&
                           Math.abs(cuentaCuota.total - sumaPendientes) >= 0.01 && (
                             <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5">
                               Estos son los precios de <strong>tarifa</strong> y suman{" "}
@@ -1446,9 +1576,34 @@ export default function CobrosPage() {
                       </div>
                     </FormRow>
                   )}
+                  {/*
+                   * SE VIENE DE UNA CITA QUE NO ES LA CUOTA MENSUAL (10/09/2026).
+                   * Lo que se rellena es el diagnóstico, no la pedagogía de todos
+                   * los meses, y eso hay que decirlo con todas las letras: son dos
+                   * importes muy distintos y el de arriba se cobra tal cual.
+                   */}
+                  {cuotaDeLaCita && (
+                    <div className="text-[11px] rounded-lg border border-amber-100 bg-amber-50 px-2.5 py-2 -mt-1 space-y-1">
+                      <p className="text-neutral-700">
+                        Vienes de una cita de <strong>{cuotaDeLaCita.nombre}</strong>: se ha puesto{" "}
+                        <strong>su</strong> importe, no la cuota mensual de la familia.
+                        {cuotaDeLaCita.fuente === "tipo" && " Sale de su tipo de cita, que es donde está puesta esa cuota."}
+                      </p>
+                      <p className="text-neutral-500">
+                        Va como un cobro aparte: ni salda el cobro del mes ni cuenta contra su cuota.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setCitaOrigen(null)}
+                        className="underline text-neutral-500 hover:text-neutral-800"
+                      >
+                        Cobrar su cuota del mes en vez de esto
+                      </button>
+                    </div>
+                  )}
                   {/* De dónde ha salido lo que se acaba de rellenar. Callarlo era
                       lo que dejaba dudar de si salían TODAS sus cuotas o solo una. */}
-                  {form.clientId && conceptosCatalogo.length > 0 && (
+                  {!cuotaDeLaCita && form.clientId && conceptosCatalogo.length > 0 && (
                     <p className="text-[10px] text-neutral-400 -mt-1">
                       {cuotaDeLaFamilia ? (
                         <>
@@ -1545,7 +1700,39 @@ export default function CobrosPage() {
                     pago parcial detrás, el importe que sale es EL RESTO, y hay
                     que decir de dónde sale o parece que la cuota ha cambiado.
                     Ver `lib/billing/restoDelMes.js`. */}
-                {form.modo === "cuota" && pendientesDelMes.length > 0 && (
+                {/* TRAEN MENOS DE LO QUE SE LES PIDIÓ (10/09/2026). Lo que falta
+                    se queda pendiente de este mes, que es lo que hace que salga
+                    en Cobros y en Morosidad en vez de evaporarse. */}
+                {form.modo === "cuota" && restoQueQueda > 0 && (
+                  <label className="mt-2 flex items-start gap-2 text-[11px] text-neutral-600 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={dejarResto}
+                      onChange={(e) => setDejarResto(e.target.checked)}
+                      className="mt-0.5 shrink-0"
+                    />
+                    <span>
+                      Traen <span className="tabular">{fmtMoney(Number(form.amount))}</span> de{" "}
+                      <span className="tabular">{fmtMoney(loQueTocaba)}</span>: dejar los{" "}
+                      <strong className="tabular">{fmtMoney(restoQueQueda)}</strong> que faltan{" "}
+                      <strong>pendientes</strong> de este mes.
+                      <span className="block text-neutral-400">
+                        Quítalo si el resto no se va a cobrar (un descuento, una sesión que no se cobra).
+                      </span>
+                    </span>
+                  </label>
+                )}
+                {/* Con un cobro suelto de una cita, el pendiente del mes NO es lo
+                    que se está cobrando: se nombra para que nadie lo dé por
+                    saldado, y ahí se queda (10/09/2026). */}
+                {form.modo === "cuota" && cuotaDeLaCita && pendientesDelMes.length > 0 && (
+                  <p className="mt-2 text-[11px] text-neutral-500">
+                    Aparte de esto, su cuota del mes sigue con{" "}
+                    {pendientesDelMes.length === 1 ? "un cobro pendiente" : `${pendientesDelMes.length} cobros pendientes`}{" "}
+                    de <span className="tabular">{fmtMoney(sumaPendientes)}</span>. Este cobro no lo toca.
+                  </p>
+                )}
+                {form.modo === "cuota" && !cuotaDeLaCita && pendientesDelMes.length > 0 && (
                   <div className="mt-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2">
                     <p className="text-[11px] text-neutral-500 mb-1.5">
                       {pendientesDelMes.length === 1
