@@ -714,35 +714,33 @@ export default function CuotasPage() {
   );
 }
 
-/* ── Qué contar del cobro después de guardar (05/09/2026, AV-0048 y AV-0046) ─
+/* ── Qué contar de los cobros después de guardar (05/09/2026, AV-0048 y AV-0046) ─
  *
- * Desde hoy guardar una cuota deja al día su cobro del mes en curso, así que el
- * aviso deja de ser «ahora dale a Generar el mes» y pasa a decir qué ha pasado.
- * Los dos casos que hay que decir sí o sí son los que NO terminan en un cobro:
- * el que no se puede tocar porque ya está cobrado o facturado, y el que no vale
- * nada porque sus conceptos ya no están en el catálogo — ese era el agujero
- * silencioso.
+ * Guardar una cuota deja al día sus cobros, así que el aviso deja de ser «ahora
+ * dale a Generar el mes» y pasa a decir qué ha pasado. Los dos casos que hay
+ * que decir sí o sí son los que NO terminan en un cobro: el que no se puede
+ * tocar porque ya está cobrado o facturado, y el que no vale nada porque sus
+ * conceptos ya no están en el catálogo — ese era el agujero silencioso.
+ *
+ * Desde el 10/09/2026 los meses pueden ser varios («seis meses de cuota, seis
+ * cobros»), así que la frase dice CUÁLES en vez de dar por hecho que es este.
  */
-function colaDelCobro(cobro) {
-  if (!cobro) return "";
-  const mes = mesLegible(mesActual());
-  if (cobro.estado === "creado") return ` · su cobro de ${mes} ya está en Cobros`;
-  if (cobro.estado === "actualizado") return ` · su cobro de ${mes} se ha puesto al día`;
-  if (cobro.estado === "intocable") return ` · OJO: el cobro de ${mes} no se ha tocado (${cobro.motivo})`;
-  if (cobro.estado === "sin-importe") return ` · OJO: no sale cobro de ${mes} (${cobro.motivo})`;
-  if (cobro.estado === "retirado") return ` · su cobro de ${mes} se ha retirado de Cobros (${cobro.motivo})`;
-  return "";
+function rotuloDeMeses(meses) {
+  const lista = (Array.isArray(meses) ? meses : []).filter(Boolean);
+  if (!lista.length) return mesLegible(mesActual());
+  if (lista.length === 1) return mesLegible(lista[0]);
+  return `de ${mesLegible(lista[0])} a ${mesLegible(lista[lista.length - 1])}`;
 }
 
 function colaDelLote(cobros) {
   if (!cobros) return "";
-  const mes = mesLegible(mesActual());
+  const cuando = rotuloDeMeses(cobros.meses);
   const partes = [];
-  if (cobros.creados) partes.push(`${cobros.creados} ${cobros.creados === 1 ? "cobro" : "cobros"} de ${mes} en Cobros`);
+  if (cobros.creados) partes.push(`${cobros.creados} ${cobros.creados === 1 ? "cobro" : "cobros"} en Cobros (${cuando})`);
   if (cobros.actualizados) partes.push(`${cobros.actualizados} al día`);
   if (cobros.sinImporte) partes.push(`${cobros.sinImporte} sin importe (revisa sus conceptos)`);
   if (cobros.intocables) partes.push(`${cobros.intocables} ya cobrados o facturados, sin tocar`);
-  if (cobros.retirados) partes.push(`${cobros.retirados} ${cobros.retirados === 1 ? "cobro retirado" : "cobros retirados"} (ya no tocan este mes)`);
+  if (cobros.retirados) partes.push(`${cobros.retirados} ${cobros.retirados === 1 ? "cobro retirado" : "cobros retirados"} (ya no tocan)`);
   return partes.length ? ` · ${partes.join(" · ")}` : "";
 }
 
@@ -850,7 +848,7 @@ function DrawerCuota({ conceptos, cuota = null, inicial = null, ivaSugerido = 21
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || "No se pudo guardar");
 
-      if (editando) { onDone(`Cuota actualizada${colaDelCobro(j.data?.cobro)}`); return; }
+      if (editando) { onDone(`Cuota actualizada${colaDelLote(j.data?.cobros)}`); return; }
       // En grupo puede haber saltadas (ya tenían cuota): se enseñan antes de
       // cerrar, que si no nadie se entera de que faltan.
       if (j.data?.omitidas?.length) setResultado(j.data);
@@ -1172,6 +1170,27 @@ function DrawerCuota({ conceptos, cuota = null, inicial = null, ivaSugerido = 21
 }
 
 /* ── Generar los cobros del mes ────────────────────────────────────────────── */
+
+/**
+ * De quién es cada línea: PRIMERO EL PACIENTE y detrás quien paga (10/09/2026,
+ * Rodrigo: «a la hora de generar el mes sale primero el padre y debería salir
+ * primero el paciente»). Es la misma regla que la tabla de Cuotas, la de Cobros
+ * y la de Facturas: al centro se le conoce por el niño, y una lista de sesenta
+ * apellidos de pagadores no se repasa de un vistazo.
+ *
+ * Sin paciente —una cuota de la familia entera— queda solo la ficha, que es
+ * justo lo que hay que leer ahí.
+ */
+function DeQuienEs({ fila }) {
+  if (!fila?.paciente) return <>{fila?.nombre}</>;
+  return (
+    <>
+      {fila.paciente}
+      <span className="text-neutral-400"> · {fila.nombre}</span>
+    </>
+  );
+}
+
 function DrawerGenerar({ onClose, onDone }) {
   const [mes, setMes] = useState(mesActual());
   const [metodos, setMetodos] = useState([]);
@@ -1264,7 +1283,7 @@ function DrawerGenerar({ onClose, onDone }) {
               {resultado.resultados.map((r) => (
                 <li key={`${r.cuotaId}-${r.resultado}`} className="px-4 py-2.5 flex items-center gap-3 text-xs">
                   <span className="min-w-0 flex-1 truncate text-neutral-800">
-                    {r.nombre}{r.paciente && <span className="text-neutral-400"> · {r.paciente}</span>}
+                    <DeQuienEs fila={r} />
                   </span>
                   {r.resultado === "creado"
                     ? <span className="text-emerald-700">creado</span>
@@ -1327,7 +1346,9 @@ function DrawerGenerar({ onClose, onDone }) {
                     </p>
                     <ul className="space-y-1 max-h-28 overflow-y-auto">
                       {preview.sinImporte.map((f) => (
-                        <li key={f.cuotaId} className="text-[11px] text-amber-800 truncate">{f.nombre} — {f.motivo}</li>
+                        <li key={f.cuotaId} className="text-[11px] text-amber-800 truncate">
+                          {f.paciente || f.nombre} — {f.motivo}
+                        </li>
                       ))}
                     </ul>
                   </div>
@@ -1335,8 +1356,8 @@ function DrawerGenerar({ onClose, onDone }) {
 
                 {preview.totales.sinMetodo > 0 && (
                   <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-2 text-[11px] text-amber-800">
-                    {preview.totales.sinMetodo} sin método de cobro: se registrarán como{" "}
-                    <b>{METODO_CORTO[preview.metodoPorDefecto]}</b>.
+                    {preview.totales.sinMetodo} sin método de cobro: el cobro nace{" "}
+                    <b>sin decidir</b> y se elige al registrar el dinero.
                   </div>
                 )}
 
@@ -1360,8 +1381,7 @@ function DrawerGenerar({ onClose, onDone }) {
                             })}
                             className="accent-[var(--color-primary,#1B3A2D)]" />
                           <span className="min-w-0 flex-1 truncate text-neutral-800">
-                            {f.nombre}
-                            {f.paciente && <span className="text-neutral-400"> · {f.paciente}</span>}
+                            <DeQuienEs fila={f} />
                             {f.rotulo && <span className="text-amber-600"> · {f.rotulo}</span>}
                             {/* La reserva se dice ANTES de generar (09/09/2026,
                                 Rodrigo): un recibo más barato de lo esperado

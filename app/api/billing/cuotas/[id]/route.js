@@ -2,7 +2,7 @@ import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, errorConDatos, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { logBillingAudit, datosPeticion } from "../../../../../lib/billing/audit.js";
 import { limpiarCuota, cuadrarBajaYActiva, cobroSePuedeRehacer, mesVigente } from "../../../../../lib/billing/cuotas.js";
-import { sincronizarCobroDelMes } from "../../../../../lib/billing/cobroDeCuota.js";
+import { sincronizarCobrosDelTramo } from "../../../../../lib/billing/cobrosDelTramo.js";
 
 /**
  * PATCH/DELETE /api/billing/cuotas/[id] — modificar, dar de baja o eliminar una
@@ -91,15 +91,23 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
     });
 
     /*
-     * Y el cobro pendiente del mes en curso se rehace (05/09/2026, AV-0046:
-     * «si un paciente tiene dos terapias en cuotas, eliminas una de ella, sigue
-     * apareciendo en cobros las dos terapias que tenía anteriormente»). Solo
-     * ese cobro y solo si aún no es dinero ni papel; los frenos y el porqué,
-     * en `lib/billing/cobroDeCuota.js`.
+     * Y sus cobros pendientes se rehacen (05/09/2026, AV-0046: «si un paciente
+     * tiene dos terapias en cuotas, eliminas una de ella, sigue apareciendo en
+     * cobros las dos terapias que tenía anteriormente»). Solo los que aún no
+     * son dinero ni papel; los frenos y el porqué, en
+     * `lib/billing/cobroDeCuota.js`.
+     *
+     * Los meses firmados, no solo el que corre (10/09/2026): pasar una cuota
+     * de seis meses a tres tiene que retirar los tres cobros que sobran, y
+     * alargarla a nueve tiene que dejar puestos los que faltan.
      */
-    const cobro = await sincronizarCobroDelMes({ tenantModels, cuotaId: cuota.id });
+    const cobros = await sincronizarCobrosDelTramo({ tenantModels, cuotaIds: [cuota.id] });
 
-    return ok({ ...cuota.toJSON(), cobro });
+    // `cobro` es el del mes en curso, que es lo que la pantalla contaba antes
+    // de que esto mirara el tramo entero.
+    const cobro = cobros.resultados.find((r) => r.mes === mesVigente()) ?? cobros.resultados[0] ?? null;
+
+    return ok({ ...cuota.toJSON(), cobro, cobros });
   } catch (err) {
     return serverError(err);
   }
