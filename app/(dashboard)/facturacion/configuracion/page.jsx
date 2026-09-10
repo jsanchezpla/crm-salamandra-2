@@ -524,13 +524,35 @@ function ImagenDeMarca({ campo, etiqueta, valor, onSubida, disabled, onCambiarTe
   return (
     <Field label={etiqueta}>
       <div className="flex items-center gap-2">
-        <input
-          disabled={disabled}
-          value={esSubida ? "" : valor ?? ""}
-          onChange={(e) => onCambiarTexto(e.target.value)}
-          placeholder={esSubida ? "" : placeholder}
-          className={inputCls + (esSubida ? " opacity-0 pointer-events-none absolute" : "")}
-        />
+        {/*
+          Con la imagen ya subida, la caja de texto NO se pinta. Antes se
+          quedaba puesta y se escondía con `opacity-0 … absolute`, y eso se
+          llevó por delante la pantalla entera (10/09/2026, Rodrigo: «el CRM no
+          cierra bien el footer, hay una zona en blanco rara»).
+
+          Un `absolute` sin ningún antepasado posicionado —aquí no hay ni un
+          `relative` en toda la rama— se coloca contra el DOCUMENTO, no contra
+          su hueco. Como la caja es `w-full`, medía el ancho ENTERO de la
+          ventana empezando donde le tocaba, así que estiraba la página ~800 px
+          a la derecha y ~100 hacia abajo. El armazón del CRM mide justo la
+          ventana, de modo que al desplazarse asomaba el fondo por fuera: franja
+          en blanco a la derecha y el menú lateral sin llegar al suelo. Y el
+          `overflow` de la columna no lo tapaba, porque un absoluto solo lo
+          recorta quien sea su contenedor de referencia.
+
+          Solo se veía en esta pantalla y solo con el logo o el sello SUBIDOS
+          (los de Aumenta, del 07/09); con una dirección pegada a mano la caja
+          se pinta normal y no pasa nada.
+        */}
+        {!esSubida && (
+          <input
+            disabled={disabled}
+            value={valor ?? ""}
+            onChange={(e) => onCambiarTexto(e.target.value)}
+            placeholder={placeholder}
+            className={inputCls}
+          />
+        )}
         {esSubida && (
           <span className="flex-1 flex items-center gap-2 text-xs text-neutral-600">
             {/* eslint-disable-next-line @next/next/no-img-element */}
