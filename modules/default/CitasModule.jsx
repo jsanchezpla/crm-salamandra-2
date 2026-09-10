@@ -20,6 +20,7 @@ import { useDialogo } from "@/components/ui/Dialogo.jsx";
 import ModalFestivos from "@/components/citas/ModalFestivos.jsx";
 import { COLOR_BLOQUEO_POR_DEFECTO, colorTextoSobre } from "@/lib/citas/coloresBloqueo.js";
 import { SIN_PROFESIONAL, COLOR_CITA_POR_DEFECTO } from "@/lib/citas/filtros.js";
+import { filtroAlAbrirLaAgenda } from "@/lib/citas/filtroInicialAgenda.js";
 import { fmtDateTime, toDateInput, toTimeInput } from "./citas/chips.jsx";
 import { CitaDetalleModal } from "./citas/CitaDetalleModal.jsx";
 import { CitaMenuContextual } from "./citas/CitaMenuContextual.jsx";
@@ -166,6 +167,15 @@ export default function CitasModule({
   // Drawer de "Nueva cita": null = cerrado; { date, time } = abierto con ese hueco.
   const [creacion, setCreacion] = useState(null);
   const [teamMembers, setTeamMembers] = useState([]);
+  /*
+   * Quiénes del equipo llevan la ADMINISTRACIÓN del centro, tal como los
+   * marca el servidor (`/api/team` → `administracion`; la regla, por
+   * departamento, vive en `lib/team/departamentos.js`). Llega en la misma
+   * respuesta que la lista, así que ambos estados se ponen a la vez. Aquí
+   * sirve para NO abrir la agenda filtrada a quien no atiende a nadie: el
+   * porqué, en el efecto del filtro inicial.
+   */
+  const [idsAdministracion, setIdsAdministracion] = useState([]);
   const [viewerIsAdmin, setViewerIsAdmin] = useState(false);
   // ¿Quien mira tiene el módulo de Facturación? (03/09/2026). Es lo que
   // enciende «Cobrar mes» en la ficha de la cita y «Cobrar» en el menú
@@ -436,7 +446,10 @@ export default function CitasModule({
   useEffect(() => {
     fetch("/api/team?status=all&limit=500", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
-      .then((j) => setTeamMembers(j?.data?.members ?? []))
+      .then((j) => {
+        setTeamMembers(j?.data?.members ?? []);
+        setIdsAdministracion(j?.data?.administracion ?? []);
+      })
       .catch(() => {});
   }, []);
 
@@ -467,13 +480,19 @@ export default function CitasModule({
    * Solo cuando hay filtro que preseleccionar (`veTodaLaAgenda`) y quien mira
    * TIENE ficha de equipo: dirección sin ficha propia sigue abriendo el centro
    * entero, que es lo suyo.
+   *
+   * Y ADMINISTRACIÓN NO SE PRESELECCIONA (10/09/2026, Rodrigo: «Olga y Rosa
+   * tienen agenda propia y no tiene sentido»): quien lleva la administración no
+   * atiende a nadie, así que su agenda propia está vacía y lo que necesita ver
+   * es la de todos. Con quién y por qué, en `lib/citas/filtroInicialAgenda.js`.
    */
   const filtroInicialPuesto = useRef(false);
   useEffect(() => {
     if (filtroInicialPuesto.current || !veTodaLaAgenda || !miFichaDeEquipo) return;
     filtroInicialPuesto.current = true;
-    setVisibleTmIds([miFichaDeEquipo.id]);
-  }, [veTodaLaAgenda, miFichaDeEquipo]);
+    const inicial = filtroAlAbrirLaAgenda({ miFichaId: miFichaDeEquipo.id, idsAdministracion });
+    if (inicial) setVisibleTmIds(inicial);
+  }, [veTodaLaAgenda, miFichaDeEquipo, idsAdministracion]);
 
   // Pacientes para asignar la cita (sólo tenants con módulo Clínica/Pacientes:
   // si el endpoint responde 403, `patients` queda vacío y el selector se oculta).
