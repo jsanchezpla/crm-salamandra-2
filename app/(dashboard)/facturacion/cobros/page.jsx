@@ -18,6 +18,7 @@ import { cuotasQueEntran, conceptosDeCuotas, importePactado } from "../../../../
 import { restoDelMes, generadoDelMes } from "../../../../lib/billing/restoDelMes.js";
 import { explicaCobro } from "../../../../lib/billing/motivoDelCobro.js";
 import { etiquetaDeMoroso, filtrarMorosos, repartirMorosos, resumenDeMorosidad } from "../../../../lib/billing/morosidad.js";
+import { exigeMetodo } from "../../../../lib/billing/caja.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -28,6 +29,14 @@ const METHOD_LABELS = {
   cash: "Efectivo",
   direct_debit: "Domiciliación",
 };
+const METODOS_OPCIONES = Object.entries(METHOD_LABELS).map(([k, v]) => ({ value: k, label: v }));
+/*
+ * «Sin decidir» (10/09/2026, Rodrigo). Un cobro PENDIENTE puede no tener
+ * método: el de la cuota del mes y el del bono nacen así, porque dar la deuda
+ * por escrita no es cobrarla. Solo vale para un pendiente — el servidor se
+ * niega a dar por cobrado un importe que no dice por dónde entró.
+ */
+const SIN_DECIDIR = { value: "", label: "Sin decidir" };
 
 export default function CobrosPage() {
   const [payments, setPayments] = useState([]);
@@ -60,7 +69,10 @@ export default function CobrosPage() {
   // abre los documentos de esa familia en su área privada.
   // `patientId`: de QUIÉN es la cuota que se cobra (01/09/2026, Rodrigo). Vacío
   // = de la familia entera, que es como funcionaba hasta hoy.
-  const [form, setForm] = useState({ modo: "factura", invoiceId: "", clientId: "", patientId: "", periodMonth: mesVigente(), amount: "", method: "transfer", paidAt: hoyVigente(), notes: "" });
+  // `method` en blanco a propósito (10/09/2026): registrar un cobro es decir
+  // por dónde entró el dinero, y proponer «Transferencia» hacía que se quedara
+  // puesta por inercia. Lo elegido se conserva para el siguiente cobro del rato.
+  const [form, setForm] = useState({ modo: "factura", invoiceId: "", clientId: "", patientId: "", periodMonth: mesVigente(), amount: "", method: "", paidAt: hoyVigente(), notes: "" });
   // Los pacientes de la familia elegida, para poder cobrar lo de UNO. Vacío
   // cuando el centro no tiene módulo asistencial (el endpoint responde 403) o
   // cuando esa ficha no tiene pacientes: entonces el selector no se enseña.
@@ -745,6 +757,7 @@ export default function CobrosPage() {
       const porFactura = form.modo === "factura";
       if (porFactura && !form.invoiceId) throw new Error("Selecciona una factura");
       if (!porFactura && !form.clientId) throw new Error("Selecciona el cliente que ha pagado");
+      if (!form.method) throw new Error("Di por dónde ha entrado el dinero: efectivo, tarjeta, banco o domiciliación");
 
       /*
        * A CUENTA: no es un cobro, son varios —uno por mes—, así que va por su
@@ -833,6 +846,11 @@ export default function CobrosPage() {
     setSaving(true);
     setFormError(null);
     try {
+      // Lo mismo que comprueba el PATCH, dicho aquí para no gastar una ida y
+      // vuelta: sin método, un cobro cobrado no cae en ninguna cesta del arqueo.
+      if (exigeMetodo(editing.status) && !editing.method) {
+        throw new Error("Di por dónde ha entrado el dinero: efectivo, tarjeta, banco o domiciliación");
+      }
       const res = await fetch(`/api/billing/payments/${editing.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -987,7 +1005,7 @@ export default function CobrosPage() {
           className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400"
           options={[
             { value: "", label: "Todos los métodos" },
-            ...Object.entries(METHOD_LABELS).map(([k, v]) => ({ value: k, label: v })),
+            ...METODOS_OPCIONES,
           ]}
         />
         <Select value={filterStatus} onChange={(v) => setFilterStatus(v)}
@@ -1151,7 +1169,9 @@ export default function CobrosPage() {
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-neutral-600 text-xs">{METHOD_LABELS[p.method] ?? p.method}</td>
+                  <td className="px-4 py-3 text-neutral-600 text-xs">
+                    {METHOD_LABELS[p.method] ?? p.method ?? <span className="text-neutral-300">Sin decidir</span>}
+                  </td>
                   <td className="px-4 py-3 text-neutral-500 text-xs">{fmtDate(p.paidAt)}</td>
                   <td className="px-4 py-3"><StatusBadge status={p.status} kind="payment" /></td>
                   <td className="px-4 py-3 text-right font-semibold text-neutral-900 tabular">{fmtMoney(p.amount)}</td>
@@ -1189,6 +1209,8 @@ export default function CobrosPage() {
                       <button
                         onClick={() => setEditing({
                           ...p,
+                          // Vacío y no null: es lo que casa con «Sin decidir».
+                          method: p.method ?? "",
                           paidAt: String(p.paidAt).slice(0, 10),
                           periodMonth: p.periodMonth ? String(p.periodMonth).slice(0, 7) : "",
                           patientId: p.patientId ?? "",
@@ -1653,10 +1675,10 @@ export default function CobrosPage() {
                   </div>
                 )}
               </FormRow>
-              <FormRow label="Método de pago">
+              <FormRow label="Método de pago *">
                 <Select value={form.method} onChange={(v) => setForm((f) => ({ ...f, method: v }))}
-                  className={inputCls}
-                  options={Object.entries(METHOD_LABELS).map(([k, v]) => ({ value: k, label: v }))}
+                  className={inputCls} placeholder="¿Por dónde ha entrado?"
+                  options={METODOS_OPCIONES}
                 />
               </FormRow>
               <FormRow label="Fecha *">
@@ -1714,9 +1736,9 @@ export default function CobrosPage() {
                 )}
               </FormRow>
               <FormRow label="Método de pago">
-                <Select value={editing.method} onChange={(v) => setEditing((p) => ({ ...p, method: v }))}
+                <Select value={editing.method ?? ""} onChange={(v) => setEditing((p) => ({ ...p, method: v }))}
                   className={inputCls}
-                  options={Object.entries(METHOD_LABELS).map(([k, v]) => ({ value: k, label: v }))} />
+                  options={[SIN_DECIDIR, ...METODOS_OPCIONES]} />
               </FormRow>
               <FormRow label="Fecha *">
                 <input required type="date" value={editing.paidAt}

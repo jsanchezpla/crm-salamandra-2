@@ -348,7 +348,7 @@ Fichero: `models/tenant/Payment.model.js`. Tabla: `payments`.
 | `periodMonth` | DATEONLY nullable | Mes al que corresponde el cobro (`YYYY-MM-01`). Es lo que mira `GET /morosidad` y el bloqueo por impago del portal (`lib/citas/portalMeses.js`): un mes está pagado si hay un cobro `completed` con ese `periodMonth`. |
 | `amount` | DECIMAL(12,2) | Importe del cobro. Se valida que no exceda `total - paidAmount`. |
 | `paidAt` | DATE NOT NULL | Fecha del cobro (no del periodo de la factura). |
-| `method` | ENUM | `card`, `transfer`, `cash`, `direct_debit`. |
+| `method` | ENUM **nullable** | `card`, `transfer`, `cash`, `direct_debit`. NULL = **sin decidir** (10/09/2026, `migrate-payments-metodo-opcional`): el cobro que generan la cuota del mes y el bono nace PENDIENTE, y por dónde va a entrar el dinero se decide el día que se paga. El hueco es solo del pendiente: el PATCH se niega a dejar un cobro en `completed` o `refunded` sin método, porque no caería en ninguna cesta del arqueo (`exigeMetodo`, `lib/billing/caja.js`). |
 | `status` | ENUM | `pending`, `completed`, `failed`, `refunded`. Default `completed`. |
 | `notes` | TEXT nullable | |
 | `refundedAt` | DATE nullable | Cuándo se devolvió el dinero (07/09/2026, `migrate-payments-refunded-at`). Un cobro «Devuelto» son DOS apuntes de caja: entró el día `paidAt` y salió el día `refundedAt`. La escribe el PATCH al pasar a `refunded` (hoy, o el día que diga el cajón) y la devolución que llega de Stripe; vuelve a NULL al salir de ese estado. |

@@ -172,7 +172,9 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     // de QUIÉN es el cobro.
     if (!invoiceId && !clientId) return error("Hace falta una factura o un cliente");
     if (!amount || Number(amount) <= 0) return error("amount debe ser mayor que 0");
-    if (!method) return error("method es obligatorio");
+    // Registrar un cobro ES decir por dónde entró el dinero: aquí no hay
+    // «sin decidir» que valga (el hueco es solo del pendiente, 10/09/2026).
+    if (!method) return error("Di por dónde ha entrado el dinero: efectivo, tarjeta, banco o domiciliación");
     if (!paidAt) return error("paidAt es obligatorio");
 
     // Mes al que corresponde ('YYYY-MM' desde la UI → primer día del mes). Es

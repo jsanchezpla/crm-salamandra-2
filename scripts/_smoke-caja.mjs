@@ -37,6 +37,7 @@ import {
   resumenDelDia,
   cobrosDelDia,
   haEntrado,
+  exigeMetodo,
   saldoDiarioEfectivo,
   fondoSugerido,
   esperadoAlCerrar,
@@ -288,6 +289,22 @@ describe("las devoluciones: entró un día, salió otro", () => {
     assert.equal(haEntrado({ status: "completed" }), true);
     assert.equal(haEntrado({ status: "pending" }), false);
     assert.equal(haEntrado({ status: "failed" }), false);
+  });
+
+  it("exigeMetodo: el pendiente puede no decirlo; el cobrado, sí", () => {
+    // 10/09/2026: el cobro de la cuota nace sin método porque todavía no es
+    // dinero. En cuanto se da por cobrado hay que decir por dónde entró, o el
+    // importe sumaría al día sin caer en ninguna cesta.
+    assert.equal(exigeMetodo("pending"), false);
+    assert.equal(exigeMetodo("failed"), false);
+    assert.equal(exigeMetodo("completed"), true);
+    // Devuelto también: el dinero entró y volvió a salir por el mismo sitio.
+    assert.equal(exigeMetodo("refunded"), true);
+    // Un cobro sin método no cae en ninguna cesta (es lo que evita la regla).
+    assert.equal(cestaDe(null), null);
+    const r = resumenDelDia({ cobros: [{ id: "x", amount: 50, method: null, status: "pending" }] });
+    assert.equal(r.pendiente, 50);
+    assert.equal(r.banco.importe, 0);
   });
 
   it("un devuelto CON fecha entró (y saldrá su día); SIN fecha, no cuenta", () => {

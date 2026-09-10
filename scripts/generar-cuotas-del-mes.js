@@ -27,7 +27,6 @@ import { planDeCuotasDelMes, mesValido, mesLegible, ultimoDiaDe } from "../lib/b
 import { citasDelMesParaCuotas } from "../lib/billing/citasParaProrrateo.js";
 import { Op } from "sequelize";
 
-const METODO_POR_DEFECTO = "transfer"; // el mismo que el endpoint
 
 async function main() {
   const args = process.argv.slice(2);
@@ -89,7 +88,7 @@ async function main() {
   if (prorrateadas) process.stdout.write(`De ellas, prorrateadas:         ${prorrateadas}\n`);
   const sinMetodo = aGenerar.filter((f) => !f.method).length;
   if (sinMetodo) {
-    process.stdout.write(`Sin método propio:              ${sinMetodo}  → se registran como '${METODO_POR_DEFECTO}'\n`);
+    process.stdout.write(`Sin método propio:              ${sinMetodo}  → nacen SIN método (se elige al cobrar)\n`);
   }
 
   if (!confirm) {
@@ -120,7 +119,7 @@ async function main() {
             periodMonth: fila.periodMonth,
             amount: fila.importe,
             paidAt: fila.paidAt,
-            method: fila.method || METODO_POR_DEFECTO,
+            method: fila.method || null,
             status: "pending", // generar NO es cobrar
             notes: fila.notes,
             invoiceText: fila.invoiceText,

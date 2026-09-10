@@ -664,6 +664,10 @@ export const MODULES = {
     // El texto con el que el cobro sale impreso en la factura (09/09/2026):
     // payments.invoice_text. ANTES del despliegue: el modelo la pide.
     "migrate-payments-invoice-text",
+    // Un cobro pendiente puede estar SIN DECIDIR (10/09/2026): payments.method
+    // deja de ser NOT NULL. ANTES del despliegue: el generador inserta NULL
+    // cuando la cuota no dice cómo se cobra.
+    "migrate-payments-metodo-opcional",
     // Entradas y salidas de caja: lo que pasa por el cajon y no es un cobro.
     // 01/09/2026, ANTES del despliegue.
     "migrate-arqueo-movimientos",

@@ -15,7 +15,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  METODO_POR_DEFECTO,
   bonoLlevaCobro,
   textoDelCobroDeBono,
   cobroPendienteDeBono,
@@ -91,11 +90,15 @@ test("la fecha es la de compra del bono, no la de hoy", () => {
   assert.equal(c.paidAt.toISOString().slice(0, 10), "2026-09-01");
 });
 
-test("el método por defecto es el de siempre y se puede cambiar", () => {
-  assert.equal(cobroPendienteDeBono(BASE).method, METODO_POR_DEFECTO);
+test("el método nace SIN DECIDIR y se puede decir al darlo", () => {
+  // 10/09/2026: dar un bono no es cobrarlo, así que el pendiente no dice por
+  // dónde va a entrar el dinero. Antes salía 'transfer' y quedaba escrito
+  // «Transferencia» en bonos que se pagaban en efectivo en el mostrador.
+  assert.equal(cobroPendienteDeBono(BASE).method, null);
   assert.equal(cobroPendienteDeBono({ ...BASE, metodo: "cash" }).method, "cash");
-  // Un método vacío cae al de siempre en vez de guardar null, que rompería la columna.
-  assert.equal(cobroPendienteDeBono({ ...BASE, metodo: "" }).method, METODO_POR_DEFECTO);
+  // Un desplegable en blanco manda "": se guarda como NULL, no como cadena vacía
+  // (el ENUM de la columna la rechazaría).
+  assert.equal(cobroPendienteDeBono({ ...BASE, metodo: "" }).method, null);
 });
 
 test("no revienta sin argumentos", () => {

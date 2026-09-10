@@ -10,7 +10,6 @@ import {
   mesLegible,
   ultimoDiaDe,
   metodosValidos,
-  metodoValido,
 } from "../../../../../lib/billing/cuotas.js";
 import { madridToday } from "../../../../../lib/utils/madridDate.js";
 import { esCobroRepetido } from "../../../../../lib/billing/cobroDeCuota.js";
@@ -20,7 +19,7 @@ import { esCobroRepetido } from "../../../../../lib/billing/cobroDeCuota.js";
  * «programarlas mensualmente»).
  *
  *   GET  ?mes=AAAA-MM[&metodo=…]      → vista previa: qué se generaría
- *   POST { mes, metodos?, excluir?, metodoPorDefecto? } → crea los cobros
+ *   POST { mes, metodos?, excluir? } → crea los cobros
  *
  * ── El cobro nace PENDIENTE ────────────────────────────────────────────────
  * Generar no es cobrar: el dinero todavía no ha entrado. Morosidad, el bloqueo
@@ -30,9 +29,12 @@ import { esCobroRepetido } from "../../../../../lib/billing/cobroDeCuota.js";
  *
  * Relanzar el mes NO duplica: cada cobro guarda su `cuota_id` y la cuota que ya
  * tiene cobro de ese mes sale en «repetidas», nunca en el lote.
+ *
+ * ── EL MÉTODO NO SE INVENTA (10/09/2026) ───────────────────────────────────
+ * La cuota que no dice cómo se cobra genera un cobro SIN método, no uno «de
+ * banco»: hasta hoy el hueco se rellenaba con 'transfer' y quedaba escrito en
+ * Cobros un método que nadie había pactado. Se elige al registrar el dinero.
  */
-
-const METODO_POR_DEFECTO = "transfer";
 
 /** 42P01 = la tabla no existe en este schema (migración sin aplicar). */
 function esTablaAusente(err) {
@@ -158,12 +160,11 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       totales: {
         cuotas: aGenerar.length,
         importe: redondear(aGenerar.reduce((s, f) => s + f.importe, 0)),
-        // Cuántas heredarían el método por defecto por no tener el suyo: sale
-        // en pantalla para que nadie descubra 40 cobros «de banco» a posteriori.
+        // Cuántas van a nacer SIN método por no tener el suyo: sale en
+        // pantalla para que nadie se encuentre después con 40 cobros a medias.
         sinMetodo: aGenerar.filter((f) => !f.method).length,
         prorrateadas: aGenerar.filter((f) => f.rotulo).length,
       },
-      metodoPorDefecto: METODO_POR_DEFECTO,
       hoy: madridToday(),
     });
   } catch (err) {
@@ -181,7 +182,6 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     if (!mesValido(mes)) return error("El mes debe ser 'AAAA-MM'", 422);
     const metodos = metodosValidos(body?.metodos);
     const excluir = new Set((Array.isArray(body?.excluir) ? body.excluir : []).map(String));
-    const porDefecto = metodoValido(body?.metodoPorDefecto) ? body.metodoPorDefecto : METODO_POR_DEFECTO;
 
     const { cuotas, conceptos, yaGenerados } = await recogerCuotas({ tenantModels, hasModule, mes });
     const { aGenerar, repetidas, sinImporte } = planDeCuotasDelMes({
@@ -229,7 +229,8 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
               periodMonth: fila.periodMonth,
               amount: fila.importe,
               paidAt: fila.paidAt,
-              method: fila.method || porDefecto,
+              // Sin método en la cuota, el cobro nace sin decidir (10/09/2026).
+              method: fila.method || null,
               // PENDIENTE: generar no es cobrar (ver cabecera).
               status: "pending",
               notes: fila.notes,

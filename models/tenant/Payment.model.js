@@ -38,9 +38,24 @@ export function definePayment(sequelize) {
         type: DataTypes.DATE,
         allowNull: false,
       },
+      /*
+       * Por dónde entra el dinero. NULL = TODAVÍA NO SE SABE (10/09/2026).
+       *
+       * Un cobro PENDIENTE —el que genera la cuota del mes, o el de un bono
+       * recién dado— no es dinero: nadie ha pagado aún, así que nadie puede
+       * decir por dónde va a entrar. Hasta hoy la columna era obligatoria y el
+       * generador tapaba el hueco con 'transfer', y eso dejaba escrito «Banco»
+       * en cobros que se acababan pagando en efectivo (Rodrigo: «que se quede
+       * sin decidir y que luego ya cuando registren el cobro pongan lo que
+       * toca»).
+       *
+       * El hueco es SOLO del pendiente: la API se niega a dejar un cobro en
+       * `completed` o `refunded` sin método, porque sería dinero que entró y no
+       * cae en ninguna cesta del arqueo (`exigeMetodo`, lib/billing/caja.js).
+       */
       method: {
         type: DataTypes.ENUM("card", "transfer", "cash", "direct_debit"),
-        allowNull: false,
+        allowNull: true,
       },
       // 'refunded' añadido al enum en la migración (rework billing)
       status: {

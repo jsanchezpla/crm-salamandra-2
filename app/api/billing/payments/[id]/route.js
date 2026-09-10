@@ -3,6 +3,7 @@ import { logBillingAudit, resumenImporte, datosPeticion } from "../../../../../l
 import { ok, noContent, error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { updateInvoiceStatus } from "../../../../../lib/billing/updateInvoiceStatus.js";
 import { billingHasPatients, pacienteValeParaElCobro } from "../../../../../lib/billing/patientLink.js";
+import { exigeMetodo } from "../../../../../lib/billing/caja.js";
 
 const VALID_STATUS = new Set(["pending", "completed", "failed", "refunded"]);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -148,6 +149,17 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
       updates.refundedAt = f;
     } else if (estadoFinal !== "refunded" && payment.refundedAt) {
       updates.refundedAt = null;
+    }
+
+    // ── UN COBRO COBRADO DICE POR DÓNDE ENTRÓ (10/09/2026) ─────────────────
+    // El método puede quedarse en blanco mientras el cobro está PENDIENTE —así
+    // nacen los de la cuota y los del bono—, pero no cuando ya es dinero: sin
+    // él, el importe no cae en ninguna cesta del arqueo. La cadena vacía que
+    // manda un desplegable en blanco se guarda como NULL; el ENUM la rechazaría.
+    if ("method" in updates && !updates.method) updates.method = null;
+    const metodoFinal = "method" in updates ? updates.method : payment.method;
+    if (exigeMetodo(estadoFinal) && !metodoFinal) {
+      return error("Di por dónde ha entrado el dinero: efectivo, tarjeta, banco o domiciliación");
     }
 
     // Cambiar el importe de un cobro ya enganchado tampoco puede pasarse del

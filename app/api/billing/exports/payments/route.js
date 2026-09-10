@@ -52,7 +52,8 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, tenant, hasM
           : inv?.number || "—";
       return {
         factura,
-        metodo: METHOD[p.method] ?? p.method,
+        // Sin método = un pendiente que nadie ha cobrado todavía (10/09/2026).
+        metodo: METHOD[p.method] ?? p.method ?? "Sin decidir",
         fecha: fmtDateEs(p.paidAt),
         estado: STATUS[p.status] ?? p.status,
         amount: Number(p.amount || 0),
