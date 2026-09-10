@@ -2,6 +2,7 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok } from "../../../../lib/utils/apiResponse.js";
 import { ForbiddenError } from "../../../../lib/utils/errors.js";
 import { listarRemitentes, resolverRemitente } from "../../../../lib/email/remitentes.js";
+import { puedeUsarCorreoEnContexto } from "../../../../lib/correo/quienEscribe.js";
 
 /**
  * GET /api/correo/remitentes — con qué direcciones puede escribir ESTA persona.
@@ -17,7 +18,8 @@ import { listarRemitentes, resolverRemitente } from "../../../../lib/email/remit
  * sale nunca por este endpoint.
  */
 export const GET = withTenant(async (_request, _ctxRuta, ctx) => {
-  if (!ctx.hasModule("clients")) throw new ForbiddenError();
+  // Quién puede escribir en este centro: `lib/correo/quienEscribe.js`.
+  if (!puedeUsarCorreoEnContexto(ctx, { exigeFichas: true })) throw new ForbiddenError();
 
   const remitentes = listarRemitentes(ctx);
 

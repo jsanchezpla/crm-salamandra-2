@@ -4,6 +4,7 @@ import { created, ok, error, forbidden, serverError } from "../../../../lib/util
 import { cobroPendienteDeBono } from "../../../../lib/billing/cobroDelBono.js";
 import { logCitasAudit } from "../../../../lib/citas/audit.js";
 import { esPack, bonosDeCliente } from "../../../../lib/citas/packs.js";
+import { bonosSinDinero, veElDineroDeLaFicha } from "../../../../lib/clients/quienVeElDinero.js";
 import { puedeDarBonos, MOTIVO_SIN_PERMISO } from "../../../../lib/citas/quienDaBonos.js";
 
 /**
@@ -45,7 +46,8 @@ const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
  * Se busca por ficha Y por correo, como `bonosDeCliente`: el bono va atado al
  * correo, pero puede haberse dado desde la ficha con otro (el del portal).
  */
-export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
+export const GET = withTenant(async (request, _ctx, ctx) => {
+  const { tenantModels, hasModule } = ctx;
   try {
     if (!hasModule("citas")) return forbidden("Módulo citas no activo");
 
@@ -70,7 +72,11 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     }
 
     const bonos = await bonosDeCliente(tenantModels, quien);
-    return ok({ bonos: bonos.filter((b) => b.estado === "active" && b.restantes > 0) });
+    // El plan de cuotas es dinero: fuera para quien no lleve Facturación
+    // (`lib/clients/quienVeElDinero.js`). Lo que pone el tipo de cita —el bono
+    // y lo que le queda— se queda para todo el equipo.
+    const vivos = bonos.filter((b) => b.estado === "active" && b.restantes > 0);
+    return ok({ bonos: veElDineroDeLaFicha(ctx) ? vivos : bonosSinDinero(vivos) });
   } catch (err) {
     return serverError(err);
   }

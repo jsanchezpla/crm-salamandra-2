@@ -58,6 +58,8 @@ decisión se supera, la nueva lo dice y enlaza a la anterior.
 | 06/09 | [El mailing sale por Amazon SES, y lo transaccional se queda en Resend](2026-09-06-mailing-por-ses-y-no-por-resend.md) — módulo `mailing`: cuenta de AWS por cliente, casilla `novedades` como consentimiento, baja de un clic y supresión | mailing, emails, configuracion |
 | 09/09 | [La semana de cada terapeuta, y por qué coordinar no es un departamento](2026-09-09-la-semana-de-cada-terapeuta.md) — AV-0078: el permiso de las coordinadoras YA estaba resuelto (`settings.clinica.coordinadoras`, 02/09) y lo que faltaba era que la Bandeja tuviera algo dentro; los registros sin escribir de la semana necesitan DOS caminos (solo 231 de 23.342 sesiones guardan su cita: la regla ingenua daría 82 donde hay 36); no se abren Desempeño ni Dirección, que enseñan euros y están a cero | clinica, team_avanzado, permisos |
 
+| 10/09 | [Las terapeutas ven la ficha, pero no el dinero](2026-09-10-las-terapeutas-ven-la-ficha-sin-el-dinero.md) — ticket de Raquel: se les abre `clients` a las 14 terapeutas de Aumenta y la pestaña de Facturación ya se escondía sola (403 → `PanelPestana` quita la pestaña); lo que se colaba eran los meses cobrados del área privada y el plan de cuotas de los bonos, ahora en `quienVeElDinero.js` (por MÓDULO, no por rol). Y el efecto colateral: Correo no tiene `moduleKey`, así que estrena interruptor `clients.correoSoloOficina` en vez de cerrarse para todos | clients, billing, correo, permisos |
+
 Otras decisiones con su propio doc fuera de esta carpeta:
 `docs/sprint-aumenta-2026-07.md` (las pantallas del sprint de Aumenta),
 `docs/como-apuntar-en-el-tablero.md` (el formato del backlog),

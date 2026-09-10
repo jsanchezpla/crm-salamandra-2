@@ -3,6 +3,7 @@ import { ok } from "../../../../lib/utils/apiResponse.js";
 import { ForbiddenError, ValidationError } from "../../../../lib/utils/errors.js";
 import { auditar, datosPeticion } from "../../../../lib/utils/auditoria.js";
 import { normalizarListaDestinatarios, normalizarNombreLista } from "../../../../lib/correo/listas.js";
+import { puedeUsarCorreoEnContexto } from "../../../../lib/correo/quienEscribe.js";
 
 /**
  * /api/correo/listas — las listas de destinatarios guardadas del centro.
@@ -16,10 +17,9 @@ import { normalizarListaDestinatarios, normalizarNombreLista } from "../../../..
  * fuente}), no el filtro que los produjo — ver el modelo (CorreoLista).
  */
 
-function puedeUsarCorreo(ctx) {
-  // La misma condición que enseña la pantalla /correo en el sidebar.
-  return ctx.hasModule("clients") || ctx.hasModule("outreach");
-}
+// Quién puede escribir: `lib/correo/quienEscribe.js` (la MISMA condición que
+// enseña la pantalla en el menú, interruptor del centro incluido).
+const puedeUsarCorreo = (ctx) => puedeUsarCorreoEnContexto(ctx);
 
 export const GET = withTenant(async (_request, _rc, ctx) => {
   if (!puedeUsarCorreo(ctx)) throw new ForbiddenError();

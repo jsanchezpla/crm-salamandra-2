@@ -4,6 +4,7 @@ import { ForbiddenError, ValidationError } from "../../../../lib/utils/errors.js
 import { auditar, datosPeticion } from "../../../../lib/utils/auditoria.js";
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
 import { normalizarFirmaEntrada } from "../../../../lib/correo/composicion.js";
+import { puedeUsarCorreoEnContexto } from "../../../../lib/correo/quienEscribe.js";
 
 /**
  * /api/correo/firmas — el pie de firma de cada persona del equipo.
@@ -26,9 +27,8 @@ import { normalizarFirmaEntrada } from "../../../../lib/correo/composicion.js";
 const ROLES_ADMIN = new Set(["admin", "owner", "superadmin"]);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function puedeUsarCorreo(ctx) {
-  return ctx.hasModule("clients") || ctx.hasModule("outreach");
-}
+// Quién puede escribir: `lib/correo/quienEscribe.js`.
+const puedeUsarCorreo = (ctx) => puedeUsarCorreoEnContexto(ctx);
 
 function esAdmin(ctx) {
   return ROLES_ADMIN.has(String(ctx.user?.role ?? ""));

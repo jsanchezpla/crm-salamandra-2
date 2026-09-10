@@ -8,6 +8,7 @@ import { GUARDIAN_RELATIONSHIP_LABEL } from "../../../../lib/clients/guardians.j
 import { SPECIALTY_KEYS } from "../../../../lib/clinica/specialties.js";
 import { coincidePorNombre } from "../../../../lib/utils/busqueda.js";
 import { filtroPorNombre } from "../../../../lib/utils/busquedaDb.js";
+import { MOTIVO_SOLO_OFICINA, puedeUsarCorreoEnContexto } from "../../../../lib/correo/quienEscribe.js";
 
 /**
  * GET /api/correo/destinatarios?fuente=…&q=…&profesional=…&terapia=…
@@ -175,6 +176,11 @@ export const GET = withTenant(async (request, _ctxRuta, ctx) => {
     propuestas: "leads",
   }[fuente];
   if (!ctx.hasModule(MODULO)) throw new ForbiddenError();
+  // Y además, quién puede escribir en este centro (`quienEscribe.js`): con el
+  // interruptor puesto, la lista de destinatarios es de oficina.
+  if (!puedeUsarCorreoEnContexto(ctx, { exigeFichas: fuente !== "propuestas" })) {
+    throw new ForbiddenError(MOTIVO_SOLO_OFICINA);
+  }
 
   const q = (sp.get("q") || "").trim();
   const { Client, Contact, Lead } = ctx.tenantModels;

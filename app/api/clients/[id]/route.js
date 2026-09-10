@@ -13,6 +13,7 @@ import { fechaONull } from "../../../../lib/clients/formularioAlta.js";
 import { categoriaONull } from "../../../../lib/booking/categorias.js";
 import { esEstadoDeFicha } from "../../../../lib/clients/estados.js";
 import { bonosDeCliente } from "../../../../lib/citas/packs.js";
+import { bonosSinDinero, veElDineroDeLaFicha } from "../../../../lib/clients/quienVeElDinero.js";
 import {
   normalizeContactValue,
   validateContactValue,
@@ -25,8 +26,15 @@ import { limpiarRazonSocialPorDefecto, limpiarRepartoEntreTutores } from "../../
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export const GET = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
+export const GET = withTenant(async (request, { params }, ctx) => {
+  const { tenant, tenantModels, hasModule } = ctx;
   if (!hasModule("clients")) return forbidden();
+
+  // El plan de cuotas de un bono a plazos —cuántas van cobradas, cuál rebotó y
+  // qué dijo el banco— es dinero, y el dinero es de quien lleva Facturación
+  // (`lib/clients/quienVeElDinero.js`, 10/09/2026). Las sesiones que le quedan
+  // sí las ve todo el equipo: son las que hacen falta para atender.
+  const conDinero = veElDineroDeLaFicha(ctx);
 
   const { Client, Interaction, WaitlistEntry } = tenantModels;
   const { id } = await params;
@@ -67,7 +75,9 @@ export const GET = withTenant(async (request, { params }, { tenant, tenantModels
       const json = client.toJSON();
       json.interactions = [];
       json.listaEspera = listaEspera;
-      json.bonos = await bonosDeCliente(tenantModels, client);
+      json.bonos = conDinero
+        ? await bonosDeCliente(tenantModels, client)
+        : bonosSinDinero(await bonosDeCliente(tenantModels, client));
       // También aquí los pacientes: por esta rama pasa nutri_laura entera, y
       // el selector de fichas los necesita para pintar la elegida.
       json.pacientes =
@@ -104,7 +114,12 @@ export const GET = withTenant(async (request, { params }, { tenant, tenantModels
     Patient: tenantModels.Patient,
     hasModule,
   });
-  return ok({ ...client.toJSON(), listaEspera, pacientes: pacientes.get(String(client.id)) ?? [], bonos });
+  return ok({
+    ...client.toJSON(),
+    listaEspera,
+    pacientes: pacientes.get(String(client.id)) ?? [],
+    bonos: conDinero ? bonos : bonosSinDinero(bonos),
+  });
 });
 
 export const PUT = withTenant(async (request, { params }, { tenant, tenantModels, tenantSequelize, hasModule }) => {

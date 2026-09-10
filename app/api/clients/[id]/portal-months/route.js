@@ -3,6 +3,7 @@ import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { auditar, datosPeticion } from "../../../../../lib/utils/auditoria.js";
 import { bloqueoImpagoActivo, mesesAbiertos, mesesManuales, mesDe } from "../../../../../lib/citas/portalMeses.js";
+import { veElDineroDeLaFicha } from "../../../../../lib/clients/quienVeElDinero.js";
 
 /**
  * /api/clients/[id]/portal-months — qué meses tiene abiertos una familia en su
@@ -21,8 +22,18 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const MES_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 const MESES_VISTA = 6;
 
+/**
+ * Quién entra aquí (10/09/2026).
+ *
+ * Esta pantalla dice, mes a mes, si la familia ha pagado —los meses se abren
+ * solos con el cobro—, así que es dinero: la ve quien lleve Facturación
+ * (`lib/clients/quienVeElDinero.js`). Al resto del equipo la sección de la
+ * ficha se le esconde sola con el 403, como todas las demás.
+ */
 function gate(ctx) {
-  return ctx.hasModule("clients") ? null : forbidden("Módulo clients no activo");
+  if (!ctx.hasModule("clients")) return forbidden("Módulo clients no activo");
+  if (!veElDineroDeLaFicha(ctx)) return forbidden("Los meses cobrados los ve quien lleve Facturación");
+  return null;
 }
 
 const tablaAusente = (err) => err?.parent?.code === "42P01" || err?.original?.code === "42P01";

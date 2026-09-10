@@ -317,7 +317,11 @@ export default function ClientBonosSection({ clientId, patientId = null, onCambi
                     decirlo, «4 de 5 usadas» en un bono sin ninguna cita en el
                     CRM parecería una cuenta mal hecha. */}
                 {b.previas > 0 && ` (${b.previas} de antes de traerlo)`}
-                {b.modoPago === "instalment" &&
+                {/* Cómo lo está pagando es dinero: solo oficina (10/09/2026,
+                    `lib/clients/quienVeElDinero.js`). El servidor ya no manda
+                    el plan de cuotas a quien no lleva Facturación; esto tapa
+                    también el rótulo de «pago fraccionado» a secas. */}
+                {esAdmin && b.modoPago === "instalment" &&
                   (b.cuotas ? ` · a plazos: ${b.cuotas.resumen}` : " · pago fraccionado")}
               </span>
               {esAdmin && (

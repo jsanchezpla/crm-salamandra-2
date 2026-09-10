@@ -7,6 +7,7 @@ import { getMasterModels } from "../../../../lib/db/masterDb.js";
 import { sendEmail } from "../../../../lib/email/resendClient.js";
 import { esEmail, formatearFrom, resolverRemitente } from "../../../../lib/email/remitentes.js";
 import { componerContenido, validarAdjuntos } from "../../../../lib/correo/composicion.js";
+import { MOTIVO_SOLO_OFICINA, puedeUsarCorreoEnContexto } from "../../../../lib/correo/quienEscribe.js";
 
 /**
  * POST /api/correo/envios — mandar UN mensaje a VARIOS destinatarios.
@@ -60,7 +61,10 @@ function hoyISO() {
 
 export const POST = withTenant(async (request, _ctxRuta, ctx) => {
   // Escribir a gente exige tener a quién: sin Clientes no hay agenda que valga.
-  if (!ctx.hasModule("clients")) throw new ForbiddenError();
+  // Y en los centros con el interruptor puesto, ser oficina (`quienEscribe.js`).
+  if (!puedeUsarCorreoEnContexto(ctx, { exigeFichas: true })) {
+    throw new ForbiddenError(MOTIVO_SOLO_OFICINA);
+  }
 
   // La demo pública da sesión de admin a cualquiera y el destinatario, asunto y
   // cuerpo vienen en el body: con una clave de Resend puesta, esto sería un

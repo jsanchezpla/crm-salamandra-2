@@ -10,6 +10,7 @@ import { vocabularioCliente } from "../../lib/clients/vocabulario.js";
 import { EVENTO_SIN_VER } from "../../lib/buzon/buzon.js";
 import { esFormacionAbierta, HIJOS_OCULTOS_FORMACION_ABIERTA } from "../../lib/training/formacionAbierta.js";
 import { conHorarioPropio, HIJOS_OCULTOS_SIN_HORARIO_PROPIO } from "../../lib/citas/horarioPropio.js";
+import { puedeUsarCorreo } from "../../lib/correo/quienEscribe.js";
 import { esSlugDemo } from "../../lib/demo/demos.js";
 
 const navigation = [
@@ -778,6 +779,23 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
   const userCanSee = (moduleKey) =>
     userWildcard || (userAccess !== null && userAccess.includes(moduleKey));
 
+  /*
+   * Correo no tiene módulo propio: se ve con `clients` O con `outreach`, así
+   * que su puerta no la puede decidir `visibleModules` sola. Desde el
+   * 10/09/2026 un centro puede dejarlo en manos de oficina —dirección o quien
+   * lleve Facturación— y la regla vive en `lib/correo/quienEscribe.js`, que es
+   * la MISMA que aplican los siete endpoints y la propia pantalla. Aquí solo se
+   * le pasan las tres cosas que necesita: quién es, qué módulos ve de verdad y
+   * los interruptores del centro.
+   */
+  const flagDelCentro = (moduleKey, flagKey) =>
+    !!modules.find((m) => m.moduleKey === moduleKey)?.featureFlags?.[flagKey];
+  const puedeCorreo = puedeUsarCorreo({
+    role,
+    hasModule: (k) => (enabledModules.has(k) || enabledModules.size === 0) && userCanSee(k),
+    hasFeatureFlag: flagDelCentro,
+  });
+
   // Visibilidad de un sub-ítem. Hijos con `moduleKey` gatean por módulo del
   // tenant (p.ej. Comerciales/Referidos bajo Leads: solo salen donde el módulo
   // está activo). `requiresAll`: el hijo necesita TODOS esos módulos (p.ej.
@@ -898,6 +916,8 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
               // Salamandra delante de un visitante anónimo, y encima el endpoint
               // corta la demo igual: sería un enlace que no lleva a ningún sitio.
               if (item.key === "ayuda" && esSlugDemo(tenant?.slug)) return false;
+              // Correo: su puerta es de `quienEscribe.js`, no de `visibleModules`.
+              if (item.key === "correo" && !puedeCorreo) return false;
               if (item.key === "inicio" || item.always) return true;
               const keys = item.visibleModules || [item.key];
               return keys.some(canSeeModule);

@@ -3,6 +3,7 @@ import { ok } from "../../../../lib/utils/apiResponse.js";
 import { ForbiddenError, ValidationError } from "../../../../lib/utils/errors.js";
 import { auditar, datosPeticion } from "../../../../lib/utils/auditoria.js";
 import { normalizarPlantilla } from "../../../../lib/correo/plantillas.js";
+import { puedeUsarCorreoEnContexto } from "../../../../lib/correo/quienEscribe.js";
 
 /**
  * /api/correo/plantillas — plantillas de correo escritas por el centro.
@@ -16,9 +17,8 @@ import { normalizarPlantilla } from "../../../../lib/correo/plantillas.js";
  * ve todas. No confundir con `lib/email/templates/` (las de sistema).
  */
 
-function puedeUsarCorreo(ctx) {
-  return ctx.hasModule("clients") || ctx.hasModule("outreach");
-}
+// Quién puede escribir: `lib/correo/quienEscribe.js`.
+const puedeUsarCorreo = (ctx) => puedeUsarCorreoEnContexto(ctx);
 
 export const GET = withTenant(async (_request, _rc, ctx) => {
   if (!puedeUsarCorreo(ctx)) throw new ForbiddenError();

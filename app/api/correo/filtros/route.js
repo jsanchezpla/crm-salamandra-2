@@ -3,6 +3,7 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok } from "../../../../lib/utils/apiResponse.js";
 import { ForbiddenError } from "../../../../lib/utils/errors.js";
 import { SPECIALTIES } from "../../../../lib/clinica/specialties.js";
+import { puedeUsarCorreoEnContexto } from "../../../../lib/correo/quienEscribe.js";
 
 /**
  * GET /api/correo/filtros — con qué se puede acotar la lista de destinatarios.
@@ -22,7 +23,8 @@ import { SPECIALTIES } from "../../../../lib/clinica/specialties.js";
  * los filtros. No es un error: es que ahí no hay nada por lo que filtrar.
  */
 export const GET = withTenant(async (_request, _ctxRuta, ctx) => {
-  if (!ctx.hasModule("clients")) throw new ForbiddenError();
+  // Quién puede escribir en este centro: `lib/correo/quienEscribe.js`.
+  if (!puedeUsarCorreoEnContexto(ctx, { exigeFichas: true })) throw new ForbiddenError();
 
   if (!ctx.hasModule("pacientes")) {
     return ok({ profesionales: [], terapias: [] });
