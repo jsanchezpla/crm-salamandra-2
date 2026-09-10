@@ -75,6 +75,9 @@ function bonito(valor) {
 
 const HOY = () => new Date().toISOString().slice(0, 10);
 
+/** "YYYY-MM-DD" de dentro de N días, para el «hasta» de la lista. */
+const enDias = (n) => new Date(Date.now() + n * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
 /**
  * El camino de vuelta de `bonito()`: un instante → la fecha y la hora que se ven
  * en MADRID, listas para meter en los `<input type=date|time>` al editar.
@@ -123,6 +126,18 @@ export default function PanelVacaciones() {
   const [yo, setYo] = useState(null);
   /** `null` = el formulario crea; un id = está corrigiendo esa ausencia. */
   const [editando, setEditando] = useState(null);
+  /*
+   * ── HASTA QUÉ DÍA SE LISTA (10/09/2026, AV-0106 de Aumenta) ───────────────
+   *
+   * Antes esto pedía 400 días de golpe y el servidor devolvía los 500 primeros
+   * sin decirlo: en un centro con la agenda del curso colocada eso son cuatro
+   * días de lista y el resto del año en blanco, con toda la pinta de que los
+   * bloqueos no estaban puestos. Ahora el rango se elige —dos semanas de
+   * entrada, que es lo que se mira— y, si aun así se recorta, se dice.
+   */
+  const [hasta, setHasta] = useState(() => enDias(14));
+  /** `{ truncado, total }` de la última carga: para avisar de lo que no se ve. */
+  const [recorte, setRecorte] = useState({ truncado: false, total: 0 });
 
   // El motivo arranca VACÍO (03/09/2026, Aumenta): «que no se ponga vacaciones
   // automáticamente». Un motivo que pone el CRM y no quien bloquea es un dato
@@ -141,12 +156,16 @@ export default function PanelVacaciones() {
     setCargando(true);
     try {
       // Desde hoy: lo que ya pasó no ayuda a nadie y la lista se llenaría sola.
-      const desde = new Date(`${HOY()}T00:00:00`).toISOString();
-      const hasta = new Date(Date.now() + 400 * 24 * 60 * 60 * 1000).toISOString();
-      const res = await fetch(`/api/citas/bloqueos?from=${desde}&to=${hasta}`, { cache: "no-store" });
+      const desdeISO = new Date(`${HOY()}T00:00:00`).toISOString();
+      const hastaISO = new Date(`${hasta || enDias(14)}T23:59:59`).toISOString();
+      const res = await fetch(
+        `/api/citas/bloqueos?from=${desdeISO}&to=${hastaISO}&limit=2000`,
+        { cache: "no-store" }
+      );
       const json = await res.json();
       if (json.ok) {
         setBloqueos(json.data.bloqueos ?? []);
+        setRecorte({ truncado: json.data.truncado === true, total: json.data.total ?? 0 });
         setCategorias(json.data.categorias ?? []);
         setTalleres(json.data.talleres ?? []);
         const quien = json.data.yo ?? null;
@@ -166,7 +185,7 @@ export default function PanelVacaciones() {
       }
     } catch { /* la lista se queda como estaba */ }
     setCargando(false);
-  }, []);
+  }, [hasta]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -309,13 +328,36 @@ export default function PanelVacaciones() {
             puede poner y quitar los suyos.
           </p>
         </div>
-        <button
-          onClick={() => (abierto ? cerrar() : setAbierto(true))}
-          className="px-3 py-1.5 text-xs font-medium rounded-md bg-[#0F0F0F] text-white hover:bg-[#222] transition-colors shrink-0"
-        >
-          {abierto ? "Cancelar" : "Bloquear un tramo"}
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Hasta qué día se lista (10/09/2026): ver el porqué en el estado
+              `hasta`. Desde hoy siempre; lo que se elige es el final. */}
+          <label className="text-xs text-neutral-500 flex items-center gap-1.5">
+            Hasta
+            <input
+              type="date"
+              value={hasta}
+              min={HOY()}
+              onChange={(e) => setHasta(e.target.value)}
+              className="border border-neutral-200 rounded-md px-2 py-1 text-xs bg-white"
+            />
+          </label>
+          <button
+            onClick={() => (abierto ? cerrar() : setAbierto(true))}
+            className="px-3 py-1.5 text-xs font-medium rounded-md bg-[#0F0F0F] text-white hover:bg-[#222] transition-colors shrink-0"
+          >
+            {abierto ? "Cancelar" : "Bloquear un tramo"}
+          </button>
+        </div>
       </header>
+
+      {/* Lo que no se está viendo, dicho. Callarlo es lo que hizo creer a un
+          centro que sus bloqueos no estaban puestos (AV-0106). */}
+      {recorte.truncado && (
+        <p className="px-4 lg:px-5 py-2.5 text-xs text-amber-900 bg-amber-50 border-b border-amber-100">
+          Hay {recorte.total} tramos hasta esa fecha y se enseñan los {bloqueos.length} primeros.
+          Acerca el «hasta» para verlos todos.
+        </p>
+      )}
 
       {abierto && (
         <div ref={formRef} className="px-4 lg:px-5 py-4 border-b border-[var(--ink-200)] bg-white scroll-mt-20">
@@ -461,7 +503,7 @@ export default function PanelVacaciones() {
         {cargando && <p className="px-4 lg:px-5 py-4 text-xs text-neutral-400">Cargando…</p>}
         {!cargando && bloqueos.length === 0 && (
           <p className="px-4 lg:px-5 py-4 text-xs text-neutral-400">
-            No hay ningún tramo bloqueado por delante.
+            No hay ningún tramo bloqueado entre hoy y esa fecha.
           </p>
         )}
         {bloqueos.map((b) => (

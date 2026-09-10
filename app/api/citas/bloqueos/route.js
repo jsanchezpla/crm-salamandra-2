@@ -90,6 +90,25 @@ const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const FECHA_RE = /^\d{4}-\d{2}-\d{2}$/;
 const HORA_RE = /^(\d{1,2}):(\d{2})$/;
 
+/*
+ * ── CUÁNTOS SE MANDAN, Y POR QUÉ SE DICE (10/09/2026, AV-0106 de Aumenta) ───
+ *
+ * Aquí había un `limit: 500` seco. Con la agenda del curso entero colocada,
+ * Aumenta tiene 9.261 tramos y unos 250 por semana: la vista de MES pedía del
+ * 31/08 al 04/10 y el corte caía a mitad —240 de la primera semana más 267 de
+ * la segunda son 507—, así que del 14 de septiembre en adelante el calendario
+ * salía limpio. «Hemos programado los bloqueos de todo el mes y solo nos salen
+ * en la semana del 7 al 11», y era verdad: estaban puestos, no se mandaban.
+ *
+ * Dos cosas cambian. El tope sube a lo que de verdad necesita una vista de mes
+ * del centro más grande, y —sobre todo— cuando se recorta se DICE: `truncado`
+ * y `total` viajan con la lista para que la pantalla avise en vez de enseñar
+ * una agenda medio vacía que parece cierta. Un tope que miente es peor que un
+ * tope pequeño.
+ */
+const TOPE_POR_DEFECTO = 3000;
+const TOPE_MAXIMO = 5000;
+
 /**
  * "2026-08-17" + "07:00" → el instante en que en MADRID son las 7 de la mañana.
  *
@@ -403,13 +422,21 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     }
 
     // Sin recorte por persona: ver la cabecera. Lo único que acota es el rango
-    // de fechas que pida quien llama.
+    // de fechas que pida quien llama, y el tope (arriba, TOPE_POR_DEFECTO).
+    const pedido = Number.parseInt(sp.get("limit") ?? "", 10);
+    const tope = Number.isFinite(pedido) && pedido > 0 ? Math.min(pedido, TOPE_MAXIMO) : TOPE_POR_DEFECTO;
+    // Uno de más: así se sabe que hay más SIN contar la tabla entera.
     const filas = await TeamBlock.findAll({
       where,
       include: TeamMember ? [{ model: TeamMember, as: "teamMember", attributes: ["id", "displayName", "blockColor"], required: false }] : [],
       order: [["startAt", "ASC"]],
-      limit: 500,
+      limit: tope + 1,
     });
+    const truncado = filas.length > tope;
+    if (truncado) filas.length = tope;
+    // El total solo se cuenta cuando de verdad se ha recortado: es la cifra que
+    // la pantalla necesita para decir «hay N y se enseñan M».
+    const total = truncado ? await TeamBlock.count({ where }) : filas.length;
     const colorGeneral = ctx.tenant?.settings?.citas?.colorBloqueos ?? null;
     const categorias = categoriasDe(ctx.tenant);
     const autores = await nombresDeQuienApunto(filas, ctx.tenantModels);
@@ -423,6 +450,9 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     const { equipo, administracion } = await equipoDelCentro(ctx.tenantModels);
     return ok({
       bloqueos: filas.map((f) => serializa(f, colorGeneral, autores, categorias, talleres, documentos, pacientes)),
+      // Lo que se ha recortado, dicho (10/09/2026): ver el tope, arriba.
+      truncado,
+      total,
       yo,
       categorias,
       talleres: [...(talleres?.values() ?? [])],
