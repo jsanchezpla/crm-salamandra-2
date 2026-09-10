@@ -106,7 +106,7 @@ export default function AnaliticaClientesPage() {
                 <SortableTh k="billedBase" label="Facturado" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
                 <SortableTh k="collectedBase" label="Cobrado" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
                 <SortableTh k="pendingCollection" label="Pendiente" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
-                <SortableTh k="imputedCosts" label="Costes imp." sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
+                <SortableTh k="imputedCosts" label="Gastos imp." sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
                 <SortableTh k="margin" label="Margen" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
                 <SortableTh k="invoiceCount" label="Nº fact." sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
               </tr>

@@ -155,7 +155,7 @@ export default function FacturacionResumen() {
 
           <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5 flex flex-col">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="eyebrow">Desglose de costes</h2>
+              <h2 className="eyebrow">Desglose de gastos</h2>
               <span className="text-[10px] text-neutral-400">Base imponible</span>
             </div>
             <div className="flex-1 space-y-2">
@@ -180,7 +180,7 @@ export default function FacturacionResumen() {
             </div>
             <div className="border-t border-neutral-200 mt-3 pt-3 space-y-1.5">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-neutral-700 font-semibold">Costes operativos</span>
+                <span className="text-xs text-neutral-700 font-semibold">Gastos operativos</span>
                 <span className="text-xs text-neutral-900 font-semibold tabular">{fmtMoney(costs.operating)}</span>
               </div>
             </div>

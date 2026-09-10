@@ -6,7 +6,7 @@ import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 const SECTIONS = [
   { href: "/facturacion/analitica/iva", label: "Libro IVA · Modelo 303", desc: "Ventas, compras deducibles, diferencia, exportación a Excel" },
-  { href: "/facturacion/analitica/clientes", label: "Por cliente", desc: "Facturación, cobros, costes imputados y margen por cliente" },
+  { href: "/facturacion/analitica/clientes", label: "Por cliente", desc: "Facturación, cobros, gastos imputados y margen por cliente" },
   { href: "/facturacion/analitica/empleados", label: "Por empleado", desc: "Rendimiento, coste salarial y margen por empleado" },
 ];
 

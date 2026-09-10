@@ -69,7 +69,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, tenant, hasM
       { header: "Facturado", key: "billedBase", width: 14, numFmt: MONEY_FMT },
       { header: "Cobrado", key: "collectedBase", width: 14, numFmt: MONEY_FMT },
       { header: "Pendiente", key: "pendingCollection", width: 14, numFmt: MONEY_FMT },
-      { header: "Costes imp.", key: "imputedCosts", width: 14, numFmt: MONEY_FMT },
+      { header: "Gastos imp.", key: "imputedCosts", width: 14, numFmt: MONEY_FMT },
       { header: "Margen", key: "margin", width: 14, numFmt: MONEY_FMT },
       { header: "Margen %", key: "marginPct", width: 11, numFmt: PCT_FMT },
       { header: "Nº fact.", key: "invoiceCount", width: 10, numFmt: INT_FMT },

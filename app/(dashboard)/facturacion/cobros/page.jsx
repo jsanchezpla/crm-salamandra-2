@@ -461,6 +461,15 @@ export default function CobrosPage() {
   const primeraUrl = useRef(true);
   const [filterMethod, setFilterMethod] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+  /*
+   * Entre dos fechas, igual que en Gastos (10/09/2026, Rodrigo). El endpoint ya
+   * entendía `from`/`to` sobre `paidAt` —de ahí los sacaba el Excel—, pero la
+   * pantalla no los ofrecía: para saber lo cobrado del 1 al 15 había que bajarse
+   * el Excel o sumar a ojo. Filtra por el DÍA DEL COBRO, no por el mes al que
+   * corresponde la cuota.
+   */
+  const [filterFrom, setFilterFrom] = useState("");
+  const [filterTo, setFilterTo] = useState("");
   const { sortKey, sortDir, toggle: toggleSort } = useSortState("paidAt", "desc");
 
   useEffect(() => {
@@ -531,10 +540,12 @@ export default function CobrosPage() {
     pon("q", searchInput.trim());
     pon("metodo", filterMethod);
     pon("estado", filterStatus);
+    pon("desde", filterFrom);
+    pon("hasta", filterTo);
     pon("morosidad", mesMorosidad === mesVigente() ? "" : mesMorosidad);
     const cadena = sp.toString();
     window.history.replaceState(null, "", cadena ? `?${cadena}` : window.location.pathname);
-  }, [searchInput, filterMethod, filterStatus, mesMorosidad]);
+  }, [searchInput, filterMethod, filterStatus, filterFrom, filterTo, mesMorosidad]);
 
   // …y se lee al entrar, que es la otra mitad: sin esto la dirección guardada
   // no serviría de nada al abrirla en una pestaña nueva.
@@ -544,6 +555,11 @@ export default function CobrosPage() {
     if (q) { setSearchInput(q); setSearch(q.trim().toLowerCase()); }
     if (sp.get("metodo")) setFilterMethod(sp.get("metodo"));
     if (sp.get("estado")) setFilterStatus(sp.get("estado"));
+    // Con el formato comprobado: un `?desde=ayer` dejaría el recuadro en blanco
+    // (el navegador no lo pinta) pero el filtro viajaría igual al servidor.
+    const dia = (v) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : "");
+    if (dia(sp.get("desde"))) setFilterFrom(sp.get("desde"));
+    if (dia(sp.get("hasta"))) setFilterTo(sp.get("hasta"));
     const m = sp.get("morosidad");
     if (m && /^\d{4}-(0[1-9]|1[0-2])$/.test(m)) setMesMorosidad(m);
   }, []);
@@ -563,6 +579,8 @@ export default function CobrosPage() {
       const params = new URLSearchParams({ limit: 100, sortBy: sortKey, sortDir });
       if (filterMethod) params.set("method", filterMethod);
       if (filterStatus) params.set("status", filterStatus);
+      if (filterFrom) params.set("from", filterFrom);
+      if (filterTo) params.set("to", filterTo);
       // La búsqueda va al SERVIDOR (31/08/2026): filtrar aquí solo veía los
       // 100 cargados y un cobro antiguo no aparecía por mucho que se buscara.
       if (search) params.set("q", search);
@@ -574,7 +592,7 @@ export default function CobrosPage() {
     } catch (e) {
       setErrorMsg(e.message);
     } finally { setLoading(false); }
-  }, [sortKey, sortDir, filterMethod, filterStatus, search]);
+  }, [sortKey, sortDir, filterMethod, filterStatus, filterFrom, filterTo, search]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -874,6 +892,8 @@ export default function CobrosPage() {
   const exportParams = new URLSearchParams();
   if (filterMethod) exportParams.set("method", filterMethod);
   if (filterStatus) exportParams.set("status", filterStatus);
+  if (filterFrom) exportParams.set("from", filterFrom);
+  if (filterTo) exportParams.set("to", filterTo);
   const exportUrl = `/api/billing/exports/payments${exportParams.toString() ? `?${exportParams}` : ""}`;
 
   return (
@@ -948,8 +968,15 @@ export default function CobrosPage() {
             { value: "refunded", label: "Reembolsado" },
           ]}
         />
-        {(searchInput || filterMethod || filterStatus) && (
-          <button onClick={() => { setSearchInput(""); setFilterMethod(""); setFilterStatus(""); }}
+        {/* Del día al día, por fecha de cobro. Los mismos dos recuadros que Gastos. */}
+        <input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)}
+          title="Cobrado desde" aria-label="Cobrado desde"
+          className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400" />
+        <input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)}
+          title="Cobrado hasta" aria-label="Cobrado hasta"
+          className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400" />
+        {(searchInput || filterMethod || filterStatus || filterFrom || filterTo) && (
+          <button onClick={() => { setSearchInput(""); setFilterMethod(""); setFilterStatus(""); setFilterFrom(""); setFilterTo(""); }}
             className="text-xs text-neutral-400 hover:text-neutral-600 px-2 py-1.5 transition-colors">Limpiar</button>
         )}
       </div>
@@ -1060,7 +1087,7 @@ export default function CobrosPage() {
                 <tr><td colSpan={8} className="text-center py-12 text-xs text-neutral-400">Cargando...</td></tr>
               )}
               {!loading && filtered.length === 0 && (
-                <tr><td colSpan={8} className="text-center py-12 text-xs text-neutral-400">Sin cobros{(search || filterMethod || filterStatus) ? " que coincidan con los filtros" : " registrados"}</td></tr>
+                <tr><td colSpan={8} className="text-center py-12 text-xs text-neutral-400">Sin cobros{(search || filterMethod || filterStatus || filterFrom || filterTo) ? " que coincidan con los filtros" : " registrados"}</td></tr>
               )}
               {filtered.map((p) => (
                 <tr key={p.id} className="border-b border-neutral-50 hover:bg-neutral-50/70 transition-colors">

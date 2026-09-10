@@ -157,7 +157,7 @@ export default function IvaPage() {
                     </tr>
                   ))}
                   {data.input.byRate.length === 0 && (
-                    <tr><td colSpan={3} className="text-center py-6 text-xs text-neutral-400">Sin costes deducibles en el periodo</td></tr>
+                    <tr><td colSpan={3} className="text-center py-6 text-xs text-neutral-400">Sin gastos deducibles en el periodo</td></tr>
                   )}
                 </tbody>
                 <tfoot>

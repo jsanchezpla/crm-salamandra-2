@@ -16,7 +16,7 @@ export const GET = withTenant(async (_request, { params }, { tenantModels, hasMo
         { model: Supplier, as: "supplier", attributes: ["id", "name"] },
       ],
     });
-    if (!cost) return notFound("Coste no encontrado");
+    if (!cost) return notFound("Gasto no encontrado");
     return ok(cost);
   } catch (err) {
     return serverError(err);
@@ -30,7 +30,7 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
     const { Cost, Supplier } = tenantModels;
     const { id } = await params;
     const cost = await Cost.findByPk(id);
-    if (!cost) return notFound("Coste no encontrado");
+    if (!cost) return notFound("Gasto no encontrado");
 
     const body = await request.json();
     const updates = camposGasto(body);
@@ -77,7 +77,7 @@ export const DELETE = withTenant(async (request, { params }, { tenant, tenantMod
     const { Cost } = tenantModels;
     const { id } = await params;
     const cost = await Cost.findByPk(id);
-    if (!cost) return notFound("Coste no encontrado");
+    if (!cost) return notFound("Gasto no encontrado");
     const antesBorrar = resumenImporte(cost);
     const idGasto = cost.id;
     await cost.destroy();
