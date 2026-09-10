@@ -5,6 +5,7 @@ import Link from "next/link";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import Select from "@/components/ui/Select.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
+import { ordenarPorNombre } from "@/lib/billing/conceptosCatalogo.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -73,7 +74,10 @@ export default function ConfiguracionPage() {
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "No se pudo crear el concepto");
-      setConceptos((cs) => [...cs, j.data]);
+      // En su sitio, no al final (10/09/2026, Rodrigo: «deberían salir en
+      // orden alfabético»): la lista llega ordenada y una alta no la descoloca
+      // hasta la siguiente recarga.
+      setConceptos((cs) => ordenarPorNombre([...cs, j.data]));
       setNuevoConcepto(CONCEPTO_VACIO);
     } catch (e) { setErrorMsg(e.message); } finally { setGuardandoConcepto(false); }
   }
@@ -109,7 +113,7 @@ export default function ConfiguracionPage() {
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "No se pudo guardar el concepto");
-      setConceptos((cs) => cs.map((x) => (x.id === c.id ? j.data : x)));
+      setConceptos((cs) => ordenarPorNombre(cs.map((x) => (x.id === c.id ? j.data : x))));
       setEditandoConcepto(null);
     } catch (e) { setErrorMsg(e.message); }
   }
