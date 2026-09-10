@@ -1598,6 +1598,32 @@ día con la lista recortada (`docs/modules/team.md`).
 
 Lo fija `scripts/_smoke-citas-visibilidad.mjs`, que ahora también comprueba que
 la PANTALLA pregunta lo mismo que el servidor.
+#### La profesional que se estaba mirando se queda puesta diez minutos (10/09/2026, Rosa)
+
+«Cada vez que salgo de Citas a otra pestaña del CRM y vuelvo, me salen todas
+las terapeutas sin seleccionar ninguna.»
+
+Es la segunda mitad de lo que el 09/09/2026 llevó la vista por terapeuta a la
+dirección: aquello arregló el botón de ATRÁS, pero quien vuelve a Citas por el
+MENÚ llega a `/citas` limpio y el filtro nacía en blanco. Con dieciocho
+personas en el centro, dirección entra y sale decenas de veces al día.
+
+Las reglas viven en `lib/citas/filtroRecordado.js` (puro y sin dependencias,
+como `filtros.js`: el almacén entra por parámetro, así que la prueba no
+necesita navegador) y `CitasModule.jsx` solo las llama:
+
+| Regla | Por qué |
+| --- | --- |
+| **Diez minutos** desde el ÚLTIMO uso | Lo pidió Rodrigo así, «plazos cortos». Para siempre sería una trampa: el lunes la agenda amanecería acotada a la terapeuta del viernes, y una agenda a medias se lee como si faltaran citas. Contarlos desde el último uso deja repartir la agenda media hora sin perder el filtro. |
+| **Con el `userId` dentro** | En recepción se comparte ordenador: sin él, quien entra después abriría la agenda acotada a la terapeuta que miró la anterior. |
+| **«Todo el equipo» se recuerda igual que una lista** | Si no, volver a Citas devolvería a quien mira SU agenda (la preselección de más arriba) justo después de haber pedido la de todos. |
+| **Lo recordado se cruza con las fichas de hoy** | Una ficha de equipo borrada dejaría el filtro pidiendo un id que ya no existe: agenda en blanco. Si no queda nadie, se hace como si no hubiera recuerdo. |
+| **Manda sobre la preselección** | El recuerdo pisa el `ref` del efecto que abre la agenda en la propia. |
+
+El recuerdo se anota en `localStorage` (`citas.filtroProfesional`, mismo prefijo
+que `citas.compacta`), y sin memoria —modo privado, cuota llena— la pantalla se
+comporta como antes. Lo fija `_smoke-citas-filtro-recordado.mjs`.
+
 #### Repaso del 12/08/2026 (Rodrigo)
 
 Cinco cosas de la pantalla, todas en el módulo por defecto (o sea, para todos

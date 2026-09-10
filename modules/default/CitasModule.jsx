@@ -21,6 +21,11 @@ import ModalFestivos from "@/components/citas/ModalFestivos.jsx";
 import { COLOR_BLOQUEO_POR_DEFECTO, colorTextoSobre } from "@/lib/citas/coloresBloqueo.js";
 import { SIN_PROFESIONAL, COLOR_CITA_POR_DEFECTO } from "@/lib/citas/filtros.js";
 import { filtroAlAbrirLaAgenda } from "@/lib/citas/filtroInicialAgenda.js";
+import {
+  memoriaDelNavegador,
+  recuperarFiltroDeProfesional,
+  recordarFiltroDeProfesional,
+} from "@/lib/citas/filtroRecordado.js";
 import { fmtDateTime, toDateInput, toTimeInput } from "./citas/chips.jsx";
 import { CitaDetalleModal } from "./citas/CitaDetalleModal.jsx";
 import { CitaMenuContextual } from "./citas/CitaMenuContextual.jsx";
@@ -487,12 +492,56 @@ export default function CitasModule({
    * es la de todos. Con quién y por qué, en `lib/citas/filtroInicialAgenda.js`.
    */
   const filtroInicialPuesto = useRef(false);
+
+  /*
+   * ── …SALVO QUE SE ESTUVIERA MIRANDO OTRA HACE NADA (10/09/2026, Rosa) ──────
+   *
+   * «Cada vez que salgo de Citas a otra pestaña del CRM y vuelvo, me salen
+   * todas las terapeutas sin seleccionar ninguna.» El 09/09 se llevó la vista
+   * por terapeuta a la dirección, y eso arregló el botón de ATRÁS; quien vuelve
+   * por el MENÚ llega a `/citas` limpio y el filtro nacía otra vez en blanco.
+   *
+   * Así que la elección se anota, con sello y por usuario, y se repone si no ha
+   * pasado el plazo —corto a propósito, diez minutos: las reglas y el porqué
+   * están en `lib/citas/filtroRecordado.js`—. Va ANTES del efecto de aquí abajo
+   * y le pisa el `ref`: si hay recuerdo manda el recuerdo, no la preselección,
+   * incluso cuando lo recordado es «Todo el equipo».
+   *
+   * Espera a tener el equipo cargado porque lo recordado se cruza con las
+   * fichas que existen hoy; hasta entonces no se decide nada.
+   */
+  const memoriaDelFiltroLeida = useRef(false);
+  useEffect(() => {
+    if (memoriaDelFiltroLeida.current || !veTodaLaAgenda || !viewerUserId || teamMembers.length === 0) return;
+    memoriaDelFiltroLeida.current = true;
+    const almacen = memoriaDelNavegador();
+    const recordado = recuperarFiltroDeProfesional(almacen, {
+      userId: viewerUserId,
+      idsValidos: [...teamMembers.map((m) => m.id), SIN_PROFESIONAL],
+    });
+    if (!recordado) return;
+    filtroInicialPuesto.current = true;
+    setVisibleTmIds(recordado.ids);
+    // Volver a mirar cuenta como uso: el plazo corre desde la última vez.
+    recordarFiltroDeProfesional(almacen, { userId: viewerUserId, ids: recordado.ids });
+  }, [veTodaLaAgenda, viewerUserId, teamMembers]);
+
   useEffect(() => {
     if (filtroInicialPuesto.current || !veTodaLaAgenda || !miFichaDeEquipo) return;
     filtroInicialPuesto.current = true;
     const inicial = filtroAlAbrirLaAgenda({ miFichaId: miFichaDeEquipo.id, idsAdministracion });
     if (inicial) setVisibleTmIds(inicial);
   }, [veTodaLaAgenda, miFichaDeEquipo, idsAdministracion]);
+
+  /*
+   * …y cada cambio del filtro se anota, para el próximo regreso. Solo DESPUÉS
+   * de haber leído la memoria: si no, el `null` con el que arranca la pantalla
+   * borraría el recuerdo antes de que diera tiempo a reponerlo.
+   */
+  useEffect(() => {
+    if (!memoriaDelFiltroLeida.current || !viewerUserId) return;
+    recordarFiltroDeProfesional(memoriaDelNavegador(), { userId: viewerUserId, ids: visibleTmIds });
+  }, [visibleTmIds, viewerUserId]);
 
   // Pacientes para asignar la cita (sólo tenants con módulo Clínica/Pacientes:
   // si el endpoint responde 403, `patients` queda vacío y el selector se oculta).
