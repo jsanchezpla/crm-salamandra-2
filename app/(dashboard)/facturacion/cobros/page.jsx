@@ -57,7 +57,7 @@ export default function CobrosPage() {
    */
   const puedeFacturar = Boolean(me);
 
-  // Revertir un cobro no tiene vuelta atrás: se pregunta con el diálogo del
+  // Eliminar un cobro no tiene vuelta atrás: se pregunta con el diálogo del
   // CRM, no con el del navegador (que Chrome deja silenciar y devuelve `false`
   // siempre — ver components/ui/Dialogo.jsx).
   const { confirmar, dialogo } = useDialogo();
@@ -883,14 +883,21 @@ export default function CobrosPage() {
   }
 
   /**
-   * Revertir un cobro (01/09/2026, Rodrigo: «debería poder editar un cobro o
+   * Eliminar un cobro (01/09/2026, Rodrigo: «debería poder editar un cobro o
    * revertirlo si quiero»).
    *
-   * REVERTIR NO ES «DEVUELTO». Son las dos formas de deshacer y significan
+   * SE LLAMA «ELIMINAR», NO «REVERTIR» (10/09/2026, Rodrigo: «cuando estoy
+   * editando un cobro debería poder eliminarlo»). El botón llevaba aquí desde
+   * el 01/09, pero puesto como «Revertir cobro» nadie lo leía como borrar: se
+   * buscaba una papelera y no la había. Ahora se llama por su nombre y lleva
+   * el icono, y el porqué de borrar en vez de marcar «Devuelto» se cuenta al
+   * preguntar, que es cuando hace falta saberlo.
+   *
+   * ELIMINAR NO ES «DEVUELTO». Son las dos formas de deshacer y significan
    * cosas distintas, así que la pantalla las separa:
    *   · «Devuelto» (el estado de arriba) = el dinero entró y se ha devuelto.
    *     El cobro se queda en el histórico, porque pasó.
-   *   · «Revertir» = el cobro NUNCA debió existir: se apuntó dos veces, o en la
+   *   · «Eliminar» = el cobro NUNCA debió existir: se apuntó dos veces, o en la
    *     familia equivocada. Se borra y la factura vuelve a estar pendiente.
    * Un cobro apuntado por error que se dejara como «devuelto» ensuciaría el
    * arqueo y la morosidad de un mes que estaba bien.
@@ -899,17 +906,17 @@ export default function CobrosPage() {
    * recalcula el estado de la factura; aquí solo hace falta preguntar primero,
    * que esto no tiene vuelta atrás.
    */
-  async function revertirCobro() {
+  async function eliminarCobro() {
     if (!editing) return;
     const quien = editing.clientName ? ` de ${editing.clientName}` : "";
     const ok = await confirmar({
-      titulo: "Revertir el cobro",
+      titulo: "Eliminar el cobro",
       texto:
         `Se borrará el cobro${quien} de ${fmtMoney(editing.amount)}` +
         (editing.invoice?.number ? `, y la factura ${editing.invoice.number} volverá a quedar pendiente` : "") +
         ". Queda apuntado en el registro de actividad, pero el cobro no se puede recuperar.\n\n" +
-        "Si el dinero SÍ entró y se ha devuelto, no reviertas: cambia el estado a «Devuelto».",
-      confirmar: "Revertir",
+        "Si el dinero SÍ entró y se ha devuelto, no lo elimines: cambia el estado a «Devuelto».",
+      confirmar: "Eliminar",
       tono: "peligro",
     });
     if (!ok) return;
@@ -920,7 +927,7 @@ export default function CobrosPage() {
       // El DELETE responde 204 sin cuerpo: no hay JSON que leer.
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
-        throw new Error(json.error || "No se pudo revertir el cobro");
+        throw new Error(json.error || "No se pudo eliminar el cobro");
       }
       setEditing(null);
       load();
@@ -1817,10 +1824,14 @@ export default function CobrosPage() {
               {formError && <div className="text-xs text-red-600 bg-red-50 border border-red-100 px-3 py-2 rounded-lg">{formError}</div>}
               <div className="flex gap-2 justify-between items-center pt-3 border-t border-neutral-100 flex-wrap">
                 {/* Deshacer del todo, a la izquierda y separado de Guardar: es
-                    lo único de este cajón que borra algo. */}
-                <button type="button" onClick={revertirCobro} disabled={saving}
-                  className="px-3 py-2 text-xs font-semibold text-red-600 uppercase tracking-wide hover:bg-red-50 rounded-lg disabled:opacity-50">
-                  Revertir cobro
+                    lo único de este cajón que borra algo. Con papelera, que es
+                    lo que se busca con la vista cuando se quiere borrar algo. */}
+                <button type="button" onClick={eliminarCobro} disabled={saving}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-red-600 uppercase tracking-wide hover:bg-red-50 rounded-lg disabled:opacity-50">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                  </svg>
+                  Eliminar cobro
                 </button>
                 <div className="flex gap-2 justify-end">
                   <button type="button" onClick={() => setEditing(null)}
