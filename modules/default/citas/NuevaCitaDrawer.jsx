@@ -444,6 +444,16 @@ export function NuevaCitaDrawer({
 
       let res = await enviar(false);
       let j = await res.json();
+      /*
+       * `insistio` viaja a las repeticiones (10/09/2026, AV-0105 de Aumenta).
+       * Sin esto, una serie sobre una agenda con huecos cerrados se quedaba en
+       * la primera cita: la de arriba se creaba porque alguien contestaba
+       * «crearla igualmente», y las otras cuarenta chocaban una a una contra el
+       * mismo bloqueo que ya se había perdonado. La decisión se toma UNA vez y
+       * vale para toda la serie; volver a preguntarla cuarenta veces no es
+       * prudencia, es no dejar trabajar.
+       */
+      let insistio = false;
       // 409 = el día está cerrado, o alguien está de vacaciones. No se impone:
       // se pregunta, y si insiste (una urgencia en el puente) se reenvía.
       if (res.status === 409 && !j.ok) {
@@ -456,6 +466,7 @@ export function NuevaCitaDrawer({
           setSaving(false);
           return;
         }
+        insistio = true;
         res = await enviar(true);
         j = await res.json();
       }
@@ -493,19 +504,26 @@ export function NuevaCitaDrawer({
        * ── LAS REPETICIONES (31/08/2026) ────────────────────────────────────
        * Citas INDEPENDIENTES por el POST de siempre, que ya valida festivos,
        * bloqueos y solapes: la que choca NO se crea y se cuenta al final —
-       * aquí no se insiste con permitirFestivo, que doce preguntas seguidas
-       * no las contesta nadie. Sin correo (`omitirCorreo`): a la familia le
-       * llega solo el de la primera.
+       * aquí no se PREGUNTA, que doce preguntas seguidas no las contesta
+       * nadie. Lo que sí viaja es la respuesta que ya se dio para la primera
+       * (`insistio`), y el perdón del hueco que la cita viene a sustituir.
+       * Sin correo (`omitirCorreo`): a la familia le llega solo el de la
+       * primera.
        */
       if (repeticion) {
         const chocadas = [];
         let creadas = 0;
+        // Lo que ya se decidió arriba, para toda la serie (10/09/2026, AV-0105).
+        const perdones = {
+          ...(insistio ? { permitirFestivo: true, permitirBloqueo: true } : {}),
+          ...(desdeBloqueo ? { permitirBloqueo: true } : {}),
+        };
         for (const f of repeticion.fechas) {
           try {
             const r = await fetch("/api/citas/bookings", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ ...cuerpoCita, scheduledAt: f.toISOString(), omitirCorreo: true }),
+              body: JSON.stringify({ ...cuerpoCita, ...perdones, scheduledAt: f.toISOString(), omitirCorreo: true }),
             });
             const jr = await r.json();
             if (jr.ok) creadas += 1;
