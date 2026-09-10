@@ -607,6 +607,19 @@ export default function ClientesClient({
                       {conCategoria ? "Contratante" : "Nombre / Empresa"}
                     </Cabecera>
                     {/*
+                      Quién es el paciente (10/09/2026, Rodrigo). Pegada al
+                      nombre porque se leen juntas: la ficha es de la familia
+                      que paga y a quien se atiende es al niño, así que sin esto
+                      «Vanesa Muñoz» no dice de quién es la ficha. No ordena:
+                      los pacientes viven en otra tabla y ordenar por ellos
+                      pediría una consulta distinta.
+                    */}
+                    {conPacientes && (
+                      <th scope="col" className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                        Pacientes
+                      </th>
+                    )}
+                    {/*
                       Qué es (festival, sala, ayuntamiento, medio…). Solo con
                       `booking`, y va justo detrás del nombre porque es lo
                       primero que decide qué se le escribe: a un ayuntamiento un
@@ -665,6 +678,11 @@ export default function ClientesClient({
                             {client.customFields?.company || (conCategoria ? client.customFields?.provincia || "" : "")}
                           </div>
                         </td>
+                        {conPacientes && (
+                          <td className="px-4 py-3">
+                            <ColumnaPacientes pacientes={client.pacientes} />
+                          </td>
+                        )}
                         {conCategoria && (
                           <td className="px-4 py-3">
                             {client.customFields?.categoria ? (
@@ -1113,6 +1131,41 @@ function CampoAlta({ tipo, valor, opciones, placeholder, onChange }) {
       onChange={(e) => onChange(e.target.value)}
       className={cls}
     />
+  );
+}
+
+/**
+ * Los pacientes de una ficha, en la lista de clientes (10/09/2026).
+ *
+ * Se enseñan DOS y el resto se cuenta: hay familias con tres y cuatro hermanos y
+ * una fila que crece hasta cuatro líneas rompe el barrido de la lista, que es
+ * justo para lo que sirve. El nombre entero de todos va en el `title`.
+ *
+ * El estado se marca en gris solo cuando ya no está en activo (dado de alta o
+ * en pausa): pintar de color a los 1.100 que sí lo están no dice nada.
+ */
+const ESTADO_PACIENTE = { active: "Activo", paused: "En pausa", discharged: "Alta" };
+
+function ColumnaPacientes({ pacientes }) {
+  const lista = Array.isArray(pacientes) ? pacientes : [];
+  if (!lista.length) return <span className="text-xs text-gray-300">—</span>;
+  const visibles = lista.slice(0, 2);
+  const resto = lista.length - visibles.length;
+  return (
+    <div className="max-w-[180px]" title={lista.map((p) => p.nombre).join(", ")}>
+      {visibles.map((p) => (
+        <div
+          key={p.id}
+          className={`text-xs truncate ${p.estado && p.estado !== "active" ? "text-gray-400" : "text-gray-700"}`}
+        >
+          {p.nombre}
+          {p.estado && p.estado !== "active" && (
+            <span className="text-gray-400"> · {ESTADO_PACIENTE[p.estado] ?? p.estado}</span>
+          )}
+        </div>
+      ))}
+      {resto > 0 && <div className="text-[10px] text-gray-400">+{resto} más</div>}
+    </div>
   );
 }
 

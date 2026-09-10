@@ -23,6 +23,7 @@ import { categoriaONull } from "../../../lib/booking/categorias.js";
 import { resolveCurrentTeamMemberId } from "../../../lib/team/currentTeamMember.js";
 import { filtroPorNombre } from "../../../lib/utils/busquedaDb.js";
 import { pacientesQueCasan } from "../../../lib/clients/familiasPorPaciente.js";
+import { pacientesPorFamilia } from "../../../lib/clients/pacientesDeLaFamilia.js";
 
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   if (!hasModule("clients")) return forbidden();
@@ -160,11 +161,21 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   }
 
   const { rows, count } = result;
+  // Quién es el paciente de cada ficha (10/09/2026): solo el de las 50 filas
+  // que se van a pintar, en una consulta aparte para no descuadrar el total.
+  // El porqué, en lib/clients/pacientesDeLaFamilia.js.
+  const pacientes = await pacientesPorFamilia({
+    clientIds: rows.map((r) => r.id),
+    Patient: tenantModels.Patient,
+    hasModule,
+  });
   // Cuando la ficha salió por su paciente, se dice cuál: sin eso el resultado
   // parece un error («busqué a Hugo y me sale Vanesa Muñoz»).
-  const clients = porPacienteMapa
-    ? rows.map((r) => ({ ...r.toJSON(), porPaciente: porPacienteMapa.get(String(r.id)) ?? null }))
-    : rows;
+  const clients = rows.map((r) => ({
+    ...r.toJSON(),
+    pacientes: pacientes.get(String(r.id)) ?? [],
+    ...(porPacienteMapa ? { porPaciente: porPacienteMapa.get(String(r.id)) ?? null } : {}),
+  }));
   return ok({ clients, total: count, page, pages: Math.ceil(count / limit) });
 });
 
