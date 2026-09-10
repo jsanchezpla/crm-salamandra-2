@@ -108,8 +108,19 @@ describe("de dónde saca la pantalla ese número", () => {
   it("la pantalla lo usa para rellenar el fondo, no para decidir sola", () => {
     assert.match(pagina, /import \{ fondoSugerido \} from "@\/lib\/billing\/caja\.js";/);
     assert.match(pagina, /const fondoDeAyer = fondoSugerido\(ultimoCierre\);/);
-    const abrir = pagina.slice(pagina.indexOf("function abrirCierre"), pagina.indexOf("async function comprobar"));
+    const abrir = pagina.slice(pagina.indexOf("function abrirCierre"), pagina.indexOf("useEffect(() => {", pagina.indexOf("function abrirCierre")));
     assert.match(abrir, /openingAmount: fondoDeAyer \? String\(fondoDeAyer\.importe\) : ""/);
+  });
+
+  /*
+   * Desde el 10/09/2026 el fondo bueno lo dice el servidor para el DÍA que se
+   * está cerrando: cerrando un día atrasado, el último cierre de todos puede
+   * ser posterior y su conteo no vale. El de ayer se queda como lo que se
+   * enseña mientras llega la respuesta.
+   */
+  it("y el del día que se cierra lo manda el servidor, que sabe cuál es", () => {
+    assert.match(endpoint, /closeDate: \{ \[Op\.lt\]: fecha \}/, "el fondo sale del último cierre ANTERIOR a ese día");
+    assert.match(pagina, /const fondoDelDia = previo\?\.fondo \?\? fondoDeAyer;/);
   });
 
   it("y dice de dónde sale, con las dos caras", () => {
@@ -118,9 +129,11 @@ describe("de dónde saca la pantalla ese número", () => {
   });
 
   it("el fondo se sigue pudiendo cambiar a mano", () => {
-    const campo = pagina.slice(pagina.indexOf("Fondo inicial"), pagina.indexOf("Dinero contado"));
-    assert.match(campo, /onChange=\{\(e\) => \{ setForm\(\{ \.\.\.form, openingAmount: e\.target\.value \}\)/);
-    assert.match(campo, /setPrevio\(null\)/, "cambiar el fondo tiene que invalidar el esperado ya calculado");
+    const campo = pagina.slice(pagina.indexOf('<span className="text-[12px] text-neutral-500">Fondo inicial'), pagina.indexOf("Dinero contado"));
+    assert.match(campo, /openingAmount: e\.target\.value/);
+    // Y en cuanto se toca, manda la persona: el sistema deja de reescribirlo
+    // al recargar la cuenta del día (10/09/2026).
+    assert.match(campo, /tocado\.current\.fondo = true/);
   });
 });
 
@@ -151,9 +164,8 @@ describe("el fondo en blanco no puede colarse como cero", () => {
     assert.match(ruta, /Number\.isNaN\(openingAmount\)/);
   });
 
-  it("la pantalla lo pide antes de dejar comprobar o cerrar", () => {
-    assert.match(pagina, /form\.openingAmount === ""/, "el botón de comprobar tiene que pararlo");
-    const campo = pagina.slice(pagina.indexOf("Fondo inicial"), pagina.indexOf("Dinero contado"));
-    assert.match(campo, /<input required/, "el campo del fondo tiene que ser obligatorio");
+  it("y la pantalla no deja cerrar con la casilla vacía", () => {
+    const campo = pagina.slice(pagina.indexOf('<span className="text-[12px] text-neutral-500">Fondo inicial'), pagina.indexOf("Dinero contado"));
+    assert.match(campo, /<input\s+required/, "el campo del fondo tiene que ser obligatorio");
   });
 });

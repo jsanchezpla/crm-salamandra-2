@@ -117,7 +117,12 @@ export default function EfectivoCaja({ cajaId, onApuntar }) {
   // Un día sin efectivo ni apuntes no cambia el cajón: se puede esconder sin
   // que el saldo de las demás filas deje de cuadrar (cada fila lleva el suyo).
   const dias = (datos?.dias ?? []).filter(
-    (d) => !soloConMovimiento || (d.efectivoDelDia?.movimiento ?? 0) !== 0
+    (d) =>
+      !soloConMovimiento ||
+      (d.efectivoDelDia?.movimiento ?? 0) !== 0 ||
+      // Un día que se arqueó sí es una fila aunque no se moviera el cajón: es
+      // el día en que el saldo pasó a ser lo contado (10/09/2026).
+      d.efectivoDelDia?.contado != null
   );
 
   const partida = datos?.saldoInicial ?? null;
@@ -246,7 +251,23 @@ export default function EfectivoCaja({ cajaId, onApuntar }) {
                       <td className="px-3 py-2 text-right tabular">
                         {e.salidas !== 0 ? <span className="text-rose-600">− {fmtMoney(e.salidas)}</span> : <span className="text-neutral-300">—</span>}
                       </td>
-                      <td className="px-3 py-2 text-right tabular font-semibold text-neutral-800">{fmtMoney(e.queda)}</td>
+                      {/* Si ese día se arqueó, manda lo CONTADO: es de donde
+                          parte el cierre siguiente (10/09/2026). */}
+                      <td className="px-3 py-2 text-right tabular font-semibold text-neutral-800">
+                        {fmtMoney(e.queda)}
+                        {e.contado !== null && e.contado !== undefined && (
+                          <span
+                            className="ml-1 text-[10.5px] font-normal text-neutral-400"
+                            title={
+                              e.descuadre === 0
+                                ? "Caja cerrada ese día: cuadró"
+                                : `Caja cerrada ese día: ${e.descuadre < 0 ? "faltaban" : "sobraban"} ${fmtMoney(Math.abs(e.descuadre))}`
+                            }
+                          >
+                            contado
+                          </span>
+                        )}
+                      </td>
                     </tr>
 
                     {abierto && (

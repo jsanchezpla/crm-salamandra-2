@@ -39,6 +39,7 @@ import {
   haEntrado,
   saldoDiarioEfectivo,
   fondoSugerido,
+  esperadoAlCerrar,
 } from "../lib/billing/caja.js";
 
 const CAJA = "11111111-1111-1111-1111-111111111111";
@@ -374,5 +375,89 @@ describe("el efectivo que queda en el cajón", () => {
       fondoSugerido({ closeDate: "2026-09-08", countedAmount: 240.75, hechoPorUnaPersona: true }),
       { importe: 240.75, fecha: "2026-09-08" }
     );
+  });
+});
+
+/*
+ * ── EL CIERRE LO ESCRIBE EL SISTEMA (10/09/2026, Aumenta) ──────────────────
+ *
+ * Rodrigo, contando lo que pasaba en recepción: «en el botón de cerrar caja
+ * Rosa escribe lo que quiere y lo correcto es que escriba el sistema el
+ * efectivo que se ha ingresado y el que se ha retirado». Y la cuenta tiene que
+ * ser UNA: la que propone el cierre y la que enseña la columna «Queda en caja»
+ * del resumen por día. Si cada pantalla hiciera la suya, el centro vería dos
+ * cifras de la misma caja y no sabría a cuál creer.
+ *
+ * Lo que se fija aquí:
+ *  - la suma del cierre, con el arrastre de los días que nadie cerró;
+ *  - que el día que se arquea manda lo CONTADO, no lo esperado: si faltaban
+ *    20 €, siguen faltando mañana, y el fondo del día siguiente parte de ahí.
+ */
+describe("lo que debería quedar al cerrar", () => {
+  it("es fondo + arrastre + cobros − devoluciones + entradas − salidas", () => {
+    assert.equal(
+      esperadoAlCerrar({ fondo: 100, arrastre: 20, efectivo: 50, devuelto: 10, entradas: 5, salidas: 15 }),
+      150
+    );
+  });
+
+  it("sin nada, cero (no NaN)", () => {
+    assert.equal(esperadoAlCerrar(), 0);
+    assert.equal(esperadoAlCerrar({ fondo: "", efectivo: null }), 0);
+  });
+
+  it("los números que llegan como texto cuentan igual", () => {
+    assert.equal(esperadoAlCerrar({ fondo: "120.50", efectivo: "9.50" }), 130);
+  });
+
+  it("los céntimos se cierran una vez", () => {
+    assert.equal(esperadoAlCerrar({ fondo: 0.1, efectivo: 0.2 }), 0.3);
+  });
+});
+
+describe("el día que se arquea manda lo contado", () => {
+  const dia = (fecha, { cash = 0, entradas = 0, salidas = 0 } = {}) => ({
+    fecha,
+    ...resumenDelDia({
+      cobros: cash ? [{ amount: cash, method: "cash", status: "completed" }] : [],
+      movimientos: [
+        ...(entradas ? [{ direction: "in", amount: entradas }] : []),
+        ...(salidas ? [{ direction: "out", amount: salidas }] : []),
+      ],
+    }),
+  });
+
+  it("el saldo pasa a ser lo contado, y el día siguiente parte de ahí", () => {
+    const filas = saldoDiarioEfectivo(
+      [dia("2026-09-01", { cash: 100 }), dia("2026-09-02", { cash: 50 })],
+      0,
+      new Map([["2026-09-01", { contado: 80 }]])
+    );
+    assert.equal(filas[0].efectivoDelDia.esperado, 100);
+    assert.equal(filas[0].efectivoDelDia.queda, 80, "lo contado manda sobre lo esperado");
+    assert.equal(filas[0].efectivoDelDia.descuadre, -20);
+    assert.equal(filas[1].efectivoDelDia.queda, 130, "el día siguiente arrastra los 80, no los 100");
+  });
+
+  it("un día sin arqueo no dice que se contó nada", () => {
+    const [uno] = saldoDiarioEfectivo([dia("2026-09-01", { cash: 40 })], 10);
+    assert.equal(uno.efectivoDelDia.contado, null);
+    assert.equal(uno.efectivoDelDia.descuadre, null);
+    assert.equal(uno.efectivoDelDia.esperado, uno.efectivoDelDia.queda);
+  });
+
+  it("sin cierres, todo como antes", () => {
+    const filas = saldoDiarioEfectivo([dia("2026-09-01", { cash: 100, salidas: 30 })], 0, null);
+    assert.equal(filas[0].efectivoDelDia.queda, 70);
+  });
+
+  it("el cierre que cuadra deja el saldo donde estaba", () => {
+    const filas = saldoDiarioEfectivo(
+      [dia("2026-09-01", { cash: 100, entradas: 20, salidas: 30 })],
+      50,
+      { "2026-09-01": { contado: 140 } }
+    );
+    assert.equal(filas[0].efectivoDelDia.descuadre, 0);
+    assert.equal(filas[0].efectivoDelDia.queda, 140);
   });
 });

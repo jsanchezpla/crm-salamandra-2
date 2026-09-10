@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { hoyVigente } from "@/lib/billing/cuotas.js";
 import { fondoSugerido } from "@/lib/billing/caja.js";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
@@ -15,6 +15,9 @@ const fmt = (n) =>
   new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" }).format(Number(n) || 0);
 
 const hoy = () => hoyVigente();
+
+/** Los céntimos, una vez: la misma cuenta que hace el servidor al cerrar. */
+const redondear = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
 /** «2026-07-31» → «31/07/2026». La casilla habla de un día concreto. */
 const fmtFecha = (iso) => {
@@ -43,7 +46,14 @@ export default function ArqueoPage() {
 
   const [showCierre, setShowCierre] = useState(false);
   const [form, setForm] = useState({ closeDate: hoy(), openingAmount: "", countedAmount: "", notes: "" });
-  const [previo, setPrevio] = useState(null); // { esperado, efectivoDelDia, numCobros }
+  // El desglose que manda el servidor: cobros en efectivo del día, entradas,
+  // salidas, el arrastre de los días sin cerrar y el fondo del que se parte.
+  const [previo, setPrevio] = useState(null);
+  const [cargandoPrevio, setCargandoPrevio] = useState(false);
+  // Qué casillas ha tocado la persona: mientras no toque, las escribe el
+  // sistema y se rehacen solas al cambiar de día (10/09/2026).
+  const tocado = useRef({ fondo: false, contado: false });
+  const [cajaVaciaOk, setCajaVaciaOk] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
 
@@ -121,6 +131,12 @@ export default function ArqueoPage() {
    * sin cierre anterior se deja vacía y se dice por qué.
    */
   const fondoDeAyer = fondoSugerido(ultimoCierre);
+  /*
+   * El que vale para el día que se está cerrando: el servidor busca el último
+   * cierre anterior a ESA fecha (cerrando un día atrasado, el fondo bueno no es
+   * el del último cierre de todos). Mientras llega su respuesta, el de ayer.
+   */
+  const fondoDelDia = previo?.fondo ?? fondoDeAyer;
 
   function abrirCierre() {
     setForm({
@@ -130,40 +146,72 @@ export default function ArqueoPage() {
       notes: "",
     });
     setPrevio(null);
+    tocado.current = { fondo: false, contado: false };
+    setCajaVaciaOk(false);
     setFormError(null);
     setShowCierre(true);
   }
 
   /**
-   * Se pide el esperado DESPUÉS de teclear lo contado, no antes: si la cifra
-   * objetivo estuviera a la vista mientras se cuenta, el arqueo dejaría de
-   * detectar nada. El servidor lo recalcula igualmente al guardar.
+   * ── EL CIERRE LO ESCRIBE EL SISTEMA (10/09/2026, Aumenta) ─────────────────
+   *
+   * Hasta hoy el desglose se pedía DESPUÉS de teclear lo contado, para que la
+   * cifra objetivo no estuviera a la vista mientras se contaba el cajón. La
+   * idea era buena y lo que pasaba en recepción era otra cosa: el número se
+   * escribía de memoria y el cierre no salía de ningún sitio («Rosa escribe lo
+   * que quiere»). Así que ahora la cuenta entera —fondo, cobros en efectivo,
+   * entradas, salidas y los días que quedaron sin cerrar— sale sola al abrir,
+   * y quien cierra solo corrige si al contar hay otra cosa. Lo que se guarda lo
+   * recalcula el servidor, que es quien manda.
    */
-  async function comprobar() {
-    setFormError(null);
-    if (form.countedAmount === "") {
-      setFormError("Escribe primero cuánto dinero has contado");
-      return;
-    }
-    // El fondo en blanco no es un cero: sin él, lo esperado saldría corto justo
-    // por el fondo y el arqueo cantaría un descuadre que no existe.
-    if (form.openingAmount === "") {
-      setFormError("Escribe el fondo inicial: cuánto había en el cajón al abrir (0 si estaba vacío)");
-      return;
-    }
-    try {
-      const r = await fetch("/api/arqueo/cierres", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cashPointId: cajaId, closeDate: form.closeDate, openingAmount: form.openingAmount || 0 }),
-      });
-      const j = await r.json();
-      if (!j.ok) throw new Error(j.error || "No se pudo calcular lo esperado");
-      setPrevio(j.data);
-    } catch (e) {
-      setFormError(e.message);
-    }
-  }
+  useEffect(() => {
+    if (!showCierre || !cajaId || !form.closeDate) return undefined;
+    let vivo = true;
+    setCargandoPrevio(true);
+    (async () => {
+      try {
+        const r = await fetch("/api/arqueo/cierres", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cashPointId: cajaId, closeDate: form.closeDate }),
+        });
+        const j = await r.json();
+        if (!vivo) return;
+        if (!j.ok) throw new Error(j.error || "No se pudo calcular lo que debería haber en el cajón");
+        setPrevio(j.data);
+        // El fondo bueno es el del ÚLTIMO cierre anterior a ESE día, y lo sabe
+        // el servidor: cerrando un martes que se quedó atrás, no vale el del
+        // viernes. Si la persona ya lo ha tocado, mandan sus dedos.
+        if (!tocado.current.fondo) {
+          setForm((f) => ({ ...f, openingAmount: j.data.fondo ? String(j.data.fondo.importe) : "" }));
+        }
+      } catch (e) {
+        if (vivo) setFormError(e.message);
+      } finally {
+        if (vivo) setCargandoPrevio(false);
+      }
+    })();
+    return () => { vivo = false; };
+  }, [showCierre, cajaId, form.closeDate]);
+
+  /*
+   * Lo que debería quedar, rehecho al vuelo: el fondo se puede corregir a mano
+   * (el sobre que fue al banco, el cambio que se metió) y la cuenta tiene que
+   * seguirle sin ir y volver al servidor. Es la misma suma que hace
+   * `esperadoAlCerrar` allí, y el POST la recalcula antes de guardar.
+   */
+  const esperado =
+    previo === null
+      ? null
+      : redondear(
+          Number(form.openingAmount || 0) + Number(previo.arrastre?.importe || 0) + Number(previo.netoDelDia || 0)
+        );
+
+  // Y el cierre se abre con esa cifra escrita: es el encargo del centro.
+  useEffect(() => {
+    if (esperado === null || tocado.current.contado) return;
+    setForm((f) => (f.countedAmount === String(esperado) ? f : { ...f, countedAmount: String(esperado) }));
+  }, [esperado]);
 
   async function guardar(e) {
     e.preventDefault();
@@ -173,11 +221,14 @@ export default function ArqueoPage() {
       const r = await fetch("/api/arqueo/cierres", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, cashPointId: cajaId }),
+        body: JSON.stringify({ ...form, cashPointId: cajaId, cajaVaciaConfirmada: cajaVaciaOk }),
       });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || "No se pudo cerrar la caja");
       setShowCierre(false);
+      // A la lista de cierres: se acaba de crear una fila y hay que verla (y
+      // las otras pestañas se quedarían con los números de antes de cerrar).
+      setVista("cierres");
       await cargarCierres();
     } catch (e) {
       setFormError(e.message);
@@ -186,7 +237,14 @@ export default function ArqueoPage() {
     }
   }
 
-  const dif = previo !== null ? Number(form.countedAmount || 0) - Number(previo.esperado || 0) : null;
+  const contado = form.countedAmount === "" ? null : Number(form.countedAmount);
+  const dif = esperado !== null && contado !== null ? redondear(contado - esperado) : null;
+  /*
+   * «La caja nunca queda a cero porque hay que mantener efectivo para hacer el
+   * cambio a los pacientes» (Aumenta, 10/09/2026). Un cero casi siempre es un
+   * cierre sin contar, y encima se arrastra al fondo del día siguiente.
+   */
+  const dejaLaCajaVacia = contado === 0;
 
   return (
     <div className="p-4 lg:p-8 space-y-5">
@@ -378,19 +436,37 @@ export default function ArqueoPage() {
 
               <label className="block">
                 <span className="text-[12px] text-neutral-500">Día que se cierra</span>
-                <input type="date" value={form.closeDate} onChange={(e) => { setForm({ ...form, closeDate: e.target.value }); setPrevio(null); }} className={inputCls} />
+                <input
+                  type="date"
+                  value={form.closeDate}
+                  onChange={(e) => {
+                    // Otro día es otro fondo y otro conteo: los dos los vuelve
+                    // a escribir el sistema.
+                    tocado.current = { fondo: false, contado: false };
+                    setForm({ ...form, closeDate: e.target.value });
+                  }}
+                  className={inputCls}
+                />
               </label>
               <label className="block">
                 <span className="text-[12px] text-neutral-500">Fondo inicial (lo que había al abrir)</span>
                 {/* Obligatorio: en blanco no es un cero, y desde que el fondo se
                     arrastra de un día a otro, dejarlo vacío cantaba un descuadre
                     falso por ese importe (07/09/2026). */}
-                <input required type="number" step="0.01" value={form.openingAmount} onChange={(e) => { setForm({ ...form, openingAmount: e.target.value }); setPrevio(null); }} className={inputCls} placeholder="0,00" />
+                <input
+                  required
+                  type="number"
+                  step="0.01"
+                  value={form.openingAmount}
+                  onChange={(e) => { tocado.current.fondo = true; setForm({ ...form, openingAmount: e.target.value }); }}
+                  className={inputCls}
+                  placeholder="0,00"
+                />
                 {/* De dónde sale el número: sin esto la casilla vuelve a ser un
                     hueco que nadie sabe rellenar, que es el aviso AV-0067. */}
-                {fondoDeAyer ? (
+                {fondoDelDia ? (
                   <span className="mt-1 block text-[11.5px] text-neutral-400">
-                    Es lo que se contó al cerrar el {fmtFecha(fondoDeAyer.fecha)}. Cámbialo si el dinero fue al banco o si has metido cambio.
+                    Es lo que se contó al cerrar el {fmtFecha(fondoDelDia.fecha)}. Cámbialo si el dinero fue al banco o si has metido cambio.
                   </span>
                 ) : (
                   <span className="mt-1 block text-[11.5px] text-neutral-400">
@@ -398,63 +474,137 @@ export default function ArqueoPage() {
                   </span>
                 )}
               </label>
-              <label className="block">
-                <span className="text-[12px] text-neutral-500">Dinero contado en el cajón *</span>
-                <input type="number" step="0.01" value={form.countedAmount} onChange={(e) => setForm({ ...form, countedAmount: e.target.value })} className={inputCls} placeholder="0,00" />
-              </label>
 
+              {/* ── LA CUENTA, ENTERA Y ESCRITA POR EL SISTEMA (10/09/2026) ──
+                  Sale sola al abrir: el fondo, lo cobrado en efectivo y las
+                  entradas y salidas apuntadas. Antes había que pedirla con un
+                  botón después de teclear el conteo, y el conteo se escribía de
+                  memoria. */}
               {previo === null ? (
-                <button type="button" onClick={comprobar} className="w-full rounded-lg border border-neutral-200 text-neutral-700 text-sm font-medium py-2 hover:bg-neutral-50 transition">
-                  Comprobar
-                </button>
+                <p className="text-[12px] text-neutral-400 text-center py-2">
+                  {cargandoPrevio ? "Calculando lo que debería haber en el cajón…" : "—"}
+                </p>
               ) : (
                 <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-3 space-y-1 text-[12.5px]">
+                  <div className="flex justify-between text-neutral-600">
+                    <span>Fondo del que se parte</span>
+                    <span>{fmt(form.openingAmount || 0)}</span>
+                  </div>
+                  {/* Los días que nadie cerró siguen moviendo el cajón: sin
+                      esta línea, su efectivo desaparecía del esperado. */}
+                  {previo.arrastre && previo.arrastre.importe !== 0 && (
+                    <div className="flex justify-between text-neutral-600">
+                      <span>
+                        Días sin cerrar desde el {fmtFecha(previo.arrastre.desde)}
+                        {previo.arrastre.dias > 1 ? ` (${previo.arrastre.dias} días)` : ""}
+                      </span>
+                      <span>{previo.arrastre.importe > 0 ? "+" : ""}{fmt(previo.arrastre.importe)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-neutral-600">
                     <span>Cobros en efectivo del día ({previo.numCobros})</span>
                     <span>{fmt(previo.efectivoDelDia)}</span>
                   </div>
+                  {previo.devueltoDelDia > 0 && (
+                    <div className="flex justify-between text-neutral-600">
+                      <span>Devuelto en efectivo ({previo.numDevoluciones})</span>
+                      <span className="text-rose-600">− {fmt(previo.devueltoDelDia)}</span>
+                    </div>
+                  )}
                   {/* Las entradas y salidas apuntadas ese día también mueven el
                       cajón (01/09/2026): sin enseñarlas, el esperado sale de
                       una cuenta que la persona no puede seguir. */}
-                  {previo.numMovimientos > 0 && (
+                  {previo.entradas > 0 && (
                     <div className="flex justify-between text-neutral-600">
-                      <span>Entradas y salidas de caja ({previo.numMovimientos})</span>
-                      <span>{fmt(Number(previo.entradas || 0) - Number(previo.salidas || 0))}</span>
+                      <span>Entradas de caja apuntadas</span>
+                      <span>+ {fmt(previo.entradas)}</span>
                     </div>
                   )}
-                  <div className="flex justify-between text-neutral-600">
-                    <span>Debería haber</span>
-                    <span>{fmt(previo.esperado)}</span>
+                  {previo.salidas > 0 && (
+                    <div className="flex justify-between text-neutral-600">
+                      <span>Salidas de caja apuntadas</span>
+                      <span className="text-rose-600">− {fmt(previo.salidas)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-semibold text-neutral-800 pt-1 border-t border-neutral-200">
+                    <span>Debería quedar en el cajón</span>
+                    <span>{fmt(esperado)}</span>
                   </div>
-                  <div className={`flex justify-between font-semibold pt-1 border-t border-neutral-200 ${dif < 0 ? "text-red-600" : dif > 0 ? "text-amber-600" : "text-emerald-700"}`}>
-                    <span>{dif === 0 ? "Cuadra" : dif < 0 ? "Faltan" : "Sobran"}</span>
-                    <span>{dif === 0 ? "✓" : fmt(Math.abs(dif))}</span>
-                  </div>
+                  {previo.numMovimientos === 0 && (
+                    <p className="text-[11.5px] text-neutral-400 pt-0.5">
+                      Sin entradas ni salidas apuntadas hoy. Lo que salga del cajón para otra cosa se apunta en «Entradas y salidas».
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <label className="block">
+                <span className="text-[12px] text-neutral-500">Dinero contado en el cajón *</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={form.countedAmount}
+                  onChange={(e) => { tocado.current.contado = true; setForm({ ...form, countedAmount: e.target.value }); }}
+                  className={inputCls}
+                  placeholder="0,00"
+                />
+                <span className="mt-1 block text-[11.5px] text-neutral-400">
+                  Lo escribe el sistema con los cobros en efectivo y las entradas y salidas del día. Cámbialo solo si al contar el cajón hay otra cosa.
+                </span>
+              </label>
+
+              {dif !== null && (
+                <div
+                  className={`flex justify-between rounded-lg border px-3 py-2 text-[12.5px] font-medium ${
+                    dif === 0
+                      ? "border-emerald-100 bg-emerald-50 text-emerald-700"
+                      : dif < 0
+                        ? "border-red-100 bg-red-50 text-red-700"
+                        : "border-amber-100 bg-amber-50 text-amber-700"
+                  }`}
+                >
+                  <span>{dif === 0 ? "Cuadra con la cuenta del sistema" : dif < 0 ? "Faltan" : "Sobran"}</span>
+                  <span>{dif === 0 ? "✓" : fmt(Math.abs(dif))}</span>
+                </div>
+              )}
+
+              {/* Un cajón a cero se pregunta: casi siempre es un cierre sin
+                  contar, y el cero se arrastra al fondo de mañana. */}
+              {dejaLaCajaVacia && (
+                <div className="space-y-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-800">
+                  <p>
+                    El cajón se queda a 0 €. En un centro se deja siempre algo de efectivo para dar cambio, y
+                    este número es el fondo con el que abrirás mañana.
+                  </p>
+                  <label className="flex items-center gap-2 font-medium">
+                    <input type="checkbox" checked={cajaVaciaOk} onChange={(e) => setCajaVaciaOk(e.target.checked)} />
+                    Sí, hoy el cajón se queda vacío
+                  </label>
                 </div>
               )}
 
               <label className="block">
                 <span className="text-[12px] text-neutral-500">
-                  Motivo {previo !== null && dif !== 0 ? "*" : "(opcional)"}
+                  Motivo {dif !== null && dif !== 0 ? "*" : "(opcional)"}
                 </span>
                 <textarea
                   value={form.notes}
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
                   rows={3}
                   className={inputCls}
-                  placeholder={previo !== null && dif !== 0 ? "Un «faltan 20 €» sin explicación no vale de nada dentro de seis meses" : ""}
+                  placeholder={dif !== null && dif !== 0 ? "Un «faltan 20 €» sin explicación no vale de nada dentro de seis meses" : ""}
                 />
               </label>
 
               <button
                 type="submit"
-                disabled={saving || previo === null}
+                disabled={saving || previo === null || (dejaLaCajaVacia && !cajaVaciaOk)}
                 className="w-full rounded-lg bg-[var(--color-primary,#1B3A2D)] text-white text-sm font-medium py-2 hover:opacity-90 transition disabled:opacity-40"
               >
                 {saving ? "Guardando…" : "Cerrar el día"}
               </button>
               {previo === null && (
-                <p className="text-[11.5px] text-neutral-400 text-center">Comprueba antes de cerrar.</p>
+                <p className="text-[11.5px] text-neutral-400 text-center">Un momento: el sistema está haciendo la cuenta del día.</p>
               )}
             </form>
           </div>

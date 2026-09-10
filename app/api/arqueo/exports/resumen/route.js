@@ -56,30 +56,36 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, tenant, hasM
     const columns = [
       { header: "Día", key: "dia", width: 14 },
       { header: "Efectivo", key: "efectivo", width: 14, numFmt: MONEY_FMT },
+      { header: "Entradas y salidas", key: "caja", width: 18, numFmt: MONEY_FMT },
+      // Lo que queda en el cajón al cerrar ese día, como en pantalla
+      // (10/09/2026): el saldo se arrastra, así que no es la suma de la columna.
+      { header: "Queda en caja", key: "queda", width: 16, numFmt: MONEY_FMT },
       { header: "Tarjeta", key: "tarjeta", width: 14, numFmt: MONEY_FMT },
       { header: "Banco", key: "banco", width: 14, numFmt: MONEY_FMT },
       { header: "Total cobrado", key: "total", width: 16, numFmt: MONEY_FMT },
       { header: "Nº de cobros", key: "n", width: 13 },
-      { header: "Caja (+/−)", key: "caja", width: 14, numFmt: MONEY_FMT },
     ];
     const rows = conAlgo.map((d) => ({
       dia: fmtDateEs(d.fecha),
       efectivo: d.efectivo.importe,
+      caja: d.movimientos.neto,
+      queda: d.efectivoDelDia?.queda ?? 0,
       tarjeta: d.tarjeta.importe,
       banco: d.banco.importe,
       total: d.cobrado,
       n: d.lista.length,
-      caja: d.movimientos.neto,
     }));
     // La fila de totales, como el pie de la tabla en pantalla.
     rows.push({
       dia: "TOTAL",
       efectivo: data.total.efectivo.importe,
+      caja: data.total.movimientos.neto,
+      // Aquí no se suma: lo que queda es el saldo del último día.
+      queda: data.enCajaAlFinal,
       tarjeta: data.total.tarjeta.importe,
       banco: data.total.banco.importe,
       total: data.total.cobrado,
       n: conAlgo.reduce((s, d) => s + d.lista.length, 0),
-      caja: data.total.movimientos.neto,
     });
 
     const cobros = conAlgo.flatMap((d) =>
