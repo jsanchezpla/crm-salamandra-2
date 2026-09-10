@@ -312,6 +312,11 @@ const navigation = [
           // Las cuotas mensuales asignadas (01/09/2026): van pegadas a Cobros
           // porque es donde nacen — la cuota genera el cobro del mes.
           { key: "billing-cuotas", label: "Cuotas", href: "/facturacion/cuotas" },
+          // Los bonos de sesiones (10/09/2026, Rodrigo): al lado de Cuotas
+          // porque son la otra forma de cobrar lo mismo —de una vez y por
+          // sesiones, en vez de mes a mes— y su cobro nace igual, pendiente.
+          // Sin `moduleKey`: no se vende aparte, es Facturación (como Cuotas).
+          { key: "billing-bonos", label: "Bonos", href: "/facturacion/bonos" },
           { key: "billing-gastos", label: "Gastos", href: "/facturacion/costes" },
           { key: "billing-arqueo", label: "Arqueo", href: "/facturacion/arqueo" },
           { key: "billing-banco", label: "Banco", href: "/facturacion/banco", moduleKey: "billing_banco" },

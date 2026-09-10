@@ -22,6 +22,9 @@ function pillars(conBanco, conSocios) {
         // Cuotas va pegada a Cobros porque es donde nacen: la cuota asignada
         // genera el cobro del mes (01/09/2026).
         { href: "/facturacion/cuotas", label: "Cuotas" },
+        // Bonos va detrás de Cuotas porque es la otra forma de cobrar lo mismo
+        // (10/09/2026): de una vez y por sesiones, en vez de mes a mes.
+        { href: "/facturacion/bonos", label: "Bonos" },
         { href: "/facturacion/recurrentes", label: "Recurrentes" },
         { href: "/facturacion/costes", label: "Gastos" },
         // Proveedores va pegado a Gastos porque es donde se usa: al registrar un

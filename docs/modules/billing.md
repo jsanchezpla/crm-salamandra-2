@@ -2336,3 +2336,112 @@ Rodrigo, con el ejemplo: «debe 80 y le cobro 30, se queda pendiente a deber 50;
 
 - **«Acabó el»** junto a «Empezó el» en cada concepto del cajón de cobro, «para los pacientes que fallan a final de mes pero han empezado bien». Es el mismo tramo por el otro extremo, y `tramoDelMes` ya lo sabía hacer —así prorratea la generación el mes de la BAJA—: lo que faltaba era que el cajón se lo pasara. `partesConProrrateo` acepta ahora `fin` además de `inicio`, las dos juntas cobran el trozo de en medio («del 03/09 al 18/09»), y el tramo se calcula SIEMPRE con `tramoDelMes` (sin mes, se saca del propio `inicio`) en vez de mantener dos caminos para lo mismo.
 - **La línea de debajo decía «20/30 días» pasara lo que pasara.** El importe ya salía por SESIONES desde el 07/09 cuando hay citas de ese servicio en el tramo, así que la cuenta que se leía no era la que se había hecho — de ahí «no me divide por la cantidad de citas sino por la cantidad de días». Ahora dice la que se hizo («3 de 4 sesiones») y, cuando cae en los días teniendo citas delante, dice por qué.
+
+## Bonos de sesiones: el submódulo de Facturación (10/09/2026)
+
+Rodrigo: «un submódulo en facturación llamado Bonos que tenga todos los bonos de
+los pacientes, que se puedan ordenar por grupos igual que cuotas y que sean de
+pago por bono en lugar de una cuota que se repite mes a mes. Pueden volver a
+coger el bono si quieren. Es lo mismo que cuotas pero cambiando la idea a Bonos».
+
+### No hay una tabla nueva: son los `session_packs` que ya existían
+
+Los bonos llevaban vivos desde el 04/08/2026 (`models/tenant/SessionPack.model.js`)
+y en Aumenta hay 232, 229 de ellos traídos de Organízate. Lo que faltaba era la
+pantalla: solo se veían **de uno en uno**, dentro de la ficha de cada familia
+(`components/clients/ClientBonosSection.jsx`), así que estas cuatro preguntas no
+tenían respuesta en ninguna parte:
+
+- ¿qué bonos hay vendidos y a quién?
+- ¿cuáles están agotados y hay que ofrecer la renovación?
+- ¿cuánto de eso está sin cobrar?
+- ¿cómo se le da el mismo bono a los ocho niños de un grupo sin entrar en ocho
+  fichas?
+
+Duplicar los bonos en una tabla de Facturación habría creado **dos verdades**
+sobre las mismas sesiones: las citas descuentan de `session_packs` y el portal
+lee de ahí. Así que el submódulo son dos puertas nuevas a la tabla de siempre —
+`/api/citas/packs` sigue sirviendo a la ficha— y el cobro lo crea la MISMA pieza
+(`lib/billing/cobroDelBono.js`).
+
+### En qué se parece a Cuotas y en qué no
+
+Se parece en la forma de trabajar: alta **en grupo**, **grupos por tipo** (el
+espejo de «Tipos de cuota»), el cuadro de cerrados abajo con su buscador en vez
+de esconderlos, y que **dar un bono no es cobrarlo** (su cobro nace `pending`).
+
+No se parece en la unidad de tiempo, y de ahí salen las tres ausencias que se
+notan al mirarlo:
+
+| Cuota | Bono |
+| --- | --- |
+| Se repite cada mes hasta la baja | Se paga UNA vez |
+| Día de cobro, prorrateo, «Generar el mes» | Nada de eso: un cobro y se acabó |
+| De baja por FECHA (`endDate`) | Agotado por el CONTADOR, o anulado a mano |
+| Su cobro lleva `periodMonth` | `periodMonth` a null (no es de ningún mes) |
+| Reactivar la misma fila | **Volver a cogerlo = OTRO bono** |
+
+**Por qué renovar crea otro bono y no reabre el de antes**: subirle las sesiones
+de 10 a 20 borraría que las diez primeras se dieron en unas fechas, con un precio
+y en una factura, y la sesión 11 volvería a llamarse «la 1 de veinte». La tabla
+se llama `session_packs` en plural por esto.
+
+**Por qué no tiene `moduleKey` propio** (al revés que `billing_banco`): no se
+vende aparte. Es Facturación, como Cuotas — cualquier centro con `billing` y
+tipos de cita con más de una sesión lo estrena sin comprar nada.
+
+### El estado sale de las citas, no de un número guardado
+
+`estadoDelBono` (`lib/billing/bonos.js`) devuelve `anulado`, `agotado` o `vivo`, y
+**no recibe el día de hoy**: un bono de 2023 con dos sesiones sin gastar sigue
+vivo, y eso es una decisión del centro. Las sesiones las cuenta `estadoPack`
+(`lib/citas/packs.js`), que es quien sabe qué cita gasta sesión y qué cita solo la
+reserva — una cancelada a tiempo no gasta. Las **reservadas** no dejan sesión
+libre: 10 sesiones con 3 dadas y 7 en la agenda es un bono sin libres.
+
+`lib/billing/bonosConSesiones.js` es lo que hace que eso se pueda pintar en una
+tabla: trae las citas de TODOS los bonos en una consulta y las reparte en memoria
+(`bonosDeCliente` hace una consulta por bono, que en una ficha con tres está bien
+y con 232 no).
+
+### El dinero: céntimos aquí, euros en el cobro
+
+`session_packs.amount` va en **céntimos** (como `EventType.price` y Stripe) y
+`payments.amount` en **euros**. La API de bonos y sus pantallas hablan en
+céntimos de punta a punta, igual que `/api/citas/packs`; la conversión vive solo
+en `lib/billing/cobroDelBono.js`, que es la frontera. Pasar el número tal cual ya
+hizo nacer una vez un bono de 150 € con un pendiente de 15.000 €.
+
+`null` y `0` no son lo mismo y se distinguen a propósito: `null` es «nadie ha
+dicho lo que vale» (sale en «sin importe» y no suma), `0` es un bono regalado a
+propósito. Ninguno de los dos crea cobro.
+
+### Qué le pasa a su cobro cuando el bono cambia
+
+`PATCH /api/billing/bonos/[id]` mantiene al día el pendiente, y lo dice en la
+respuesta (un ajuste de dinero silencioso es el que nadie revisa):
+
+- **Un cobro que ya es un hecho no se reescribe** (cobrado, facturado, con Stripe
+  o casado con el banco): `cobroSePuedeRehacer`, la misma regla que las cuotas.
+- **Anular el bono retira su pendiente**; lo ya cobrado se queda, porque pasó de
+  verdad (para devolverlo está «Devuelto» en Caja).
+- **Reactivarlo lo vuelve a poner** si el bono vale dinero y no le quedó ninguno.
+- Ponerle importe a un bono que no lo tenía **crea** su pendiente (el caso de
+  Rosa: los bonos se daban sin importe y no aparecían en Cobros).
+- Con el cobro **partido en varias filas** no se toca nada: repartir la diferencia
+  es una decisión de quien las partió.
+- Las sesiones **no se pueden bajar** por debajo de las ya usadas.
+- El **tipo de bono no se cambia**: sería otro bono, y las citas ya enganchadas
+  dejarían de cuadrar.
+
+### Piezas
+
+| | |
+| --- | --- |
+| **Pantallas** | `/facturacion/bonos` (todos, con filtros por tipo, estado y «sin cobrar»; cuadro de agotados y anulados abajo), `/facturacion/bonos/tipos` (los grupos), `/facturacion/bonos/tipos/[id]` (quién lo lleva + los que pasaron, y «Añadir al grupo») |
+| **Endpoints** | `GET/POST /api/billing/bonos` · `GET/PATCH /api/billing/bonos/[id]` · `POST /api/billing/bonos/[id]/renovar` · `GET /api/billing/bonos/tipos` (`?todos=1` para el desplegable del alta) · `GET /api/billing/bonos/tipos/[id]`. Todos gateados por `billing`, y el que escribe también por `puedeDarBonos` (`lib/citas/quienDaBonos.js`: dirección o quien lleve Facturación) |
+| **Lib** | `lib/billing/bonos.js` (puro: estado, validación, grupos, renovación, totales) · `lib/billing/bonosConSesiones.js` (servidor: los bonos con sus sesiones y su cobro) · `lib/billing/altaDeBono.js` (el bono y su cobro en la misma transacción) |
+| **Componentes** | `components/billing/DrawerBono.jsx` (alta, alta en un grupo y edición) · `components/billing/useAccionesDeBono.js` (anular, reactivar, renovar, con sus avisos) |
+| **Migración** | **ninguna**: la tabla y sus columnas ya estaban (`migrate-cobro-de-bono`, `traer-bonos-de-organizate`) |
+| **Pruebas** | `scripts/_smoke-bonos.mjs` (`node:test`, ligera, en `npm test`) |
+| **Auditoría** | `bono.created`, `bono.updated`, `bono.anulado`, `bono.renovado` (prefijo `bono` → Facturación en `lib/actividad/etiquetas.js`). No hay `bono.deleted`: un bono no se borra, se anula |
