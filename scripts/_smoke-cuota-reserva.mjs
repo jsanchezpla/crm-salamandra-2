@@ -30,7 +30,14 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { descuentoDeReserva, notaDeCobro, planDeCuotasDelMes } from "../lib/billing/cuotas.js";
+import {
+  descuentoDeReserva,
+  notaDeCobro,
+  planDeCuotasDelMes,
+  reservaDeLasCuotas,
+  reservaPendiente,
+} from "../lib/billing/cuotas.js";
+import { partesConProrrateo } from "../lib/billing/prorrateo.js";
 import { explicaCobro } from "../lib/billing/motivoDelCobro.js";
 
 const CONCEPTO = { id: "11111111-1111-1111-1111-111111111111", name: "Cuota Psicología 45x1", unitPrice: 145 };
@@ -178,5 +185,68 @@ describe("notaDeCobro con motivos", () => {
       notaDeCobro({ mes: "2026-09", conceptos: ["Logopedia 60x2"], motivos: ["Reserva de plaza ya abonada: −30 €"] }),
       "Cuota septiembre 2026 — Logopedia 60x2 — Reserva de plaza ya abonada: −30 €"
     );
+  });
+});
+
+describe("la reserva que ve el CAJÓN de cobros (10/09/2026)", () => {
+  /*
+   * EL CASO DE RODRIGO. «Debía 145 de logopedia 45x1. Hizo la reserva, por
+   * tanto se descontaron 30 euros. Como ha empezado tarde se ha partido en
+   * varias sesiones y debía 108,75 − 30 de reserva.»
+   *
+   * El cajón prorratea la TARIFA del catálogo (145 × 3/4 = 108,75) y hasta hoy
+   * ahí se quedaba: los 30 € que la familia ya había adelantado no entraban en
+   * la cuenta, así que proponía 108,75 € para un mes que valía 78,75 €. La
+   * generación mensual llevaba desde el 07/09 haciendo bien esta misma resta.
+   */
+  const CITAS = ["2026-09-10", "2026-09-17", "2026-09-24"].map((f) => ({
+    scheduledAt: `${f}T10:00:00.000Z`,
+    conceptId: CONCEPTO.id,
+  }));
+
+  const loQueProponeElCajon = (cuotas) => {
+    const bruto = partesConProrrateo(
+      [{ importe: CONCEPTO.unitPrice, inicio: "2026-09-10", fin: "", conceptId: CONCEPTO.id }],
+      { mes: "2026-09", citas: CITAS }
+    ).total;
+    const reserva = reservaDeLasCuotas(cuotas, "2026-09");
+    return Math.max(0, Math.round((bruto - Math.min(reserva, bruto)) * 100) / 100);
+  };
+
+  it("3 de 4 sesiones son 108,75 € de tarifa", () => {
+    assert.equal(loQueProponeElCajon([]), 108.75);
+  });
+
+  it("y con la reserva ya abonada, 78,75 €", () => {
+    assert.equal(loQueProponeElCajon([cuotaBase({ reservaAbonada: 30, reservaAplicadaEn: "2026-09" })]), 78.75);
+  });
+
+  it("una reserva gastada en otro mes no vuelve a descontarse", () => {
+    assert.equal(loQueProponeElCajon([cuotaBase({ reservaAbonada: 30, reservaAplicadaEn: "2026-08" })]), 108.75);
+  });
+});
+
+describe("reservaPendiente / reservaDeLasCuotas", () => {
+  it("sin reserva, o gastada en otro mes, no queda nada por descontar", () => {
+    assert.equal(reservaPendiente(cuotaBase(), "2026-09"), 0);
+    assert.equal(reservaPendiente(cuotaBase({ reservaAbonada: 0 }), "2026-09"), 0);
+    assert.equal(reservaPendiente(cuotaBase({ reservaAbonada: 30, reservaAplicadaEn: "2026-08" }), "2026-09"), 0);
+  });
+
+  it("sin gastar, o gastada en ESTE mes, quedan los 30 €", () => {
+    assert.equal(reservaPendiente(cuotaBase({ reservaAbonada: 30 }), "2026-09"), 30);
+    assert.equal(reservaPendiente(cuotaBase({ reservaAbonada: 30, reservaAplicadaEn: "2026-09" }), "2026-09"), 30);
+  });
+
+  it("con dos cuotas de la misma familia se suman", () => {
+    const dos = [cuotaBase({ reservaAbonada: 30 }), cuotaBase({ reservaAbonada: 30 })];
+    assert.equal(reservaDeLasCuotas(dos, "2026-09"), 60);
+    assert.equal(reservaDeLasCuotas([], "2026-09"), 0);
+    assert.equal(reservaDeLasCuotas(null, "2026-09"), 0);
+  });
+
+  it("dice lo mismo que `descuentoDeReserva` cuando cabe entero", () => {
+    const c = cuotaBase({ reservaAbonada: 30 });
+    assert.equal(reservaPendiente(c, "2026-09"), descuentoDeReserva(c, "2026-09", 145).importe);
   });
 });

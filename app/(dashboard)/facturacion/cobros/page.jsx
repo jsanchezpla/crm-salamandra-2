@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { hoyVigente, mesVigente } from "@/lib/billing/cuotas.js";
+import { hoyVigente, mesVigente, reservaDeLasCuotas } from "@/lib/billing/cuotas.js";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import Link from "next/link";
 import StatusBadge from "../_components/StatusBadge.jsx";
@@ -144,6 +144,23 @@ export default function CobrosPage() {
    * generarla otro.
    */
   const [citasDelMes, setCitasDelMes] = useState([]);
+  /*
+   * ── LA RESERVA DE PLAZA NO SE PRORRATEA (10/09/2026, Rodrigo) ─────────────
+   *
+   * «Debía 145 de logopedia. Hizo la reserva, por tanto se descontaron 30
+   * euros. Como ha empezado tarde se ha partido en varias sesiones y debía
+   * 108,75 − 30 de reserva. El CRM no ha contado la reserva.»
+   *
+   * Los 30 € que la familia adelantó en verano viven en la CUOTA
+   * (`reservaAbonada`) y la generación mensual los resta ENTEROS después de
+   * prorratear (`planDeCuotasDelMes`). Este cajón prorrateaba la tarifa del
+   * catálogo y los dejaba por el camino: al teclear «Empezó el» proponía
+   * 108,75 € donde el mes valía 78,75 €.
+   *
+   * Aquí se guarda lo que le queda por descontar a ESTE mes; la resta va donde
+   * se calcula el importe y nunca deja el total por debajo de cero.
+   */
+  const [reservaDelMes, setReservaDelMes] = useState(0);
 
   const conceptosElegidos = lineasCuota
     .map(({ id, inicio, fin }) => {
@@ -158,13 +175,24 @@ export default function CobrosPage() {
     conceptosElegidos.map(({ c, inicio, fin }) => ({ importe: Number(c.unitPrice || 0), inicio, fin, conceptId: c.id })),
     { mes: form.periodMonth, citas: citasDelMes }
   );
+  /*
+   * Y menos la reserva de plaza ya abonada, entera y fuera del prorrateo: es la
+   * misma cuenta que hace la generación del mes. Nunca por debajo de cero (una
+   * cuota de 25 € con 30 € de reserva no se cobra en negativo).
+   */
+  const sinLaReserva = (total, reserva = reservaDelMes) => {
+    const bruto = Number(total) || 0;
+    const cabe = Math.min(Number(reserva) || 0, Math.max(0, bruto));
+    return Math.max(0, Math.round((bruto - cabe) * 100) / 100);
+  };
+  const totalCuota = sinLaReserva(cuentaCuota.total);
 
   // El importe se rellena solo al tocar conceptos o fecha de inicio, desde el
   // HANDLER (no un efecto): así un importe retocado a mano solo se pisa cuando
   // el usuario vuelve a tocar la composición de la cuota.
   // Devuelve el total además de escribirlo: el efecto de abajo necesita el
   // importe ESPERADO del mes para restarle lo que ya se cobró (04/09/2026).
-  function totalDeItems(items) {
+  function totalDeItems(items, reserva = reservaDelMes) {
     const partes = (items ?? [])
       .map(({ id, inicio, fin }) => {
         const c = conceptosCatalogo.find((c2) => String(c2.id) === String(id));
@@ -172,10 +200,12 @@ export default function CobrosPage() {
       })
       .filter(Boolean);
     if (!partes.length) return null;
-    return partesConProrrateo(partes, { mes: form.periodMonth, citas: citasDelMes }).total;
+    // `reserva` viaja a mano porque el efecto que carga las cuotas llama a esto
+    // en el mismo turno en que la calcula: el estado todavía no se ha asentado.
+    return sinLaReserva(partesConProrrateo(partes, { mes: form.periodMonth, citas: citasDelMes }).total, reserva);
   }
-  function aplicarImporteCuota(items) {
-    const total = totalDeItems(items);
+  function aplicarImporteCuota(items, reserva = reservaDelMes) {
+    const total = totalDeItems(items, reserva);
     if (total === null) return null;
     setForm((f) => ({ ...f, amount: String(total) }));
     return total;
@@ -307,6 +337,30 @@ export default function CobrosPage() {
     Math.round(pendientesDelMes.reduce((t, p) => t + Number(p.amount || 0), 0) * 100) / 100;
 
   /*
+   * ── EL MES PASA A VALER LO QUE SE ACABA DE PRORRATEAR (10/09/2026) ────────
+   *
+   * Con «Empezó el» (o «Acabó el») puesto, este importe NO es «una parte de lo
+   * que la familia debe»: es lo que ese mes cuesta de verdad. El cobro que el
+   * CRM generó el día 1 no podía saberlo —la cuota empieza el 1 y nadie le dijo
+   * que el paciente entró el 10—, así que pide de más.
+   *
+   * Si se cobra sin corregirlo, la fila se PARTE (`cobroParcial.js`) y queda
+   * pendiente una diferencia que nadie debe: eso es lo que dejó a cinco
+   * familias de Aumenta debiendo entre 6,25 € y 95 € en septiembre. Va al
+   * servidor como `importeDelMes` y allí se corrige el pendiente ANTES de
+   * cobrarlo.
+   */
+  const mesProrrateado =
+    form.modo === "cuota" && !cuotaDeLaCita && cuentaCuota.hayProrrateo && totalCuota > 0 ? totalCuota : null;
+  // Solo a la baja, igual que el servidor: un tramo tecleado corrige de menos
+  // lo que se pidió de más, pero nunca le sube sola la deuda a una familia.
+  const corrigeElPendiente =
+    mesProrrateado != null &&
+    pendientesDelMes.length === 1 &&
+    sumaPendientes - mesProrrateado >= 0.005;
+  const loQuePideElMes = corrigeElPendiente ? mesProrrateado : sumaPendientes;
+
+  /*
    * ── SI TRAEN MENOS, EL RESTO SE QUEDA PENDIENTE (10/09/2026, Rodrigo: «si me
    *    pagan la mitad, debería quedar pendiente de pago lo restante») ─────────
    *
@@ -334,7 +388,7 @@ export default function CobrosPage() {
     if (esperadoDeLaCuota?.pactado && esperadoDeLaCuota.tarifa != null) return esperadoDeLaCuota.tarifa;
     // Si no, lo que suman los conceptos que se están viendo, con su prorrateo:
     // es lo que el usuario tiene delante y lo que puede corregir con la ✕.
-    return Number(cuentaCuota.total) || 0;
+    return Number(totalCuota) || 0;
   })();
   const restoQueQueda = restoQueSeQuedaPendiente({
     esperado: loQueTocaba,
@@ -398,6 +452,7 @@ export default function CobrosPage() {
     setCobradosDelMes([]);
     setEsperadoDeLaCuota(null);
     setCitasDelMes([]);
+    setReservaDelMes(0);
     setForm((f) => (f.amount === "" ? f : { ...f, amount: "" }));
     if (!form.clientId || !conceptosCatalogo.length) return;
 
@@ -415,6 +470,9 @@ export default function CobrosPage() {
        * con su prueba; Facturas ya la usaba.
        */
       const cuotas = cuotasQueEntran(todas, form.patientId);
+      // Lo que la reserva de plaza ya abonada le quita a este mes (10/09/2026).
+      const reserva = reservaDeLasCuotas(cuotas, form.periodMonth);
+      setReservaDelMes(reserva);
       // Aparte y para el botón «Cambiar el importe»: ver `enlaceALaCuota`.
       setCuotasFamilia(
         cuotas.length
@@ -495,7 +553,7 @@ export default function CobrosPage() {
       const pactado = suelta ? null : importePactado(cuotas);
       let esperado;
       if (pactado !== null) { esperado = pactado; setForm((f) => ({ ...f, amount: String(pactado) })); }
-      else esperado = aplicarImporteCuota(items);
+      else esperado = aplicarImporteCuota(items, reserva);
 
       /*
        * Y AHORA SE LE RESTA LO QUE YA ENTRÓ ESTE MES. Va al final a propósito:
@@ -945,6 +1003,12 @@ export default function CobrosPage() {
           // Esto es lo de UNA cita y no la cuota del mes (un diagnóstico, un
           // informe): que no dé por cobrado el pendiente de la mensualidad.
           suelto: Boolean(cuotaDeLaCita),
+          /*
+           * LO QUE VALE EL MES cuando se acaba de prorratear aquí (10/09/2026):
+           * el servidor corrige con esto el cobro pendiente antes de cobrarlo,
+           * para que no se quede a deber una diferencia que no existe.
+           */
+          importeDelMes: mesProrrateado,
           // Y lo que falta, si falta y se quiere reclamar.
           restoPendiente: !porFactura && dejarResto && restoQueQueda > 0 ? restoQueQueda : null,
         }),
@@ -1758,13 +1822,25 @@ export default function CobrosPage() {
                         <span className="tabular font-semibold">{fmtMoney(sumaPendientes)}</span>
                       </div>
                     )}
+                    {/* El tramo que se acaba de teclear cambia lo que vale el
+                        mes: se dice ANTES de registrar, con las dos cifras
+                        delante, porque lo que se corrige es un cobro que ya
+                        estaba escrito (10/09/2026). */}
+                    {corrigeElPendiente && (
+                      <p className="text-[11px] text-neutral-700 mt-1.5">
+                        Con el tramo que has puesto, este mes vale{" "}
+                        <strong className="tabular">{fmtMoney(mesProrrateado)}</strong> y no{" "}
+                        <span className="tabular">{fmtMoney(sumaPendientes)}</span>: al registrar se corrige el cobro
+                        pendiente, así que no queda a deber la diferencia.
+                      </p>
+                    )}
                     {/* La frase dice QUÉ HACER, no qué pasa: «pone que si se cambia
                         el importe se genera un cobro nuevo y se deja el antiguo????»
                         (Rosa, 08/09/2026). Lo que asusta va después y como
                         consecuencia, no como amenaza. */}
                     <p className="text-[11px] text-neutral-700 font-medium mt-1.5">
                       {pendientesDelMes.length === 1
-                        ? `Para saldarlo, deja los ${fmtMoney(sumaPendientes)} y pulsa Registrar.`
+                        ? `Para saldarlo, deja los ${fmtMoney(loQuePideElMes)} y pulsa Registrar.`
                         : `Para saldar los ${pendientesDelMes.length}, deja los ${fmtMoney(sumaPendientes)} y pulsa Registrar.`}
                     </p>
                     <p className="text-[10px] text-neutral-500 mt-0.5">

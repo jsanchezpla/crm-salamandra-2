@@ -182,6 +182,15 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
        */
       suelto,
       restoPendiente,
+      /*
+       * `importeDelMes` lo que vale ese mes cuando el cajón acaba de
+       *           prorratearlo («Empezó el», «Acabó el»). El cobro pendiente
+       *           nació el día 1, cuando nadie sabía que el paciente entraba el
+       *           10: sin esto la fila se parte contra el importe viejo y queda
+       *           a deber una diferencia que no existe. Solo corrige a la baja
+       *           (ver `lib/billing/cobroParcial.js`).
+       */
+      importeDelMes,
     } = body;
 
     // COBRO SIN FACTURA (sprint Aumenta 2026-07, punto 8): en el centro se
@@ -293,7 +302,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
          * que el centro espera ver en Cobros. La regla, con su prueba, en
          * `lib/billing/cobroParcial.js`.
          */
-        const decision = decidirCobroDelPendiente({ pendiente: p.amount, importe });
+        const decision = decidirCobroDelPendiente({ pendiente: p.amount, importe, importeDelMes });
         if (decision.accion === "partir") {
           /*
            * El resto se queda en la fila que YA existía (misma cuota, mismo
@@ -329,6 +338,11 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
         payment = p;
         cobradosPendientes = [p.id];
         }
+        /*
+         * Con VARIOS pendientes no se corrige nada con `importeDelMes`: esa
+         * cifra es la del mes entero y no dice cuánto le toca a cada fila, así
+         * que repartirla sería inventárselo. Se sigue con lo de siempre.
+         */
       } else if (pendientes.length > 1 && Math.abs(suma - importe) < 0.005) {
         for (const p of pendientes) {
           await p.update({ status: "completed", paidAt, method, notes: notes ? `${p.notes ? `${p.notes} — ` : ""}${notes}` : p.notes });

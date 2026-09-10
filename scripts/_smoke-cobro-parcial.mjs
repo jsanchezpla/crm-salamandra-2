@@ -23,7 +23,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { decidirCobroDelPendiente, pendienteQueCasa } from "../lib/billing/cobroParcial.js";
+import { decidirCobroDelPendiente, pendienteQueCasa, pedidoDelMes } from "../lib/billing/cobroParcial.js";
 
 describe("cobrar menos de lo que pide la fila", () => {
   it("EL CASO DEL FALLO: 100 € de un pendiente de 160 € deja 60 € pendientes", () => {
@@ -137,5 +137,53 @@ describe("cuál de los pendientes se está pagando", () => {
   it("un céntimo de diferencia no es el mismo cobro", () => {
     assert.equal(pendienteQueCasa(pendientes, 260.02), null);
     assert.equal(pendienteQueCasa(pendientes, 259.999)?.id, "logo");
+  });
+});
+
+describe("el mes vale menos de lo que pide la fila (10/09/2026)", () => {
+  /*
+   * EL CASO REAL. Logopedia 45x1 = 145 €, la familia había pagado 30 € de
+   * reserva de plaza, y el niño empieza el 10 de septiembre: 3 de las 4
+   * sesiones del mes. El mes vale 145 × 3/4 − 30 = 78,75 €, pero el cobro que
+   * el CRM generó el día 1 pedía 115 € (la cuota entera menos la reserva),
+   * porque entonces nadie sabía que iba a entrar tarde.
+   *
+   * Sin `importeDelMes`, pagar los 78,75 € correctos partía la fila y dejaba
+   * 36,25 € pendientes que nadie debe. Con él, el mes queda cerrado.
+   */
+  it("pagar el mes prorrateado lo cierra, no deja resto", () => {
+    const r = decidirCobroDelPendiente({ pendiente: 115, importe: 78.75, importeDelMes: 78.75 });
+    assert.equal(r.accion, "cobrar-entero");
+    assert.equal(r.cobrado, 78.75);
+    assert.equal(r.restoPendiente, 0);
+    assert.equal(r.pedia, 78.75);
+  });
+
+  it("y si traen menos, el resto es contra el mes corregido", () => {
+    const r = decidirCobroDelPendiente({ pendiente: 115, importe: 40, importeDelMes: 78.75 });
+    assert.equal(r.accion, "partir");
+    assert.equal(r.cobrado, 40);
+    assert.equal(r.restoPendiente, 38.75);
+  });
+
+  it("SOLO A LA BAJA: un mes más caro no le sube la deuda a nadie", () => {
+    const r = decidirCobroDelPendiente({ pendiente: 115, importe: 115, importeDelMes: 145 });
+    assert.equal(r.accion, "cobrar-entero");
+    assert.equal(r.restoPendiente, 0);
+    assert.equal(r.pedia, 115);
+  });
+
+  it("sin decir lo que vale el mes, todo sigue como estaba", () => {
+    for (const nada of [null, undefined, 0, "", NaN]) {
+      const r = decidirCobroDelPendiente({ pendiente: 160, importe: 100, importeDelMes: nada });
+      assert.equal(r.restoPendiente, 60, `con importeDelMes = ${String(nada)}`);
+    }
+  });
+
+  it("pedidoDelMes se queda con la cifra menor de las dos", () => {
+    assert.equal(pedidoDelMes({ pendiente: 115, importeDelMes: 78.75 }), 78.75);
+    assert.equal(pedidoDelMes({ pendiente: "115.00", importeDelMes: "78.75" }), 78.75);
+    assert.equal(pedidoDelMes({ pendiente: 115, importeDelMes: 200 }), 115);
+    assert.equal(pedidoDelMes({ pendiente: 115 }), 115);
   });
 });
