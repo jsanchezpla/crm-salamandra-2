@@ -37,6 +37,10 @@ const METODOS = [
   { value: "cash", label: "Efectivo" },
 ];
 const METODO_CORTO = { transfer: "Banco", direct_debit: "Domiciliación", card: "Tarjeta", cash: "Efectivo" };
+// «Ninguno» solo existe en el alta y la edición de UNA cuota: en el filtro de
+// arriba ya está «Todos los métodos», y en «Qué generar» un botón vacío no
+// significa nada (sin elegir ninguno entran todas).
+const SIN_METODO = { value: "", label: "Ninguno" };
 
 /*
  * «Durante N meses y luego de baja» (01/09/2026, Rodrigo). La casilla de fecha
@@ -63,7 +67,11 @@ const CUOTA_VACIA = () => ({
   // mes (09/09/2026). Vacío = no pagó ninguna, que es lo normal.
   reservaAbonada: "",
   payerClientId: "",
-  method: "transfer",
+  // NINGUNO de salida (10/09/2026, Rodrigo): una cuota nueva no puede dar por
+  // supuesto que se cobra por banco. Vacío = nadie lo ha dicho todavía, y el
+  // lote mensual avisa en pantalla de cuántas van a heredar el método por
+  // defecto antes de generar nada.
+  method: "",
   dayOfMonth: "",
   startDate: hoyIso(),
   endDate: "",
@@ -721,7 +729,7 @@ function DrawerCuota({ conceptos, cuota = null, inicial = null, ivaSugerido = 21
           conceptIds: Array.isArray(cuota.conceptIds) ? cuota.conceptIds.map(String) : [],
           amount: cuota.amount ?? "",
           reservaAbonada: cuota.reservaAbonada ?? "",
-          method: cuota.method ?? "transfer",
+          method: cuota.method ?? "",
           dayOfMonth: cuota.dayOfMonth ?? "",
           startDate: String(cuota.startDate ?? "").slice(0, 10),
           endDate: cuota.endDate ? String(cuota.endDate).slice(0, 10) : "",
@@ -1012,8 +1020,12 @@ function DrawerCuota({ conceptos, cuota = null, inicial = null, ivaSugerido = 21
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Cómo se cobra</label>
                 <Select value={form.method} onChange={(v) => setForm((f) => ({ ...f, method: v }))}
-                  options={METODOS} className={inputCls} />
-                <p className="text-[10px] text-neutral-400">Es lo que permite generar «solo las de banco».</p>
+                  options={[SIN_METODO, ...METODOS]} className={inputCls} />
+                <p className="text-[10px] text-neutral-400">
+                  {form.method
+                    ? "Es lo que permite generar «solo las de banco»."
+                    : "Sin decidir: entra en todos los lotes y el cobro nace con el método por defecto."}
+                </p>
               </div>
             </div>
 

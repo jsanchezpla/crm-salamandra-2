@@ -44,6 +44,8 @@ const METODOS = [
   { value: "cash", label: "Efectivo" },
 ];
 const METODO_CORTO = { transfer: "Banco", direct_debit: "Domiciliación", card: "Tarjeta", cash: "Efectivo" };
+// Una cuota puede no tener método: es lo que sale de salida (10/09/2026).
+const SIN_METODO = { value: "", label: "Ninguno" };
 
 /** El color de la casilla del mes dice en qué estado está ese cobro. */
 const ESTADO = {
@@ -630,7 +632,8 @@ function Leyenda({ clase, texto }) {
 function CajonAnadir({ tipo, onClose, onHecho }) {
   const [destinatarios, setDestinatarios] = useState([]);
   const [form, setForm] = useState({
-    method: "transfer",
+    // Ninguno de salida: dar el alta no es decidir cómo se le cobra.
+    method: "",
     dayOfMonth: "",
     startDate: hoyVigente(),
     amount: "",
@@ -652,7 +655,7 @@ function CajonAnadir({ tipo, onClose, onHecho }) {
         body: JSON.stringify({
           conceptIds: [tipo.id],
           amount: form.amount === "" ? null : Number(form.amount),
-          method: form.method,
+          method: form.method || null,
           dayOfMonth: form.dayOfMonth === "" ? null : Number(form.dayOfMonth),
           startDate: form.startDate,
           notes: form.notes || null,
@@ -727,7 +730,7 @@ function CajonAnadir({ tipo, onClose, onHecho }) {
               <Select
                 value={form.method}
                 onChange={(v) => setForm({ ...form, method: v })}
-                options={METODOS}
+                options={[SIN_METODO, ...METODOS]}
                 className={inputCls}
               />
             </label>
