@@ -2445,3 +2445,35 @@ respuesta (un ajuste de dinero silencioso es el que nadie revisa):
 | **Migración** | **ninguna**: la tabla y sus columnas ya estaban (`migrate-cobro-de-bono`, `traer-bonos-de-organizate`) |
 | **Pruebas** | `scripts/_smoke-bonos.mjs` (`node:test`, ligera, en `npm test`) |
 | **Auditoría** | `bono.created`, `bono.updated`, `bono.anulado`, `bono.renovado` (prefijo `bono` → Facturación en `lib/actividad/etiquetas.js`). No hay `bono.deleted`: un bono no se borra, se anula |
+
+## Un buscador en el arqueo (10/09/2026)
+
+Rodrigo: «necesito un buscador en la parte de arqueo». La pestaña de Cierres
+pintaba TODOS los de la caja —Aumenta lleva 828 importados de Organízate más
+los que haga cada día— y la única manera de llegar a uno era bajar por la tabla
+con el ratón; las entradas y salidas tenían el rango de fechas, que sirve para
+ver una semana pero no para encontrar «el sobre al banco» entre doscientos
+apuntes.
+
+- **Regla en `lib/billing/busquedaArqueo.js`** (`whereDeBusquedaCierres`,
+  `whereDeBusquedaMovimientos`, `colgarBusqueda`; prueba
+  `scripts/_smoke-busqueda-arqueo.mjs`, ligera). Se resuelve en el SERVIDOR,
+  como en Cobros: filtrar en el navegador solo mira lo ya descargado.
+- **Todas las palabras, cada una en cualquier campo, y sin exigir tildes**
+  (reutiliza `patronDePalabra` de `busquedaCobros.js`). En los cierres: motivo,
+  quién cerró, día e importes. En los apuntes: concepto, observaciones, quién lo
+  apuntó, día, importe y la palabra «entrada» o «salida», que filtra
+  `direction` como «tarjeta» filtra `method` en Cobros.
+- **Por día, escribiéndolo**: «31/07/2026», «31/07», «2026-07» o «2026» —dos
+  `to_char` (`DD/MM/YYYY` y `YYYY-MM-DD`) más el año por igualdad—. ⚠️ Un
+  número de una o dos cifras NO se busca como fecha: «20» casaría el «2026» de
+  todos los cierres del año y el buscador devolvería la tabla entera.
+- **Por importe, solo si la palabra ES un número, y por igualdad**: con un LIKE,
+  «20» pescaba 120,50. Del descuadre se busca su TAMAÑO (`abs`): faltar 20 y
+  sobrar 20 son el mismo 20 para quien busca.
+- La pantalla manda `q` 300 ms después de la última tecla y el `where` mira una
+  columna del JOIN (`$closedBy.display_name$`), así que la consulta lleva
+  `subQuery: false` cuando hay búsqueda. En Cierres, además, el rango de fechas
+  que el endpoint YA entendía y la pantalla no ofrecía, la casilla de
+  descuadres y un «Quitar filtros»; con algo puesto, la tabla vacía dice que no
+  hay ninguno que case y no que nunca se haya cerrado la caja.

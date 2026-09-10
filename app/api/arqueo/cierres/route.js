@@ -5,6 +5,7 @@ import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMemb
 import { Op } from "sequelize";
 import { saldoDeMovimientos, esperadoAlCerrar, fondoSugerido } from "../../../../lib/billing/caja.js";
 import { madridDayRange } from "../../../../lib/utils/madridDate.js";
+import { whereDeBusquedaCierres, colgarBusqueda } from "../../../../lib/billing/busquedaArqueo.js";
 
 /**
  * Cierres de caja (arqueo).
@@ -195,9 +196,25 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   else if (hasta) where.closeDate = { [Op.lte]: hasta };
   if (soloDescuadres) where.difference = { [Op.ne]: 0 };
 
+  /*
+   * EL BUSCADOR (10/09/2026, Rodrigo: «necesito un buscador en la parte de
+   * arqueo»). Aumenta tiene 828 cierres importados de Organízate más los que
+   * hace cada día, y llegar a uno era bajar por la tabla con el ratón. Se
+   * busca por día, por motivo, por quién cerró y por importe; la regla vive en
+   * `lib/billing/busquedaArqueo.js`.
+   *
+   * En el SERVIDOR y no en el navegador: filtrar allí solo mira los cierres
+   * que ya se han pintado, que es el agujero que ya se pagó en Cobros.
+   */
+  const busqueda = whereDeBusquedaCierres(searchParams.get("q"));
+  colgarBusqueda(where, busqueda);
+
   const cierres = await CashClose.findAll({
     where,
     order: [["closeDate", "DESC"]],
+    // Buscando por persona, el `where` mira una columna del JOIN
+    // (`$closedBy.display_name$`) y sin esto Sequelize no la ve.
+    ...(busqueda ? { subQuery: false } : {}),
     include: [
       { model: CashPoint, as: "cashPoint", attributes: ["id", "name"] },
       { model: TeamMember, as: "closedBy", attributes: ["id", "displayName"] },

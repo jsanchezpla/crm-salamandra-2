@@ -36,6 +36,23 @@ export default function ArqueoPage() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const [soloDescuadres, setSoloDescuadres] = useState(false);
+  /*
+   * ── EL BUSCADOR (10/09/2026, Rodrigo: «necesito un buscador en la parte de
+   * arqueo») ────────────────────────────────────────────────────────────────
+   *
+   * La tabla pintaba TODOS los cierres de la caja —828 en Aumenta, importados
+   * de Organízate, más los de cada día— y para llegar a uno había que bajar
+   * con el ratón. Se busca por día, motivo, quién cerró e importe, y además
+   * por rango de fechas, que el endpoint ya entendía y la pantalla no ofrecía.
+   *
+   * Lo resuelve el SERVIDOR (`lib/billing/busquedaArqueo.js`): filtrar en el
+   * navegador solo miraría lo ya descargado. Se manda 300 ms después de la
+   * última tecla, como en Cobros, para no pedir una consulta por letra.
+   */
+  const [buscaInput, setBuscaInput] = useState("");
+  const [busca, setBusca] = useState("");
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
   // Tres cosas distintas sobre el mismo cajon: los cierres de siempre, los
   // apuntes de entrada/salida y el resumen por dia (01/09/2026). Pestanas y no
   // tres pantallas: se miran seguidas, cuadrando el dia.
@@ -80,6 +97,9 @@ export default function ArqueoPage() {
     try {
       const qs = new URLSearchParams({ cajaId });
       if (soloDescuadres) qs.set("soloDescuadres", "1");
+      if (busca) qs.set("q", busca);
+      if (desde) qs.set("desde", desde);
+      if (hasta) qs.set("hasta", hasta);
       const r = await fetch(`/api/arqueo/cierres?${qs}`, { cache: "no-store" });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || "No se pudieron cargar los cierres");
@@ -95,7 +115,7 @@ export default function ArqueoPage() {
     } finally {
       setLoading(false);
     }
-  }, [cajaId, soloDescuadres]);
+  }, [cajaId, soloDescuadres, busca, desde, hasta]);
 
   useEffect(() => {
     cargarCajas();
@@ -103,6 +123,12 @@ export default function ArqueoPage() {
   useEffect(() => {
     cargarCierres();
   }, [cargarCierres]);
+
+  // Lo escrito se manda 300 ms después de la última tecla.
+  useEffect(() => {
+    const id = setTimeout(() => setBusca(buscaInput.trim()), 300);
+    return () => clearTimeout(id);
+  }, [buscaInput]);
 
   async function crearCaja(e) {
     e.preventDefault();
@@ -137,6 +163,13 @@ export default function ArqueoPage() {
    * el del último cierre de todos). Mientras llega su respuesta, el de ayer.
    */
   const fondoDelDia = previo?.fondo ?? fondoDeAyer;
+
+  /*
+   * ¿Hay algo puesto? Con un filtro, una tabla vacía no quiere decir «aquí no
+   * se cierra la caja» sino «no hay ninguno que case», y son dos frases
+   * distintas. También decide si se ofrece quitar los filtros.
+   */
+  const filtrando = Boolean(busca || desde || hasta || soloDescuadres);
 
   function abrirCierre() {
     setForm({
@@ -321,11 +354,40 @@ export default function ArqueoPage() {
               </button>
             ))}
           </div>
-          {vista === "cierres" && (
-            <label className="flex items-center gap-2 text-[12.5px] text-neutral-600">
-              <input type="checkbox" checked={soloDescuadres} onChange={(e) => setSoloDescuadres(e.target.checked)} />
-              Solo los días que no cuadraron
-            </label>
+        </div>
+      )}
+
+      {/* ── BUSCAR UN CIERRE (10/09/2026, Rodrigo) ─────────────────────────
+          El buscador y el rango de fechas van juntos porque contestan a lo
+          mismo: llegar a un día concreto. Escribir «31/07» basta; las dos
+          casillas de fecha son para mirar un tramo entero. */}
+      {cajas.length > 0 && vista === "cierres" && (
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={buscaInput}
+            onChange={(e) => setBuscaInput(e.target.value)}
+            placeholder="Buscar por día, motivo, quién cerró o importe…"
+            className="rounded-lg px-3 py-1.5 text-[12.5px] text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition w-full sm:w-80 placeholder-neutral-300"
+          />
+          <label className="flex items-center gap-1.5 text-[12px] text-neutral-500">
+            Desde
+            <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className={`${inputCls} py-1.5`} />
+          </label>
+          <label className="flex items-center gap-1.5 text-[12px] text-neutral-500">
+            Hasta
+            <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className={`${inputCls} py-1.5`} />
+          </label>
+          <label className="flex items-center gap-2 text-[12.5px] text-neutral-600">
+            <input type="checkbox" checked={soloDescuadres} onChange={(e) => setSoloDescuadres(e.target.checked)} />
+            Solo los días que no cuadraron
+          </label>
+          {filtrando && (
+            <button
+              onClick={() => { setBuscaInput(""); setBusca(""); setDesde(""); setHasta(""); setSoloDescuadres(false); }}
+              className="text-[12px] px-2.5 py-1.5 rounded-lg border border-neutral-200 text-neutral-500 hover:bg-neutral-50 transition"
+            >
+              Quitar filtros
+            </button>
           )}
         </div>
       )}
@@ -375,7 +437,11 @@ export default function ArqueoPage() {
               {!loading && cierres.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-3 py-8 text-center text-neutral-400">
-                    {soloDescuadres ? "Ningún cierre con descuadre. Buena señal." : "Todavía no se ha cerrado ninguna caja."}
+                    {busca || desde || hasta
+                      ? "Ningún cierre casa con lo que buscas. Prueba con el día («31/07»), el motivo o el importe."
+                      : soloDescuadres
+                        ? "Ningún cierre con descuadre. Buena señal."
+                        : "Todavía no se ha cerrado ninguna caja."}
                   </td>
                 </tr>
               )}

@@ -26,6 +26,14 @@ export default function MovimientosCaja({ cajaId, cajas = [] }) {
   const [hasta, setHasta] = useState(hoy());
   const [cargando, setCargando] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
+  /*
+   * El buscador (10/09/2026, Rodrigo). Las fechas sirven para ver una semana;
+   * encontrar «el sobre del banco» entre doscientos apuntes, no. Busca por
+   * concepto, observaciones, quién lo apuntó, día, importe y la palabra
+   * «entrada» o «salida» — la regla, en `lib/billing/busquedaArqueo.js`.
+   */
+  const [buscaInput, setBuscaInput] = useState("");
+  const [busca, setBusca] = useState("");
 
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ direction: "out", date: hoy(), amount: "", concept: "", notes: "" });
@@ -38,6 +46,7 @@ export default function MovimientosCaja({ cajaId, cajas = [] }) {
     setErrorMsg(null);
     try {
       const qs = new URLSearchParams({ cajaId, desde, hasta });
+      if (busca) qs.set("q", busca);
       const r = await fetch(`/api/arqueo/movimientos?${qs}`, { cache: "no-store" });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || "No se pudieron cargar los movimientos");
@@ -48,9 +57,15 @@ export default function MovimientosCaja({ cajaId, cajas = [] }) {
     } finally {
       setCargando(false);
     }
-  }, [cajaId, desde, hasta]);
+  }, [cajaId, desde, hasta, busca]);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  // 300 ms después de la última tecla, como en Cobros.
+  useEffect(() => {
+    const id = setTimeout(() => setBusca(buscaInput.trim()), 300);
+    return () => clearTimeout(id);
+  }, [buscaInput]);
 
   async function guardar(e) {
     e.preventDefault();
@@ -89,6 +104,12 @@ export default function MovimientosCaja({ cajaId, cajas = [] }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={buscaInput}
+            onChange={(e) => setBuscaInput(e.target.value)}
+            placeholder="Buscar por concepto, quién lo apuntó, día o importe…"
+            className="rounded-lg px-3 py-1.5 text-[12.5px] text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition w-full sm:w-72 placeholder-neutral-300"
+          />
           <label className="flex items-center gap-1.5 text-[12px] text-neutral-500">
             Desde
             <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className={`${inputCls} py-1.5`} />
@@ -130,7 +151,9 @@ export default function MovimientosCaja({ cajaId, cajas = [] }) {
               {cargando && <tr><td colSpan={6} className="px-3 py-6 text-center text-neutral-400">Cargando…</td></tr>}
               {!cargando && movimientos.length === 0 && (
                 <tr><td colSpan={6} className="px-3 py-8 text-center text-neutral-400">
-                  Sin entradas ni salidas en estas fechas.
+                  {busca
+                    ? "Ningún apunte casa con lo que buscas en estas fechas."
+                    : "Sin entradas ni salidas en estas fechas."}
                 </td></tr>
               )}
               {!cargando && movimientos.map((m) => {

@@ -4,6 +4,7 @@ import { ok, created, forbidden, error, notFound } from "../../../../lib/utils/a
 import { auditar, datosPeticion, resumen } from "../../../../lib/utils/auditoria.js";
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
 import { limpiarMovimiento, saldoDeMovimientos } from "../../../../lib/billing/caja.js";
+import { whereDeBusquedaMovimientos, colgarBusqueda } from "../../../../lib/billing/busquedaArqueo.js";
 
 /**
  * Entradas y salidas de caja (01/09/2026, petición de Aumenta: «poder hacer
@@ -34,10 +35,22 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     where.direction = searchParams.get("direccion");
   }
 
+  /*
+   * EL BUSCADOR (10/09/2026, Rodrigo). El rango de fechas sirve para ver una
+   * semana; encontrar «el sobre del banco» entre doscientos apuntes, no. Busca
+   * por concepto, observaciones, quién lo apuntó, día, importe y la palabra
+   * «entrada» o «salida» (`lib/billing/busquedaArqueo.js`).
+   */
+  const busqueda = whereDeBusquedaMovimientos(searchParams.get("q"));
+  colgarBusqueda(where, busqueda);
+
   const movimientos = await CashMovement.findAll({
     where,
     order: [["date", "DESC"], ["createdAt", "DESC"]],
     limit: Math.min(500, Number(searchParams.get("limit") || 200)),
+    // Buscando por persona, el `where` mira una columna del JOIN
+    // (`$createdBy.display_name$`) y sin esto Sequelize no la ve.
+    ...(busqueda ? { subQuery: false } : {}),
     include: [
       { model: CashPoint, as: "cashPoint", attributes: ["id", "name"] },
       { model: TeamMember, as: "createdBy", attributes: ["id", "displayName"] },
