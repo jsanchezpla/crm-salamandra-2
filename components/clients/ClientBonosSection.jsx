@@ -35,7 +35,8 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { useDialogo } from "../ui/Dialogo.jsx";
-import { eurosToCents } from "../../lib/payments/money.js";
+import DrawerBono from "../billing/DrawerBono.jsx";
+import { eurosToCents, centsToEuros } from "../../lib/payments/money.js";
 
 import { puedeDarBonos } from "../../lib/citas/quienDaBonos.js";
 import { packsParaPaciente } from "../../lib/citas/bonoDelPaciente.js";
@@ -88,8 +89,23 @@ export default function ClientBonosSection({ clientId, patientId = null, onCambi
   const [pacientes, setPacientes] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [abierto, setAbierto] = useState(false);
+  /*
+   * Corregir un bono ya dado (10/09/2026, Rodrigo: «debería poderse editar el
+   * bono una vez hecho»). El cajón es el MISMO de Facturación
+   * (`components/billing/DrawerBono.jsx`): allí vive la regla de que al cambiar
+   * el importe su cobro pendiente se entere, y un segundo formulario aquí
+   * acabaría dejando bonos de 180 € con un pendiente de 150 en Cobros.
+   *
+   * Solo para quien lleva Facturación, porque es su endpoint (PATCH
+   * `/api/billing/bonos/[id]` responde 403 sin el módulo): dirección sin
+   * Facturación puede dar y quitar bonos, pero no reescribir su dinero.
+   */
+  const [editando, setEditando] = useState(null);
+  const [llevaFacturacion, setLlevaFacturacion] = useState(false);
+  const [abriendo, setAbriendo] = useState(null);
   const [quitando, setQuitando] = useState(null);
   const [falloQuitar, setFalloQuitar] = useState(null);
+  const [okMsg, setOkMsg] = useState(null);
   const { confirmar, dialogo } = useDialogo();
 
   const cargar = useCallback(() => {
@@ -127,6 +143,7 @@ export default function ClientBonosSection({ clientId, patientId = null, onCambi
         // Dirección o quien lleve Facturación (07/09/2026): la misma regla que el endpoint.
         const mods = Array.isArray(yo?.data?.enabledModules) ? yo.data.enabledModules : [];
         setEsAdmin(puedeDarBonos({ role: yo?.data?.role, hasModule: (k) => mods.includes(k) }));
+        setLlevaFacturacion(mods.includes("billing"));
       })
       .catch(() => {})
       .finally(() => { if (vivo) setCargando(false); });
@@ -149,6 +166,32 @@ export default function ClientBonosSection({ clientId, patientId = null, onCambi
    * De cara a quien atiende da igual: deja de contar, desaparece de aquí y esa
    * persona vuelve a dejar de ver ese tipo de cita en la agenda.
    */
+  /*
+   * El bono para corregirlo se pide a FACTURACIÓN, no se reaprovecha el de la
+   * ficha (10/09/2026).
+   *
+   * Son dos idiomas distintos —la ficha dice `nota` y no manda ni el importe ni
+   * el `clientId`— y, sobre todo, lo que vale un bono es dinero: haciéndolo
+   * así, el importe solo sale del servidor para quien lleva el módulo, que es
+   * exactamente quien ve el botón. Traer el bono entero por la misma puerta que
+   * lo va a guardar evita además que el cajón abra el importe en blanco y lo
+   * borre al guardar.
+   */
+  async function abrirEdicion(b) {
+    setOkMsg(null);
+    setFalloQuitar(null);
+    setAbriendo(b.id);
+    try {
+      const res = await fetch(`/api/billing/bonos/${b.id}`, { cache: "no-store" });
+      const j = await res.json().catch(() => null);
+      if (!res.ok || !j?.ok || !j?.data?.bono) throw new Error(j?.error || "No se ha podido abrir el bono");
+      setEditando(j.data.bono);
+    } catch (e) {
+      setFalloQuitar(e.message);
+    }
+    setAbriendo(null);
+  }
+
   async function quitar(b) {
     const quedan = b.restantes > 0 ? `Le quedan ${b.restantes} sesión(es) sin usar.\n\n` : "";
     const seguro = await confirmar({
@@ -228,6 +271,10 @@ export default function ClientBonosSection({ clientId, patientId = null, onCambi
       )}
 
       {falloQuitar && <p className="px-5 pt-3 text-[11px] text-red-600">{falloQuitar}</p>}
+      {/* Lo que pasó al corregirlo, con su cobro: «Bono corregido · su cobro
+          pendiente puesto al día» es justo lo que hay que leer para no ir a
+          Cobros a comprobarlo a mano. */}
+      {okMsg && <p className="px-5 pt-3 text-[11px] text-emerald-700">{okMsg}</p>}
 
       <div className={lista.length ? "p-5 space-y-4" : "hidden"}>
         {lista.map((b) => (
@@ -274,15 +321,28 @@ export default function ClientBonosSection({ clientId, patientId = null, onCambi
                   (b.cuotas ? ` · a plazos: ${b.cuotas.resumen}` : " · pago fraccionado")}
               </span>
               {esAdmin && (
-                <button
-                  type="button"
-                  onClick={() => quitar(b)}
-                  disabled={quitando === b.id}
-                  title="Deja de contar y esa persona deja de ver ese tipo de cita. Queda registrado que se le dio."
-                  className="text-[11px] text-gray-400 hover:text-red-600 hover:underline shrink-0 disabled:opacity-50"
-                >
-                  {quitando === b.id ? "Quitando…" : "Quitar bono"}
-                </button>
+                <span className="flex items-baseline gap-2.5 shrink-0">
+                  {llevaFacturacion && (
+                    <button
+                      type="button"
+                      onClick={() => abrirEdicion(b)}
+                      disabled={abriendo === b.id}
+                      title="Corregir las sesiones, el importe, la fecha o de quién es. Su cobro pendiente se pone al día solo."
+                      className="text-[11px] text-gray-400 hover:text-[var(--color-primary)] hover:underline disabled:opacity-50"
+                    >
+                      {abriendo === b.id ? "Abriendo…" : "Editar"}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => quitar(b)}
+                    disabled={quitando === b.id}
+                    title="Deja de contar y esa persona deja de ver ese tipo de cita. Queda registrado que se le dio."
+                    className="text-[11px] text-gray-400 hover:text-red-600 hover:underline disabled:opacity-50"
+                  >
+                    {quitando === b.id ? "Quitando…" : "Quitar bono"}
+                  </button>
+                </span>
               )}
             </div>
             {/* Barra de progreso: gastadas + reservadas sobre el total. */}
@@ -318,6 +378,15 @@ export default function ClientBonosSection({ clientId, patientId = null, onCambi
           </div>
         ))}
       </div>
+
+      {editando && (
+        <DrawerBono
+          bono={editando}
+          tipoNombre={editando.nombre}
+          onClose={() => setEditando(null)}
+          onDone={(msg) => { setEditando(null); setOkMsg(msg); recargar(); }}
+        />
+      )}
 
       {dialogo}
     </div>
@@ -365,21 +434,72 @@ function DarBonoForm({ cliente, pacientes = [], patientFijo = null, onHecho }) {
   const [err, setErr] = useState(null);
   const [avisos, setAvisos] = useState([]);
 
+  /*
+   * LOS TIPOS, CON SU PRECIO (10/09/2026, Rodrigo: «el importe del bono debería
+   * salir solo al elegir el tipo de cita»).
+   *
+   * El precio no lo puede dar Citas: `/api/citas/event-types` se lo recorta a
+   * quien no es dirección (`filtrarTipos`, `lib/citas/dinero.js`) y en Aumenta
+   * los bonos los lleva administración, que entra con rol `user`. Así que se
+   * pide a Facturación —`/api/billing/bonos/tipos`, que sí enseña la tarifa a
+   * quien lleva el módulo— y solo si esa puerta no está (centro sin billing) se
+   * cae a la de Citas, que al menos trae nombres y sesiones. Las dos se
+   * normalizan al mismo objeto para que abajo solo haya una forma de tipo.
+   */
   useEffect(() => {
     let vivo = true;
-    fetch("/api/citas/event-types?active=true", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => { if (vivo && j.ok) setTipos(j.data ?? []); })
-      .catch(() => { if (vivo) setErr("No se pudieron cargar los tipos de cita"); });
+    (async () => {
+      try {
+        const r = await fetch("/api/billing/bonos/tipos?todos=1", { cache: "no-store" });
+        const j = r.ok ? await r.json() : null;
+        // Los apagados no: un bono se da de lo que el centro vende hoy. Los
+        // OCULTOS sí, que es donde viven los acuerdos privados.
+        const deFacturacion = (j?.data?.tipos ?? []).filter((t) => t.enElCatalogo && t.activo);
+        if (deFacturacion.length) {
+          if (vivo) {
+            setTipos(deFacturacion.map((t) => ({
+              id: t.id,
+              name: t.name,
+              sesiones: Number(t.sesionesDelTipo) || 1,
+              precio: Number.isInteger(t.precio) ? t.precio : null,
+              oculto: t.oculto === true,
+            })));
+          }
+          return;
+        }
+      } catch { /* sin Facturación: se prueba por Citas */ }
+      try {
+        const r = await fetch("/api/citas/event-types?active=true", { cache: "no-store" });
+        const j = await r.json();
+        if (vivo && j.ok) {
+          setTipos((j.data ?? []).map((t) => ({
+            id: t.id,
+            name: t.name,
+            sesiones: Number(t.sessionsCount) || 1,
+            precio: Number.isInteger(t.price) ? t.price : null,
+            oculto: t.isHidden === true,
+          })));
+        }
+      } catch {
+        if (vivo) setErr("No se pudieron cargar los tipos de cita");
+      }
+    })();
     return () => { vivo = false; };
   }, []);
 
-  // Al elegir el tipo, se propone su número de sesiones. Se puede cambiar: no
-  // todos los acuerdos son el paquete estándar.
+  const tipoElegido = tipos.find((x) => String(x.id) === String(eventTypeId)) ?? null;
+
+  // Al elegir el tipo se proponen SUS sesiones y SU precio. Los dos se pueden
+  // cambiar: no todos los acuerdos son el paquete estándar, y el precio del
+  // catálogo es el de la lista, no el que se cerró por teléfono.
   function elegirTipo(id) {
     setEventTypeId(id);
-    const t = tipos.find((x) => x.id === id);
-    setSesiones(String(t?.sessionsCount ?? 1));
+    const t = tipos.find((x) => String(x.id) === String(id));
+    setSesiones(String(t?.sesiones ?? 1));
+    if (Number.isInteger(t?.precio) && t.precio > 0) {
+      setImporte(centsToEuros(t.precio));
+      setSinCobro(false);
+    }
   }
 
   const correo = cliente?.portalEmail || cliente?.email || "";
@@ -450,10 +570,24 @@ function DarBonoForm({ cliente, pacientes = [], patientFijo = null, onHecho }) {
           <option value="">Elige…</option>
           {tipos.map((t) => (
             <option key={t.id} value={t.id}>
-              {t.name}{t.isHidden ? " · oculto" : ""}
+              {t.name}
+              {t.sesiones > 1 ? ` · ${t.sesiones} sesiones` : ""}
+              {Number.isInteger(t.precio) ? ` · ${centsToEuros(t.precio)} €` : ""}
+              {t.oculto ? " · oculto" : ""}
             </option>
           ))}
         </select>
+        {/*
+          * Cuando el tipo no lleva precio, decirlo AQUÍ y no dejar el importe en
+          * blanco sin explicación: en Aumenta ninguno de los cuatro tipos con
+          * bonos lo tenía puesto, y por eso el campo no se rellenaba solo.
+          */}
+        {tipoElegido && !Number.isInteger(tipoElegido.precio) && (
+          <p className="text-[11px] text-gray-400 mt-1">
+            Este tipo no tiene precio de bono en el catálogo, así que hay que teclear el importe. Para que
+            salga solo, ponle las sesiones y el precio en Citas → Tipos de cita.
+          </p>
+        )}
       </div>
 
       {/*
@@ -511,7 +645,9 @@ function DarBonoForm({ cliente, pacientes = [], patientFijo = null, onHecho }) {
             value={importe}
             onChange={(e) => setImporte(e.target.value)}
             disabled={sinCobro}
-            placeholder={sinCobro ? "sin cobro" : "200"}
+            placeholder={
+              sinCobro ? "sin cobro" : Number.isInteger(tipoElegido?.precio) ? centsToEuros(tipoElegido.precio) : "200"
+            }
             className={`${inputCls} disabled:bg-gray-100 disabled:text-gray-400`}
           />
         </div>
