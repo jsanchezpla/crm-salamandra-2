@@ -20,6 +20,7 @@ import {
   isMissingTable,
 } from "../../../../lib/clients/contactMethods.js";
 import { normalizeGuardians } from "../../../../lib/clients/guardians.js";
+import { pacientesPorFamilia } from "../../../../lib/clients/pacientesDeLaFamilia.js";
 import { limpiarRazonSocialPorDefecto, limpiarRepartoEntreTutores } from "../../../../lib/billing/razonSocial.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -67,6 +68,12 @@ export const GET = withTenant(async (request, { params }, { tenant, tenantModels
       json.interactions = [];
       json.listaEspera = listaEspera;
       json.bonos = await bonosDeCliente(tenantModels, client);
+      // También aquí los pacientes: por esta rama pasa nutri_laura entera, y
+      // el selector de fichas los necesita para pintar la elegida.
+      json.pacientes =
+        (await pacientesPorFamilia({ clientIds: [client.id], Patient: tenantModels.Patient, hasModule })).get(
+          String(client.id)
+        ) ?? [];
       return ok(json);
     }
   }
@@ -88,7 +95,16 @@ export const GET = withTenant(async (request, { params }, { tenant, tenantModels
   // Bonos de sesiones y lo que le queda de cada uno (04/08/2026). Devuelve []
   // en cuanto falte algo: la ficha no se cae por una sección de más.
   const bonos = await bonosDeCliente(tenantModels, client);
-  return ok({ ...client.toJSON(), listaEspera, bonos });
+  // Quién viene a consulta en esta ficha (10/09/2026). Lo pide el selector de
+  // fichas para poder pintar la ya elegida como la pinta en la lista —primero
+  // el paciente—; sin esto, elegir a «Hugo Castro» dejaba el campo diciendo
+  // solo «Vanesa Muñoz». Mismo helper que el listado, y vacío donde no aplica.
+  const pacientes = await pacientesPorFamilia({
+    clientIds: [client.id],
+    Patient: tenantModels.Patient,
+    hasModule,
+  });
+  return ok({ ...client.toJSON(), listaEspera, pacientes: pacientes.get(String(client.id)) ?? [], bonos });
 });
 
 export const PUT = withTenant(async (request, { params }, { tenant, tenantModels, tenantSequelize, hasModule }) => {

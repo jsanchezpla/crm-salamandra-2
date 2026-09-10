@@ -19,6 +19,23 @@ import VistaPreviaFacturaModal from "./VistaPreviaFacturaModal.jsx";
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition";
 
+/**
+ * De quién es cada línea: PRIMERO EL PACIENTE y detrás quien paga (10/09/2026,
+ * Rodrigo). Misma regla que «Generar el mes», la tabla de Cuotas y la de
+ * Cobros: al centro se le conoce por el niño, y una lista de sesenta apellidos
+ * de pagadores no se repasa de un vistazo. Sin paciente —una factura de la
+ * familia entera— queda solo la ficha.
+ */
+function DeQuienEs({ fila }) {
+  if (!fila?.paciente) return <>{fila?.nombre}</>;
+  return (
+    <>
+      {fila.paciente}
+      <span className="text-neutral-400"> · {fila.nombre}</span>
+    </>
+  );
+}
+
 export default function FacturarMesDrawer({ open, onClose, onDone }) {
   const [mes, setMes] = useState(mesVigente());
   const [preview, setPreview] = useState(null);
@@ -150,9 +167,8 @@ export default function FacturarMesDrawer({ open, onClose, onDone }) {
               {resultado.resultados.map((r) => (
                 <li key={r.grupoId ?? r.clientId} className="px-4 py-2.5 flex items-center gap-3 text-xs">
                   <span className="min-w-0 flex-1 truncate text-neutral-800">
-                    {r.nombre}
+                    <DeQuienEs fila={r} />
                     {r.terapia && <span className="text-neutral-400"> · {r.terapia}</span>}
-                    {r.paciente && <span className="text-neutral-400"> · {r.paciente}</span>}
                     {r.aNombreDe && <span className="text-neutral-400"> · {r.aNombreDe}</span>}
                   </span>
                   {r.resultado === "emitida" ? (
@@ -288,9 +304,8 @@ export default function FacturarMesDrawer({ open, onClose, onDone }) {
                           className="accent-[var(--color-primary,#1B3A2D)]"
                         />
                         <span className="min-w-0 flex-1 truncate text-neutral-800">
-                          {g.nombre}
+                          <DeQuienEs fila={g} />
                           {g.terapia && <span className="text-neutral-400"> · {g.terapia}</span>}
-                          {g.paciente && <span className="text-neutral-400"> · {g.paciente}</span>}
                           {g.aNombreDe && (
                             <span className="text-neutral-400"> · a nombre de {g.aNombreDe}{g.parteDe ? ` (${g.parteDe.pct} %)` : ""}</span>
                           )}

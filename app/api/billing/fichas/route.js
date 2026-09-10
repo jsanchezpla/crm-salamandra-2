@@ -3,6 +3,7 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, forbidden, notFound, serverError } from "../../../../lib/utils/apiResponse.js";
 import { filtroPorNombre } from "../../../../lib/utils/busquedaDb.js";
 import { pacientesQueCasan } from "../../../../lib/clients/familiasPorPaciente.js";
+import { pacientesPorFamilia } from "../../../../lib/clients/pacientesDeLaFamilia.js";
 import { opcionesDeRazonSocial, razonSocialPorDefecto } from "../../../../lib/billing/razonSocial.js";
 
 /**
@@ -57,7 +58,13 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     const id = searchParams.get("id");
     if (id) {
       const ficha = await Client.findByPk(id, { attributes: ATRIBUTOS });
-      return ficha ? ok(paraPantalla(ficha)) : notFound("Ficha no encontrada");
+      if (!ficha) return notFound("Ficha no encontrada");
+      // Con sus pacientes, igual que en la lista: el selector pinta la ficha ya
+      // elegida con lo que devuelve ESTA rama, y sin ellos el campo pasaba de
+      // decir «Hugo Castro — Vanesa Muñoz» a decir solo «Vanesa Muñoz» justo al
+      // elegirlo (10/09/2026).
+      const suyos = await pacientesPorFamilia({ clientIds: [ficha.id], Patient, hasModule });
+      return ok({ ...paraPantalla(ficha), pacientes: suyos.get(String(ficha.id)) ?? [] });
     }
 
     const search = (searchParams.get("search") ?? "").trim();
@@ -84,8 +91,25 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     });
 
     const porPaciente = new Map(casan.map((x) => [String(x.clientId), x.nombre]));
+    /*
+     * Y los pacientes de cada ficha, aunque la búsqueda haya sido por el
+     * apellido de la familia (10/09/2026, Rodrigo: «en los buscadores debería
+     * salir el paciente primero»). `porPaciente` solo sabe del que hizo la
+     * coincidencia; sin esto, escribir «muñoz» en Cobros devuelve una lista de
+     * pagadores en la que no se reconoce a nadie. Consulta aparte, sobre las
+     * 20 filas que se van a pintar.
+     */
+    const deLaFamilia = await pacientesPorFamilia({
+      clientIds: rows.map((r) => r.id),
+      Patient,
+      hasModule,
+    });
     return ok({
-      clients: rows.map((r) => ({ ...paraPantalla(r), porPaciente: porPaciente.get(String(r.id)) ?? null })),
+      clients: rows.map((r) => ({
+        ...paraPantalla(r),
+        porPaciente: porPaciente.get(String(r.id)) ?? null,
+        pacientes: deLaFamilia.get(String(r.id)) ?? [],
+      })),
       total: count,
     });
   } catch (err) {

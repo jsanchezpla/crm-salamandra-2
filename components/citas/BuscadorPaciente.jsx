@@ -2,6 +2,29 @@
 
 import { useEffect, useState } from "react";
 
+import { rotuloDePacientes } from "../../lib/clients/buscarFichas.js";
+
+/**
+ * Quién viene a consulta en esta ficha, y qué se lee en la primera línea.
+ *
+ * Dos listas, y en este orden: `pacientes` son los que han hecho la
+ * coincidencia —si se ha tecleado «thiago», ese es el que hay que leer— y
+ * `pacientesFicha` los de la familia, para cuando se ha buscado por el apellido
+ * de la madre y ninguno casa. La regla de cuántos caben y en qué orden es la
+ * misma que la de los desplegables (`lib/clients/buscarFichas.js`).
+ *
+ * Una ficha sin pacientes —un adulto que es su propia ficha, una empresa— se
+ * lee por su nombre, que es todo lo que hay.
+ */
+function pacientesDeLaFicha(ficha) {
+  const casan = Array.isArray(ficha?.pacientes) ? ficha.pacientes : [];
+  return casan.length ? casan : ficha?.pacientesFicha;
+}
+
+const tienePacientes = (ficha) => Boolean(rotuloDePacientes({ pacientes: pacientesDeLaFicha(ficha) }));
+const rotuloDeLaFicha = (ficha) =>
+  rotuloDePacientes({ pacientes: pacientesDeLaFicha(ficha) }) || ficha?.name || "";
+
 /**
  * Buscador de pacientes para el alta manual de citas.
  *
@@ -21,8 +44,8 @@ import { useEffect, useState } from "react";
  * recepción teclea el nombre de quien viene a la sesión, no el de la familia
  * que paga. Escribir «thiago» respondía «Nadie con ese nombre» aunque el
  * paciente estuviera dado de alta — de los 1.174 pacientes de Aumenta, 934 no
- * se podían encontrar así. Cuando la ficha sale por un paciente suyo, se enseña
- * cuál debajo del nombre de la familia.
+ * se podían encontrar así. Cada ficha se lee POR SU PACIENTE, con la familia
+ * debajo (10/09/2026): es el nombre que se teclea y el que hay que reconocer.
  *
  * CON SALIDA A PROPÓSITO: si la persona no está en la lista se puede seguir
  * escribiendo el nombre a mano y crear la cita igual. Es el caso de quien
@@ -160,7 +183,16 @@ export default function BuscadorPaciente({
                   className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-50 last:border-0"
                 >
                   <div className="flex items-center gap-1.5">
-                    <span className="text-sm text-gray-900 font-medium truncate">{c.name}</span>
+                    {/*
+                      PRIMERO EL PACIENTE (10/09/2026, Rodrigo: «en los
+                      buscadores debería salir el paciente primero»). Quien
+                      teclea en recepción escribe el nombre del niño; leerlo en
+                      la tercera línea de cada resultado, debajo de un apellido
+                      que no reconoce, es justo el trabajo que este buscador
+                      venía a ahorrar. La familia baja a la línea de debajo, que
+                      es donde hace falta para saber a quién se le cobra.
+                    */}
+                    <span className="text-sm text-gray-900 font-medium truncate">{rotuloDeLaFicha(c)}</span>
                     {/* Archivada = dada de baja desde su ficha. Sale igual, y al
                         final de la lista, para que quien vuelve a los dos meses
                         se pueda enlazar a SU ficha en vez de acabar en una cita
@@ -174,23 +206,24 @@ export default function BuscadorPaciente({
                       </span>
                     )}
                   </div>
+                  {/*
+                    DE QUIÉN ES LA FICHA (28/08/2026, Lau de Aumenta; orden
+                    cambiado el 10/09/2026). Al buscar por el nombre del hijo,
+                    la ficha que aparece es la de la familia — y sin decirlo,
+                    quien teclea «thiago» ve un apellido que no reconoce y da
+                    por hecho que no es. Ahora arriba va el niño y aquí la
+                    familia, que es a quien se le cobra; cuando la ficha no
+                    tiene pacientes, arriba ya está su nombre y esta línea
+                    sobra.
+                  */}
+                  {tienePacientes(c) && (
+                    <div className="text-[11px] text-[var(--color-primary,#1B3A2D)] truncate">
+                      {c.name}
+                    </div>
+                  )}
                   <div className="text-[11px] text-gray-500 truncate">
                     {[c.email, c.phone].filter(Boolean).join(" · ") || "sin email ni teléfono en la ficha"}
                   </div>
-                  {/*
-                    POR QUÉ SALE ESTA FAMILIA (28/08/2026, Lau de Aumenta). Al
-                    buscar por el nombre del hijo, la ficha que aparece es la de
-                    la familia — y sin decirlo, quien teclea «thiago» ve un
-                    apellido que no reconoce y da por hecho que no es. Aquí se
-                    enseña el paciente que ha hecho la coincidencia; si es uno
-                    solo, el alta lo deja además ya elegido.
-                  */}
-                  {Array.isArray(c.pacientes) && c.pacientes.length > 0 && (
-                    <div className="text-[11px] text-[var(--color-primary,#1B3A2D)] truncate mt-0.5">
-                      {c.pacientes.length === 1 ? "Paciente: " : "Pacientes: "}
-                      {c.pacientes.map((p) => p.nombre).join(" · ")}
-                    </div>
-                  )}
                 </button>
               ))}
 

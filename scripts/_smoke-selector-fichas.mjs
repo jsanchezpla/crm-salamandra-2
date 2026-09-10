@@ -266,6 +266,70 @@ test("la etiqueta dice el niño cuando fue la llave, y calla cuando no", async (
   assert.equal(etiquetaDeFicha(null), "");
 });
 
+// ─── Y también cuando se busca por el apellido de la familia (10/09/2026) ───
+//
+// Rodrigo: «en los buscadores debería salir el paciente primero». `porPaciente`
+// solo sabe del que hizo la coincidencia, así que escribir «muñoz» devolvía una
+// lista de pagadores en la que no se reconoce a nadie. Ahora el servidor manda
+// los pacientes de cada ficha y la línea empieza por ellos igual.
+
+test("con los pacientes de la ficha, el niño va delante aunque no fuera la llave", async () => {
+  const { etiquetaDeFicha, rotuloDePacientes } = await import("../lib/clients/buscarFichas.js");
+  const ficha = {
+    name: "Vanesa Muñoz Álvarez",
+    pacientes: [{ id: "1", nombre: "Hugo Castro" }],
+  };
+  assert.equal(etiquetaDeFicha(ficha), "Hugo Castro — Vanesa Muñoz Álvarez");
+  assert.equal(rotuloDePacientes(ficha), "Hugo Castro");
+});
+
+test("los hermanos: caben dos y el resto se cuenta", async () => {
+  const { etiquetaDeFicha } = await import("../lib/clients/buscarFichas.js");
+  const hermanos = (n) =>
+    Array.from({ length: n }, (_, i) => ({ id: String(i), nombre: `Hijo ${i + 1}` }));
+  assert.equal(
+    etiquetaDeFicha({ name: "Familia Ruiz", pacientes: hermanos(2) }),
+    "Hijo 1 · Hijo 2 — Familia Ruiz"
+  );
+  // Cuatro hermanos en una línea de desplegable no se leen: dos y «+2».
+  assert.equal(
+    etiquetaDeFicha({ name: "Familia Ruiz", pacientes: hermanos(4) }),
+    "Hijo 1 · Hijo 2 +2 — Familia Ruiz"
+  );
+});
+
+test("el que hizo la coincidencia manda sobre la lista de la ficha", async () => {
+  const { etiquetaDeFicha } = await import("../lib/clients/buscarFichas.js");
+  // Se ha tecleado «marta»: la línea tiene que empezar por Marta, no por su
+  // hermano, aunque el servidor mande a los dos.
+  assert.equal(
+    etiquetaDeFicha({
+      name: "Familia Ruiz",
+      porPaciente: "Marta Ruiz",
+      pacientes: [{ id: "1", nombre: "Hugo Ruiz" }, { id: "2", nombre: "Marta Ruiz" }],
+    }),
+    "Marta Ruiz — Familia Ruiz"
+  );
+});
+
+test("una ficha sin pacientes se lee por su nombre, sin adornos", async () => {
+  const { etiquetaDeFicha, rotuloDePacientes } = await import("../lib/clients/buscarFichas.js");
+  assert.equal(etiquetaDeFicha({ name: "Ayuntamiento de Cuenca", pacientes: [] }), "Ayuntamiento de Cuenca");
+  assert.equal(rotuloDePacientes({ name: "Ayuntamiento de Cuenca" }), "");
+  // Nombres vacíos o a medias no dejan una línea con guiones sueltos.
+  assert.equal(etiquetaDeFicha({ name: "Familia Ruiz", pacientes: [{ id: "1", nombre: "  " }] }), "Familia Ruiz");
+});
+
+test("los tres endpoints mandan los pacientes de cada ficha", () => {
+  // Es la parte que se puede romper sin que se note: si el servidor deja de
+  // mandarlos, la etiqueta cae al nombre de la familia y parece que «ya no
+  // funciona el buscador».
+  for (const ruta of ["../app/api/clients/route.js", "../app/api/billing/fichas/route.js", "../app/api/citas/clientes/route.js"]) {
+    const fuente = readFileSync(new URL(ruta, import.meta.url), "utf8");
+    assert.ok(fuente.includes("pacientesPorFamilia"), `${ruta} no cuelga los pacientes de la ficha`);
+  }
+});
+
 test("las pantallas de dinero preguntan por la puerta de facturación", () => {
   for (const pantalla of ["facturas", "presupuestos", "recurrentes", "costes", "cobros"]) {
     const fuente = readFileSync(

@@ -2,6 +2,7 @@ import { Op } from "sequelize";
 import { filtroPorNombre } from "../../../../lib/utils/busquedaDb.js";
 import { agruparPorFamilia, conPacientes, idsDeFamilia } from "../../../../lib/citas/familiasDePacientes.js";
 import { fichaConContacto } from "../../../../lib/clients/contactoDeFicha.js";
+import { pacientesPorFamilia } from "../../../../lib/clients/pacientesDeLaFamilia.js";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 
@@ -203,11 +204,32 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       buscar("inactive", CUPO_ARCHIVADAS),
     ]);
 
+    const fichas = conPacientes(
+      [...vivas, ...archivadas].map((c) => fichaConContacto(c.toJSON())),
+      porFamilia
+    );
+
+    /*
+     * Y LOS HIJOS DE CADA FAMILIA, HAYAN CASADO O NO (10/09/2026, Rodrigo: «en
+     * los buscadores debería salir el paciente primero»).
+     *
+     * `pacientes` son los que han hecho la coincidencia, y de eso depende que el
+     * alta deje elegido al niño: no se toca. Pero buscando por el apellido de la
+     * madre esa lista viene vacía, y el resultado es una lista de apellidos de
+     * pagadores donde no se reconoce a nadie. `pacientesFicha` es para PINTAR:
+     * quién viene a consulta en esa ficha, que es lo que va en la primera línea.
+     */
+    const deLaFamilia = await pacientesPorFamilia({
+      clientIds: fichas.map((f) => f.id),
+      Patient,
+      hasModule,
+    });
+
     return ok({
       // Cada ficha lleva colgados los pacientes por los que ha salido, para que
       // el desplegable pueda decir POR QUÉ aparece esa familia y el alta pueda
       // dejar elegido a ese paciente.
-      clientes: conPacientes([...vivas, ...archivadas].map((c) => fichaConContacto(c.toJSON())), porFamilia),
+      clientes: fichas.map((f) => ({ ...f, pacientesFicha: deLaFamilia.get(String(f.id)) ?? [] })),
       soloPacientes: Boolean(idsAsistenciales),
       totalPacientes: idsAsistenciales ? idsAsistenciales.length : null,
       /*
