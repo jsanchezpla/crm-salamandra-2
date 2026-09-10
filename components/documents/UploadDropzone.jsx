@@ -3,13 +3,18 @@
 import { useRef, useState } from "react";
 import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 
-const ACCEPT = ".pdf,.docx,.xlsx";
 const MAX_MB = 25;
 
 /**
  * Zona de subida (drag & drop + click). Sube uno a uno a POST /api/documents con
  * el folderId actual (visibilidad heredada) o la visibilidad si estamos en la
- * raíz. Reporta errores por archivo. El backend valida tipo/tamaño/cuota/magic.
+ * raíz. Reporta errores por archivo. El backend valida tamaño, cuota y magic
+ * bytes; el TIPO no lo restringe.
+ *
+ * Y desde el 10/09/2026 el botón tampoco (Rodrigo: «aparte de PDF se debe subir
+ * Word»). El `accept` decía PDF/DOCX/XLSX, así que por el botón no se podía
+ * elegir un .odt, un .csv ni un .zip — pero arrastrándolos entraban sin
+ * rechistar. Era una puerta cerrada al lado de otra abierta.
  */
 export default function UploadDropzone({ folderId, visibility, onUploaded, disabled }) {
   const inputRef = useRef(null);
@@ -68,7 +73,6 @@ export default function UploadDropzone({ folderId, visibility, onUploaded, disab
         <input
           ref={inputRef}
           type="file"
-          accept={ACCEPT}
           multiple
           disabled={disabled || busy}
           onChange={(e) => uploadFiles(e.target.files)}
@@ -80,7 +84,7 @@ export default function UploadDropzone({ folderId, visibility, onUploaded, disab
         <span className="text-sm text-neutral-600">
           {busy ? "Subiendo…" : "Arrastra archivos o haz clic para subir"}
         </span>
-        <span className="text-[11px] text-neutral-400">PDF, DOCX o XLSX · máx {MAX_MB} MB</span>
+        <span className="text-[11px] text-neutral-400">Cualquier archivo · máx {MAX_MB} MB</span>
       </label>
       {errors.length > 0 && (
         <ul className="mt-2 space-y-1">

@@ -451,7 +451,16 @@ export default function CostesPage() {
                         className="text-neutral-300 hover:text-red-500 shrink-0">✕</button>
                     </div>
                   ) : (
-                    <input type="file" accept=".pdf,.png,.jpg,.jpeg,image/*,application/pdf" disabled={subiendoAdjunto}
+                    /* Sin lista de tipos (10/09/2026, Rodrigo: «aparte de PDF
+                       se debe subir Word»). La factura de un gasto llega como la
+                       manda quien la emite: PDF, Word, Excel o la foto del
+                       ticket. El `accept` de antes solo dejaba ELEGIR PDF e
+                       imágenes en el diálogo de Windows —el servidor nunca ha
+                       restringido el tipo—, así que un Word ni se veía en la
+                       carpeta y parecía que el CRM no lo admitía. Lo que no se
+                       puede enseñar en pantalla se descarga al abrirlo, que es
+                       como se abre un Word igualmente. */
+                    <input type="file" disabled={subiendoAdjunto}
                       onChange={(e) => subirAdjunto(e.target.files?.[0])}
                       className="block w-full text-xs text-neutral-500 file:mr-2 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:bg-neutral-100 file:text-neutral-700 file:text-xs file:cursor-pointer" />
                   )}

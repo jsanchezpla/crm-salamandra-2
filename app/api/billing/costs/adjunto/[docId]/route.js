@@ -1,6 +1,8 @@
 import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { error, forbidden, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
 import { readDocumentStream } from "../../../../../../lib/documents/documentStorage.js";
+import { contentDisposition } from "../../../../../../lib/documents/helpers.js";
+import { tipoParaVerEnPantalla } from "../../../../../../lib/documents/verEnPantalla.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -29,13 +31,25 @@ export const GET = withTenant(async (_request, { params }, ctx) => {
       throw err;
     }
 
-    const safeName = String(row.fileName || "archivo").replace(/[\r\n"]/g, "_");
+    /*
+     * QUÉ SE VE EN PANTALLA Y QUÉ SE DESCARGA (10/09/2026). Desde que la
+     * factura de un gasto puede llegar en Word o en Excel —y no solo en PDF—,
+     * servirlo todo «inline» con el `mimeType` que declaró quien lo subió sería
+     * dejar que quien sube decida cómo se lo servimos al que mira: un .html
+     * colado por esta puerta se ejecutaría en NUESTRO origen. La regla es la
+     * misma del resto del CRM (lib/documents/verEnPantalla.js) y mira la
+     * extensión que guardamos nosotros: PDF e imágenes se ven, lo demás se
+     * descarga, que es como se abre un Word de todas formas.
+     */
+    const tipoEnLinea = tipoParaVerEnPantalla(row.storagePath || row.fileName);
     return new Response(stream, {
       status: 200,
       headers: {
-        "Content-Type": row.mimeType || "application/octet-stream",
-        "Content-Disposition": `inline; filename="${safeName}"`,
+        "Content-Type": tipoEnLinea || "application/octet-stream",
+        "Content-Disposition": contentDisposition(tipoEnLinea ? "inline" : "attachment", row.fileName || "archivo"),
         "Content-Length": String(size),
+        "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "default-src 'none'; object-src 'self'",
         "Cache-Control": "private, no-cache",
       },
     });
