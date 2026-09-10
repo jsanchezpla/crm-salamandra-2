@@ -603,22 +603,24 @@ export default function ClientesClient({
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50">
-                    <Cabecera clave="nombre" orden={orden} dir={dir} onClick={ordenarPor}>
-                      {conCategoria ? "Contratante" : "Nombre / Empresa"}
-                    </Cabecera>
                     {/*
-                      Quién es el paciente (10/09/2026, Rodrigo). Pegada al
-                      nombre porque se leen juntas: la ficha es de la familia
-                      que paga y a quien se atiende es al niño, así que sin esto
-                      «Vanesa Muñoz» no dice de quién es la ficha. No ordena:
-                      los pacientes viven en otra tabla y ordenar por ellos
-                      pediría una consulta distinta.
+                      EL PACIENTE, PRIMERO (10/09/2026, Rodrigo: «en general, en
+                      los buscadores debería salir el paciente primero»). La
+                      ficha es de la familia que paga y a quien se atiende es al
+                      niño: «Vanesa Muñoz» sola no dice de quién es la ficha, y
+                      es el nombre del niño el que se busca con la vista.
+                      No ordena: los pacientes viven en otra tabla y ordenar por
+                      ellos pediría una consulta distinta; el orden por defecto
+                      lo sigue mandando la columna de al lado.
                     */}
                     {conPacientes && (
                       <th scope="col" className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
                         Pacientes
                       </th>
                     )}
+                    <Cabecera clave="nombre" orden={orden} dir={dir} onClick={ordenarPor}>
+                      {conCategoria ? "Contratante" : "Nombre / Empresa"}
+                    </Cabecera>
                     {/*
                       Qué es (festival, sala, ayuntamiento, medio…). Solo con
                       `booking`, y va justo detrás del nombre porque es lo
@@ -654,13 +656,23 @@ export default function ClientesClient({
                           isSelected ? "bg-blue-50" : i % 2 === 0 ? "hover:bg-gray-50" : "bg-gray-50/50 hover:bg-gray-100/50"
                         }`}
                       >
+                        {conPacientes && (
+                          <td className="px-4 py-3">
+                            <ColumnaPacientes pacientes={client.pacientes} />
+                          </td>
+                        )}
                         <td className="px-4 py-3">
                           {/* El tope de ancho va en el NOMBRE, no en la fila:
                               si lo lleva la fila, el distintivo le roba 60 px
                               al nombre y «María del Carmen Rodríguez» se corta
                               en «María del…» solo por estar archivada. */}
                           <div className="flex items-center gap-1.5">
-                            <span className="font-medium text-gray-900 truncate max-w-[160px]">{client.name || "—"}</span>
+                            {/* El nombre de la ficha pasa a segundo plano SOLO
+                                cuando hay un paciente delante que la nombre.
+                                Una ficha sin pacientes —una empresa, un adulto
+                                que es su propia ficha— se sigue leyendo por su
+                                nombre, o la fila entera se quedaría sin título. */}
+                            <span className={`truncate max-w-[160px] ${client.pacientes?.length ? "text-gray-600" : "font-medium text-gray-900"}`}>{client.name || "—"}</span>
                             {/* Archivada = dada de baja (`client.status`, NO el
                                 embudo comercial de la columna «Estado»). Es la
                                 única forma de saber por qué esta ficha no sale
@@ -678,11 +690,6 @@ export default function ClientesClient({
                             {client.customFields?.company || (conCategoria ? client.customFields?.provincia || "" : "")}
                           </div>
                         </td>
-                        {conPacientes && (
-                          <td className="px-4 py-3">
-                            <ColumnaPacientes pacientes={client.pacientes} />
-                          </td>
-                        )}
                         {conCategoria && (
                           <td className="px-4 py-3">
                             {client.customFields?.categoria ? (
@@ -1135,7 +1142,9 @@ function CampoAlta({ tipo, valor, opciones, placeholder, onChange }) {
 }
 
 /**
- * Los pacientes de una ficha, en la lista de clientes (10/09/2026).
+ * Los pacientes de una ficha, en la lista de clientes (10/09/2026). Desde esa
+ * misma tarde va en la PRIMERA columna, delante del contratante: es el nombre
+ * por el que el centro conoce cada ficha y el que se busca con la vista.
  *
  * Se enseñan DOS y el resto se cuenta: hay familias con tres y cuatro hermanos y
  * una fila que crece hasta cuatro líneas rompe el barrido de la lista, que es
@@ -1156,7 +1165,7 @@ function ColumnaPacientes({ pacientes }) {
       {visibles.map((p) => (
         <div
           key={p.id}
-          className={`text-xs truncate ${p.estado && p.estado !== "active" ? "text-gray-400" : "text-gray-700"}`}
+          className={`truncate ${p.estado && p.estado !== "active" ? "text-xs text-gray-400" : "font-medium text-gray-900"}`}
         >
           {p.nombre}
           {p.estado && p.estado !== "active" && (
