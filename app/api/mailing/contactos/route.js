@@ -1,4 +1,3 @@
-import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok } from "../../../../lib/utils/apiResponse.js";
 import { ValidationError } from "../../../../lib/utils/errors.js";
@@ -6,6 +5,7 @@ import { auditar, datosPeticion } from "../../../../lib/utils/auditoria.js";
 import { autorDe, emailValido, exigirMailing, leerBody, serializarContacto, texto } from "../../../../lib/mailing/comun.js";
 import { enviarConfirmacion } from "../../../../lib/mailing/confirmacion.js";
 import { assertNotDemoPaidCall } from "../../../../lib/demo/isDemo.js";
+import { filtrarPorTexto } from "../../../../lib/utils/busquedaDb.js";
 
 /**
  * /api/mailing/contactos — los correos SUELTOS de la lista: los que no son de
@@ -33,8 +33,8 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   const estado = (sp.get("estado") || "").trim();
   const where = {};
   if (ESTADOS.has(estado)) where.estado = estado;
-  if (q) where[Op.or] = [{ email: { [Op.iLike]: `%${q}%` } }, { nombre: { [Op.iLike]: `%${q}%` } }];
   const { MailingContact } = ctx.tenantModels;
+  await filtrarPorTexto(where, MailingContact, q, ["email", "nombre"]);
   const { rows, count } = await MailingContact.findAndCountAll({ where, order: [["createdAt", "DESC"]], limit: LIMITE });
   const porEstado = Object.fromEntries(
     (await MailingContact.findAll({

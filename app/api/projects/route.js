@@ -1,12 +1,12 @@
 import { withTenant } from "../../../lib/tenant/withTenant.js";
 import { ok, created, forbidden } from "../../../lib/utils/apiResponse.js";
 import { ValidationError, ForbiddenError } from "../../../lib/utils/errors.js";
-import { Op } from "sequelize";
 import { serializeProject } from "../../../lib/projects/serializeProject.js";
 import { generateProjectCode } from "../../../lib/projects/generateProjectCode.js";
 import { createDefaultBoardColumns } from "../../../lib/projects/createDefaultBoardColumns.js";
 import { isAdminRole, fetchLeadProjectIds, findOwnTeamMember } from "../../../lib/projects/projectAuth.js";
 import { getMasterModels } from "../../../lib/db/masterDb.js";
+import { filtrarPorTexto } from "../../../lib/utils/busquedaDb.js";
 
 async function auditLog(data) {
   try {
@@ -38,12 +38,7 @@ export const GET = withTenant(async (request, _ctx, ctx) => {
   if (!includeArchived) where.archivedAt = null;
   if (status) where.status = status;
   if (clientId) where.clientId = clientId;
-  if (search) {
-    where[Op.or] = [
-      { name: { [Op.iLike]: `%${search}%` } },
-      { code: { [Op.iLike]: `%${search}%` } },
-    ];
-  }
+  await filtrarPorTexto(where, Project, search || "", ["name", "code"]);
 
   // Filtro "soy lead" / "lead específico"
   if (leadOf) {

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import TaskDrawer from "./TaskDrawer.jsx";
 import Select from "@/components/ui/Select.jsx";
 import { priorityMeta, priorityRank } from "@/lib/projects/taskPriority.js";
+import { coincidePorNombre } from "@/lib/utils/busqueda.js";
 
 /**
  * ProjectListView — Vista de Lista del proyecto (alternativa al Kanban).
@@ -211,10 +212,7 @@ export default function ProjectListView({ projectId, filters = {}, teamMembers =
     if (!tasks) return [];
     const { search, assigneeId, tag, phaseId } = filters;
     const filtered = tasks.filter((t) => {
-      if (search) {
-        const q = search.toLowerCase();
-        if (!(t.title.toLowerCase().includes(q) || (t.description ?? "").toLowerCase().includes(q))) return false;
-      }
+      if (search && !coincidePorNombre(search, [t.title, t.description])) return false;
       if (assigneeId && !(t.assignees ?? []).some((a) => (a.id ?? a.teamMemberId) === assigneeId)) return false;
       if (tag && !(t.tags ?? []).includes(tag)) return false;
       // "sin" = las que no cuelgan de ninguna fase (ver la barra del tablero).

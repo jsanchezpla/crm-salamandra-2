@@ -3,6 +3,7 @@ import { Op } from "sequelize";
 import ExcelJS from "exceljs";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { forbidden, error, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
+import { filtrarPorTexto } from "../../../../../lib/utils/busquedaDb.js";
 import {
   CENTER_TYPE,
   POSITIONS,
@@ -126,14 +127,10 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule, s
       if (from) where.submittedAt[Op.gte] = new Date(from);
       if (to) where.submittedAt[Op.lte] = new Date(to);
     }
-    const q = (searchParams.get("search") || "").trim();
-    if (q) {
-      where[Op.or] = [
-        { email: { [Op.iLike]: `%${q}%` } },
-        { centerName: { [Op.iLike]: `%${q}%` } },
-        { centerNif: { [Op.iLike]: `%${q}%` } },
-      ];
-    }
+    // El XLSX saca EXACTAMENTE lo que se ve en pantalla, así que busca igual.
+    await filtrarPorTexto(where, CourseRegistration, searchParams.get("search") || "", [
+      "email", "centerName", "centerNif",
+    ]);
 
     const rows = await CourseRegistration.findAll({
       where,

@@ -28,6 +28,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { anchoPanel } from "@/components/admin/anchoPanel.js";
+import { coincidePorNombre } from "@/lib/utils/busqueda.js";
 
 /** Marca de un tipo de personalización, con su explicación al pasar el ratón. */
 function Marca({ texto, titulo, fuerte = false }) {
@@ -82,14 +83,8 @@ export default function ModulosPage() {
   // Filtro por módulo: responde a «¿quién tiene esto?», que es media razón de
   // ser de la pantalla. Casa también contra el nombre y el slug del cliente.
   const visibles = useMemo(() => {
-    const q = filtro.trim().toLowerCase();
-    if (!q) return clientes;
-    return clientes.filter(
-      (c) =>
-        c.slug.toLowerCase().includes(q) ||
-        c.nombre.toLowerCase().includes(q) ||
-        c.modulos.some((m) => m.toLowerCase().includes(q))
-    );
+    if (!filtro.trim()) return clientes;
+    return clientes.filter((c) => coincidePorNombre(filtro, [c.slug, c.nombre, ...c.modulos]));
   }, [clientes, filtro]);
 
   if (error) {

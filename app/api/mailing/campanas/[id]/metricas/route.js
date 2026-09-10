@@ -2,6 +2,7 @@ import { Op } from "sequelize";
 import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { ok } from "../../../../../../lib/utils/apiResponse.js";
 import { buscarOFallar, exigirMailing, idDeRuta } from "../../../../../../lib/mailing/comun.js";
+import { filtrarPorTexto } from "../../../../../../lib/utils/busquedaDb.js";
 
 /**
  * GET /api/mailing/campanas/[id]/metricas — cómo fue.
@@ -63,7 +64,7 @@ export const GET = withTenant(async (request, rc, ctx) => {
 
   const q = (new URL(request.url).searchParams.get("q") || "").trim().toLowerCase();
   const where = { campaignId: id };
-  if (q) where[Op.or] = [{ email: { [Op.iLike]: `%${q}%` } }, { nombre: { [Op.iLike]: `%${q}%` } }];
+  await filtrarPorTexto(where, MailingSend, q, ["email", "nombre"]);
   const envios = await MailingSend.findAll({
     where,
     attributes: ["id", "email", "nombre", "origen", "estado", "error", "enviadoAt", "abiertoAt", "primerClicAt", "aperturas", "clics", "variante"],

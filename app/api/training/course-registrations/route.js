@@ -1,6 +1,7 @@
 import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, forbidden, error, serverError } from "../../../../lib/utils/apiResponse.js";
+import { filtrarPorTexto } from "../../../../lib/utils/busquedaDb.js";
 
 /**
  * GET /api/training/course-registrations
@@ -43,14 +44,11 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       if (to) where.submittedAt[Op.lte] = new Date(to);
     }
 
-    const q = (searchParams.get("search") || "").trim();
-    if (q) {
-      where[Op.or] = [
-        { email: { [Op.iLike]: `%${q}%` } },
-        { centerName: { [Op.iLike]: `%${q}%` } },
-        { centerNif: { [Op.iLike]: `%${q}%` } },
-      ];
-    }
+    // Sin tildes y por palabras (10/09/2026), la misma regla que la cabecera
+    // de `stats`: si contaran distinto, el total diría 0 con filas debajo.
+    await filtrarPorTexto(where, CourseRegistration, searchParams.get("search") || "", [
+      "email", "centerName", "centerNif",
+    ]);
 
     const { count, rows } = await CourseRegistration.findAndCountAll({
       where,

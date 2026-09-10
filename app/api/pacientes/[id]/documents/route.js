@@ -2,6 +2,7 @@ import { Op } from "sequelize";
 import { randomUUID } from "node:crypto";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, created, error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
+import { filtrarPorTexto } from "../../../../../lib/utils/busquedaDb.js";
 import {
   MAX_FILE_SIZE_BYTES,
   TENANT_QUOTA_BYTES,
@@ -61,7 +62,7 @@ export const GET = withTenant(async (request, { params }, ctx) => {
     // borra desde su sesión (reenviar reemplaza), no desde aquí.
     const where = { patientId: id, source: { [Op.in]: ["paciente", "incidencia", "sesion", "sesion_preparacion"] } };
     const q = (new URL(request.url).searchParams.get("q") || "").trim();
-    if (q) where.fileName = { [Op.iLike]: `%${q}%` };
+    await filtrarPorTexto(where, Document, q, ["fileName"]);
 
     const rows = await Document.findAll({ where, // Por la fecha DEL documento: la cronología clínica manda sobre la de subida.
       order: [["documentDate", "DESC"], ["createdAt", "DESC"]], limit: MAX_FILES_PER_PATIENT });

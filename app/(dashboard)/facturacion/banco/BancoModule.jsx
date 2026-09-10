@@ -6,6 +6,7 @@ import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import Select from "@/components/ui/Select.jsx";
 import { fmtMoney, fmtDate } from "../_components/Kpi.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
+import { coincidePorNombre } from "@/lib/utils/busqueda.js";
 
 /**
  * /facturacion/banco — el extracto REAL del banco, dentro del CRM.
@@ -174,9 +175,10 @@ export default function BancoModule() {
 
   const bancosFiltrados = useMemo(() => {
     if (!bancos) return [];
-    const t = buscaBanco.trim().toLowerCase();
-    if (!t) return bancos;
-    return bancos.filter((b) => b.nombre.toLowerCase().includes(t));
+    if (!buscaBanco.trim()) return bancos;
+    // Sin tildes y por palabras, como el resto del CRM (10/09/2026): «caja rural»
+    // encuentra «Caja Rural de Navarra» y «bbva bizkaia» no obliga a acertar el orden.
+    return bancos.filter((b) => coincidePorNombre(buscaBanco, [b.nombre]));
   }, [bancos, buscaBanco]);
 
   // ── Sincronizar ───────────────────────────────────────────────────────────

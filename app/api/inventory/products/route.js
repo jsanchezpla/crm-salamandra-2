@@ -2,8 +2,8 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, created, forbidden, error } from "../../../../lib/utils/apiResponse.js";
 import { stockDeVarios } from "../../../../lib/inventory/stock.js";
 import { UNIDADES } from "../../../../models/tenant/Product.model.js";
-import { Op } from "sequelize";
 import { camposEscaparateDe, estorbaParaPublicar } from "../../../../lib/tienda/camposEscaparate.js";
+import { filtrarPorTexto } from "../../../../lib/utils/busquedaDb.js";
 
 /**
  * Productos del almacén (rework 02/08/2026).
@@ -27,12 +27,9 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   const where = {};
   if (!verInactivos) where.active = true;
   if (category) where.category = category;
-  if (search) {
-    where[Op.or] = [
-      { name: { [Op.iLike]: `%${search}%` } },
-      { sku: { [Op.iLike]: `%${search}%` } },
-    ];
-  }
+  // Sin tildes y por palabras (10/09/2026): «boligrafo azul» encuentra
+  // «Bolígrafo azul», que es como lo teclea quien está en el almacén.
+  await filtrarPorTexto(where, Product, search || "", ["name", "sku"]);
 
   const productos = await Product.findAll({ where, order: [["name", "ASC"]] });
   const stocks = await stockDeVarios(tenantModels, productos.map((p) => p.id));

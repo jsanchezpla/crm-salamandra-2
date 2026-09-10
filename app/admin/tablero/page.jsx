@@ -60,6 +60,7 @@ import { seccionDeHoy } from "@/lib/tablero/parser.js";
 import { ordenarTareas } from "@/lib/tablero/estado.js";
 import { tareaComoTexto } from "@/lib/tablero/copiar.js";
 import { tonoDe } from "@/components/admin/tableroTonos.js";
+import { coincidePorNombre } from "@/lib/utils/busqueda.js";
 import {
   Capturas,
   ModalApuntar,
@@ -633,17 +634,11 @@ export default function TableroPage() {
   const secciones = datos?.[pestaña] ?? [];
 
   const visibles = useMemo(() => {
-    const q = filtro.trim().toLowerCase();
-    if (!q) return secciones;
+    if (!filtro.trim()) return secciones;
     return secciones
       .map((s) => ({
         ...s,
-        tareas: s.tareas.filter(
-          (t) =>
-            (t.quien ?? "").toLowerCase().includes(q) ||
-            t.titulo.toLowerCase().includes(q) ||
-            t.cuerpo.toLowerCase().includes(q)
-        ),
+        tareas: s.tareas.filter((t) => coincidePorNombre(filtro, [t.quien, t.titulo, t.cuerpo])),
       }))
       .filter((s) => s.tareas.length > 0);
   }, [secciones, filtro]);

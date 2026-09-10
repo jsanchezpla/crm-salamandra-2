@@ -4,6 +4,7 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
 import { recipeInclude, serializeRecipe, sanitizeIngredients, sanitizeSteps } from "../../../../lib/nutricion/recipes.js";
+import { filtrarPorTexto } from "../../../../lib/utils/busquedaDb.js";
 
 const MAX_LIMIT = 100;
 
@@ -37,7 +38,8 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
 
     const where = {};
     if (!includeArchived) where.isArchived = false;
-    if (q) where.name = { [Op.iLike]: `%${q}%` };
+    // «puré de calabacin» encuentra «Puré de calabacín» (10/09/2026).
+    await filtrarPorTexto(where, Recipe, q || "", ["name"]);
 
     // ── Filtros del recetario (04/08/2026) ────────────────────────────────
     //

@@ -1,4 +1,3 @@
-import { Op } from "sequelize";
 import { NextResponse } from "next/server";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import {
@@ -9,6 +8,7 @@ import {
 } from "../../../../lib/utils/apiResponse.js";
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
+import { filtrarPorTexto } from "../../../../lib/utils/busquedaDb.js";
 
 const MAX_LIMIT = 100;
 
@@ -55,7 +55,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
 
     const where = { type };
     if (!includeArchived) where.archivedAt = null;
-    if (q) where.name = { [Op.iLike]: `%${q}%` };
+    await filtrarPorTexto(where, Plan, q || "", ["name"]);
     if (type === "assigned" && clientId) where.clientId = clientId;
     // Asignados de una plantilla concreta (panel de asignación del editor de
     // menú): filtrar en BD evita traer los 100 más recientes y filtrar en cliente.

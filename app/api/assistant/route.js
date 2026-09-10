@@ -6,6 +6,7 @@ import { answerQuestion } from "../../../lib/assistant/answer.js";
 import { getTenantAnthropicKey } from "../../../lib/ai/anthropicKey.js";
 import { vetoAi } from "../../../lib/ai/aiAccess.js";
 import { getTenantAnthropicModel } from "../../../lib/ai/anthropicModel.js";
+import { filtroPorAtributos } from "../../../lib/utils/busquedaDb.js";
 
 const MAX_MSGS = 12;
 
@@ -28,8 +29,14 @@ async function searchClients(tenantModels, query) {
     .filter((w) => w.length >= 3 && !["como", "donde", "cuando", "para", "que", "los", "las", "una", "cliente", "clientes", "busca", "buscar"].includes(w));
   if (!words.length) return [];
   try {
+    // La pregunta ya venía sin tildes; el NOMBRE de la base sí las lleva, así
+    // que «munoz» no encontraba a los Muñoz (10/09/2026). `filtroPorAtributos`
+    // normaliza los dos lados. Sigue siendo un O entre palabras: aquí no se
+    // busca un nombre, se pescan las palabras sueltas de una pregunta.
+    const porPalabra = (await Promise.all(words.map((w) => filtroPorAtributos(Client, w, ["name"])))).filter(Boolean);
+    if (!porPalabra.length) return [];
     const rows = await Client.findAll({
-      where: { [Op.or]: words.map((w) => ({ name: { [Op.iLike]: `%${w}%` } })) },
+      where: { [Op.or]: porPalabra },
       attributes: ["id", "name"],
       limit: 6,
     });

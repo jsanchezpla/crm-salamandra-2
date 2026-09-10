@@ -67,9 +67,11 @@ export const GET = withTenant(async (request, _ctx, { tenantSequelize, hasModule
       const clauses = [...extraClauses];
       const binds = [];
       let idx = startIdx;
-      if (companyName) {
-        clauses.push(`empresa ILIKE $${idx}`);
-        binds.push(`%${companyName}%`);
+      // La empresa, con la misma regla que el alumno: sin tildes y por
+      // palabras (10/09/2026).
+      for (const palabra of palabrasDe(companyName)) {
+        clauses.push(`${campo("empresa")} LIKE ${patron(idx)}`);
+        binds.push(`%${escaparLike(palabra)}%`);
         idx++;
       }
       if (courseId) {

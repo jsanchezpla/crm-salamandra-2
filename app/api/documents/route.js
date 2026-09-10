@@ -27,6 +27,7 @@ import {
 } from "@/lib/documents/documentStorage.js";
 import { sincronizaLectores, avisaALosLectores } from "@/lib/documents/lecturas.js";
 import { carpetasCompartidasCon } from "@/lib/documents/carpetasCompartidas.js";
+import { filtrarPorTexto } from "@/lib/utils/busquedaDb.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -65,7 +66,9 @@ export const GET = withTenant(async (request, _rc, ctx) => {
       where.patientId = patientId;
     }
     if (source) where.source = source.slice(0, 40);
-    if (q) where.fileName = { [Op.iLike]: `%${q}%` };
+    // Sin tildes (10/09/2026): «informe evaluacion» encuentra «Informe
+    // evaluación.pdf», y da igual el orden de las palabras.
+    await filtrarPorTexto(where, Document, q, ["fileName"]);
 
     if (!modoBusqueda) {
       const folderParam = sp.get("folderId");

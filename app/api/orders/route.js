@@ -1,6 +1,6 @@
-import { Op } from "sequelize";
 import { withTenant } from "../../../lib/tenant/withTenant.js";
 import { ok, created, forbidden, error, serverError } from "../../../lib/utils/apiResponse.js";
+import { filtroPorAtributos } from "../../../lib/utils/busquedaDb.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
@@ -35,7 +35,9 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     { model: OrderLine, as: "lines" },
   ];
   if (search) {
-    include[0].where = { name: { [Op.iLike]: `%${search}%` } };
+    // Dentro de un include manda el alias de la ASOCIACIÓN («client»), no el
+    // del modelo: con «Client» Postgres responde un 500.
+    include[0].where = await filtroPorAtributos(Client, search, ["name"], { alias: "client" });
     include[0].required = true;
   }
 

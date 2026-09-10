@@ -79,3 +79,19 @@ test("con muchos hermanos se corta, pero se dice cuántos faltan", () => {
   // Cortar la etiqueta no puede cortar la BÚSQUEDA: los de más también casan.
   assert.equal(cuotaCasaCon(muchos, "iván"), true);
 });
+
+test("el buscador no obliga a poner tildes (10/09/2026, Rodrigo)", () => {
+  // «munoz» encuentra a los Muñoz, y «alvarez» a la razón fiscal con tilde.
+  assert.equal(cuotaCasaCon(deLaFamilia, "munoz"), true);
+  assert.equal(cuotaCasaCon(deLaFamilia, "alvarez"), true);
+  // Y al revés: escribirla de más tampoco estorba.
+  assert.equal(cuotaCasaCon(deLaFamilia, "Muñoz"), true);
+  // Sigue sin encontrar lo que no está.
+  assert.equal(cuotaCasaCon(deLaFamilia, "lucia"), false);
+});
+
+test("y busca por palabras sueltas, en cualquier orden", () => {
+  assert.equal(cuotaCasaCon(deLaFamilia, "castro hugo"), true);
+  assert.equal(cuotaCasaCon(deLaFamilia, "hugo vanesa"), true); // el niño y quien paga
+  assert.equal(cuotaCasaCon(deLaFamilia, "hugo lucia"), false); // todas las palabras, no una
+});

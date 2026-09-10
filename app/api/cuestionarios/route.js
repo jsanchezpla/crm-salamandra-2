@@ -1,7 +1,7 @@
 import { withTenant } from "../../../lib/tenant/withTenant.js";
 import { ok, forbidden } from "../../../lib/utils/apiResponse.js";
 import { Op } from "sequelize";
-import { filtroPorNombre } from "../../../lib/utils/busquedaDb.js";
+import { filtroPorNombre, filtrarPorTexto } from "../../../lib/utils/busquedaDb.js";
 
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   if (!hasModule("training")) return forbidden();
@@ -17,7 +17,8 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   const limit = Math.min(parseInt(searchParams.get("limit") ?? "100"), 500);
   const offset = parseInt(searchParams.get("offset") ?? "0");
 
-  if (empresa) where.empresa = { [Op.iLike]: `%${empresa}%` };
+  // La empresa, con la misma regla que el alumno: sin tildes y por palabras.
+  await filtrarPorTexto(where, QuizAttempt, empresa || "", ["empresa"]);
   if (result) where.result = result;
   if (wpCourseId) where.wpCourseId = parseInt(wpCourseId);
   /*

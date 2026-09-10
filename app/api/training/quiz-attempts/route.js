@@ -2,7 +2,7 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok } from "../../../../lib/utils/apiResponse.js";
 import { ForbiddenError } from "../../../../lib/utils/errors.js";
 import { Op } from "sequelize";
-import { filtroPorNombre } from "../../../../lib/utils/busquedaDb.js";
+import { filtroPorNombre, filtrarPorTexto } from "../../../../lib/utils/busquedaDb.js";
 
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   if (!hasModule("training")) throw new ForbiddenError();
@@ -22,7 +22,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   const limit = Math.min(parseInt(searchParams.get("limit") ?? "50"), 500);
   const offset = parseInt(searchParams.get("offset") ?? "0");
 
-  if (companyName) where.empresa = { [Op.iLike]: `%${companyName}%` };
+  await filtrarPorTexto(where, QuizAttempt, companyName || "", ["empresa"]);
   if (result) where.result = result;
   if (wpCourseId) where.wpCourseId = parseInt(wpCourseId);
   if (wpQuizId) where.wpQuizId = parseInt(wpQuizId);

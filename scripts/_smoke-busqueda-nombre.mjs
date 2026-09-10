@@ -39,7 +39,7 @@ import {
   coincidePorNombre,
   MAX_PALABRAS,
 } from "../lib/utils/busqueda.js";
-import { condicionPorPalabras } from "../lib/utils/busquedaDb.js";
+import { condicionPorPalabras, filtroPorAtributos, filtrarPorTexto } from "../lib/utils/busquedaDb.js";
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), "..");
 const leer = (p) => readFileSync(join(RAIZ, p), "utf8");
@@ -432,5 +432,59 @@ describe("La regla se puede usar también en el navegador", () => {
     const db = leer("lib/utils/busquedaDb.js");
     assert.match(db, /from "sequelize"/);
     assert.match(db, /export async function filtroPorNombre/);
+  });
+});
+
+/*
+ * ── DECIR EL ATRIBUTO Y NO LA COLUMNA (10/09/2026) ─────────────────────────
+ * Rodrigo: «ni un solo buscador del CRM debería obligar a poner tildes». El
+ * repaso tocó veinte endpoints, y en `condicionPorPalabras` la columna va con
+ * su nombre de BASE («file_name», no «fileName») y cualificada con el alias:
+ * equivocarse no da un resultado raro, da un 500. `filtroPorAtributos` se lo
+ * pregunta al modelo, que es quien lo sabe.
+ */
+describe("filtroPorAtributos traduce el atributo a su columna", () => {
+  // Una base que dice tener `unaccent`, y un modelo con su columna en snake_case.
+  const modelo = (nombre = "Document") => ({
+    name: nombre,
+    sequelize: { query: async () => [[{ ok: 1 }]] },
+    getAttributes: () => ({ fileName: { field: "file_name" }, nombre: { field: "nombre" } }),
+  });
+
+  const columnaDe = (cond, i = 0) => {
+    const porPalabra = cond[Op.and][i];
+    const primera = porPalabra[Op.or][0];
+    // unaccent(lower("Document"."file_name")) → se mira el col() de dentro.
+    return primera.attribute.args[0].args[0].col;
+  };
+
+  it("usa el nombre de la columna, no el del atributo", async () => {
+    const cond = await filtroPorAtributos(modelo(), "informe", ["fileName"]);
+    assert.equal(columnaDe(cond), "Document.file_name");
+  });
+
+  it("dentro de un include manda el alias de la asociación", async () => {
+    const cond = await filtroPorAtributos(modelo("Client"), "ana", ["nombre"], { alias: "client" });
+    assert.equal(columnaDe(cond), "client.nombre");
+  });
+
+  it("una cláusula por palabra: todas tienen que aparecer", async () => {
+    const cond = await filtroPorAtributos(modelo(), "informe evaluacion", ["fileName"]);
+    assert.equal(cond[Op.and].length, 2);
+  });
+
+  it("sin texto no hay filtro, y el where se queda como estaba", async () => {
+    assert.equal(await filtroPorAtributos(modelo(), "   ", ["fileName"]), null);
+    const where = { patientId: "p1" };
+    await filtrarPorTexto(where, modelo(), "", ["fileName"]);
+    assert.deepEqual(Object.getOwnPropertySymbols(where), []);
+  });
+
+  it("cuelga del Op.and sin pisar lo que ya hubiera (el fallo del Buzón)", async () => {
+    const previo = { estado: "nuevo" };
+    const where = { [Op.and]: [previo] };
+    await filtrarPorTexto(where, modelo(), "informe", ["fileName"]);
+    assert.equal(where[Op.and].length, 2);
+    assert.equal(where[Op.and][0], previo);
   });
 });

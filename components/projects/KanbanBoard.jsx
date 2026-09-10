@@ -14,6 +14,7 @@ import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import BoardColumn from "./BoardColumn.jsx";
 import TaskCard from "./TaskCard.jsx";
 import TaskDrawer from "./TaskDrawer.jsx";
+import { coincidePorNombre } from "@/lib/utils/busqueda.js";
 
 /**
  * KanbanBoard — wrapper del tablero del proyecto.
@@ -76,12 +77,7 @@ export default function KanbanBoard({
     return data.columns.map((col) => ({
       ...col,
       tasks: col.tasks.filter((t) => {
-        if (search) {
-          const q = search.toLowerCase();
-          const hit = t.title.toLowerCase().includes(q) ||
-            (t.description ?? "").toLowerCase().includes(q);
-          if (!hit) return false;
-        }
+        if (search && !coincidePorNombre(search, [t.title, t.description])) return false;
         if (assigneeId) {
           const has = (t.assignees ?? []).some(
             (a) => (a.id ?? a.teamMemberId) === assigneeId

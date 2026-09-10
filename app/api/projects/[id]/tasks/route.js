@@ -7,6 +7,7 @@ import { isAdminRole, isLeadOfProject } from "../../../../../lib/projects/projec
 import { getMasterModels } from "../../../../../lib/db/masterDb.js";
 import { isValidTaskPriority, TASK_PRIORITY_VALUES, DEFAULT_TASK_PRIORITY } from "../../../../../lib/projects/taskPriority.js";
 import { normalizeChecklistItems } from "../../../../../lib/projects/checklist.js";
+import { filtrarPorTexto } from "../../../../../lib/utils/busquedaDb.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -82,12 +83,7 @@ export const GET = withTenant(async (request, { params }, ctx) => {
   if (boardColumnId) where.boardColumnId = boardColumnId;
   if (phaseId) where.phaseId = phaseId;
   if (milestoneId) where.milestoneId = milestoneId;
-  if (search) {
-    where[Op.or] = [
-      { title: { [Op.iLike]: `%${search}%` } },
-      { description: { [Op.iLike]: `%${search}%` } },
-    ];
-  }
+  await filtrarPorTexto(where, Task, search || "", ["title", "description"]);
   if (tagsAny) {
     const list = tagsAny.split(",").map((s) => s.trim()).filter(Boolean);
     if (list.length > 0) {

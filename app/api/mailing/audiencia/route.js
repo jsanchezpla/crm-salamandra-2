@@ -2,6 +2,7 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok } from "../../../../lib/utils/apiResponse.js";
 import { exigirMailing, leerBody } from "../../../../lib/mailing/comun.js";
 import { contarAudiencia, resolverAudiencia } from "../../../../lib/mailing/audiencia.js";
+import { coincidePorNombre } from "../../../../lib/utils/busqueda.js";
 
 /**
  * /api/mailing/audiencia — quién recibiría un correo.
@@ -23,7 +24,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   const q = (new URL(request.url).searchParams.get("q") || "").trim().toLowerCase();
   const r = await resolverAudiencia(ctx, {}, { conClientes: ctx.tenantHasModule("clients") });
   let lista = r.destinatarios;
-  if (q) lista = lista.filter((d) => d.email.includes(q) || (d.nombre ?? "").toLowerCase().includes(q));
+  if (q) lista = lista.filter((d) => coincidePorNombre(q, [d.email, d.nombre]));
   return ok({
     total: r.total,
     clientes: r.clientes,

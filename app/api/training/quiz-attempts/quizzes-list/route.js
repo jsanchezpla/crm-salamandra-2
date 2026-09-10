@@ -1,5 +1,7 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, forbidden, serverError } from "../../../../../lib/utils/apiResponse.js";
+import { palabrasDe, escaparLike } from "../../../../../lib/utils/busqueda.js";
+import { hasUnaccentSupport } from "../../../../../lib/utils/busquedaDb.js";
 
 /**
  * GET /api/training/quiz-attempts/quizzes-list?courseId=&companyName=
@@ -31,9 +33,14 @@ export const GET = withTenant(async (request, _ctx, { tenantSequelize, hasModule
     const clauses = ["wp_quiz_id IS NOT NULL"];
     const binds = [];
     let idx = 1;
-    if (companyName) {
-      clauses.push(`empresa ILIKE $${idx}`);
-      binds.push(`%${companyName}%`);
+    // Sin tildes y por palabras (10/09/2026), como la tabla que hay debajo:
+    // el desplegable y la lista tienen que enseñar lo mismo.
+    const conTildes = await hasUnaccentSupport(tenantSequelize);
+    const campo = (c) => (conTildes ? `unaccent(lower(${c}))` : `lower(${c})`);
+    const patron = (n) => (conTildes ? `unaccent($${n}::text)` : `$${n}`);
+    for (const palabra of palabrasDe(companyName)) {
+      clauses.push(`${campo("empresa")} LIKE ${patron(idx)}`);
+      binds.push(`%${escaparLike(palabra)}%`);
       idx++;
     }
     if (courseId) {

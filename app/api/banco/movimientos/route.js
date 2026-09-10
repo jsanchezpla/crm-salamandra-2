@@ -1,6 +1,7 @@
 import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, forbidden } from "../../../../lib/utils/apiResponse.js";
+import { filtrarPorTexto } from "../../../../lib/utils/busquedaDb.js";
 
 /**
  * GET /api/banco/movimientos — el extracto, con su estado de conciliación.
@@ -61,10 +62,9 @@ export const GET = withTenant(async (request, _ctx, ctx) => {
   // Cobros, que trae el id del movimiento conciliado.
   if (searchParams.get("id")) where.id = searchParams.get("id");
   if (searchParams.get("cuenta")) where.bankAccountId = searchParams.get("cuenta");
-  const q = (searchParams.get("q") || "").trim();
-  if (q) {
-    where[Op.or] = [{ concept: { [Op.iLike]: `%${q}%` } }, { counterparty: { [Op.iLike]: `%${q}%` } }];
-  }
+  // Sin tildes y por palabras, como el resto del CRM (10/09/2026): «nomina
+  // maria» encuentra «NÓMINA MARÍA GARCÍA», que es como se busca un cargo.
+  await filtrarPorTexto(where, BankTransaction, searchParams.get("q") || "", ["concept", "counterparty"]);
   const estado = searchParams.get("estado");
   const idsCasados = [...casadoPor.keys()];
   if (estado === "sin_casar" && idsCasados.length) where.id = { [Op.notIn]: idsCasados };

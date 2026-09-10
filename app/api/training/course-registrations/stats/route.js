@@ -1,6 +1,8 @@
 import { Op } from "sequelize";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, forbidden, error, serverError } from "../../../../../lib/utils/apiResponse.js";
+import { palabrasDe, escaparLike } from "../../../../../lib/utils/busqueda.js";
+import { filtrarPorTexto, hasUnaccentSupport } from "../../../../../lib/utils/busquedaDb.js";
 
 /**
  * GET /api/training/course-registrations/stats?courseId=<uuid>
@@ -120,13 +122,17 @@ export const GET = withTenant(async (request, _ctx, { tenantSequelize, tenantMod
       if (fromIso) where.submittedAt[Op.gte] = new Date(fromIso);
       if (toIso) where.submittedAt[Op.lte] = new Date(toIso);
     }
-    if (search) {
-      where[Op.or] = [
-        { email: { [Op.iLike]: `%${search}%` } },
-        { centerName: { [Op.iLike]: `%${search}%` } },
-        { centerNif: { [Op.iLike]: `%${search}%` } },
-      ];
-    }
+    await filtrarPorTexto(where, CourseRegistration, search || "", ["email", "centerName", "centerNif"]);
+
+    /*
+     * La misma regla en el SQL crudo de aquí abajo (10/09/2026). Se pregunta
+     * UNA vez por `unaccent` porque `buildRawFilters` es síncrona y se llama
+     * varias veces; y el `::text` del parámetro no es adorno: sin él,
+     * `unaccent($1)` no tiene tipo y Postgres responde un 500.
+     */
+    const conTildes = await hasUnaccentSupport(CourseRegistration.sequelize);
+    const campo = (c) => (conTildes ? `unaccent(lower(${c}))` : `lower(${c})`);
+    const patron = (n) => (conTildes ? `unaccent($${n}::text)` : `$${n}`);
 
     // ── WHERE crudo para la query SQL ──────────────────────────────────
     // courseId siempre va en $1; el resto se añade dinámicamente con $2, $3…
@@ -144,12 +150,16 @@ export const GET = withTenant(async (request, _ctx, { tenantSequelize, tenantMod
       if (toIso) {
         clauses.push(`${prefix}submitted_at <= $${idx}`); binds.push(new Date(toIso)); idx++;
       }
-      if (search) {
-        const pattern = `%${search}%`;
+      // Una cláusula por palabra: todas tienen que aparecer, cada una en
+      // cualquiera de los tres campos. Los nombres de columna son constantes
+      // escritas aquí; lo que teclea la persona viaja SOLO por `binds`.
+      for (const palabra of palabrasDe(search)) {
         clauses.push(
-          `(${prefix}email ILIKE $${idx} OR ${prefix}center_name ILIKE $${idx} OR ${prefix}center_nif ILIKE $${idx})`
+          `(${campo(prefix + "email")} LIKE ${patron(idx)}` +
+          ` OR ${campo(prefix + "center_name")} LIKE ${patron(idx)}` +
+          ` OR ${campo(prefix + "center_nif")} LIKE ${patron(idx)})`
         );
-        binds.push(pattern); idx++;
+        binds.push(`%${escaparLike(palabra)}%`); idx++;
       }
       return { sql: clauses.length ? " AND " + clauses.join(" AND ") : "", binds };
     }

@@ -56,6 +56,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { anchoPanel } from "@/components/admin/anchoPanel.js";
+import { coincidePorNombre } from "@/lib/utils/busqueda.js";
 
 // Respaldos estables para mientras no ha llegado la respuesta. Escribir `?? []`
 // dentro del componente crea un array nuevo en cada render y hace que los
@@ -347,38 +348,34 @@ export default function IntegracionesPage() {
    * real: «¿qué le falta a este para que le funcione todo?».
    */
   const filasDeps = useMemo(() => {
-    const q = filtro.trim().toLowerCase();
+    const hayFiltro = Boolean(filtro.trim());
 
     return matriz.filter((fila) => {
       if (cliente && !fila.loTienen.includes(cliente)) return false;
-      if (!q) return true;
-      return (
-        fila.modulo.toLowerCase().includes(q) ||
-        (nombres[fila.modulo] ?? "").toLowerCase().includes(q) ||
-        (fila.resumen ?? "").toLowerCase().includes(q) ||
-        (fila.necesitaTexto ?? "").toLowerCase().includes(q) ||
-        fila.necesita.some(
-          (d) =>
-            d.claves.some((k) => k.toLowerCase().includes(q) || (nombres[k] ?? "").toLowerCase().includes(q)) ||
-            d.porque.toLowerCase().includes(q)
-        )
-      );
+      if (!hayFiltro) return true;
+      return coincidePorNombre(filtro, [
+        fila.modulo,
+        nombres[fila.modulo],
+        fila.resumen,
+        fila.necesitaTexto,
+        ...fila.necesita.flatMap((d) => [...d.claves, ...d.claves.map((k) => nombres[k]), d.porque]),
+      ]);
     });
   }, [matriz, filtro, cliente, nombres]);
 
   const visibles = useMemo(() => {
-    const q = filtro.trim().toLowerCase();
+    const hayFiltro = Boolean(filtro.trim());
     return todas.filter((i) => {
       if (cliente && !i.vivas.includes(cliente) && !i.aMedias.includes(cliente)) return false;
-      if (!q) return true;
-      return (
-        i.desde.toLowerCase().includes(q) ||
-        i.hacia.toLowerCase().includes(q) ||
-        i.titulo.toLowerCase().includes(q) ||
-        i.queHace.toLowerCase().includes(q) ||
-        (nombres[i.desde] ?? "").toLowerCase().includes(q) ||
-        (nombres[i.hacia] ?? "").toLowerCase().includes(q)
-      );
+      if (!hayFiltro) return true;
+      return coincidePorNombre(filtro, [
+        i.desde,
+        i.hacia,
+        i.titulo,
+        i.queHace,
+        nombres[i.desde],
+        nombres[i.hacia],
+      ]);
     });
   }, [todas, filtro, cliente, nombres]);
 

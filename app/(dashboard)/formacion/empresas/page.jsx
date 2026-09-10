@@ -7,6 +7,7 @@ import { TrainingTable, Tr, Td } from "../../../../components/training/TrainingT
 import { ActiveBadge } from "../../../../components/training/TrainingBadge.jsx";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import { anchoPantalla } from "../../../../components/layout/anchoPantalla.js";
+import { coincidePorNombre } from "@/lib/utils/busqueda.js";
 
 export default function EmpresasPage() {
   const router = useRouter();
@@ -38,9 +39,7 @@ export default function EmpresasPage() {
 
   useEffect(() => { load(); }, []);
 
-  const filtered = companies.filter((c) =>
-    !search.trim() || c.name.toLowerCase().includes(search.trim().toLowerCase())
-  );
+  const filtered = companies.filter((c) => coincidePorNombre(search, [c.name]));
 
   async function handleCreate(e) {
     e.preventDefault();

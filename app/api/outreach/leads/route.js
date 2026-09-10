@@ -4,6 +4,7 @@ import { ok, created } from "../../../../lib/utils/apiResponse.js";
 import { ForbiddenError, ValidationError } from "../../../../lib/utils/errors.js";
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
 import { isAllowedLeadStatus } from "../../../../lib/outreach/estados.js";
+import { filtrarPorTexto } from "../../../../lib/utils/busquedaDb.js";
 
 async function auditLog(data) {
   try {
@@ -35,8 +36,7 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
 
   // Los convertidos a cliente NO aparecen en la lista de captados.
   const where = { converted: false };
-  const q = sp.get("q")?.trim();
-  if (q) where.name = { [Op.iLike]: `%${q}%` };
+  await filtrarPorTexto(where, OutreachLead, sp.get("q") || "", ["name"]);
   for (const field of ["sector", "location", "source"]) {
     const v = sp.get(field)?.trim();
     if (v) where[field] = v;

@@ -1,9 +1,9 @@
-import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok } from "../../../../lib/utils/apiResponse.js";
 import { auditar, datosPeticion } from "../../../../lib/utils/auditoria.js";
 import { emailValido, exigirMailing, leerBody, texto } from "../../../../lib/mailing/comun.js";
 import { suprimirEmail } from "../../../../lib/mailing/supresion.js";
+import { filtrarPorTexto } from "../../../../lib/utils/busquedaDb.js";
 
 /**
  * /api/mailing/supresiones — de aquí no sale nadie nunca más.
@@ -17,8 +17,9 @@ import { suprimirEmail } from "../../../../lib/mailing/supresion.js";
 export const GET = withTenant(async (request, _rc, ctx) => {
   exigirMailing(ctx);
   const q = (new URL(request.url).searchParams.get("q") || "").trim().toLowerCase();
-  const where = q ? { email: { [Op.iLike]: `%${q}%` } } : {};
   const { MailingSuppression } = ctx.tenantModels;
+  const where = {};
+  await filtrarPorTexto(where, MailingSuppression, q, ["email"]);
   const { rows, count } = await MailingSuppression.findAndCountAll({ where, order: [["createdAt", "DESC"]], limit: 500 });
   const porMotivo = Object.fromEntries(
     (await MailingSuppression.findAll({
