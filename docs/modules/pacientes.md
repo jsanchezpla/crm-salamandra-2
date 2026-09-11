@@ -413,7 +413,10 @@ Pestañas (`TABS` en `app/(dashboard)/pacientes/[id]/page.jsx`):
 1. **Resumen**: motivo de derivación, objetivos terapéuticos (los de la
    ficha; hay tres listas de objetivos —ficha, plan, sesión— y no se copian
    entre sí), citas del paciente (solo las que lo tienen asignado), **contacto
-   (pagador)** con sus métodos de contacto y el aviso «padres separados»,
+   (pagador)** con sus métodos de contacto —y, si la familia no tiene ninguno
+   (las que vinieron de Organízate, casi todas), el teléfono y el correo de la
+   propia ficha o de un tutor, etiquetados «ficha»/«tutor»: `payerContactsOf`
+   en `lib/clinica/serialize.js`, 11/09/2026, AV-0124— y el aviso «padres separados»,
    **datos y consentimientos** (DNI, parentesco, domicilio; chips Imágenes /
    Publicidad / WhatsApp), el contrato de la FAMILIA (se gestiona en la ficha
    del cliente; aquí solo se consulta y enlaza) y **facturación**

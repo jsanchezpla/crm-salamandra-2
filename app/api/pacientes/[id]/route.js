@@ -65,7 +65,13 @@ function therapistInclude(TeamMember) {
  */
 function payerInclude({ Client, ClientContactMethod }, tenantHasModule) {
   if (!tenantHasModule("clients") || !Client) return [];
-  const inc = { model: Client, as: "client", attributes: ["id", "name", "separated", "guardians"] };
+  // `email` y `phone` desde el 11/09/2026 (AV-0124): la tarjeta «Contacto
+  // (pagador)» solo leía `client_contact_methods`, y las 1.000 familias que
+  // vinieron de Organízate no tienen ni una fila ahí —su teléfono vive en la
+  // propia ficha—, así que la ficha del paciente decía «sin contactos» con el
+  // número guardado. El serializador cae a la ficha (y a los tutores) cuando
+  // no hay métodos de contacto: `payerContactsOf` en lib/clinica/serialize.js.
+  const inc = { model: Client, as: "client", attributes: ["id", "name", "separated", "guardians", "email", "phone"] };
   if (ClientContactMethod) {
     inc.include = [{ model: ClientContactMethod, as: "contactMethods", attributes: ["id", "kind", "value", "label", "isPrimary"] }];
   }
