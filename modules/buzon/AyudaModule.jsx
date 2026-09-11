@@ -11,7 +11,9 @@ import {
   LIMITES,
   MB_POR_ADJUNTO,
   EVENTO_SIN_VER,
+  ESTADOS,
 } from "../../lib/buzon/buzon.js";
+import { filtrarAvisos, TODOS } from "../../lib/buzon/buscarAvisos.js";
 import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 
 /**
@@ -65,6 +67,10 @@ const ESTADO_COLOR = {
   enviado: "bg-blue-50 text-blue-700 border-blue-200",
 };
 
+// Las pastillas del filtro de la lista: «Todos» y los dos estados, con el
+// mismo rótulo que lleva cada fila (sale de la misma lista que `estadoLabel`).
+const FILTROS_ESTADO = [{ key: TODOS, label: "Todos" }, ...ESTADOS.map((e) => ({ key: e.key, label: e.label }))];
+
 function fecha(v) {
   if (!v) return "";
   return new Date(v).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" });
@@ -96,6 +102,13 @@ export default function AyudaModule({ esDemo = false }) {
   const [enviado, setEnviado] = useState(null);
 
   const [abierto, setAbierto] = useState(null);
+
+  // El buscador de la lista (11/09/2026, AV-0118 de Aumenta). Decide lo que se
+  // PINTA, no lo que se tiene: `avisos` sigue entero porque de él se cuenta el
+  // punto del menú (`sinLeer`, más abajo), y un recuento sobre una lista
+  // filtrada apagaría el punto en cuanto alguien escribiera una letra.
+  const [busqueda, setBusqueda] = useState("");
+  const [filtroEstado, setFiltroEstado] = useState(TODOS);
 
   // Para poder llevar el cursor al campo que falta, y no solo decirlo.
   const refAsunto = useRef(null);
@@ -144,6 +157,11 @@ export default function AyudaModule({ esDemo = false }) {
    * va a pasar.)
    */
   const sinLeer = avisos.filter((a) => a.sinLeer).length;
+
+  // Las filas que se enseñan. Texto y estado a la vez, sin pisarse
+  // (`lib/buzon/buscarAvisos.js`, con la regla de búsqueda del resto del CRM).
+  const visibles = filtrarAvisos(avisos, { texto: busqueda, estado: filtroEstado });
+  const hayFiltro = busqueda.trim().length > 0 || filtroEstado !== TODOS;
 
   /**
    * Y se le dice al MENÚ, que vive fuera de esta pantalla.
@@ -406,15 +424,84 @@ export default function AyudaModule({ esDemo = false }) {
           <p className="text-[12px] text-gray-400 mb-3">
             Aquí sale lo de todo tu equipo, para no mandarnos la misma duda dos veces.
           </p>
+          {/* El buscador (11/09/2026, AV-0118 de Aumenta, Olga: «dentro de las
+              incidencias que te enviamos podríamos poner un buscador»). Con
+              más de cien avisos de todo el equipo ya no se encuentra nada
+              bajando por la lista. Busca como el resto del CRM —por palabras,
+              sin tildes ni mayúsculas— por asunto, texto, quién lo escribió y
+              referencia, y el estado se combina en vez de pisarlo. Solo sale
+              cuando hay algo entre lo que buscar. */}
+          {!cargando && avisos.length > 0 && (
+            <div className="mb-3 flex flex-col sm:flex-row sm:items-center gap-2">
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  placeholder="Buscar por asunto, texto, quién lo escribió o AV-0123"
+                  aria-label="Buscar entre lo que nos habéis mandado"
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 pr-8 text-sm focus:outline-none focus:border-gray-400"
+                />
+                {busqueda && (
+                  <button
+                    type="button"
+                    onClick={() => setBusqueda("")}
+                    aria-label="Borrar la búsqueda"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 text-lg leading-none cursor-pointer"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5 shrink-0">
+                {FILTROS_ESTADO.map((f) => (
+                  <button
+                    key={f.key}
+                    type="button"
+                    onClick={() => setFiltroEstado(f.key)}
+                    className={`px-2.5 py-1 rounded-full text-[12px] border transition-colors cursor-pointer whitespace-nowrap ${
+                      filtroEstado === f.key
+                        ? "text-white border-transparent"
+                        : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
+                    }`}
+                    style={filtroEstado === f.key ? { backgroundColor: "var(--color-primary, #1B3A2D)" } : undefined}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {!cargando && hayFiltro && visibles.length > 0 && (
+            <p className="text-[11px] text-gray-400 mb-2">
+              {visibles.length} de {avisos.length}
+            </p>
+          )}
           {cargando ? (
             <p className="text-[13px] text-gray-400">Cargando…</p>
           ) : avisos.length === 0 ? (
             <p className="text-[13px] text-gray-400">
               Todavía nada. Lo que nos escribas aparecerá aquí con su respuesta.
             </p>
+          ) : visibles.length === 0 ? (
+            <p className="text-[13px] text-gray-400">
+              Nada coincide{busqueda.trim() ? ` con «${busqueda.trim()}»` : ""}
+              {filtroEstado !== TODOS ? " en ese estado" : ""}.{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  setBusqueda("");
+                  setFiltroEstado(TODOS);
+                }}
+                className="underline underline-offset-2 cursor-pointer"
+                style={{ color: "var(--color-primary, #1B3A2D)" }}
+              >
+                Ver todo
+              </button>
+            </p>
           ) : (
             <ul className="space-y-2">
-              {avisos.map((a) => (
+              {visibles.map((a) => (
                 <li key={a.id}>
                   <button
                     onClick={() => setAbierto(a)}
