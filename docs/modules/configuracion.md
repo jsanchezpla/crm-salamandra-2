@@ -10,7 +10,7 @@
 | **Reina** | — |
 | **Pantallas** | `app/(dashboard)/configuracion/page.jsx` → `/configuracion` (una página con **seis zonas en pestañas** desde el 23/08/2026: Empresa, Conexiones, Agenda, Reserva online, Portal del cliente y Módulos; la abierta viaja en `?zona=`). La página es de SERVIDOR y resuelve ahí los módulos del tenant, que el componente es `"use client"` y no puede preguntarlos · el back-office la complementa desde `app/admin/page.jsx` (ficha de Custodia, `/admin`): nosotros también podemos poner las claves |
 | **Endpoints** | `app/api/tenant/settings/route.js` (GET/PATCH, 1) · `app/api/ai-permisos/**` (2: `route.js`, `[id]/route.js`, el candado de IA) · `app/api/admin/configuraciones/route.js` (1, back-office: pone credenciales sin leerlas nunca) · la pantalla reutiliza además `app/api/billing/settings`, `app/api/outreach/settings`, `app/api/outreach/business-lines/**` y `app/api/clinica/derivaciones` · la pestaña **Tu cuenta** usa `app/api/auth/password` (cambiarse la contraseña, 24/08/2026) y `app/api/auth/correo` (ponerse el correo de la cuenta, 26/08/2026) · públicos: ninguno |
-| **Lógica** | `lib/configuracion/pestanas.js` (**el reparto en zonas y qué módulo hace útil cada tarjeta**) · `lib/tenant/normalizarCentro.js` (28/08/2026: qué se guarda en `settings.centro` —recorta, tira las sedes vacías y descarta lo que no es texto—; `LIMITES`, `normalizarCentro`, `normalizarSede`, `centroVacio`) · `lib/configuracion/avisoCambio.js` (recibo por correo de cada cambio, enviado con la cuenta de Salamandra) · `lib/crypto/secretBox.js` (AES-256-GCM, prefijo `enc:v1:`) · resolvers que LEEN lo que aquí se guarda: `lib/ai/anthropicKey.js`, `lib/ai/anthropicModel.js` (`ANTHROPIC_MODELS`, Sonnet por defecto), `lib/ai/openaiKey.js`, `lib/ai/aiAccess.js` (`vetoAi`, candado `settings.aiAccess`), `lib/outreach/resendConfig.js`, `lib/payments/stripeConfig.js`, `lib/analytics/cloudflareConfig.js`, `lib/whatsapp/whatsappConfig.js`, `lib/citas/videollamada.js` (`settings.citas.meetModo`), `lib/citas/coloresBloqueo.js` · back-office: `lib/provisioning/credencialesCliente.js` (solo escribir), `lib/provisioning/contactoCliente.js` (`settings.contacto`) · plantilla del recibo: `lib/email/templates/configuracion/cambioAplicado.js` |
+| **Lógica** | `lib/configuracion/pestanas.js` (**el reparto en zonas y qué módulo hace útil cada tarjeta**) · `lib/tenant/normalizarCentro.js` (28/08/2026: qué se guarda en `settings.centro` —recorta, tira las sedes vacías y descarta lo que no es texto—; `LIMITES`, `normalizarCentro`, `normalizarSede`, `centroVacio`) · `lib/configuracion/avisoCambio.js` (recibo por correo de cada cambio, enviado con la cuenta de Salamandra) · `lib/crypto/secretBox.js` (AES-256-GCM, prefijo `enc:v1:`) · resolvers que LEEN lo que aquí se guarda: `lib/ai/anthropicKey.js`, `lib/ai/anthropicModel.js` (`ANTHROPIC_MODELS`, Haiku por defecto desde el 11/09/2026; `parametrosDeRazonamiento`) · `lib/ai/usoDeIA.js` + `lib/ai/precios.js` (contabilidad de cada llamada en `master.ai_uso`) · `lib/ai/cacheDeRespuestas.js`, `lib/ai/openaiKey.js`, `lib/ai/aiAccess.js` (`vetoAi`, candado `settings.aiAccess`), `lib/outreach/resendConfig.js`, `lib/payments/stripeConfig.js`, `lib/analytics/cloudflareConfig.js`, `lib/whatsapp/whatsappConfig.js`, `lib/citas/videollamada.js` (`settings.citas.meetModo`), `lib/citas/coloresBloqueo.js` · back-office: `lib/provisioning/credencialesCliente.js` (solo escribir), `lib/provisioning/contactoCliente.js` (`settings.contacto`) · plantilla del recibo: `lib/email/templates/configuracion/cambioAplicado.js` |
 | **UI** | `modules/config/ConfigModule.jsx` (el armazón: pestañas, aviso de solo-lectura y la sección fiscal) + `modules/config/tarjetas/` (un fichero por pestaña: `Empresa`, `Conexiones`, `Agenda`, `Reservas`, `Portal`, `Modulos`, `Cuenta`, más `DatosCentro.jsx` —la tarjeta «Datos del centro», 28/08/2026— y `ui.jsx` con `BotonZona`, `Tarjeta` —atenúa y explica—, `Section`, `Field`; partido el 27/08/2026) · no hay `components/config/`; usa `components/ui/Select.jsx` y `components/ui/HelpTooltip.jsx` |
 | **Modelos** | `models/master/Tenant.model.js` — todo va en `master.tenants.settings` (JSONB: `brand`, `integrations`, `aiAccess`, `citas`, `clientes`, `centro`, `contacto`), sin migración · `models/tenant/AiPermission.model.js` (`ai_permissions`: solicitudes y concesiones del candado de IA) · `models/master/AuditLog.model.js` (`master.audit_logs`) recibe cada cambio, sin el valor de los secretos |
 | **Interruptores y parámetros** | ninguno que lea el código (no hay fila en `tenant_modules`). Lo que esta pantalla escribe vive en `master.tenants.settings`, no en `featureFlags`: `integrations.*` (Anthropic, OpenAI, Google Places, Resend, Stripe, WhatsApp, Cloudflare; los secretos cifrados, `anthropicModel` en claro), `aiAccess` (`libre` / `restringido`), `citas.*` (`meetModo`, `recordatoriosCitas`, `agendaCompartida`, `avisosWhatsapp`, `portalBloqueoImpago`, `cancelacionBloqueada`, `reservaOnlineCerrada`, `formularioObligatorio`, `contratoObligatorio`, `soloConPago`, `identidadObligatoria`, `formularioUrl`, `portalUrl`, `reservaUrl`, `colorBloqueos`), `clientes.categoriasExternas`, `centro` (los datos que imprime el informe clínico), `brand`, `name` |
@@ -262,11 +262,31 @@ esconde sola con el 403 de quien no tiene Clínica).
 > resumen/estructura (texto → sesión).
 
 > **Modelo de Claude (selector):** debajo de la clave de Anthropic hay un selector de
-> modelo — **Sonnet (por defecto)** · Opus · Haiku. Se guarda en
+> modelo — **Haiku (por defecto desde el 11/09/2026)** · Sonnet · Opus. Se guarda en
 > `settings.integrations.anthropicModel` (sin cifrar, no es secreto) y se aplica a
 > **TODO el CRM** vía `getTenantAnthropicModel(ctx)` (`lib/ai/anthropicModel.js`).
-> Sonnet por defecto porque Opus consume muchos más tokens. Lista de modelos
-> admitidos: `ANTHROPIC_MODELS` (misma fuente que valida el backend y pinta la UI).
+> Haiku por defecto porque Aumenta se quedó sin saldo en diez días con Sonnet: un
+> registro dictado costaba 0,07-0,12 $ y con Haiku ~0,015 $ (las terapeutas lo
+> dieron por bueno). Lista de modelos admitidos: `ANTHROPIC_MODELS` (misma fuente
+> que valida el backend y pinta la UI).
+
+> **Lo que se hizo el 11/09/2026 para que la IA cueste menos, en el cliente
+> central y sin tocar ningún prompt:** (1) **el razonamiento previo se apaga**
+> (`parametrosDeRazonamiento(model)` → `thinking: disabled` en Sonnet 5, que lo
+> trae encendido de fábrica y lo cobra como salida aunque no se vea; Haiku y
+> Opus 4.8 no lo necesitan); (2) **la misma petición no se paga dos veces**
+> (`lib/ai/cacheDeRespuestas.js`: mismo modelo + prompt + mensaje + tenant → la
+> respuesta anterior durante 24 h, solo si fue completa); (3) **cada llamada
+> deja una fila en `master.ai_uso`** con tokens, coste estimado
+> (`lib/ai/precios.js`), acción y duración (`lib/ai/usoDeIA.js`; el tenant y el
+> usuario viajan por `AsyncLocalStorage` desde `withTenant`, la acción la apunta
+> `vetoAi`; best-effort, nunca rompe una llamada; migración
+> `scripts/migrate-ai-uso.js`, ONE_OFF de master). Y (4) **«Consumo estimado de
+> este mes»** dentro de la tarjeta de Anthropic, solo admins
+> (`modules/config/tarjetas/ConsumoIA.jsx` ← `GET /api/tenant/ia/consumo`): total
+> del mes y del anterior en $ y ≈ €, por acción, llamadas devueltas sin coste y
+> minutos de Whisper. Es una estimación con precios públicos; la cifra oficial
+> está en la consola de cada proveedor. Prueba: `scripts/_smoke-ia-coste.mjs`.
 
 Cada tarjeta muestra estado **Conectada / Sin configurar** con una pista
 enmascarada (p.ej. `AIza…1234`), y permite reemplazar o eliminar la clave.

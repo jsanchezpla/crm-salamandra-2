@@ -304,7 +304,7 @@ export function ApiKeyCard({ provider, status, isAdmin, onSave, onClear, models,
           <div className="min-w-0">
             <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Modelo de IA</label>
             <p className="text-[11px] text-neutral-400 mt-0.5">
-              {models.find((m) => m.id === currentModel)?.description ?? "Sonnet es el recomendado: más barato que Opus, calidad similar."}
+              {models.find((m) => m.id === currentModel)?.description ?? "Haiku es el recomendado: el más económico y sin razonamiento previo."}
             </p>
           </div>
           <Select

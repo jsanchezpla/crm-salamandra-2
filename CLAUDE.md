@@ -269,7 +269,8 @@ despliegue que toque módulos.
   de sesiones clínicas (`lib/clinica/structureSession.js`); Whisper SOLO para
   transcribir audio clínico (`lib/clinica/whisper.js`). **Clave y modelo POR
   TENANT** (Configuración → IA; `lib/ai/anthropicKey.js`, `anthropicModel.js`,
-  `openaiKey.js`; Sonnet por defecto). **NO se usan las claves del entorno**:
+  `openaiKey.js`; Haiku por defecto desde el 11/09/2026, y el razonamiento
+  previo de Sonnet apagado en el cliente central: `parametrosDeRazonamiento`). **NO se usan las claves del entorno**:
   sin clave → 503. Patrón: datos → prompt → pedir solo JSON → parsear con
   try/catch → persistir. Nada de IA se dispara solo: cuesta dinero.
 - **n8n** como motor de automatizaciones externo; el CRM dispara webhooks.

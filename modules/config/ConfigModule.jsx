@@ -8,6 +8,7 @@ import ConectarWhatsapp from "./ConectarWhatsapp.jsx";
 import { ANTHROPIC_MODELS } from "../../lib/ai/anthropicModel.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 import CorreoSalidaCard from "./CorreoSalidaCard.jsx";
+import ConsumoIA from "./tarjetas/ConsumoIA.jsx";
 import {
   PESTANAS,
   PESTANA_POR_DEFECTO,
@@ -451,6 +452,7 @@ export default function ConfigModule({ modulos = null }) {
               models={ANTHROPIC_MODELS}
               currentModel={cfg.integrations?.anthropic?.model}
               onModelChange={(v) => patchTenant({ anthropicModel: v }, "Modelo de IA actualizado")}
+              extra={isAdmin ? <ConsumoIA /> : null}
             />
           )}
 
