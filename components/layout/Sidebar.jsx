@@ -435,6 +435,10 @@ const navigation = [
           // quien quiere. NO son especialidades — Habilidades Sociales venía de
           // Organízate marcada como tal y son 4.287 citas.
           { key: "clinica-talleres", label: "Talleres", href: "/clinica/talleres" },
+          // Diagnósticos (12/09/2026, Rodrigo con Isa): los expedientes de
+          // diagnóstico —producto de horas cerrado, terapeuta asignado y barra
+          // que se cuenta desde las citas—. Lo ve todo el equipo con `clinica`.
+          { key: "clinica-diagnosticos", label: "Diagnósticos", href: "/clinica/diagnosticos" },
           // Estadísticas del centro (sprint 2026-07, punto 10). adminOnly: son
           // datos agregados de TODO el equipo, y el endpoint también lo exige.
           { key: "clinica-estadisticas", label: "Estadísticas", href: "/clinica/estadisticas", adminOnly: true },

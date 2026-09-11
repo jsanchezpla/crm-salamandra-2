@@ -337,6 +337,28 @@ export function defineBooking(sequelize) {
         allowNull: true,
         field: "cobro_importe",
       },
+      /**
+       * ── EL DIAGNÓSTICO del que es esta cita (12/09/2026, Rodrigo con Isa) ──
+       *
+       * Un diagnóstico es un producto de horas (10 o 20) y su barra se CUENTA
+       * desde las citas que llevan este puntero (`lib/clinica/diagnostico.js`,
+       * `horasDe`): nada se guarda en el expediente. `diagnosticoTramo` dice
+       * qué es la cita dentro de él —`entrevista` (la entrevista inicial, que
+       * vale 1 h y abre la plantilla `entrevista_inicial` aunque el tipo sea
+       * DIAGNÓSTICO) u `horas` (una sesión más, que vale su duración)—; los
+       * dos valores en `lib/citas/altaDesdeDiagnostico.js`.
+       *
+       * Null en todas las citas de siempre. Sin FK dura: `diagnosticos` es de
+       * Clínica y esta tabla de Citas (el mismo motivo que `tallerGrupoId`).
+       */
+      diagnosticoId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      diagnosticoTramo: {
+        type: DataTypes.STRING(12),
+        allowNull: true,
+      },
       // Notas internas (no visibles al cliente)
       notes: {
         type: DataTypes.TEXT,
@@ -352,6 +374,7 @@ export function defineBooking(sequelize) {
         { fields: ["patient_id"], name: "bookings_patient_idx" },
         { fields: ["pack_id"], name: "bookings_pack_idx" },
         { fields: ["taller_grupo_id"], name: "bookings_taller_grupo_idx" },
+        { fields: ["diagnostico_id"], name: "bookings_diagnostico_idx" },
       ],
     }
   );

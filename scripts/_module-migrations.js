@@ -481,6 +481,17 @@ export const MODULES = {
      * siempre.
      */
     "migrate-event-types-informe",
+    /*
+     * El apartado DIAGNÓSTICO de Clínica (12/09/2026): `bookings.diagnostico_id`
+     * y `.diagnostico_tramo`, `session_packs.diagnostico_id`, y
+     * `session_packs.total_sessions` deja de ser NOT NULL (NULL = bono sin
+     * tope). Aquí por lo mismo que `migrate-talleres-grupos`: `Booking` y
+     * `SessionPack` las declaran para todos, y un centro con Citas y sin
+     * Clínica se quedaría sin ellas con 42703 en toda su agenda. La tabla
+     * `diagnosticos` la crea donde hay `patients` (bloque `clinica`). VA
+     * ANTES del despliegue.
+     */
+    "migrate-diagnosticos",
   ],
 
   calendar: ["migrate-calendar-citas-fks"],
@@ -509,6 +520,11 @@ export const MODULES = {
     // declara la columna: a un tenant con `pacientes` suelto le reventaría
     // igual con 42703. VA ANTES del despliegue.
     "migrate-clinica-sesion-de-cita",
+    // De qué DIAGNÓSTICO es un registro de sesión (12/09/2026):
+    // `clinic_sessions.diagnostico_id`. En los DOS bloques por lo mismo que
+    // la de arriba: el MODELO la declara y `clinic_sessions` existe con
+    // `pacientes` suelto. VA ANTES del despliegue.
+    "migrate-diagnosticos",
   ],
 
   clinica: [
@@ -598,6 +614,18 @@ export const MODULES = {
     // migración el primer SELECT de /pacientes/[id] revienta con 42703 en el
     // schema que no la tenga. VA ANTES del despliegue.
     "migrate-clinica-sesion-de-cita",
+    /*
+     * El apartado DIAGNÓSTICO (12/09/2026, Rodrigo con Isa): la tabla
+     * `diagnosticos` —el expediente de un producto de horas (simple 10 h,
+     * completo 20 h) con su terapeuta y su estado— donde hay `patients`, más
+     * los enganches en `bookings` (`diagnostico_id`, `diagnostico_tramo`),
+     * `clinic_sessions` (`diagnostico_id`) y `session_packs`
+     * (`diagnostico_id`, y `total_sessions` pasa a admitir NULL = bono sin
+     * tope). Está también en `citas` y `pacientes` porque esos tres modelos
+     * declaran las columnas para TODOS los tenants; el analizador deduplica.
+     * Las reglas, en `lib/clinica/diagnostico.js`. VA ANTES del despliegue.
+     */
+    "migrate-diagnosticos",
   ],
 
   // Control horario. Depende de `team_members`, que crea el módulo Equipo: la

@@ -15,7 +15,8 @@ import SelectorPaciente from "../../../components/citas/SelectorPaciente.jsx";
 import PanelTallerCita from "../../../components/citas/PanelTallerCita.jsx";
 import SesionTallerDrawer from "../../../components/clinica/SesionTallerDrawer.jsx";
 import { colaDePreparacion } from "../../../lib/clinica/prepararSesion.js";
-import { PLANTILLA_ENTREVISTA } from "../../../lib/clinica/plantillas.js";
+import { plantillaDeLaCita } from "../../../lib/clinica/plantillaDeLaCita.js";
+import { TRAMO_ENTREVISTA } from "../../../lib/citas/altaDesdeDiagnostico.js";
 // Cómo se llama el informe que sale de esta cita (09/09/2026).
 import { REPORT_TYPE_LABEL } from "../../../lib/clinica/serialize.js";
 import { citaNoSeDio } from "../../../lib/clinica/borradorDeCita.js";
@@ -573,6 +574,26 @@ export function CitaDetalleModal({
                       {openBooking.eventType.name}
                     </span>
                   )}
+                  {/*
+                    De qué DIAGNÓSTICO es esta cita y por dónde va su barra
+                    (12/09/2026): «Diagnóstico · 3 de 10 h». El rótulo lo
+                    trae el GET de la cita (`diagnostico.rotulo`); si no llega
+                    —tras un PATCH, o sin la tabla— se dice el tramo. Lleva a
+                    la lista de Diagnósticos, en pestaña nueva como la ficha.
+                  */}
+                  {openBooking.diagnosticoId && (
+                    <a
+                      href="/clinica/diagnosticos"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={`Cita de un diagnóstico (${openBooking.diagnosticoTramo === TRAMO_ENTREVISTA ? "entrevista inicial" : "horas de diagnóstico"}). Abre la lista de Diagnósticos en una pestaña nueva`}
+                      className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium border bg-sky-50 text-sky-700 border-sky-100 hover:border-sky-300 transition-colors"
+                    >
+                      Diagnóstico ·{" "}
+                      {openBooking.diagnostico?.rotulo ??
+                        (openBooking.diagnosticoTramo === TRAMO_ENTREVISTA ? "entrevista inicial" : "horas")}
+                    </a>
+                  )}
                 </div>
               </div>
               <button
@@ -941,7 +962,13 @@ export function CitaDetalleModal({
                         */}
                         {!citaNoSeDio(openBooking) && (
                           <a
-                            href={`/pacientes/${openBooking.patientId}/sesiones/nueva${colaDePreparacion(openBooking.scheduledAt, { bookingId: openBooking.id, profesionalId: openBooking.teamMemberId, plantilla: openBooking.eventType?.isInitialAssessment ? PLANTILLA_ENTREVISTA.key : null })}`}
+                            /*
+                             * Con qué PLANTILLA nace el registro lo decide
+                             * `plantillaDeLaCita` (12/09/2026): la valoración
+                             * inicial del centro, y también la entrevista de un
+                             * diagnóstico aunque su tipo sea DIAGNÓSTICO.
+                             */
+                            href={`/pacientes/${openBooking.patientId}/sesiones/nueva${colaDePreparacion(openBooking.scheduledAt, { bookingId: openBooking.id, profesionalId: openBooking.teamMemberId, plantilla: plantillaDeLaCita(openBooking) })}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             title={

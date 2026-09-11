@@ -15,7 +15,12 @@ import { repasarContactoDeCita, avisoDeContacto } from "../../../lib/citas/conta
 import { CADENCIAS, fechasDeRepeticion, repeticionDeBloqueo } from "../../../lib/citas/recurrencia.js";
 import { cobroDelTipo, normalizarCobro, euros } from "../../../lib/citas/dineroDeLaCita.js";
 import { packsParaPaciente } from "../../../lib/citas/bonoDelPaciente.js";
+import { TRAMO_ENTREVISTA, duracionLimpia } from "../../../lib/citas/altaDesdeDiagnostico.js";
+import { ENTREVISTA, tipoDiagnosticoDe } from "../../../lib/clinica/diagnostico.js";
 import { inputCls } from "./chips.jsx";
+
+/** Cuánto puede durar una sesión de diagnóstico: de media hora a cuatro horas. */
+const DURACIONES_DE_DIAGNOSTICO = [30, 60, 90, 120, 180, 240];
 
 const EMPTY_BOOKING_FORM = {
   eventTypeId: "",
@@ -62,6 +67,25 @@ export function NuevaCitaDrawer({
   // puede dejar en blanco. Ver `lib/citas/dineroDeLaCita.js`.
   exigeCobro = false,
 }) {
+  /*
+   * ── LA CITA DE UN DIAGNÓSTICO (12/09/2026, Rodrigo con Isa, Aumenta) ─────
+   *
+   * `inicial.diagnostico` = `{ id, tramo, patientId, duracion }` cuando la
+   * agenda se abrió desde la lista de Diagnósticos («Abrir entrevista
+   * inicial» o «Añadir horas»; el contrato de la URL, en
+   * `lib/citas/altaDesdeDiagnostico.js`). Lo que cambia en el cajón:
+   *
+   *   · el paciente viene puesto y NO se cambia (el servidor lo rechazaría);
+   *   · el tipo de cita es el DIAGNÓSTICO del centro, solo;
+   *   · en la entrevista la duración es 60 min; en las horas se elige aquí
+   *     (`duracionDiag`), que es lo único que el tipo no sabe;
+   *   · ni bono ni bloque de cobro: el dinero lo pone el servidor (la
+   *     entrevista nace sin coste; las horas salen del bono del expediente);
+   *   · sin repetición: las horas de un diagnóstico se apuntan de una en una,
+   *     que es como se cuentan contra su tope.
+   */
+  const diagnostico = inicial.diagnostico ?? null;
+  const esEntrevistaDeDiagnostico = diagnostico?.tramo === TRAMO_ENTREVISTA;
   const [createForm, setCreateForm] = useState({
     ...EMPTY_BOOKING_FORM,
     date: inicial.date,
@@ -69,7 +93,33 @@ export function NuevaCitaDrawer({
     // La terapeuta del hueco, cuando la cita nace de un bloqueo (07/09/2026,
     // AV-0059): «Convertir en cita» la trae puesta.
     teamMemberId: inicial.teamMemberId ?? "",
+    ...(diagnostico
+      ? {
+          patientId: diagnostico.patientId ?? "",
+          // El tipo DIAGNÓSTICO, si los tipos ya han llegado; si no, lo pone
+          // el efecto de abajo en cuanto lleguen.
+          eventTypeId: tipoDiagnosticoDe(eventTypes)?.id ?? "",
+          // «Entrevista inicial» como nota: es lo que se lee en la agenda.
+          notes: esEntrevistaDeDiagnostico ? ENTREVISTA.titulo : "",
+        }
+      : {}),
   });
+  // Minutos de la sesión de diagnóstico: lo que traiga la URL, si no la
+  // duración del tipo DIAGNÓSTICO si va de media en media, y si no 60.
+  const [duracionDiag, setDuracionDiag] = useState(() => {
+    if (!diagnostico) return null;
+    if (esEntrevistaDeDiagnostico) return ENTREVISTA.duracionMin;
+    return (
+      duracionLimpia(diagnostico.duracion) ??
+      duracionLimpia(tipoDiagnosticoDe(eventTypes)?.duration) ??
+      ENTREVISTA.duracionMin
+    );
+  });
+  // El paciente del expediente, traído por su id para enseñar su nombre y
+  // rellenar a su familia. Mientras no llega —o si no se puede— el cajón
+  // enseña los selectores de siempre y no se queda mudo.
+  const [pacienteDiag, setPacienteDiag] = useState(null);
+  const pacienteFijado = Boolean(diagnostico && pacienteDiag);
   // El bloqueo que esta cita sustituye (`{ id, rotulo, minutos }`), o null.
   const desdeBloqueo = inicial.desdeBloqueo ?? null;
   /*
@@ -196,6 +246,45 @@ export function NuevaCitaDrawer({
       return null;
     }
   }, []);
+
+  /*
+   * El paciente del diagnóstico, al abrir (12/09/2026): se trae su ficha para
+   * poner su nombre en la franja y a su familia en el formulario (contacto y
+   * terapeuta, por la MISMA regla que al elegirlo a mano: `datosAlElegirFicha`).
+   * Sin familia con ficha, el nombre del paciente hace de nombre de la cita,
+   * que es NOT NULL. No se buscan bonos: el del diagnóstico lo pone el servidor.
+   */
+  const pacienteDelDiagnostico = diagnostico?.patientId ?? null;
+  useEffect(() => {
+    if (!pacienteDelDiagnostico) return;
+    let vivo = true;
+    traerPaciente(pacienteDelDiagnostico).then((p) => {
+      if (!vivo || !p) return;
+      setPacienteDiag(p);
+      const terapeuta = p?.mainTherapistId ?? p?.therapistId ?? null;
+      const familia = p?.client ?? null;
+      setCreateForm((prev) => {
+        const conFamilia = { ...prev, patientId: pacienteDelDiagnostico, ...datosAlElegirFicha(prev, familia) };
+        return {
+          ...conFamilia,
+          teamMemberId: prev.teamMemberId || terapeuta || "",
+          clientName: conFamilia.clientName || [p.firstName, p.lastName].filter(Boolean).join(" "),
+        };
+      });
+    });
+    return () => { vivo = false; };
+  }, [pacienteDelDiagnostico, traerPaciente]);
+
+  /*
+   * El tipo DIAGNÓSTICO puede llegar DESPUÉS de abrir el cajón (los tipos se
+   * cargan aparte): en cuanto esté, se pone. Solo si no hay tipo ya puesto.
+   */
+  useEffect(() => {
+    if (!diagnostico) return;
+    const tipo = tipoDiagnosticoDe(eventTypes);
+    if (!tipo) return;
+    setCreateForm((prev) => (prev.eventTypeId ? prev : { ...prev, eventTypeId: tipo.id }));
+  }, [diagnostico, eventTypes]);
 
   /**
    * @param objeto la fila entera cuando el campo la tiene detrás (hoy solo el
@@ -332,7 +421,8 @@ export function NuevaCitaDrawer({
      * mismo hoy dejan de decirlo el día que alguien toque una. Aquí solo sirve
      * para enseñar el error antes de mandar; el que manda es el 422 de la API.
      */
-    if (!esTaller && !packId) {
+    // En un diagnóstico el dinero lo pone el servidor: aquí no hay nada que validar.
+    if (!esTaller && !diagnostico && !packId) {
       const { error: errorCobro } = normalizarCobro(cobro ?? {}, {
         concepto: cobro?.modo === "cuota" ? { id: cobro.conceptId, name: cobro.texto, unitPrice: null } : null,
         exigido: exigeCobro,
@@ -413,8 +503,17 @@ export function NuevaCitaDrawer({
              */
             // El bono elegido, o `null` = cita suelta aunque tenga bono. La
             // clave va SIEMPRE: así el servidor no adivina (07/09/2026).
-            packId: packId || null,
-            ...(cobro && !packId
+            // En un DIAGNÓSTICO (12/09/2026) no va: el bono lo dice el
+            // expediente, y lo que viaja es el expediente, el tramo y los
+            // minutos elegidos (`duration` solo se escucha con expediente).
+            ...(diagnostico
+              ? {
+                  diagnosticoId: diagnostico.id,
+                  diagnosticoTramo: diagnostico.tramo,
+                  duration: duracionDiag,
+                }
+              : { packId: packId || null }),
+            ...(cobro && !packId && !diagnostico
               ? {
                   cobro:
                     cobro.modo === "cuota"
@@ -647,12 +746,33 @@ export function NuevaCitaDrawer({
                 puede rellenar sola: eligiéndola antes, su bono pone el tipo (ver
                 `buscarBono`) y su terapeuta pone el profesional.
               */}
+              {/*
+                La franja del DIAGNÓSTICO (12/09/2026): qué tramo es y de quién.
+                El paciente no se cambia desde aquí: la cita es de su
+                expediente y el servidor rechaza cualquier otro.
+              */}
+              {diagnostico && (
+                <div className="text-xs rounded-md border border-sky-100 bg-sky-50 px-3 py-2 text-sky-800">
+                  <strong>Diagnóstico · {esEntrevistaDeDiagnostico ? "entrevista inicial" : "añadir horas"}</strong>
+                  {pacienteDiag
+                    ? ` — ${[pacienteDiag.firstName, pacienteDiag.lastName].filter(Boolean).join(" ")}`
+                    : ""}
+                  <div className="mt-0.5 text-[11px] text-sky-700">
+                    {esEntrevistaDeDiagnostico
+                      ? "Una hora, sin coste: el cobro nace al decidir si sigue con el diagnóstico."
+                      : "Sale del bono del diagnóstico y cuenta contra sus horas; si no cabe, se desbloquean desde Diagnósticos."}
+                  </div>
+                </div>
+              )}
               {desdeBloqueo && (
                 <div className="text-xs rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-amber-800">
                   Esta cita sustituye al hueco <strong>«{desdeBloqueo.rotulo}»</strong>
                   {desdeBloqueo.minutos ? ` (${desdeBloqueo.minutos} min)` : ""}: al guardarla, el bloqueo se quita de la agenda.
                 </div>
               )}
+              {/* Con el paciente del diagnóstico ya puesto, los selectores
+                  sobran: quién viene está decidido por el expediente. */}
+              {!pacienteFijado && (
               <BuscadorPaciente
                 etiqueta={patients.length > 0 ? "Cliente (la familia) *" : "Cliente / paciente *"}
                 nombre={createForm.clientName}
@@ -716,6 +836,7 @@ export function NuevaCitaDrawer({
                   setCreateForm((prev) => ({ ...prev, clientId: "" }));
                 }}
               />
+              )}
 
               {/*
                 «Cliente» arriba y «Paciente» aquí NO son lo mismo, y leídos
@@ -725,7 +846,7 @@ export function NuevaCitaDrawer({
                 no hay módulo de pacientes esta caja ni aparece, y entonces el
                 cliente ES el paciente — por eso el rótulo de arriba cambia.
               */}
-              {patients.length > 0 && (
+              {patients.length > 0 && !pacienteFijado && (
                 <div>
                   <label className="block text-[11px] font-medium text-neutral-500 mb-1">Paciente</label>
                   {/*
@@ -756,7 +877,7 @@ export function NuevaCitaDrawer({
               {/* Sus bonos (07/09/2026, AV-0055 de Aumenta): solo sale si la
                   familia tiene alguno vivo. Elegirlo pone el tipo de cita y
                   quita el bloque de cobro: la sesión ya está pagada. */}
-              {!esTaller && bonosDelPaciente.length > 0 && (
+              {!esTaller && !diagnostico && bonosDelPaciente.length > 0 && (
                 <div>
                   <label className="block text-[11px] font-medium text-neutral-500 mb-1">Bono de sesiones</label>
                   <Select
@@ -860,8 +981,36 @@ export function NuevaCitaDrawer({
                 </div>
               </div>
 
+              {/*
+                CUÁNTO DURA la sesión de diagnóstico (12/09/2026): es lo único
+                que el tipo de cita no sabe —una tarde de pruebas dura 3 h— y
+                por eso se elige aquí, solo en las horas. La entrevista dura
+                siempre 60 y no se pregunta. Va de media en media hora, que es
+                como se cuenta contra el tope del expediente.
+              */}
+              {diagnostico && !esEntrevistaDeDiagnostico && (
+                <div>
+                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Duración</label>
+                  <Select
+                    value={String(duracionDiag ?? "")}
+                    onChange={(v) => setDuracionDiag(duracionLimpia(v) ?? ENTREVISTA.duracionMin)}
+                    options={DURACIONES_DE_DIAGNOSTICO.map((min) => ({
+                      value: String(min),
+                      label: min < 60 ? `${min} min` : `${min / 60} h${min % 60 ? ` ${min % 60} min` : ""} (${min} min)`,
+                    }))}
+                    className={inputCls}
+                  />
+                  <p className="text-[10px] text-neutral-400 mt-1">
+                    Cuenta {duracionDiag ? (duracionDiag / 60).toLocaleString("es-ES") : "—"} h contra las horas del diagnóstico.
+                  </p>
+                </div>
+              )}
+
               {/* Repetición (31/08/2026): citas independientes hasta una fecha,
-                  la regla en lib/citas/recurrencia.js. */}
+                  la regla en lib/citas/recurrencia.js. No en un diagnóstico:
+                  sus horas se apuntan de una en una contra su tope. */}
+              {!diagnostico && (
+              <>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block text-[11px] font-medium text-neutral-500 mb-1">Repetir</label>
@@ -890,6 +1039,8 @@ export function NuevaCitaDrawer({
                   Se crean citas sueltas (cada una se mueve o cancela sola). Las que caigan en
                   festivo o bloqueo no se crean y se avisa. El correo a la familia sale solo con la primera.
                 </p>
+              )}
+              </>
               )}
 
               {/* En un taller no hay UN contacto: son ocho familias. */}
@@ -1021,7 +1172,7 @@ export function NuevaCitaDrawer({
                 * DICIENDO POR QUÉ — que es lo que convierte una cita gratis en
                 * una decisión en vez de en un olvido.
                 */}
-              {!esTaller && !packId && (exigeCobro || cobro) && (
+              {!esTaller && !diagnostico && !packId && (exigeCobro || cobro) && (
                 <div className="border border-neutral-200 rounded-xl p-3 bg-neutral-50/60 space-y-2">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <label className="text-[11px] font-medium text-neutral-500">

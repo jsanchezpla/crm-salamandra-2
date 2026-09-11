@@ -42,6 +42,7 @@ import { fmtDate } from "../_components/Kpi.jsx";
 import { formatMoney } from "@/lib/payments/money.js";
 import {
   bonoCerrado,
+  bonoSinTope,
   estadoDelBono,
   rotuloDelBono,
   ordenarBonos,
@@ -67,6 +68,25 @@ const ESTADOS = [
  * un `* 100` suelto repetido por la pantalla.
  */
 const dineroDelCobro = (euros) => formatMoney(Math.round((Number(euros) || 0) * 100));
+
+/*
+ * EL BONO DE UN DIAGNÓSTICO (12/09/2026) no tiene tope de sesiones: sus horas
+ * las acota el expediente, no un contador. Aquí se rotula como lo que es y se
+ * manda a Diagnósticos, que es donde se ve la barra de horas. Y NO se renueva
+ * desde aquí: «volver a darlo» copiaría `totalSessions` a null y la API lo
+ * resolvería a las sesiones del tipo, o sea que nacería un bono CON tope para
+ * un diagnóstico que no lo tiene.
+ */
+function RotuloSesiones({ bono: b }) {
+  if (!bonoSinTope(b)) return <span className="tabular">{rotuloDelBono(b)}</span>;
+  const usadas = Number(b.gastadas) || 0;
+  return (
+    <span className="tabular">
+      <Link href="/clinica/diagnosticos" className="text-indigo-700 hover:underline">sin tope · diagnóstico</Link>
+      {estadoDelBono(b) === "anulado" ? " · anulado" : ` · ${usadas} usada${usadas === 1 ? "" : "s"}`}
+    </span>
+  );
+}
 
 export default function BonosPage() {
   const [bonos, setBonos] = useState([]);
@@ -338,11 +358,13 @@ export default function BonosPage() {
                       ) : (b.familia || "—")}
                     </td>
                     <td className="px-4 py-2.5 text-xs">{b.nombre}</td>
-                    <td className="px-4 py-2.5 text-xs">{rotuloDelBono(b)}</td>
+                    <td className="px-4 py-2.5 text-xs"><RotuloSesiones bono={b} /></td>
                     <td className="px-4 py-2.5 text-xs text-right tabular">{b.amount ? formatMoney(b.amount) : "—"}</td>
                     <td className="px-4 py-2.5 text-xs whitespace-nowrap">{fmtDate(b.compradoEl)}</td>
                     <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                      <button onClick={() => renovar(b)} className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-800 mr-2">Volver a darlo</button>
+                      {!bonoSinTope(b) && (
+                        <button onClick={() => renovar(b)} className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-800 mr-2">Volver a darlo</button>
+                      )}
                       {estadoDelBono(b) === "anulado" ? (
                         <button onClick={() => reactivar(b)} className="text-[11px] text-neutral-500 hover:text-neutral-800">Reactivar</button>
                       ) : (
@@ -400,7 +422,7 @@ function FilaBono({ bono: b, onEditar, onAnular, onRenovar }) {
         {b.tipoOculto && <span className="text-neutral-400"> · oculto</span>}
       </td>
       <td className="px-4 py-3 text-xs text-neutral-600">
-        <span className="tabular">{rotuloDelBono(b)}</span>
+        <RotuloSesiones bono={b} />
         {b.previas > 0 && (
           <span className="block text-[11px] text-neutral-400">{b.previas} venían gastadas de antes</span>
         )}
@@ -424,7 +446,9 @@ function FilaBono({ bono: b, onEditar, onAnular, onRenovar }) {
       <td className="px-4 py-3 text-xs text-neutral-500 whitespace-nowrap">{fmtDate(b.compradoEl)}</td>
       <td className="px-4 py-3 text-right whitespace-nowrap">
         <button onClick={onEditar} className="text-[11px] text-neutral-500 hover:text-neutral-900 mr-2">Editar</button>
-        <button onClick={onRenovar} className="text-[11px] text-emerald-600 hover:text-emerald-800 mr-2">Renovar</button>
+        {!bonoSinTope(b) && (
+          <button onClick={onRenovar} className="text-[11px] text-emerald-600 hover:text-emerald-800 mr-2">Renovar</button>
+        )}
         <button onClick={onAnular} className="text-[11px] text-rose-500 hover:text-rose-700">Anular</button>
       </td>
     </tr>

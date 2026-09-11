@@ -27,6 +27,17 @@ import { asignarSesion, elegirPack, cobroDeBono } from "../../../../lib/citas/pa
 import { grupoDeTipoDeCita, montarCitaDeTaller } from "../../../../lib/clinica/citaDeTaller.js";
 import { cobroObligatorio, cobroDelTipo, normalizarCobro } from "../../../../lib/citas/dineroDeLaCita.js";
 import { terapeutasDeGrupo } from "../../../../lib/clinica/grupoDeTaller.js";
+import {
+  leerCitaDeDiagnostico,
+  cargarExpediente,
+  admiteCita,
+  esDelPaciente,
+  duracionDeCitaDeDiagnostico,
+  cabeEnElExpediente,
+  cobroDeLaCitaDeEntrevista,
+  MENSAJES as MENSAJES_DIAGNOSTICO,
+} from "../../../../lib/clinica/citaDeDiagnostico.js";
+import { TRAMO_ENTREVISTA, TRAMO_HORAS } from "../../../../lib/citas/altaDesdeDiagnostico.js";
 
 
 const VALID_STATUS = new Set(["pending", "confirmed", "completed", "cancelled", "no_show"]);
@@ -195,6 +206,9 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
 //   - NO valida disponibilidad (admin puede crear donde quiera)
 //   - SÍ valida solapamiento con otros bookings activos
 //   - SÍ valida que modality esté en EventType.modalities
+//   - Con `diagnosticoId` + `diagnosticoTramo` la cita es de un DIAGNÓSTICO
+//     (12/09/2026): acepta `duration`, comprueba paciente y tope de horas, y
+//     el dinero lo pone el servidor (lib/clinica/citaDeDiagnostico.js)
 // ───────────────────────────────────────────────────────────────────────────
 export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule, tenantHasModule }) => {
   try {
@@ -355,7 +369,43 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
      * mano pone la hora que quiere—, pero sí se respeta lo que ocupa de verdad,
      * o la agenda diría 60 minutos donde hay 50 y los solapes saldrían mal.
      */
-    const duration = duracionDeContacto(eventType); // snapshot
+    /*
+     * ── ¿ES UNA CITA DE UN DIAGNÓSTICO? (12/09/2026, Rodrigo con Isa) ────────
+     *
+     * Un diagnóstico es un producto de horas (10 o 20) que se apunta desde la
+     * lista de Diagnósticos con la cita ya preparada
+     * (`lib/citas/altaDesdeDiagnostico.js`). Aquí llega como `diagnosticoId`
+     * + `diagnosticoTramo` y cambia cuatro cosas, todas en
+     * `lib/clinica/citaDeDiagnostico.js`:
+     *
+     *   · la DURACIÓN la elige quien apunta (`duration`, de media en media
+     *     hora), no el tipo de cita — una tarde de pruebas dura 3 h;
+     *   · la cita tiene que ser DEL paciente del expediente;
+     *   · con esta cita no se puede pasar de las horas del producto
+     *     (`cabeHora`: se cuentan las hechas Y las reservadas);
+     *   · el dinero lo pone el servidor: la entrevista nace sin coste («el
+     *     cobro nace al decidir si sigue») y las horas salen del bono SIN TOPE
+     *     del expediente.
+     *
+     * Se resuelve aquí arriba porque la duración entra en el solape y en los
+     * bloqueos, que van justo debajo. Sin `diagnosticoId` nada de esto corre
+     * y `duration` del cuerpo se ignora, como siempre.
+     */
+    const pedidoDiagnostico = leerCitaDeDiagnostico(body);
+    if (pedidoDiagnostico?.error) return error(pedidoDiagnostico.error);
+    let diag = null;
+    if (pedidoDiagnostico) {
+      if (tallerGrupoId) return error(MENSAJES_DIAGNOSTICO.taller, 422);
+      const cargado = await cargarExpediente(tenantModels, pedidoDiagnostico.diagnosticoId);
+      if (cargado.error) return error(cargado.error, cargado.status);
+      const admite = admiteCita(cargado.expediente, pedidoDiagnostico.tramo);
+      if (!admite.ok) return error(admite.error, 422);
+      diag = { ...pedidoDiagnostico, expediente: cargado.expediente };
+    }
+
+    const duration = diag
+      ? duracionDeCitaDeDiagnostico({ tramo: diag.tramo, duracion: diag.duracion, porDefecto: duracionDeContacto(eventType) })
+      : duracionDeContacto(eventType); // snapshot
     // El enlace solo se hereda del tipo de cita si el tenant tiene el modo
     // "automatico" (Configuración → Citas). Por defecto la cita nace sin
     // enlace y se pega a mano con «Guardar y enviar».
@@ -446,6 +496,21 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     const patRes = await resolvePatientId(body, tenantModels, hasModule);
     if (patRes.err) return error(patRes.err);
 
+    /*
+     * La cita de un diagnóstico es DEL paciente del expediente, y tiene que
+     * caber en sus horas. Va después del paciente porque lo compara, y antes
+     * del bono y del dinero porque si no cabe no hay nada que cobrar. El 422
+     * del tope lleva la misma frase que la lista de Diagnósticos, que es donde
+     * se desbloquean.
+     */
+    let cabeDiag = null;
+    if (diag) {
+      if (!patRes.patientId) return error(MENSAJES_DIAGNOSTICO.sinPaciente, 422);
+      if (!esDelPaciente(diag.expediente, patRes.patientId)) return error(MENSAJES_DIAGNOSTICO.otroPaciente, 422);
+      cabeDiag = await cabeEnElExpediente(tenantModels, diag.expediente, duration);
+      if (!cabeDiag.cabe) return error(cabeDiag.mensaje, 422);
+    }
+
     // Si esta persona tiene bono con sesiones libres para este tipo de cita, la
     // cita se engancha y se numera. La agenda del CRM no cobra —lo apunta la
     // profesional a mano—, así que aquí solo importa la numeración. Sin correo
@@ -458,7 +523,26 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     // apunta); y sin la clave en el cuerpo —el widget y los clientes viejos—
     // se adivina como siempre, ahora también por ficha.
     let enBono = null;
-    if (Object.prototype.hasOwnProperty.call(body, "packId")) {
+    if (diag) {
+      /*
+       * En un diagnóstico el bono lo dice el EXPEDIENTE, no el cuerpo
+       * (12/09/2026): un `packId` que viniera del navegador se ignora. Las
+       * horas salen del bono sin tope que nació al «Seguir», por la misma
+       * puerta que un bono elegido a mano —de esa familia, de ese paciente y
+       * de ese tipo de cita—; la entrevista no gasta bono: nace sin coste.
+       */
+      if (diag.tramo === TRAMO_HORAS) {
+        const elegido = await elegirPack(tenantModels, {
+          packId: diag.expediente.packId,
+          email: clientEmail,
+          clientId: clientId ?? diag.expediente.clientId ?? null,
+          patientId: patRes.patientId,
+          eventTypeId,
+        });
+        if (elegido.error) return error(elegido.error, 422);
+        enBono = elegido;
+      }
+    } else if (Object.prototype.hasOwnProperty.call(body, "packId")) {
       if (body.packId) {
         if (typeof body.packId !== "string" || !UUID_RE.test(body.packId)) return error("packId inválido");
         // El paciente va desde el 08/09/2026 (AV-0055): un bono dado a un
@@ -506,8 +590,14 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       cobro = cobroDeBono({
         nombre: eventType.name,
         sessionNumber: enBono.sessionNumber,
-        total: enBono.pack?.totalSessions ?? eventType.sessionsCount,
+        // Un bono SIN TOPE (el del diagnóstico, `totalSessions` a null) no
+        // dice «de N»: el null explícito se respeta y no cae al tipo.
+        total: enBono.pack?.totalSessions === null ? null : (enBono.pack?.totalSessions ?? eventType.sessionsCount),
       });
+    } else if (diag) {
+      // La entrevista inicial de un diagnóstico: sin coste, y diciendo por
+      // qué. El dinero de verdad nace al parar (50 €) o al seguir (el producto).
+      cobro = cobroDeLaCitaDeEntrevista();
     } else {
       const { BillingConcept } = tenantModels;
       const hayCatalogo = Boolean(BillingConcept) && tenantHasModule("billing");
@@ -549,6 +639,9 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       packId: enBono?.packId ?? null,
       sessionNumber: enBono?.sessionNumber ?? null,
       tallerGrupoId,
+      // De qué diagnóstico es y qué tramo (12/09/2026); null en las de siempre.
+      diagnosticoId: diag?.expediente.id ?? null,
+      diagnosticoTramo: diag?.tramo ?? null,
       cobroModo: cobro?.modo ?? null,
       cobroConceptId: cobro?.conceptId ?? null,
       cobroTexto: cobro?.texto ?? null,
@@ -564,6 +657,21 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     let taller = null;
     if (tallerGrupoId) {
       taller = await montarCitaDeTaller({ tenantModels, booking: row, grupoId: tallerGrupoId });
+    }
+
+    /*
+     * El expediente apunta a SU entrevista (12/09/2026): es la cita que abre
+     * la plantilla `entrevista_inicial` y la que se enseña en la lista. Si se
+     * repite (la primera se canceló tarde), apunta a la última. Best-effort:
+     * la cita ya existe y se cuenta desde `bookings.diagnostico_id`; un fallo
+     * aquí se escribe en el log, no deshace la cita.
+     */
+    if (diag?.tramo === TRAMO_ENTREVISTA) {
+      try {
+        await diag.expediente.update({ entrevistaBookingId: row.id });
+      } catch (diagErr) {
+        process.stderr.write(`[citas:diagnostico] entrevista_booking_id ${row.id}: ${diagErr.message}\n`);
+      }
     }
 
     await logCitasAudit({
@@ -646,7 +754,17 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       }
     }
 
-    return created({ ...row.toJSON(), emailEnviado, emailMotivo, taller });
+    return created({
+      ...row.toJSON(),
+      emailEnviado,
+      emailMotivo,
+      taller,
+      // Por dónde queda el diagnóstico con esta cita puesta («lleva 4 de 10»),
+      // para que el alta pueda decirlo sin volver a preguntar.
+      ...(diag && cabeDiag
+        ? { diagnostico: { id: diag.expediente.id, tramo: diag.tramo, ocupadas: cabeDiag.despues, max: cabeDiag.max } }
+        : {}),
+    });
   } catch (err) {
     return serverError(err);
   }

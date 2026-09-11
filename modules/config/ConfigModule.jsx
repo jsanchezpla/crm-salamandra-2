@@ -52,7 +52,7 @@ import {
   ReservaOnlineCard,
 } from "./tarjetas/Reservas.jsx";
 import { AreaPrivadaCard, BloqueoImpagoCard } from "./tarjetas/Portal.jsx";
-import { AiPermissionsCard, CategoriasExternasCard, CoordinadorasCard, DerivacionesCard, PerfilDelCentroCard, PlantillasClinicaCard } from "./tarjetas/Modulos.jsx";
+import { AiPermissionsCard, CategoriasExternasCard, CoordinadorasCard, DerivacionesCard, DiagnosticosCard, PerfilDelCentroCard, PlantillasClinicaCard } from "./tarjetas/Modulos.jsx";
 import PruebasDiagnosticasCard from "./tarjetas/PruebasDiagnosticas.jsx";
 import { ContrasenaCard, CorreoCuentaCard } from "./tarjetas/Cuenta.jsx";
 
@@ -1101,6 +1101,24 @@ export default function ConfigModule({ modulos = null }) {
                   patchTenant(
                     { coordinadoras: v },
                     v.length ? "Guardado: coordinan la bandeja y los informes de todo el equipo" : "Sin coordinadoras: cada terapeuta ve solo lo suyo"
+                  )
+                }
+              />
+            )
+          )}
+
+          {enZona(
+            "diagnosticos",
+            isAdmin && (
+              <DiagnosticosCard
+                // La `key` reinicia la tarjeta con lo que devuelve el PATCH (lo normalizado).
+                key={JSON.stringify(cfg.diagnosticos ?? [])}
+                productos={cfg.diagnosticos ?? []}
+                readOnly={!!cfg.readOnly}
+                onGuardar={(v) =>
+                  patchTenant(
+                    { diagnosticos: v },
+                    v.length ? "Guardado: los diagnósticos nuevos usarán estos productos" : "Productos de diagnóstico de fábrica: simple (10 h) y completo (20 h)"
                   )
                 }
               />

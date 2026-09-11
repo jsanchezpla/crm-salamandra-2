@@ -198,6 +198,22 @@ export function defineClinicSession(sequelize) {
         allowNull: true,
         field: "booking_id",
       },
+      /**
+       * ── DE QUÉ DIAGNÓSTICO es este registro (12/09/2026) ─────────────────
+       *
+       * La entrevista inicial y las sesiones de un diagnóstico se escriben
+       * como registros de sesión de siempre; esto los agrupa bajo su
+       * expediente para que la lista de Diagnósticos y, en la segunda
+       * entrega, el informe de valoración los encuentren sin cruzar por la
+       * cita. Null en las 22.045 sesiones de siempre. Sin FK dura, por lo
+       * mismo que `bookingId`: cerrar o borrar un expediente no puede
+       * llevarse por delante la nota clínica de una sesión que sí se dio.
+       */
+      diagnosticoId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: "diagnostico_id",
+      },
       // Cliente/pagador (2026-07-23). Foto tomada del paciente al crear la
       // sesión, para llegar a la ficha del cliente sin depender del salto
       // paciente→cliente, que es frágil. El terapeuta ya se guarda aparte.

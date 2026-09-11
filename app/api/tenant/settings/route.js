@@ -30,6 +30,8 @@ import {
   limpiarResponsables,
 } from "../../../../lib/citas/incidenciaPorFalta.js";
 import { coordinadorasDe } from "../../../../lib/clinica/coordinadoras.js";
+import { productosDe } from "../../../../lib/clinica/diagnostico.js";
+import { productosParaGuardar, resumenDeProductos } from "../../../../lib/clinica/diagnosticosAjustes.js";
 import { semanaLaboralDe, esSemanaValida } from "../../../../lib/citas/vistaAgenda.js";
 import {
   listarCuentas,
@@ -252,6 +254,9 @@ function diffConfiguracion(antes, despues, nombreAntes, nombreDespues) {
   );
   anota("centro.sedes", antes?.centro?.sedes, despues?.centro?.sedes, resumenSedes);
   anota("aiAccess", antes?.aiAccess, despues?.aiAccess);
+  // Los productos de diagnóstico: cambiar las horas o el precio de caída de
+  // un producto cambia lo que se le cobra a la siguiente familia.
+  anota("clinica.diagnosticos", antes?.clinica?.diagnosticos, despues?.clinica?.diagnosticos, resumenDeProductos);
   anota("citas.meetModo", antes?.citas?.meetModo, despues?.citas?.meetModo);
   anota("citas.recordatorios", antes?.citas?.recordatorios, despues?.citas?.recordatorios);
   anota("citas.agendaCompartida", antes?.citas?.agendaCompartida, despues?.citas?.agendaCompartida);
@@ -446,6 +451,9 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
     // Quién coordina: ve los informes vencidos de todo el centro y puede
     // elegir la bandeja de cualquier terapeuta (02/09/2026, AV-0022).
     coordinadoras: coordinadorasDe(t),
+    // Los productos de diagnóstico (12/09/2026): con caída a los de fábrica,
+    // que es lo que ve cualquier centro que no los haya tocado.
+    diagnosticos: productosDe(t),
     brand: {
       primaryColor: brand.primaryColor ?? null,
       secondaryColor: brand.secondaryColor ?? null,
@@ -991,6 +999,21 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
     };
   }
 
+  /*
+   * Los productos de diagnóstico (12/09/2026, Rodrigo con Isa): nombre, horas
+   * y concepto del simple y el completo. Una lista vacía QUITA la guardada
+   * —el centro vuelve a los de fábrica— y una lista sin nada válido no se
+   * guarda: se contesta con la frase (`lib/clinica/diagnosticosAjustes.js`).
+   */
+  if ("diagnosticos" in body) {
+    const { valor, problema } = productosParaGuardar(body.diagnosticos);
+    if (problema) throw new ValidationError(problema);
+    const clinica = { ...(settings.clinica ?? {}) };
+    if (valor === null) delete clinica.diagnosticos;
+    else clinica.diagnosticos = valor;
+    settings.clinica = clinica;
+  }
+
   // Candado de la IA para empleados (no es un secreto): lista cerrada.
   if (body.aiAccess === "libre" || body.aiAccess === "restringido") {
     settings.aiAccess = body.aiAccess;
@@ -1062,6 +1085,7 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
     categoriasBloqueo: categoriasBloqueoDe({ settings }),
     incidenciaPorFalta: responsablesDeIncidenciaPorFalta({ settings }),
     coordinadoras: coordinadorasDe({ settings }),
+    diagnosticos: productosDe({ settings }),
     brand: {
       primaryColor: settings.brand.primaryColor ?? null,
       secondaryColor: settings.brand.secondaryColor ?? null,

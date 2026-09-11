@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import HelpTooltip from "../../components/ui/HelpTooltip.jsx";
 import FullCalendar from "@fullcalendar/react";
@@ -34,6 +34,7 @@ import { destinoDePegado, sePuedeMover } from "@/lib/citas/pegarCita.js";
 import { fichaDeLaCita } from "@/lib/citas/fichaDeLaCita.js";
 import { mesDeLaCita, urlCobrarMes } from "@/lib/citas/cobrarMes.js";
 import { NuevaCitaDrawer } from "./citas/NuevaCitaDrawer.jsx";
+import { leerAltaDesdeDiagnostico } from "@/lib/citas/altaDesdeDiagnostico.js";
 import { Waitlist } from "./citas/Waitlist.jsx";
 import MiniMeses from "./citas/MiniMeses.jsx";
 import AgendaPorTerapeuta from "./citas/AgendaPorTerapeuta.jsx";
@@ -62,6 +63,11 @@ export default function CitasModule({
 }) {
   const calendarRef = useRef(null);
   const router = useRouter();
+  // Los parámetros con los que se abrió /citas: hoy solo los lee el alta
+  // desde un DIAGNÓSTICO (`lib/citas/altaDesdeDiagnostico.js`). El ref evita
+  // abrir el cajón dos veces (StrictMode repite los efectos en desarrollo).
+  const searchParams = useSearchParams();
+  const altaDesdeDiagnosticoAbierta = useRef(false);
   // Menú contextual de una cita (clic derecho sobre la caja): { x, y, titulo,
   // cita: { id, startStr, props } } o null. Y el portapapeles de cortar/copiar:
   // { modo: "cortar" | "copiar", cita } — el siguiente clic sobre el
@@ -380,6 +386,39 @@ export default function CitasModule({
   }, []);
 
   useEffect(() => { loadEventTypes(); }, [loadEventTypes]);
+
+  /*
+   * ── LA AGENDA ABIERTA DESDE UN DIAGNÓSTICO (12/09/2026, Rodrigo con Isa) ──
+   *
+   * La lista de Diagnósticos manda aquí con la cita ya preparada:
+   * `/citas?nueva=1&diagnostico=<id>&tramo=entrevista|horas&paciente=<id>&duracion=60`
+   * (el contrato, con su prueba, en `lib/citas/altaDesdeDiagnostico.js`). Se
+   * abre el cajón de alta con el expediente, el tramo, el paciente y los
+   * minutos; el resto —el tipo DIAGNÓSTICO, la familia, el terapeuta— lo
+   * resuelve el propio cajón con lo que ya sabe hacer. El día va puesto a hoy
+   * y la hora se elige.
+   *
+   * Después se limpia la URL: recargar o volver atrás no debe abrir otra vez
+   * el mismo alta. Como `useSearchParams` cambia con el `replace`, el efecto
+   * vuelve a correr, no lee nada y no hace nada.
+   */
+  useEffect(() => {
+    if (altaDesdeDiagnosticoAbierta.current) return;
+    const encargo = leerAltaDesdeDiagnostico(searchParams);
+    if (!encargo) return;
+    altaDesdeDiagnosticoAbierta.current = true;
+    setCreacion({
+      date: toDateInput(new Date()),
+      time: "",
+      diagnostico: {
+        id: encargo.diagnosticoId,
+        tramo: encargo.tramo,
+        patientId: encargo.patientId,
+        duracion: encargo.duracion,
+      },
+    });
+    router.replace("/citas", { scroll: false });
+  }, [searchParams, router]);
 
   // `viewerIsAdmin` se decide con /api/auth/me (el ROL), NO con /api/team: en un
   // tenant con citas pero SIN módulo team, /api/team da 403 y un admin real se

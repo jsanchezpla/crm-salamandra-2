@@ -7,6 +7,7 @@ import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, noContent, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { citaSegunRol } from "../../../../../lib/citas/dinero.js";
 import { estadoPack } from "../../../../../lib/citas/packs.js";
+import { resumenDelDiagnostico } from "../../../../../lib/clinica/citaDeDiagnostico.js";
 import {
   normalizeString,
   normalizeEmail,
@@ -158,6 +159,10 @@ export const GET = withTenant(async (request, { params }, { tenant, tenantModels
     // le quedan 2». Consulta aparte y a prueba de tenants sin la migración de
     // bonos: sin tabla, la cita sale igual y sin `bono`.
     if (row.packId) cita.bono = await cuentaDelBono(tenantModels, row.packId);
+    // Y por dónde va su DIAGNÓSTICO (12/09/2026): «3 de 10 h», para el chip
+    // del modal. Misma forma que el bono: consulta aparte y a prueba de
+    // centros sin la tabla — sin expediente que contar, la cita sale igual.
+    if (row.diagnosticoId) cita.diagnostico = await resumenDelDiagnostico(tenantModels, row.diagnosticoId);
     return ok(cita);
   } catch (err) {
     return serverError(err);

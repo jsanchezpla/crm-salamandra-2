@@ -6,6 +6,12 @@
 
 
 import { useCallback, useEffect, useState } from "react";
+import {
+  claveDesdeNombre,
+  formularioDeProductos,
+  problemasDeProductos,
+  productosDesdeFormulario,
+} from "../../../lib/clinica/diagnosticosAjustes.js";
 export function DerivacionesCard() {
   const [lineas, setLineas] = useState(null);
   const [guardando, setGuardando] = useState(false);
@@ -722,6 +728,218 @@ export function PerfilDelCentroCard() {
           ? <span className="text-emerald-700">{escritos === 1 ? "Un apartado escrito" : `${escritos} apartados escritos`}: la IA los tiene delante en cada documento.</span>
           : <span className="text-neutral-400">Sin escribir: la IA redacta con lo genérico, igual que cualquier otro centro.</span>}
       </div>
+    </div>
+  );
+}
+
+/**
+ * DiagnosticosCard — los productos de diagnóstico del centro (12/09/2026,
+ * Rodrigo con Isa, Aumenta): el simple (10 h) y el completo (20 h), con su
+ * nombre, sus horas, el concepto del catálogo que los cobra y el precio de
+ * caída si no hay concepto. Es lo que lee «Nuevo diagnóstico» en
+ * `/clinica/diagnosticos` y lo que decide cuánto cobra «Seguir con el
+ * diagnóstico» (`lib/clinica/diagnostico.js`).
+ *
+ * Se guarda a un botón, no a cada tecla como las coordinadoras: son varias
+ * casillas por fila y a medio escribir «1» de «10» no hay nada que guardar.
+ * «Volver a los de fábrica» manda la lista vacía, que es como el PATCH
+ * entiende «quita lo guardado».
+ *
+ * Cambiar un producto NO toca los expedientes ya abiertos: cada uno lleva su
+ * nombre y sus horas copiados al nacer.
+ *
+ * Lo guardado manda: al volver del PATCH la tarjeta adopta lo normalizado.
+ * Eso lo hace quien la monta cambiándole la `key` con los productos (React
+ * la reinicia entera), no un efecto que sincronice estado: así el formulario
+ * nace una vez de sus props y no hay dos verdades a medio guardar.
+ */
+export function DiagnosticosCard({ productos = [], readOnly, onGuardar }) {
+  const [filas, setFilas] = useState(() => formularioDeProductos(productos));
+  const [conceptos, setConceptos] = useState(null); // null = sin Facturación
+  const [guardando, setGuardando] = useState(false);
+  const [intentado, setIntentado] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/billing/conceptos", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setConceptos(j?.ok ? (j.data?.conceptos ?? []) : null))
+      .catch(() => setConceptos(null));
+  }, []);
+
+  const problemas = problemasDeProductos(filas);
+  const hayProblemas = problemas.some(Boolean);
+
+  const cambia = (i, campo, valor) =>
+    setFilas((fs) => fs.map((f, k) => (k === i ? { ...f, [campo]: valor } : f)));
+
+  function anadir() {
+    setFilas((fs) => [...fs, { key: "", nombre: "", horas: "", conceptId: "", precioEuros: "", nueva: true }]);
+  }
+
+  async function guardar() {
+    setIntentado(true);
+    if (hayProblemas || filas.length === 0) return;
+    setGuardando(true);
+    await onGuardar(productosDesdeFormulario(filas));
+    setGuardando(false);
+  }
+
+  async function volverAFabrica() {
+    if (!confirm("¿Volver a los productos de fábrica?\n\nSimple (10 h) y completo (20 h), sin concepto fijado: se buscará por nombre en el catálogo. Los diagnósticos ya abiertos no cambian.")) return;
+    setGuardando(true);
+    await onGuardar([]);
+    setGuardando(false);
+  }
+
+  const celda = "w-full rounded-md border border-gray-300 px-2 py-1 text-sm disabled:bg-neutral-50 disabled:text-neutral-500";
+
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl p-5" data-testid="diagnosticos">
+      <div className="text-sm font-semibold text-neutral-800">Productos de diagnóstico</div>
+      <p className="text-xs text-neutral-400 mt-0.5 max-w-lg">
+        Lo que se elige al abrir un diagnóstico en Clínica → Diagnósticos: cuántas horas incluye cada
+        producto (la entrevista inicial cuenta como una) y con qué concepto del catálogo se cobra al
+        seguir. Sin concepto, se busca uno activo por nombre; si tampoco lo hay, se cobra el precio de
+        caída. Los diagnósticos ya abiertos no cambian.
+      </p>
+
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full text-sm min-w-[640px]">
+          <thead>
+            <tr className="text-left text-[11px] uppercase tracking-wide text-neutral-400">
+              <th className="py-1 pr-2 font-medium">Clave</th>
+              <th className="py-1 pr-2 font-medium">Nombre</th>
+              <th className="py-1 pr-2 font-medium w-20">Horas</th>
+              {conceptos && <th className="py-1 pr-2 font-medium">Concepto</th>}
+              <th className="py-1 pr-2 font-medium w-28">Precio de caída</th>
+              <th className="py-1" />
+            </tr>
+          </thead>
+          <tbody>
+            {filas.map((f, i) => (
+              <tr key={i} className="align-top">
+                <td className="py-1 pr-2">
+                  <input
+                    value={f.key}
+                    disabled={readOnly || !f.nueva}
+                    onChange={(e) => cambia(i, "key", e.target.value)}
+                    className={`${celda} font-mono text-xs w-32`}
+                    placeholder="tdah"
+                    aria-label="Clave del producto"
+                  />
+                </td>
+                <td className="py-1 pr-2">
+                  <input
+                    value={f.nombre}
+                    disabled={readOnly}
+                    onChange={(e) => {
+                      cambia(i, "nombre", e.target.value);
+                      // A un producto nuevo se le propone la clave desde el nombre hasta que la toque.
+                      if (f.nueva && (f.key === "" || f.key === claveDesdeNombre(f.nombre))) cambia(i, "key", claveDesdeNombre(e.target.value));
+                    }}
+                    className={celda}
+                    placeholder="Diagnóstico simple"
+                    aria-label="Nombre del producto"
+                  />
+                </td>
+                <td className="py-1 pr-2">
+                  <input
+                    value={f.horas}
+                    disabled={readOnly}
+                    inputMode="decimal"
+                    onChange={(e) => cambia(i, "horas", e.target.value)}
+                    className={`${celda} w-20 text-right`}
+                    placeholder="10"
+                    aria-label="Horas del producto"
+                  />
+                </td>
+                {conceptos && (
+                  <td className="py-1 pr-2">
+                    <select
+                      value={f.conceptId}
+                      disabled={readOnly}
+                      onChange={(e) => cambia(i, "conceptId", e.target.value)}
+                      className={celda}
+                      aria-label="Concepto del catálogo"
+                    >
+                      <option value="">— Por nombre —</option>
+                      {conceptos.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} — {Number(c.unitPrice).toLocaleString("es-ES", { minimumFractionDigits: 2 })} €
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                )}
+                <td className="py-1 pr-2">
+                  <input
+                    value={f.precioEuros}
+                    disabled={readOnly}
+                    inputMode="decimal"
+                    onChange={(e) => cambia(i, "precioEuros", e.target.value)}
+                    className={`${celda} w-28 text-right`}
+                    placeholder="350"
+                    aria-label="Precio de caída en euros"
+                  />
+                </td>
+                <td className="py-1 text-right">
+                  {!readOnly && filas.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setFilas((fs) => fs.filter((_, k) => k !== i))}
+                      className="text-neutral-400 hover:text-red-600 transition-colors text-xs px-1"
+                      aria-label={`Quitar ${f.nombre || f.key || "este producto"}`}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {intentado && hayProblemas && (
+        <ul className="mt-2 text-[11px] text-red-600 space-y-0.5">
+          {problemas.map((pr, i) => pr && <li key={i}>Fila {i + 1}: {pr}</li>)}
+        </ul>
+      )}
+
+      {!readOnly && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={guardar}
+            disabled={guardando || filas.length === 0}
+            className="px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide text-white disabled:opacity-40"
+            style={{ background: "var(--color-primary, #1B3A2D)" }}
+          >
+            {guardando ? "Guardando…" : "Guardar productos"}
+          </button>
+          <button
+            type="button"
+            onClick={anadir}
+            disabled={guardando}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium border border-neutral-300 text-neutral-700 hover:bg-neutral-50 disabled:opacity-40"
+          >
+            + Otro producto
+          </button>
+          <button
+            type="button"
+            onClick={volverAFabrica}
+            disabled={guardando}
+            className="ml-auto text-[11px] text-neutral-400 hover:text-neutral-700 disabled:opacity-40"
+          >
+            Volver a los de fábrica
+          </button>
+        </div>
+      )}
+      {conceptos === null && (
+        <p className="mt-2 text-[11px] text-neutral-400">
+          Sin Facturación no hay catálogo de conceptos: el cobro saldrá del precio de caída.
+        </p>
+      )}
     </div>
   );
 }

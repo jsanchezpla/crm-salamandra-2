@@ -78,7 +78,15 @@ export function defineSessionPack(sequelize) {
        */
       totalSessions: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        /*
+         * NULL = SIN TOPE (12/09/2026): el bono de un diagnóstico. No tiene
+         * número de sesiones porque sus horas las acota el expediente
+         * (`lib/clinica/diagnostico.js`, `cabeHora`), no este contador;
+         * `estadoPack` lo lee y no lo agota nunca. Si viene un número, sigue
+         * siendo ≥ 1 (el validador no mira los nulos). La columna deja de ser
+         * NOT NULL en `scripts/migrate-diagnosticos.js`.
+         */
+        allowNull: true,
         validate: { min: 1 },
       },
       /**
@@ -168,6 +176,17 @@ export function defineSessionPack(sequelize) {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      /**
+       * El EXPEDIENTE de diagnóstico del que es este bono (12/09/2026). Null
+       * en todos los bonos de siempre. Cuando lo lleva, `totalSessions` va a
+       * null (sin tope) y Facturación → Bonos lo rotula «sin tope ·
+       * diagnóstico». Sin FK dura: `diagnosticos` es de Clínica y esta tabla
+       * de Citas, y hay schemas con la una y sin la otra.
+       */
+      diagnosticoId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
     },
     {
       tableName: "session_packs",
@@ -176,6 +195,7 @@ export function defineSessionPack(sequelize) {
         { fields: ["client_email", "event_type_id", "status"], name: "session_packs_email_type_idx" },
         { fields: ["client_id"], name: "session_packs_client_idx" },
         { fields: ["patient_id"], name: "session_packs_patient_idx" },
+        { fields: ["diagnostico_id"], name: "session_packs_diagnostico_idx" },
       ],
     }
   );
