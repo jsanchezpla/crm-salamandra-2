@@ -578,6 +578,40 @@ si el borrado falla, la cita se queda y se dice que se quite desde Citas →
 Bloqueos. Paciente y cobro los pide el alta de siempre. Prueba:
 `_smoke-convertir-bloqueo-en-cita.mjs`.
 
+### Esta y las siguientes, sin serie (11/09/2026, Aumenta: AV-0107, AV-0118, AV-0119, AV-0121)
+
+Olga: «tengo que ir semana por semana, en lugar de programar o desprogramar las
+citas» y «¿no existe una forma para que pueda quitar [un bloqueo] desde el
+miércoles 16 en adelante?»; Daniela, dos tramos de los jueves repetidos hasta
+junio que había que quitar; y la mejora del Registro: «cuando hago un cambio en
+una cita, debería preguntarme si quiero generalizar ese cambio a todas las que
+tiene programadas para el futuro».
+
+**No hay serie, y sigue sin haberla** (opción (a) del Registro): «las
+siguientes» se DEDUCEN en `lib/citas/siguientesIguales.js` — misma persona,
+mismo día de la semana y misma hora DE PARED (Madrid: la serie no se parte en el
+cambio de hora de octubre), misma duración; en una cita además mismo niño (o
+familia, o correo, o nombre) y mismo tipo, solo vivas; en un bloqueo misma
+categoría y mismo rótulo. Siempre las POSTERIORES, hasta 400 días. Lo que no
+recoge, sabido y dicho en pantalla con el número delante: una excepción (una
+semana a otra hora) se queda fuera, y dos repeticiones idénticas se ven como una.
+
+- **Cita**: al «Cambiar hora» en su ficha, `CitaDetalleModal` cuenta antes
+  (`GET /api/citas/bookings/[id]/siguientes`), mueve esta como siempre y
+  DESPUÉS pregunta «hay 38 más así, hasta el 24/06: ¿las muevo también?». Si
+  sí, `POST …/siguientes { scheduledAtAnterior, scheduledAt }` aplica a cada
+  una el mismo desplazamiento (días de calendario + hora de pared,
+  `desplazamiento`/`instanteMovido`), con el freno de solape del PATCH; la
+  que choca se queda y se dice. Sin correos. Una línea de auditoría
+  (`citas.movidas_en_bloque`) con el recuento.
+- **Bloqueo**: `BloqueoModal` pide `GET /api/citas/bloqueos?siguientesDe=`
+  al abrirse y, si hay, enseña «Quitar este y los N siguientes» al lado de
+  «Quitar el bloqueo»; `DELETE …?id=&siguientes=1` pasa cada uno por
+  `vetoParaTocar` (el que no se puede tocar se queda y se cuenta) y audita una
+  vez con el recuento.
+
+Prueba: `_smoke-siguientes-iguales.mjs`.
+
 ### El bono se elige en la cita, y vale sin correo (07/09/2026, AV-0055 de Aumenta)
 
 Olga: «hemos intentado crear una cita de un paciente que tiene bono y no existe

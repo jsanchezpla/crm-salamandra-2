@@ -240,6 +240,9 @@ export function CitaDetalleModal({
     // ¿Se le manda el correo? Se pregunta (03/09/2026); sin el sí, la hora
     // cambia en silencio y el servidor lo dice en `avisoCambioHora`.
     const avisarPaciente = await preguntarSiAvisar(instante);
+    // ¿Cuántas iguales vienen después? Se pregunta ANTES de mover, con la hora
+    // que todavía tiene (11/09/2026): después ya no sería la misma serie.
+    const siguientes = await contarSiguientes();
     const res = await patchBooking({
       scheduledAt: instante.toISOString(),
       avisarPaciente,
@@ -248,6 +251,65 @@ export function CitaDetalleModal({
     // Si salió el correo se dice, y si no, POR QUÉ. Callarse es lo que hace que
     // alguien dé por avisado a un paciente que no lo está.
     setAvisoHora(mensajeDelAviso(res?.avisoCambioHora));
+    if (res && siguientes?.siguientes > 0) await moverSiguientes(siguientes, instante);
+  }
+
+  /*
+   * ── ESTA Y LAS SIGUIENTES (11/09/2026, Aumenta: AV-0107, AV-0118, AV-0105) ──
+   * «Cuando hago un cambio en una cita, debería preguntarme si quiero
+   * generalizar ese cambio a todas las que tiene programadas para el futuro.»
+   * No hay serie (cada repetición es una cita suelta, a propósito), así que el
+   * servidor deduce cuáles son «las siguientes» —mismo niño, mismo tipo, misma
+   * terapeuta, mismo día de la semana y misma hora— y aquí se enseña el número
+   * antes de preguntar. Se pregunta DESPUÉS de mover esta: si alguien dice que
+   * no, la cita de hoy ya está donde la quería y las demás siguen como estaban.
+   */
+  async function contarSiguientes() {
+    try {
+      const r = await fetch(`/api/citas/bookings/${openBooking.id}/siguientes`, { cache: "no-store" });
+      const j = await r.json();
+      return j.ok ? j.data : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function moverSiguientes({ siguientes: n, hasta }, instante) {
+    const quiere = await confirmar({
+      titulo: "¿Mover también las siguientes?",
+      texto:
+        `Hay ${n} ${n === 1 ? "cita más como esta" : "citas más como esta"} de aquí en adelante ` +
+        `(mismo día de la semana y misma hora${hasta ? `, hasta el ${hasta}` : ""}). ` +
+        "¿Las muevo también a la nueva hora? Si alguna choca con otra cita, esa se queda donde está y te lo digo.",
+      confirmar: n === 1 ? "Sí, moverla también" : "Sí, moverlas también",
+      cancelar: "Solo esta",
+    });
+    if (!quiere) return;
+    setSaving(true);
+    try {
+      const r = await fetch(`/api/citas/bookings/${openBooking.id}/siguientes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scheduledAtAnterior: openBooking.scheduledAt, scheduledAt: instante.toISOString() }),
+      });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || "No se han podido mover las siguientes");
+      const { movidas, saltadas } = j.data;
+      const lineas = (saltadas ?? []).slice(0, 8).map((x) => `· ${x.fecha}: ${x.motivo}`);
+      if (saltadas?.length > 8) lineas.push(`· … y ${saltadas.length - 8} más`);
+      await avisar({
+        titulo: saltadas?.length ? "Movidas, con huecos" : "Movidas",
+        texto:
+          `${movidas} ${movidas === 1 ? "cita movida" : "citas movidas"} a la nueva hora.` +
+          (saltadas?.length ? "\n\nEstas se han quedado donde estaban:\n" + lineas.join("\n") : ""),
+      });
+      // El padre vuelve a pintar el calendario con las que se han movido.
+      onChanged({ ...openBooking, scheduledAt: instante.toISOString() });
+    } catch (e) {
+      await avisar({ titulo: "Las siguientes no se han movido", texto: e.message });
+    } finally {
+      setSaving(false);
+    }
   }
 
   /*

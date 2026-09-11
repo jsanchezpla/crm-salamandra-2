@@ -49,7 +49,8 @@ describe("las piezas están enganchadas", () => {
   it("el modal borra por el endpoint de siempre y avisa al padre", () => {
     const src = lee("modules/default/citas/BloqueoModal.jsx");
     assert.match(src, /Quitar el bloqueo/);
-    assert.match(src, /\/api\/citas\/bloqueos\?id=\$\{encodeURIComponent\(bloqueo\.id\)\}`, \{ method: "DELETE" \}/);
+    // Desde el 11/09/2026 la URL lleva detrás `&siguientes=1` cuando se quita la serie (AV-0121).
+    assert.match(src, /\/api\/citas\/bloqueos\?id=\$\{encodeURIComponent\(bloqueo\.id\)\}\$\{conSiguientes \? "&siguientes=1" : ""\}`, \{ method: "DELETE" \}/);
     assert.match(src, /onQuitado \? onQuitado\(\) : onSaved\(\)/);
     // Pregunta antes: al lado está «Convertir en cita» y esto no se deshace.
     assert.match(src, /window\.confirm\(/);

@@ -76,6 +76,24 @@ export function BloqueoModal({ bloqueo, categorias = [], equipo = [], administra
   useEffect(() => { cargarDocs(); }, [cargarDocs]);
 
   /*
+   * Cuántos bloqueos iguales a este vienen después (11/09/2026, AV-0121 de
+   * Aumenta: «¿no existe una forma para que pueda quitar [un bloqueo] desde el
+   * miércoles 16 en adelante?»). No hay serie: el servidor los deduce —misma
+   * persona, categoría, rótulo, duración, día de la semana y hora— y aquí solo
+   * se enseña el número en el botón, para que quien pulsa sepa cuántos se va a
+   * llevar. Sin siguientes, el botón no sale.
+   */
+  const [siguientes, setSiguientes] = useState(null); // { siguientes, hasta }
+  useEffect(() => {
+    let vivo = true;
+    fetch(`/api/citas/bloqueos?siguientesDe=${encodeURIComponent(bloqueo.id)}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => { if (vivo && j.ok) setSiguientes(j.data); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [bloqueo.id]);
+
+  /*
    * Quitar el bloqueo desde la agenda (07/09/2026, Rodrigo). El servidor ya
    * sabía borrarlos (`DELETE /api/citas/bloqueos?id=`); lo que faltaba era el
    * botón donde la persona está mirando: para quitar uno había que salir a
@@ -86,12 +104,16 @@ export function BloqueoModal({ bloqueo, categorias = [], equipo = [], administra
    * bloqueo borrado no se recupera, y con «Convertir en cita» al lado, un
    * dedo torcido no puede llevarse el hueco.
    */
-  async function quitar() {
-    if (!window.confirm("¿Quitar este bloqueo de la agenda? El hueco queda libre y esto no se puede deshacer.")) return;
+  async function quitar(conSiguientes = false) {
+    const n = conSiguientes ? siguientes?.siguientes ?? 0 : 0;
+    const pregunta = conSiguientes
+      ? `¿Quitar este bloqueo y los ${n} siguientes iguales (mismo día de la semana y misma hora${siguientes?.hasta ? `, hasta el ${siguientes.hasta}` : ""})? Los huecos quedan libres y esto no se puede deshacer.`
+      : "¿Quitar este bloqueo de la agenda? El hueco queda libre y esto no se puede deshacer.";
+    if (!window.confirm(pregunta)) return;
     setErr(null);
     setQuitando(true);
     try {
-      const res = await fetch(`/api/citas/bloqueos?id=${encodeURIComponent(bloqueo.id)}`, { method: "DELETE" });
+      const res = await fetch(`/api/citas/bloqueos?id=${encodeURIComponent(bloqueo.id)}${conSiguientes ? "&siguientes=1" : ""}`, { method: "DELETE" });
       const j = await res.json().catch(() => null);
       if (!res.ok || (j && j.ok === false)) throw new Error(j?.error || "No se ha podido quitar el bloqueo");
       onQuitado ? onQuitado() : onSaved();
@@ -469,6 +491,13 @@ export function BloqueoModal({ bloqueo, categorias = [], equipo = [], administra
                 title="Quita el bloqueo de la agenda y deja el hueco libre"
                 className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors">
                 {quitando ? "Quitando…" : "Quitar el bloqueo"}
+              </button>
+            )}
+            {puedeQuitarlo && siguientes?.siguientes > 0 && (
+              <button type="button" onClick={() => !saving && !quitando && quitar(true)} disabled={saving || quitando}
+                title={`Quita este bloqueo y los ${siguientes.siguientes} que se repiten igual de aquí en adelante${siguientes.hasta ? ` (hasta el ${siguientes.hasta})` : ""}`}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors">
+                {quitando ? "Quitando…" : `Quitar este y los ${siguientes.siguientes} siguientes`}
               </button>
             )}
             {onConvertir && !bloqueo.tallerId && (

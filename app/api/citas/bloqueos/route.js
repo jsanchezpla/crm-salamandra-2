@@ -9,6 +9,7 @@ import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMemb
 import { esAdministracion as esDeAdministracion, idsDeAdministracion } from "../../../../lib/team/departamentos.js";
 import { aNombreDeQuien, puedeElegirPersona, vetoParaTocar } from "../../../../lib/citas/permisosBloqueos.js";
 import { avisoDeBloqueoLargo } from "../../../../lib/citas/duracionBloqueo.js";
+import { esBloqueoSiguiente, fechaCorta, ventanaDeBusqueda } from "../../../../lib/citas/siguientesIguales.js";
 // `veTodaLaAgenda` vuelve a este fichero (08/09/2026) para lo ÚNICO que ahora
 // depende de quién mira: el nombre del paciente de un hueco reservado. El
 // listado de bloqueos sigue sin recortarse, como desde el 14/08/2026.
@@ -402,6 +403,24 @@ async function pacienteDelCuerpo(valor, ctx) {
   return { patientId: p.id };
 }
 
+/**
+ * Los bloqueos que son repetición de `base` y vienen después: misma persona,
+ * misma categoría y rótulo, misma duración, mismo día de la semana y misma
+ * hora de pared. Lo barato lo acota la base; lo fino, `esBloqueoSiguiente`.
+ */
+async function bloqueosSiguientesDe(TeamBlock, base) {
+  const candidatos = await TeamBlock.findAll({
+    where: {
+      teamMemberId: base.teamMemberId ?? null,
+      categoryKey: base.categoryKey ?? null,
+      startAt: ventanaDeBusqueda(Op, base.startAt),
+    },
+    order: [["startAt", "ASC"]],
+  });
+  const b = base.toJSON ? base.toJSON() : base;
+  return candidatos.filter((c) => esBloqueoSiguiente(b, c.toJSON ? c.toJSON() : c));
+}
+
 export const GET = withTenant(async (request, _rc, ctx) => {
   try {
     const veto = gate(ctx);
@@ -411,6 +430,22 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     if (!TeamBlock) return ok({ bloqueos: [], yo });
 
     const sp = new URL(request.url).searchParams;
+
+    /*
+     * ?siguientesDe=UUID — cuántos bloqueos iguales a ese vienen después y
+     * hasta cuándo (11/09/2026, AV-0121 y AV-0119 de Aumenta). Es el número
+     * que el modal enseña antes de ofrecer «quitar este y los siguientes»; la
+     * regla de qué es «igual» vive en lib/citas/siguientesIguales.js.
+     */
+    const siguientesDe = String(sp.get("siguientesDe") ?? "").trim();
+    if (siguientesDe) {
+      if (!UUID_RE.test(siguientesDe)) return error("id inválido", 422);
+      const base = await TeamBlock.findByPk(siguientesDe);
+      if (!base) return error("Ese bloqueo ya no existe", 404);
+      const lista = await bloqueosSiguientesDe(TeamBlock, base);
+      return ok({ siguientes: lista.length, hasta: lista.length ? fechaCorta(lista[lista.length - 1].startAt) : null });
+    }
+
     const from = sp.get("from");
     const to = sp.get("to");
     const where = {};
@@ -861,7 +896,25 @@ export const DELETE = withTenant(async (request, _rc, ctx) => {
     if (vetoQuitar) return forbidden(vetoQuitar);
 
     const antes = { teamMemberId: fila.teamMemberId, startAt: fila.startAt, endAt: fila.endAt, label: fila.label };
+
+    /*
+     * ?siguientes=1 — este y los que son su repetición de aquí en adelante
+     * (11/09/2026, AV-0121: «¿no existe una forma para que pueda quitar [un
+     * bloqueo] desde el miércoles 16 en adelante?»). Cada uno pasa por la
+     * misma valla que uno solo; el que no se puede tocar se queda y se cuenta.
+     * Una línea de auditoría con el recuento, no cuarenta.
+     */
+    const conSiguientes = ["1", "true"].includes(String(new URL(request.url).searchParams.get("siguientes") ?? ""));
+    const siguientes = conSiguientes ? await bloqueosSiguientesDe(TeamBlock, fila) : [];
+
     await fila.destroy();
+    let quitados = 1;
+    let vetados = 0;
+    for (const otro of siguientes) {
+      if (vetoParaTocar(yo, otro, "quitar")) { vetados += 1; continue; }
+      await otro.destroy();
+      quitados += 1;
+    }
 
     await logCitasAudit({
       tenantId: ctx.tenant.id,
@@ -870,10 +923,11 @@ export const DELETE = withTenant(async (request, _rc, ctx) => {
       entity: "TeamBlock",
       entityId: id,
       before: antes,
+      after: conSiguientes ? { siguientes: quitados - 1, vetados } : null,
       ip: request.headers.get("x-forwarded-for") ?? null,
     });
 
-    return ok({ removed: true });
+    return ok({ removed: true, quitados, vetados });
   } catch (err) {
     return serverError(err);
   }
