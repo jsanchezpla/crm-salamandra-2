@@ -525,6 +525,10 @@ Review multi-agente de los endpoints (5 dimensiones × verificación adversarial
   Word, emoji, CJK) hacía `new Response()` lanzar ByteString → 500 e indescargable. Fix:
   helper `contentDisposition()` con fallback ASCII en `filename="…"` + nombre real en
   `filename*=UTF-8''` (RFC 5987), en download y preview. Verificado con `Factura €500 – 文 🚀.pdf`.
+  **10/09/2026 (K8QBN30F):** la ñ en NFD que sube macOS (n + U+0303 = 771) tumbaba once rutas
+  de OTROS módulos que solo quitaban comillas; desde entonces el helper vive en
+  `lib/utils/contentDisposition.js` (aquí se reexporta), normaliza a NFC y lo usan las 41
+  rutas que mandan un fichero (`scripts/_smoke-content-disposition.mjs`).
 - 🟠 **Borrar carpeta shared destruía documentos de OTROS usuarios** vía CASCADE (bypass del
   "solo el owner borra"). Fix: DELETE de carpeta devuelve **409** si el subárbol contiene
   documentos/subcarpetas de otro `owner_user_id`. Verificado.
