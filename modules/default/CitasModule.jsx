@@ -595,7 +595,7 @@ export default function CitasModule({
       let fondos = [];
       try {
         const rb = await fetch(
-          `/api/citas/bloqueos?from=${info.startStr}&to=${info.endStr}`,
+          `/api/citas/bloqueos?from=${info.startStr}&to=${info.endStr}&limit=5000`,
           { cache: "no-store" }
         );
         const jb = await rb.json();
@@ -1235,6 +1235,12 @@ export default function CitasModule({
           <Waitlist
             refreshKey={waitlistKey}
             esAdmin={viewerIsAdmin}
+        // Administración también elige de quién es el bloqueo (11/09/2026,
+        // AV-0114 de Aumenta): con solo `esAdmin` el servidor le ponía a su
+        // nombre el «libre pacientes» que apuntaba en la agenda de una
+        // terapeuta, y en esa agenda no salía. Es la misma regla que ya
+        // aplicaba el servidor (`puedeElegirPersona` de permisosBloqueos.js).
+        puedeElegirPersona={viewerIsAdmin || Boolean(yoBloqueosRef.current?.puedeElegirPersona)}
             onCountChange={setPendingCount}
             onActioned={() => { loadPendingCount(); refrescarAgenda(); }}
           />

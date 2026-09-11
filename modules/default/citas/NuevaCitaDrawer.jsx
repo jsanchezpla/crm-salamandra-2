@@ -53,6 +53,9 @@ export function NuevaCitaDrawer({
   // propia ficha de equipo. Ver `BloqueoRapido`, abajo.
   categoriasBloqueo = [],
   viewerIsAdmin = false,
+  // Administración también elige de quién es el bloqueo rápido (11/09/2026,
+  // AV-0114 de Aumenta); cerrar el centro entero sigue siendo de dirección.
+  puedeElegirPersona = viewerIsAdmin,
   miFichaDeEquipo = null,
   // ¿Este centro exige que la cita nazca atada a un dinero? (04/09/2026,
   // Aumenta). Lo decide el servidor; aquí solo cambia si el bloque de cobro se
@@ -583,6 +586,7 @@ export function NuevaCitaDrawer({
         inicial={inicial}
         categorias={categoriasBloqueo}
         esAdmin={viewerIsAdmin}
+        puedeElegirPersona={puedeElegirPersona}
         miFicha={miFichaDeEquipo}
         teamMembers={teamMembers}
         avisar={avisar}
@@ -1222,7 +1226,7 @@ function sumarMinutos(hhmm, minutos) {
  * bloquea a sí mismo (el «Quién» ni se elige), el motivo es opcional, y las
  * citas que ya hubiera dentro no se tocan (se avisa cuántas hay).
  */
-function BloqueoRapido({ inicial, categorias, esAdmin, miFicha, teamMembers, avisar, confirmar, onModo, onClose, onCreated }) {
+function BloqueoRapido({ inicial, categorias, esAdmin, puedeElegirPersona = esAdmin, miFicha, teamMembers, avisar, confirmar, onModo, onClose, onCreated }) {
   const [form, setForm] = useState(() => ({
     teamMemberId: miFicha?.id ?? "",
     categoryKey: "",
@@ -1272,9 +1276,10 @@ function BloqueoRapido({ inicial, categorias, esAdmin, miFicha, teamMembers, avi
         label: form.label.trim(),
         categoryKey: form.categoryKey || null,
       };
-      // De quién es solo lo manda dirección; a un no-admin el servidor se lo
-      // pone a su nombre haga lo que haga el navegador.
-      if (esAdmin) cuerpo.teamMemberId = form.teamMemberId || null;
+      // De quién es lo mandan dirección y administración (11/09/2026,
+      // AV-0114); al resto el servidor se lo pone a su nombre haga lo que
+      // haga el navegador. Cerrar el centro entero sigue siendo de dirección.
+      if (puedeElegirPersona) cuerpo.teamMemberId = form.teamMemberId || null;
       let r = await fetch("/api/citas/bloqueos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1385,12 +1390,12 @@ function BloqueoRapido({ inicial, categorias, esAdmin, miFicha, teamMembers, avi
 
           <div>
             <label className={rotulo}>Quién</label>
-            {esAdmin ? (
+            {puedeElegirPersona ? (
               <select value={form.teamMemberId} onChange={(e) => pon("teamMemberId", e.target.value)} className={inputCls}>
                 {teamMembers.map((m) => (
                   <option key={m.id} value={m.id}>{m.displayName}</option>
                 ))}
-                <option value="">Todo el centro (cierra a todo el mundo)</option>
+                {esAdmin && <option value="">Todo el centro (cierra a todo el mundo)</option>}
               </select>
             ) : (
               <p className={`${inputCls} bg-neutral-50 text-neutral-600`}>{miFicha?.displayName || "Tus ausencias"}</p>
