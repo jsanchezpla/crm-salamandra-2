@@ -700,6 +700,24 @@ de clients/leads/billing-pagos/inventario/orders/tickets no audita todavía.
   la columna y el `DetailRow` correspondientes también se mostraron
   para admin. La API ya lo aceptaba; lo único que faltaba era la UI.
 
+## El listado de incidencias se exporta a Excel (11/09/2026, AV-0125 de Aumenta)
+
+Olga (administración): «el listado de incidencias, que se pueda descargar el
+Excel, por facilidad para poder ir controlando mejor y tener otra visión». Botón
+«Exportar Excel» al lado de «Nueva incidencia» en Equipo → Incidencias: un
+enlace a `GET /api/clinica/incidencias/export` con los MISMOS parámetros que la
+lista (pestaña, categoría, responsable, quién registró, texto, vistas), así que
+el fichero es exactamente lo que se ve. Hoja «Incidencias» (fecha, asunto,
+categoría, subcategoría o falta, paciente, prioridad, estado, responsables,
+quién registró, comentarios, resolución, resuelta el, descripción) y hoja
+«Filtros aplicados».
+
+Para que la lista y el Excel no se separen nunca, los filtros y el alcance
+—dirección ve todas, el resto las que registró o tiene asignadas— viven desde
+ese día en `lib/clinica/filtroIncidencias.js` (`whereDeIncidencias`,
+`includesDeIncidencias`) y las dos rutas lo llaman. Es la lección del Excel de
+Clientes, que un día ignoró el filtro de visibilidad de su lista.
+
 ## Revisión del 06/09/2026 (incidencias)
 
 - El PATCH de una incidencia solo cuenta lo que de verdad cambia (campos comparados con la fila; responsables por conjunto): «Guardar cambios» sin tocar nada ya no borra el visto de las demás. El modal sincroniza `verification`/`falta` con lo que devuelve el servidor (antes reabría la que se había cerrado sola). El visto de quien no es responsable se rechaza antes de escribir. Una responsable `inactive` no cuenta para el repaso ni para el cierre (`filasQueCuentan`). El diálogo de eliminar dice cuando tu visto cierra la incidencia.

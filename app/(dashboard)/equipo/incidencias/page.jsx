@@ -81,9 +81,9 @@ export default function IncidenciasPage() {
 
   // `silencioso` (02/09/2026): refresco de fondo al volver a la pestaña, sin
   // sustituir la lista por «Cargando…» mientras llega.
-  const load = ({ silencioso = false } = {}) => {
-    if (!silencioso) setLoading(true);
-    setErrorMsg(null);
+  // Los mismos parámetros para la lista y para el Excel (11/09/2026, AV-0125):
+  // lo que se exporta es exactamente lo que se está viendo.
+  const paramsActuales = () => {
     const params = new URLSearchParams();
     if (statusTab === "faltas") params.set("faltas", "1");
     else if (statusTab) params.set("status", statusTab);
@@ -95,6 +95,14 @@ export default function IncidenciasPage() {
     else if (responsableId) params.set("assignedToId", responsableId);
     if (qBuscada) params.set("q", qBuscada);
     if (verVistas) params.set("vistas", "1");
+    return params;
+  };
+  const exportUrl = `/api/clinica/incidencias/export?${paramsActuales()}`;
+
+  const load = ({ silencioso = false } = {}) => {
+    if (!silencioso) setLoading(true);
+    setErrorMsg(null);
+    const params = paramsActuales();
     fetch(`/api/clinica/incidencias?${params}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => { if (j.ok) setData(j.data); else setErrorMsg(j.error); })
@@ -168,14 +176,28 @@ export default function IncidenciasPage() {
               : "Registro y seguimiento de incidencias del equipo."}
           </p>
         </div>
-        <button
-          onClick={() => setModal({ mode: "create", incidencia: null })}
-          className="inline-flex items-center gap-1.5 text-xs font-medium px-4 py-2 rounded-lg text-white hover:opacity-90 transition-opacity self-start lg:self-auto"
-          style={{ background: "var(--color-primary, #1B3A2D)" }}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-          Nueva incidencia
-        </button>
+        <div className="flex items-center gap-2 self-start lg:self-auto">
+          {/* El listado tal cual se ve, en Excel (11/09/2026, AV-0125 de Aumenta):
+              un enlace, sin JavaScript, con los filtros de la pantalla. */}
+          <a
+            href={exportUrl}
+            title="Descarga en Excel las incidencias que se ven ahora, con estos filtros"
+            className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border border-[var(--ink-200,#e5e7eb)] bg-white text-[var(--ink-700,#374151)] hover:bg-neutral-50 transition-colors"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-3.5 h-3.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M12 3v13.5m0 0l-4.5-4.5M12 16.5l4.5-4.5" />
+            </svg>
+            Exportar Excel
+          </a>
+          <button
+            onClick={() => setModal({ mode: "create", incidencia: null })}
+            className="inline-flex items-center gap-1.5 text-xs font-medium px-4 py-2 rounded-lg text-white hover:opacity-90 transition-opacity"
+            style={{ background: "var(--color-primary, #1B3A2D)" }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+            Nueva incidencia
+          </button>
+        </div>
       </div>
 
       {errorMsg && <div className="px-4 py-3 rounded-lg bg-rose-50 border border-rose-100 text-xs text-rose-700">{errorMsg}</div>}
