@@ -79,7 +79,21 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
         // profesional, y en una semana de Aumenta eran 70 de las 103 en
         // pantalla. El porqué entero, en lib/citas/filtros.js.
         const filtro = filtroDeProfesionales(searchParams.get("teamMemberIds"));
-        if (filtro) where.teamMemberId = filtro;
+        if (filtro) {
+          /*
+           * …Y los TALLERES que imparten las personas marcadas aunque la cita
+           * sea de otra (11/09/2026, AV-0108 de Aumenta). La ampliación de
+           * abajo solo corría en la rama sin agenda compartida, y en Aumenta
+           * —agenda compartida y la agenda abriéndose filtrada a una misma—
+           * la segunda terapeuta de un grupo veía solo las semanas en las que
+           * la cita era suya: «no me sale en mi horario el grupo».
+           */
+          const marcados = String(searchParams.get("teamMemberIds") ?? "")
+            .split(",").map((s) => s.trim()).filter((s) => /^[0-9a-f-]{36}$/i.test(s));
+          const deTaller = await citasDeTallerQueImparte({ tenantModels, teamMemberId: marcados, desde: startDate, hasta: endDate });
+          if (deTaller.length) where[Op.or] = [{ teamMemberId: filtro }, { id: { [Op.in]: deTaller } }];
+          else where.teamMemberId = filtro;
+        }
       } else {
         // Un profesional ve SU agenda y las citas que no son de nadie (la regla
         // entera, con su porqué, en lib/citas/visibilidad.js).

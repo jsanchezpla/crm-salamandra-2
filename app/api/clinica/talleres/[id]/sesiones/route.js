@@ -7,7 +7,7 @@ import { MAX_TRANSCRIPCION } from "../../../../../../lib/clinica/registroComplet
 import { apartadoDeNota, apartadosComunes, valoresComunes } from "../../../../../../lib/clinica/tallerSesion.js";
 import { propagarSesionDeTaller } from "../../../../../../lib/clinica/propagarTaller.js";
 import { resolveCurrentTeamMemberId } from "../../../../../../lib/team/currentTeamMember.js";
-import { asistentesQueVinieron } from "../../../../../../lib/clinica/citaDeTaller.js";
+import { asistentesQueVinieron, registroDeLaTarde } from "../../../../../../lib/clinica/citaDeTaller.js";
 
 /**
  * /api/clinica/talleres/[id]/sesiones — las sesiones de un taller
@@ -127,18 +127,21 @@ export const POST = withTenant(async (request, { params }, ctx) => {
      */
     const bookingId =
       typeof body.bookingId === "string" && UUID_RE.test(body.bookingId) ? body.bookingId : null;
-    if (bookingId) {
-      const yaHay = await TallerSesion.findOne({ where: { bookingId } });
+    const { Booking } = ctx.tenantModels;
+    const cita = bookingId && Booking
+      ? await Booking.findByPk(bookingId, { attributes: ["id", "tallerGrupoId", "scheduledAt"] })
+      : null;
+    if (cita) {
+      // Por la cita, y si no, por el grupo en el mismo día (11/09/2026,
+      // AV-0108): la segunda terapeuta del grupo, desde SU cita de esa tarde,
+      // edita el registro que ya hay en vez de abrir otro.
+      const { sesion: yaHay } = await registroDeLaTarde({ tenantModels: ctx.tenantModels, booking: cita });
       if (yaHay) return ok({ id: yaHay.id, yaExistia: true });
     }
 
     // El grupo: el que mande la pantalla, o el de la cita si viene por ahí.
     let grupoId = typeof body.grupoId === "string" && UUID_RE.test(body.grupoId) ? body.grupoId : null;
-    if (!grupoId && bookingId) {
-      const { Booking } = ctx.tenantModels;
-      const cita = Booking ? await Booking.findByPk(bookingId, { attributes: ["tallerGrupoId"] }) : null;
-      grupoId = cita?.tallerGrupoId ?? null;
-    }
+    if (!grupoId && cita) grupoId = cita.tallerGrupoId ?? null;
 
     /*
      * Quién la dio: lo que mande la pantalla, y si no manda nada, quien está

@@ -1703,7 +1703,14 @@ Dos consecuencias que hubo que resolver:
 - **`bookings.team_member_id` solo admite uno**, y hace falta (color de la caja,
   y el solape se comprueba por profesional). Se pone quien coordina; para que la
   segunda terapeuta lo vea en SU agenda, el calendario amplía el filtro con
-  `citasDeTallerQueImparte()` (`lib/clinica/citaDeTaller.js`).
+  `citasDeTallerQueImparte()` (`lib/clinica/citaDeTaller.js`). **Hasta el
+  11/09/2026 solo en la rama sin agenda compartida** (AV-0108 de Aumenta: «no me
+  sale en mi horario el grupo»): con agenda compartida, filtrar por unas
+  personas amplía ahora por los talleres que imparten esas mismas personas.
+  Y el REGISTRO de la tarde se busca por la cita y, si no hay, por el grupo en
+  el mismo día de Madrid (`registroDeLaTarde`): desde la cita de la otra
+  terapeuta se abre el registro que ya existe (`sesion.deOtraCita`) en vez de
+  ofrecer «Registrar la sesión» y partir el grupo en dos registros.
 - **No sale correo**: un taller no tiene UNA familia a la que avisar, tiene
   ocho, cada una con su consentimiento. El POST devuelve
   `emailMotivo: "taller"` y la pantalla no enseña el aviso de «no le ha llegado».
