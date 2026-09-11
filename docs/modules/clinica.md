@@ -212,6 +212,10 @@ demos hay 39 sesiones en `draft` que sí se dieron.
   `pull` que cierra en un `queueMicrotask` sin protección, mientras que un `Uint8Array` cierra con el helper
   `readableStreamClose`, que se traga justo esa frase. De ahí `lib/utils/multipart.js`. **Para volver a
   `body: form` el día que undici lo arregle**, basta con deshacer las tres líneas de `whisper.js`.
+  **Y no era todo (11/09/2026):** con eso desplegado el error siguió; las seis apariciones del 10/09 caían en el
+  segundo en que terminaba una DESCARGA de documento, no una transcripción: `new Response(createReadStream(abs))`
+  pasa por el mismo `close()` sin red (`ReadableStreamFrom` de undici). Lo cubre `lib/utils/cuerpoDeFichero.js`,
+  que usan los seis helpers de almacenamiento.
 
 - Transcripción: `lib/clinica/whisper.js` (API de OpenAI, clave del tenant). Estructura:
   `lib/clinica/structureSession.js` (Claude, reutiliza el proveedor de Outreach).

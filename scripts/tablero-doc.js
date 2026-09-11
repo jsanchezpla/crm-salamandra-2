@@ -50,6 +50,7 @@
  */
 
 import { readFileSync } from "node:fs";
+import { Readable } from "node:stream";
 import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
 import { DOCUMENTOS, ES_FICHA, comprobar, trocearTodo } from "../lib/tablero/parser.js";
 import { abrirFichero } from "../lib/tablero/tableroStorage.js";
@@ -388,10 +389,13 @@ async function capturaOrden(id) {
     err(e.code === "ENOENT" ? `La captura ${id} ya no está en disco.` : e.message);
     process.exit(1);
   }
+  // `abrirFichero` devuelve un ReadableStream web (lib/utils/cuerpoDeFichero.js):
+  // para `pipe` a stdout hace falta el de Node.
+  const nodo = Readable.fromWeb(abierto.stream);
   await new Promise((resolver, rechazar) => {
-    abierto.stream.on("error", rechazar);
-    abierto.stream.on("end", resolver);
-    abierto.stream.pipe(process.stdout, { end: false });
+    nodo.on("error", rechazar);
+    nodo.on("end", resolver);
+    nodo.pipe(process.stdout, { end: false });
   });
 }
 

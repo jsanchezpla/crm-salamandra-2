@@ -354,7 +354,8 @@ documents/{tenantSlug}/{ownerUserId | "shared"}/{documentUUID}.{ext}
 - Clonado y generalizado de `lib/clients/attachmentStorage.js` (regla #2: NO reutilizar
   in-place — el de clients está hardcodeado a `.pdf` y a `clients/{clientId}`).
 - Funciones: `saveDocumentFile`, `readDocumentStream` (`{stream,size}`, **stat primero**
-  → ENOENT antes de la respuesta), `deleteDocumentFile` (idempotente), `getTenantStorageUsage`
+  → ENOENT antes de la respuesta; `stream` es un `ReadableStream` web de `lib/utils/cuerpoDeFichero.js`,
+  no el de Node: el 10/09/2026 el final de cada descarga tumbaba el proceso), `deleteDocumentFile` (idempotente), `getTenantStorageUsage`
   (recorrido de disco), `validateMimeMagicBytes`, `sanitizeFileName`, `isAllowedMime`.
 
 ---

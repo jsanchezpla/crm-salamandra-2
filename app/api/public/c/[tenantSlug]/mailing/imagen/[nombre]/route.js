@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { Readable } from "node:stream";
 import { withPublicTenant } from "../../../../../../../../lib/tenant/publicTenantContext.js";
 import { localizarImagen, streamDeImagen } from "../../../../../../../../lib/mailing/imagenStorage.js";
 
@@ -18,7 +17,7 @@ export const GET = withPublicTenant(
     if (!ctx.hasModule("mailing")) return new NextResponse("Not found", { status: 404 });
     const img = await localizarImagen(ctx.slug, nombre);
     if (!img) return new NextResponse("Not found", { status: 404 });
-    const cuerpo = Readable.toWeb(streamDeImagen(img.ruta));
+    const cuerpo = streamDeImagen(img.ruta);
     return new NextResponse(cuerpo, {
       headers: {
         "Content-Type": img.mime,
