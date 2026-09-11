@@ -710,7 +710,13 @@ lista (pestaña, categoría, responsable, quién registró, texto, vistas), así
 el fichero es exactamente lo que se ve. Hoja «Incidencias» (fecha, asunto,
 categoría, subcategoría o falta, paciente, prioridad, estado, responsables,
 quién registró, comentarios, resolución, resuelta el, descripción) y hoja
-«Filtros aplicados».
+«Filtros aplicados». **La pestaña Faltas lleva sus propias columnas** (AV-0127,
+Olga, la misma tarde): terapeuta y fecha de la CITA que faltó (`falta.bookingId`),
+paciente, justificada, estado (recuperada / no recupera / sin respuesta), fechas
+del primer, segundo y tercer intento —no son un dato del CRM: son los tres
+primeros comentarios de la incidencia, que es donde se apunta cada llamada—,
+fecha y hora de la recuperación (la cita enlazada por `recovered_by_booking_id`,
+o `falta.fechaRecuperacion`), huecos ofrecidos y observaciones.
 
 Para que la lista y el Excel no se separen nunca, los filtros y el alcance
 —dirección ve todas, el resto las que registró o tiene asignadas— viven desde

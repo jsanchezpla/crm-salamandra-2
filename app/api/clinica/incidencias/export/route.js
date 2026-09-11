@@ -21,6 +21,8 @@ import { xlsxResponse, fmtDateEs } from "../../../../../lib/billing/exportXlsx.j
 import { includesDeIncidencias, whereDeIncidencias } from "../../../../../lib/clinica/filtroIncidencias.js";
 import { serializeIncidencia, INCIDENCIA_CATEGORIES } from "../../../../../lib/clinica/incidencias.js";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const PESTANAS = {
   "": "Todas",
   pending: "Pendientes",
@@ -47,6 +49,68 @@ export const GET = withTenant(async (request, _rc, ctx) => {
       include: includesDeIncidencias(M),
       order: [["incidenceDate", "DESC"], ["createdAt", "DESC"]],
       limit: 2000,
+    });
+
+    /*
+     * ── LA PESTAÑA «FALTAS» LLEVA SUS PROPIAS COLUMNAS (11/09/2026, AV-0127) ──
+     * Olga: «que se vaya descargando en un excel… terapeuta, fecha falta,
+     * paciente, justificada/injustificada, estado (recuperada o no), fecha
+     * primer/segundo/tercer intento, fecha recuperación, horario de la
+     * recuperación, observaciones». La terapeuta y la hora salen de la CITA
+     * que faltó (`falta.bookingId`) y la recuperación de la cita enlazada
+     * (`recovered_by_booking_id`); los «intentos» no son un dato del CRM: se
+     * ponen las fechas de los tres primeros comentarios de la incidencia, que
+     * es donde se apunta cada llamada a la familia.
+     */
+    const soloFaltas = sp.get("faltas") === "1";
+    const citas = new Map();
+    if (soloFaltas && M.Booking) {
+      const ids = rows.map((r) => r.falta?.bookingId).filter((x) => x && UUID_RE.test(x));
+      if (ids.length) {
+        const filasCita = await M.Booking.findAll({
+          where: { id: ids },
+          attributes: ["id", "scheduledAt", "teamMemberId", "recoveredByBookingId"],
+          include: M.TeamMember ? [{ model: M.TeamMember, as: "teamMember", attributes: ["id", "displayName"], required: false }] : [],
+        });
+        const recuperadoras = filasCita.map((c) => c.recoveredByBookingId).filter(Boolean);
+        const porId = new Map();
+        if (recuperadoras.length) {
+          const rec = await M.Booking.findAll({ where: { id: recuperadoras }, attributes: ["id", "scheduledAt"], raw: true });
+          for (const c of rec) porId.set(c.id, c);
+        }
+        for (const c of filasCita) {
+          citas.set(c.id, {
+            cuando: c.scheduledAt,
+            terapeuta: c.teamMember?.displayName ?? null,
+            recuperacion: c.recoveredByBookingId ? porId.get(c.recoveredByBookingId)?.scheduledAt ?? null : null,
+          });
+        }
+      }
+    }
+    const horaMadrid = (d) => (d ? new Date(d).toLocaleTimeString("es-ES", { timeZone: "Europe/Madrid", hour: "2-digit", minute: "2-digit" }) : "");
+    const fechaMadrid = (d) => (d ? new Date(d).toLocaleDateString("es-ES", { timeZone: "Europe/Madrid" }) : "");
+
+    const filasDeFaltas = rows.map((r) => {
+      const i = serializeIncidencia(r);
+      const f = i.falta ?? {};
+      const cita = citas.get(f.bookingId) ?? null;
+      const intentos = (i.comments ?? []).map((c) => c.at).filter(Boolean).sort();
+      const recuperada = f.respuesta === "aceptada";
+      return {
+        terapeuta: cita?.terapeuta ?? (i.assignees ?? []).map((a) => a.name).filter(Boolean).join(", "),
+        fechaFalta: cita?.cuando ? fechaMadrid(cita.cuando) : i.date ? fmtDateEs(i.date) : "",
+        paciente: i.patient?.name ?? "",
+        justificada: f.justificada ? "Justificada" : "Injustificada",
+        estado: recuperada ? "Recuperada" : f.respuesta === "rechazada" ? "No recupera" : "Sin respuesta",
+        intento1: intentos[0] ? fechaMadrid(intentos[0]) : "",
+        intento2: intentos[1] ? fechaMadrid(intentos[1]) : "",
+        intento3: intentos[2] ? fechaMadrid(intentos[2]) : "",
+        fechaRecuperacion: cita?.recuperacion ? fechaMadrid(cita.recuperacion) : f.fechaRecuperacion ? fmtDateEs(f.fechaRecuperacion) : "",
+        horarioRecuperacion: cita?.recuperacion ? horaMadrid(cita.recuperacion) : "",
+        huecos: f.huecosOfrecidos ?? "",
+        observaciones: [f.nota, i.resolution].filter(Boolean).join(" · "),
+        asunto: i.title ?? "",
+      };
     });
 
     const filas = rows.map((r) => {
@@ -78,8 +142,22 @@ export const GET = withTenant(async (request, _rc, ctx) => {
 
     return await xlsxResponse({
       filename: `incidencias-${ctx.tenant.slug}.xlsx`,
-      sheetName: "Incidencias",
-      columns: [
+      sheetName: soloFaltas ? "Faltas" : "Incidencias",
+      columns: soloFaltas ? [
+        { header: "Terapeuta", key: "terapeuta", width: 26 },
+        { header: "Fecha falta", key: "fechaFalta", width: 12 },
+        { header: "Paciente", key: "paciente", width: 28 },
+        { header: "Justificada / injustificada", key: "justificada", width: 16 },
+        { header: "Estado (recuperada o no)", key: "estado", width: 18 },
+        { header: "Fecha primer intento", key: "intento1", width: 14 },
+        { header: "Fecha segundo intento", key: "intento2", width: 14 },
+        { header: "Fecha tercer intento", key: "intento3", width: 14 },
+        { header: "Fecha recuperación", key: "fechaRecuperacion", width: 14 },
+        { header: "Horario de la recuperación", key: "horarioRecuperacion", width: 14 },
+        { header: "Huecos ofrecidos", key: "huecos", width: 30 },
+        { header: "Observaciones", key: "observaciones", width: 50 },
+        { header: "Asunto", key: "asunto", width: 40 },
+      ] : [
         { header: "Fecha", key: "fecha", width: 12 },
         { header: "Asunto", key: "asunto", width: 40 },
         { header: "Categoría", key: "categoria", width: 18 },
@@ -94,7 +172,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
         { header: "Resuelta el", key: "resueltaEl", width: 12 },
         { header: "Descripción", key: "descripcion", width: 60 },
       ],
-      rows: filas,
+      rows: soloFaltas ? filasDeFaltas : filas,
       filters: [
         { label: "Pestaña", value: sp.get("faltas") === "1" ? "Faltas" : PESTANAS[sp.get("status") ?? ""] ?? sp.get("status") },
         { label: "Categoría", value: etiquetaCategoria || "Todas" },
