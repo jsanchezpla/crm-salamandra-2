@@ -1,6 +1,7 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, noContent, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { auditar, datosPeticion, resumen } from "../../../../../lib/utils/auditoria.js";
+import { esFormatoValido, LARGO_MAXIMO_FORMATO } from "../../../../../lib/billing/formatoDeSerie.js";
 
 
 export const PATCH = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
@@ -17,6 +18,16 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
     if ("name" in body) updates.name = String(body.name);
     if ("prefix" in body) updates.prefix = String(body.prefix);
     if ("isDefault" in body) updates.isDefault = !!body.isDefault;
+    // Cómo se escribe el número (12/09/2026): vacío = el formato de siempre.
+    if ("numberFormat" in body) {
+      const formato = String(body.numberFormat ?? "").trim();
+      if (formato && !esFormatoValido(formato)) {
+        return error(
+          `Formato inválido: solo las fichas {prefix}, {year}, {yy} y una sola {n} (o {n:5}), ${LARGO_MAXIMO_FORMATO} caracteres como mucho`
+        );
+      }
+      updates.numberFormat = formato || null;
+    }
     // No permitimos editar nextNumber a mano (rompe correlatividad fiscal)
     await series.update(updates);
     await auditar({
@@ -25,7 +36,7 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
       action: "invoice_series.updated",
       entity: "InvoiceSeries",
       entityId: series.id,
-      after: resumen(series, ["prefix", "name", "nextNumber"]),
+      after: resumen(series, ["prefix", "name", "nextNumber", "numberFormat"]),
     });
     return ok(series);
   } catch (err) {
@@ -45,7 +56,7 @@ export const DELETE = withTenant(async (request, { params }, { tenant, tenantMod
     const used = await Invoice.count({ where: { series: series.code } });
     if (used > 0) return error(`No se puede borrar: ${used} facturas usan esta serie`, 409);
 
-    const antesBorrar = resumen(series, ["prefix", "name", "nextNumber"]);
+    const antesBorrar = resumen(series, ["prefix", "name", "nextNumber", "numberFormat"]);
     const idBorrado = series.id;
     await series.destroy();
     await auditar({

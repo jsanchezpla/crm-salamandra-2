@@ -241,7 +241,12 @@ Cosas que versiones antiguas de este doc daban por NO hechas y **sí existen**:
   pone la línea a 0% en el editor.
 - **Numeración en orden de fecha**: `assignInvoiceNumber` bloquea emitir una factura
   con fecha anterior a la última ya emitida de esa serie+año (error 422). Garantiza
-  correlatividad cronológica además de numérica.
+  correlatividad cronológica además de numérica. Los números de una serie y un año
+  se reconocen por su FORMATO (`regexDeSerie`, 12/09/2026), no por `F-2026-%`, y
+  **el contador nunca va por detrás de lo que ya existe**: si se traen de fuera
+  facturas con números más altos (las de Organízate que Aumenta sigue emitiendo
+  hasta el 30/09/2026), la siguiente sale detrás de la mayor; el cambio de año
+  cae en la misma regla (en enero no hay ninguna y se empieza por el 1).
 - **Reparto de cuota del paciente en 2 modos** (`components/billing/PatientReparto.jsx`):
   A) una factura por el total a un pagador (IVA una vez + cobros parciales), y
   B) varias facturas (una por pagador, IVA proporcional) con **validación de que la
@@ -479,6 +484,7 @@ Fichero: `models/tenant/InvoiceSeries.model.js`. Tabla: `invoice_series`.
 | `nextNumber` | INTEGER | Próximo número correlativo. Lock pesimista al asignar. |
 | `isDefault` | BOOLEAN | Solo informativo en la UI. |
 | `kind` | ENUM | `normal` o `rectificative`. |
+| `numberFormat` | VARCHAR(40) nullable | Cómo se escribe el número (12/09/2026): fichas `{prefix}`, `{year}`, `{yy}` y una sola `{n}`/`{n:5}` (`lib/billing/formatoDeSerie.js`). NULL = `{prefix}-{year}-{n:4}`, el de siempre. Aumenta sigue la numeración de Organízate con `{prefix}{yy}{n:5}`: prefijo `C` → `C2602246`, prefijo `R-C` → `R-C2600029`. Se cambia por `PATCH /series/[id]` (validado) o por SQL; la pantalla lo enseña como «Se escribirá». |
 
 La migración crea siempre dos series por tenant: `F` (default, `normal`) y
 `R` (`rectificative`). El endpoint `PATCH /series/[id]` **no permite editar

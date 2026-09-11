@@ -54,6 +54,17 @@ export function defineInvoiceSeries(sequelize) {
         allowNull: false,
         defaultValue: "normal",
       },
+      /*
+       * CÓMO SE ESCRIBE EL NÚMERO (12/09/2026). Fichas `{prefix}`, `{year}`,
+       * `{yy}` y `{n}`/`{n:5}` (lib/billing/formatoDeSerie.js). NULL = el
+       * formato de siempre, `{prefix}-{year}-{n:4}`. Existe para seguir la
+       * numeración de otro programa en vez de abrir otra serie: Aumenta
+       * continúa la de Organízate (`C2602246`, rectificativas `R-C2600029`).
+       */
+      numberFormat: {
+        type: DataTypes.STRING(40),
+        allowNull: true,
+      },
     },
     {
       tableName: "invoice_series",

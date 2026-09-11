@@ -3,6 +3,7 @@ import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { logBillingAudit, resumenFactura, datosPeticion } from "../../../../../lib/billing/audit.js";
 import { assignInvoiceNumber } from "../../../../../lib/billing/generateInvoiceNumber.js";
+import { regexDeSerie } from "../../../../../lib/billing/formatoDeSerie.js";
 import { calculateInvoice } from "../../../../../lib/billing/calculateInvoice.js";
 import { fotoFiscalDe, ATRIBUTOS_PARA_CONGELAR } from "../../../../../lib/billing/datosFiscales.js";
 import { agruparLoteCuotas, agrupacionValida, lineasDeCuota, mesValido, finExclusivoDe } from "../../../../../lib/billing/lotesCuotas.js";
@@ -116,10 +117,12 @@ function faltaEmisor(settings) {
 /** La fecha de la última factura de la serie F de ese año (o null si no hay). */
 async function ultimaFechaSerie({ tenantModels, year }) {
   const { InvoiceSeries, Invoice } = tenantModels;
-  const serie = await InvoiceSeries.findOne({ where: { code: "F" } });
-  const prefix = serie?.prefix ?? "F";
+  const serie = (await InvoiceSeries.findOne({ where: { code: "F" } })) ?? { code: "F", prefix: "F" };
+  // Los números de la serie se reconocen por su FORMATO (12/09/2026): en
+  // Aumenta son `C26…`, no `F-2026-…`, y con el LIKE de antes esta tope no
+  // veía ninguna factura y dejaba emitir el lote con fecha anterior.
   const ultima = await Invoice.findOne({
-    where: { number: { [Op.like]: `${prefix}-${year}-%` } },
+    where: { number: { [Op.regexp]: regexDeSerie(serie, year).source } },
     order: [["issueDate", "DESC"]],
     attributes: ["issueDate"],
   });

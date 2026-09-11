@@ -714,6 +714,10 @@ export const MODULES = {
     // Borrar una ficha ya no borra sus facturas: la relación pasa de CASCADE a
     // RESTRICT (y de paso deja UNA sola, que había hasta cuatro duplicadas).
     "migrate-invoices-client-restrict",
+    // Cómo se escribe el número de cada serie (12/09/2026):
+    // invoice_series.number_format. Aumenta sigue la numeración de Organízate
+    // (`C2602246`). ANTES del despliegue: el modelo pide la columna por nombre.
+    "migrate-billing-series-format",
   ],
 
   // Conciliación bancaria (29/08/2026; submódulo de Facturación desde esa

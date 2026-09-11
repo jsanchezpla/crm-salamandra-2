@@ -6,6 +6,7 @@ import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import Select from "@/components/ui/Select.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 import { ordenarPorNombre } from "@/lib/billing/conceptosCatalogo.js";
+import { ejemploDeSerie } from "@/lib/billing/formatoDeSerie.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -571,7 +572,9 @@ export default function ConfiguracionPage() {
             <strong className="text-white">solo al emitir</strong>: un borrador no gasta número,
             y al cambiar de año vuelve a empezar por el 1. Dentro de una serie los números van
             en orden de fecha, así que no podrás emitir una factura con fecha anterior a la
-            última que ya emitiste en ella. Las series se dejan preparadas al poner en marcha la
+            última que ya emitiste en ella. Cada serie escribe el número con su propio formato:
+            el de siempre (F-2026-0001) o el del programa del que venías, para seguir su
+            numeración sin abrir otra serie. Las series se dejan preparadas al poner en marcha la
             facturación; aquí solo se consultan.
           </HelpTooltip>
         }
@@ -584,6 +587,7 @@ export default function ConfiguracionPage() {
                 <th className="text-left px-3 py-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Nombre</th>
                 <th className="text-left px-3 py-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Año</th>
                 <th className="text-right px-3 py-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Próximo nº</th>
+                <th className="text-left px-3 py-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Se escribirá</th>
                 <th className="text-left px-3 py-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Tipo</th>
               </tr>
             </thead>
@@ -594,6 +598,7 @@ export default function ConfiguracionPage() {
                   <td className="px-3 py-2 text-neutral-700">{s.name}</td>
                   <td className="px-3 py-2 text-neutral-500">{s.year}</td>
                   <td className="px-3 py-2 text-right tabular font-semibold text-neutral-900">{s.nextNumber}</td>
+                  <td className="px-3 py-2 font-mono text-xs text-neutral-700">{ejemploDeSerie(s)}</td>
                   <td className="px-3 py-2 text-xs text-neutral-500">{s.kind === "rectificative" ? "Rectificativa" : "Normal"}</td>
                 </tr>
               ))}
