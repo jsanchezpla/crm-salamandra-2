@@ -281,12 +281,17 @@ enmascarada (p.ej. `AIza…1234`), y permite reemplazar o eliminar la clave.
 > frase dice que es el SALDO y dónde se recarga (console.anthropic.com → Plans &
 > Billing), no «acorta el texto». Y `lib/ai/avisoDeCuentaIa.js`
 > (`avisarAdminsDelFalloIa`) pone una campana a cada admin del tenant —una cada
-> 12 h, no una por intento— con cualquier fallo de la CUENTA (saldo, clave, permiso
+> 12 h POR CAUSA, no una por intento, con un `entityId` determinista (causa + tramo
+> de 12 h) para que el índice único `notifications_dedupe_uniq` frene dos intentos
+> simultáneos— con cualquier fallo de la CUENTA (saldo, clave, permiso
 > del modelo, límite): la llaman los endpoints clínicos que van a Claude (registro
 > de sesión, taller, completar, encargo, informe desde material, objetivos del
 > plan). Nació de la tarde del 10/09/2026 en Aumenta: 129 intentos fallidos en una
 > caja VERDE y cuatro tickets de «el CRM no va»; por eso el registro y el taller
-> devuelven además `avisoTipo: "fallo"` y la pantalla lo pinta en ámbar.
+> devuelven además `avisoTipo: "fallo"` y la pantalla lo pinta en ámbar; también
+> con la respuesta cortada, ilegible o vacía y con el audio mudo. Ojo: los errores
+> del SDK llegan con `name: "Error"` (la clase lleva el nombre), así que
+> `errorLegible.js` los reconoce por `constructor.name` (`nombreDelError`).
 
 ### 3. Descripción de empresa (alimenta Captación)
 

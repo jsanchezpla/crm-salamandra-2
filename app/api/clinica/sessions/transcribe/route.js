@@ -277,6 +277,10 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     structured,
     audioDurationSec,
     demo: false,
-    ...(avisoAudioMudo || avisoIncidencia ? { avisoIA: avisoAudioMudo ?? avisoIncidencia } : {}),
+    // Audio mudo, respuesta cortada, ilegible o vacía: tampoco es un éxito, y
+    // la pantalla lo pinta en ámbar igual que el fallo del catch.
+    ...(avisoAudioMudo || avisoIncidencia
+      ? { avisoIA: avisoAudioMudo ?? avisoIncidencia, avisoTipo: "fallo" }
+      : {}),
   });
 });

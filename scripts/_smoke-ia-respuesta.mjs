@@ -33,14 +33,18 @@ register(new URL("./_abrir-lib-hooks.mjs", import.meta.url));
 const { esErrorDeIa, mensajeDeErrorIa, esFalloDeSaldo, esFalloDeCuenta } = await import(
   "../lib/ai/errorLegible.js"
 );
-const { avisoDeCuenta, avisarAdminsDelFalloIa } = await import("../lib/ai/avisoDeCuentaIa.js");
+const { avisoDeCuenta, avisarAdminsDelFalloIa, idDelAviso } = await import("../lib/ai/avisoDeCuentaIa.js");
 const { extraerJson } = await import("../lib/projects/ai/parsePlan.js");
 const { respuestaConLatido } = await import("../lib/ai/respuestaConLatido.js");
 
-/** Un error del SDK: lo que se reconoce de él es `name` y `status`. */
+/**
+ * Un error del SDK, con la forma REAL del 0.110: la CLASE se llama como el
+ * error y `err.name` se queda en "Error" (AnthropicError no lo sobreescribe).
+ * Se reconoce por `status` y por `constructor.name`.
+ */
 function errorSdk(name, status) {
-  const err = new Error(`${status ?? ""} lo que sea que diga el SDK`);
-  err.name = name;
+  const Clase = { [name]: class extends Error {} }[name];
+  const err = new Clase(`${status ?? ""} lo que sea que diga el SDK`);
   if (status != null) err.status = status;
   return err;
 }
@@ -95,8 +99,9 @@ describe("mensajeDeErrorIa", () => {
 function errorSinSaldo() {
   const texto =
     "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.";
-  const err = new Error(`400 {"type":"error","error":{"type":"invalid_request_error","message":"${texto}"}}`);
-  err.name = "BadRequestError";
+  // Como el SDK de verdad: la CLASE es BadRequestError y `err.name` es "Error".
+  const BadRequestError = { BadRequestError: class extends Error {} }.BadRequestError;
+  const err = new BadRequestError(`400 {"type":"error","error":{"type":"invalid_request_error","message":"${texto}"}}`);
   err.status = 400;
   err.error = { type: "error", error: { type: "invalid_request_error", message: texto } };
   return err;
@@ -141,13 +146,21 @@ describe("sin saldo (esFalloDeSaldo / esFalloDeCuenta)", () => {
 });
 
 describe("avisarAdminsDelFalloIa", () => {
+  /**
+   * `recientes`: [{ userId, title }] ya avisados en la ventana. `create` imita
+   * el índice único (user_id, type, entity_id) de la tabla: la segunda fila
+   * igual choca, como en Postgres.
+   */
   function entorno({ admins = [{ id: "a1" }, { id: "a2" }], recientes = [] } = {}) {
     const creadas = [];
     const Notification = {
       async findOne({ where }) {
-        return recientes.includes(where.userId) ? { id: "x" } : null;
+        return recientes.some((r) => r.userId === where.userId && r.title === where.title) ? { id: "x" } : null;
       },
       async create(fila) {
+        if (creadas.some((c) => c.userId === fila.userId && c.type === fila.type && c.entityId === fila.entityId)) {
+          throw Object.assign(new Error("duplicate key"), { name: "SequelizeUniqueConstraintError" });
+        }
         creadas.push(fila);
         return fila;
       },
@@ -168,10 +181,33 @@ describe("avisarAdminsDelFalloIa", () => {
   });
 
   it("no repite: al admin avisado hace poco no se le vuelve a avisar (129 intentos ≠ 129 campanas)", async () => {
-    const { ctx, creadas, buscarAdmins } = entorno({ recientes: ["a1"] });
+    const { ctx, creadas, buscarAdmins } = entorno({ recientes: [{ userId: "a1", title: "La IA se ha quedado sin saldo" }] });
     const n = await avisarAdminsDelFalloIa(ctx, errorSinSaldo(), { buscarAdmins });
     assert.equal(n, 1);
     assert.deepEqual(creadas.map((c) => c.userId), ["a2"]);
+  });
+
+  it("pero una causa NUEVA sí entra: un 429 de hace un rato no tapa el sin saldo", async () => {
+    const { ctx, creadas, buscarAdmins } = entorno({
+      recientes: [{ userId: "a1", title: "La IA ha llegado a su límite de uso" }, { userId: "a2", title: "La IA ha llegado a su límite de uso" }],
+    });
+    assert.equal(await avisarAdminsDelFalloIa(ctx, errorSinSaldo(), { buscarAdmins }), 2);
+    assert.ok(creadas.every((c) => /sin saldo/i.test(c.title)));
+  });
+
+  it("dos intentos a la vez no doblan la campana: el índice único frena al segundo", async () => {
+    const { ctx, creadas, buscarAdmins } = entorno();
+    const ahora = new Date("2026-09-10T16:26:00Z");
+    // Los dos entran en el catch en el mismo instante: los dos miran antes de que
+    // el otro inserte (findOne no ve nada), y solo uno de cada par puede crear.
+    const [n1, n2] = await Promise.all([
+      avisarAdminsDelFalloIa(ctx, errorSinSaldo(), { buscarAdmins, ahora }),
+      avisarAdminsDelFalloIa(ctx, errorSinSaldo(), { buscarAdmins, ahora }),
+    ]);
+    assert.equal(n1 + n2, 2);
+    assert.equal(creadas.length, 2);
+    assert.deepEqual(creadas.map((c) => c.userId).sort(), ["a1", "a2"]);
+    assert.ok(creadas.every((c) => c.entityId === idDelAviso("t1", "La IA se ha quedado sin saldo", ahora)));
   });
 
   it("un fallo que no es de la cuenta (saturación, timeout, bug nuestro) no molesta a nadie", async () => {
@@ -198,6 +234,48 @@ describe("avisarAdminsDelFalloIa", () => {
     assert.match(avisoDeCuenta(errorSdk("PermissionDeniedError", 403)).title, /permiso/i);
     assert.match(avisoDeCuenta(errorSdk("RateLimitError", 429)).title, /límite/i);
     assert.equal(avisoDeCuenta(errorSdk("InternalServerError", 500)), null);
+  });
+});
+
+describe("con las clases REALES del SDK (@anthropic-ai/sdk)", () => {
+  it("todas llegan con name «Error»: se reconocen por la clase, no por el nombre", async () => {
+    const { default: Anthropic } = await import("@anthropic-ai/sdk");
+    const timeout = new Anthropic.APIConnectionTimeoutError();
+    assert.equal(timeout.name, "Error");
+    assert.equal(esErrorDeIa(timeout), true);
+    assert.match(mensajeDeErrorIa(timeout), /tardado demasiado/i);
+    const red = new Anthropic.APIConnectionError({ message: "fetch failed" });
+    assert.equal(esErrorDeIa(red), true);
+    assert.match(mensajeDeErrorIa(red), /conectar/i);
+    const cuerpo = {
+      type: "error",
+      error: { type: "invalid_request_error", message: "Your credit balance is too low to access the Anthropic API." },
+    };
+    const sinSaldo = new Anthropic.BadRequestError(400, cuerpo, `400 ${JSON.stringify(cuerpo)}`, new Headers());
+    assert.equal(sinSaldo.name, "Error");
+    assert.equal(esFalloDeSaldo(sinSaldo), true);
+    assert.equal(esFalloDeCuenta(sinSaldo), true);
+    assert.match(mensajeDeErrorIa(sinSaldo), /sin saldo/i);
+    const clave = new Anthropic.AuthenticationError(
+      401,
+      { type: "error", error: { type: "authentication_error", message: "invalid x-api-key" } },
+      "401 invalid x-api-key",
+      new Headers()
+    );
+    assert.equal(esFalloDeCuenta(clave), true);
+    assert.match(mensajeDeErrorIa(clave), /Configuración → IA/);
+  });
+});
+
+describe("idDelAviso: mismo tenant, misma causa, mismo tramo → mismo id", () => {
+  it("es un UUID, estable dentro del tramo y distinto por causa o por tramo", () => {
+    const t0 = new Date("2026-09-10T16:26:00Z");
+    const a = idDelAviso("t1", "La IA se ha quedado sin saldo", t0);
+    assert.match(a, /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    assert.equal(idDelAviso("t1", "La IA se ha quedado sin saldo", new Date(t0.getTime() + 60_000)), a);
+    assert.notEqual(idDelAviso("t1", "La IA ha llegado a su límite de uso", t0), a);
+    assert.notEqual(idDelAviso("t2", "La IA se ha quedado sin saldo", t0), a);
+    assert.notEqual(idDelAviso("t1", "La IA se ha quedado sin saldo", new Date(t0.getTime() + 13 * 3_600_000)), a);
   });
 });
 
