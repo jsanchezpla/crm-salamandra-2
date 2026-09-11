@@ -859,8 +859,10 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
         `}
         style={{ backgroundColor: primaryColor }}
       >
-        {/* Logo + tenant + close button (móvil) */}
-        <div className="px-5 pt-6 pb-5">
+        {/* Logo + tenant + close button (móvil). `menu-cabecera`: en una
+            pantalla baja (tablet apaisada) se encoge para que el menú no se
+            coma medio alto (11/09/2026, AV-0110). */}
+        <div className="px-5 pt-6 pb-5 menu-cabecera">
           <div className="flex items-center justify-between mb-7">
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="w-7 h-7 rounded-md bg-white/[0.10] border border-white/15 flex items-center justify-center shrink-0 overflow-hidden p-[3px]">
@@ -901,7 +903,12 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
         </div>
 
         {/* Navegación */}
-        <nav className="flex-1 overflow-y-auto px-3 space-y-4 pb-4 slim-scroll">
+        {/* `menu-con-sombra` (11/09/2026, AV-0110 de Aumenta, «se me corta la
+            parte de abajo de la vista lateral en la tablet»): el menú SÍ se
+            desplaza, pero en una tablet no hay barra que lo diga y lo que queda
+            debajo parece cortado. La sombra al borde solo sale cuando hay más
+            menú por debajo (o por encima). Regla en app/globals.css. */}
+        <nav className="flex-1 overflow-y-auto px-3 space-y-4 pb-4 slim-scroll menu-con-sombra">
           {navigation.map((section) => {
             // Un item es visible si el tenant tiene el módulo Y el usuario puede verlo.
             // `visibleModules` permite un OR de módulos (p.ej. Equipo se muestra a

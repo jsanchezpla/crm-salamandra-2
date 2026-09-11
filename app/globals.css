@@ -234,6 +234,35 @@ body {
   background: rgba(255, 255, 255, 0.35);
 }
 
+/*
+ * El menú lateral en una pantalla baja (11/09/2026, AV-0110 de Aumenta: «se me
+ * corta la parte de abajo de la vista lateral en la tablet»). El menú se
+ * desplaza, pero una tablet no pinta barra y lo que queda por debajo parece
+ * cortado. Dos cosas:
+ *   · `menu-con-sombra`: una sombra pegada al borde de abajo (y de arriba) que
+ *     solo aparece cuando hay más menú en esa dirección. Es el truco de los dos
+ *     fondos: el de `local` viaja con el contenido y tapa al de `scroll`, que
+ *     se queda fijo en el borde; al llegar al final, el primero cubre al
+ *     segundo y la sombra desaparece. Sin JavaScript y sin medir nada.
+ *   · `menu-cabecera`: con menos de 720 px de alto, el logo y la tarjeta del
+ *     centro se juntan para devolverle al menú unos 40 px.
+ */
+.menu-con-sombra {
+  background-image:
+    linear-gradient(var(--color-primary, #1B3A2D), var(--color-primary, #1B3A2D)),
+    linear-gradient(var(--color-primary, #1B3A2D), var(--color-primary, #1B3A2D)),
+    radial-gradient(farthest-side at 50% 0, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0)),
+    radial-gradient(farthest-side at 50% 100%, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0));
+  background-position: center top, center bottom, center top, center bottom;
+  background-size: 100% 28px, 100% 28px, 100% 14px, 100% 14px;
+  background-repeat: no-repeat;
+  background-attachment: local, local, scroll, scroll;
+}
+@media (max-height: 720px) {
+  .menu-cabecera { padding-top: 0.75rem; padding-bottom: 0.75rem; }
+  .menu-cabecera > div:first-child { margin-bottom: 0.9rem; }
+}
+
 .ink-scroll {
   scrollbar-width: thin;
   scrollbar-color: var(--ink-200) transparent;
