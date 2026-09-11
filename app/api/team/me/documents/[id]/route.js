@@ -1,4 +1,3 @@
-import { Readable } from "node:stream";
 import { withTenant } from "@/lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, unauthorized, serverError } from "@/lib/utils/apiResponse.js";
 import { contentDisposition } from "@/lib/documents/helpers.js";
@@ -44,7 +43,7 @@ export const GET = withTenant(async (request, { params }, ctx) => {
       if (e.code === "ENOENT") return notFound("Archivo físico no encontrado");
       throw e;
     }
-    return new Response(Readable.toWeb(stream), {
+    return new Response(stream, {
       status: 200,
       headers: {
         "Content-Type": doc.mimeType,

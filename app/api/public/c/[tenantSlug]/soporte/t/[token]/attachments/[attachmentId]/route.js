@@ -1,4 +1,3 @@
-import { Readable } from "node:stream";
 import { withPublicTenant } from "@/lib/tenant/publicTenantContext.js";
 import { enforceRateLimit } from "@/lib/utils/rateLimit.js";
 import { error, notFound, serverError } from "@/lib/utils/apiResponse.js";
@@ -48,7 +47,7 @@ export const GET = withPublicTenant(
         throw e;
       }
 
-      return new Response(Readable.toWeb(stream), {
+      return new Response(stream, {
         status: 200,
         headers: {
           "Content-Type": adj.mimeType || "application/octet-stream",

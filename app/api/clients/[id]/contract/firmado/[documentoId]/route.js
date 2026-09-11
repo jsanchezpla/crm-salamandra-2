@@ -1,4 +1,3 @@
-import { Readable } from "node:stream";
 import { withTenant } from "@/lib/tenant/withTenant.js";
 import { contentDisposition } from "@/lib/utils/contentDisposition.js";
 import { error, forbidden, notFound, serverError } from "@/lib/utils/apiResponse.js";
@@ -53,7 +52,7 @@ export const GET = withTenant(async (request, rc, ctx) => {
 
     const verEnPantalla = new URL(request.url).searchParams.get("ver") === "1";
 
-    return new Response(Readable.toWeb(stream), {
+    return new Response(stream, {
       status: 200,
       headers: {
         "Content-Type": doc.mimeType || "application/pdf",

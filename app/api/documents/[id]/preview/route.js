@@ -1,4 +1,3 @@
-import { Readable } from "node:stream";
 import { withTenant } from "@/lib/tenant/withTenant.js";
 import { error, forbidden, notFound, unauthorized, serverError } from "@/lib/utils/apiResponse.js";
 import { MODULE_KEYS } from "@/lib/tenant/moduleKeys.js";
@@ -56,7 +55,7 @@ export const GET = withTenant(async (request, { params }, ctx) => {
     const miTm = await resolveCurrentTeamMemberId(request, ctx.tenantModels);
     if (miTm) await marcarLeido({ tenantModels: ctx.tenantModels, documentId: doc.id, teamMemberId: miTm });
 
-    return new Response(Readable.toWeb(stream), {
+    return new Response(stream, {
       status: 200,
       headers: {
         "Content-Type": tipoEnLinea,

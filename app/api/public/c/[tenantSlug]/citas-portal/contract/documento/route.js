@@ -1,4 +1,3 @@
-import { Readable } from "node:stream";
 import { withPublicTenant } from "../../../../../../../../lib/tenant/publicTenantContext.js";
 import { contentDisposition } from "../../../../../../../../lib/utils/contentDisposition.js";
 import { notFound, serverError } from "../../../../../../../../lib/utils/apiResponse.js";
@@ -35,7 +34,7 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
       throw err;
     }
 
-    return new Response(Readable.toWeb(stream), {
+    return new Response(stream, {
       status: 200,
       headers: {
         "Content-Type": elegido.mimeType || "application/pdf",

@@ -1,4 +1,3 @@
-import { Readable } from "node:stream";
 
 import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { error, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
@@ -54,7 +53,7 @@ export const GET = withTenant(async (request, { params }, ctx) => {
     const url = new URL(request.url);
     const tipoEnLinea = url.searchParams.get("ver") === "1" ? tipoParaVerEnPantalla(adj.ruta) : null;
 
-    return new Response(Readable.toWeb(stream), {
+    return new Response(stream, {
       status: 200,
       headers: {
         "Content-Type": tipoEnLinea || adj.mime || "application/octet-stream",

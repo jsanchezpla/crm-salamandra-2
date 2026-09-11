@@ -1,4 +1,3 @@
-import { Readable } from "node:stream";
 import { withTenant } from "../../../../../../../lib/tenant/withTenant.js";
 import { contentDisposition } from "../../../../../../../lib/utils/contentDisposition.js";
 import { error, forbidden, notFound, noContent, serverError } from "../../../../../../../lib/utils/apiResponse.js";
@@ -46,7 +45,7 @@ export const GET = withTenant(async (_request, rc, ctx) => {
       throw err;
     }
 
-    return new Response(Readable.toWeb(stream), {
+    return new Response(stream, {
       status: 200,
       headers: {
         "Content-Type": adjunto.mimeType || "application/octet-stream",

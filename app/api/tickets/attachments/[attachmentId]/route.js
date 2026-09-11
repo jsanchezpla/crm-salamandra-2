@@ -1,4 +1,3 @@
-import { Readable } from "node:stream";
 import { withTenant } from "@/lib/tenant/withTenant.js";
 import { error, forbidden, notFound, unauthorized, serverError } from "@/lib/utils/apiResponse.js";
 import { MODULE_KEYS } from "@/lib/tenant/moduleKeys.js";
@@ -31,7 +30,7 @@ export const GET = withTenant(async (request, { params }, ctx) => {
       throw e;
     }
 
-    return new Response(Readable.toWeb(stream), {
+    return new Response(stream, {
       status: 200,
       headers: {
         "Content-Type": adj.mimeType || "application/octet-stream",
