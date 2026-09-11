@@ -1,5 +1,6 @@
 import { Op } from "sequelize";
 import { withTenant } from "../../../../../../../lib/tenant/withTenant.js";
+import { contentDisposition } from "../../../../../../../lib/utils/contentDisposition.js";
 import { error, forbidden, notFound, serverError } from "../../../../../../../lib/utils/apiResponse.js";
 import { readDocumentStream } from "../../../../../../../lib/documents/documentStorage.js";
 import { tipoParaVerEnPantalla } from "../../../../../../../lib/documents/verEnPantalla.js";
@@ -43,12 +44,11 @@ export const GET = withTenant(async (request, { params }, ctx) => {
     const quiereVer = new URL(request.url).searchParams.get("ver") === "1";
     const tipoEnLinea = quiereVer ? tipoParaVerEnPantalla(row.storagePath || row.fileName) : null;
 
-    const safeName = String(row.fileName || "archivo").replace(/[\r\n"]/g, "_");
     return new Response(stream, {
       status: 200,
       headers: {
         "Content-Type": tipoEnLinea || row.mimeType || "application/octet-stream",
-        "Content-Disposition": `${tipoEnLinea ? "inline" : "attachment"}; filename="${safeName}"`,
+        "Content-Disposition": contentDisposition(tipoEnLinea ? "inline" : "attachment", row.fileName || "archivo"),
         "Content-Length": String(size),
         "X-Content-Type-Options": "nosniff",
         ...(tipoEnLinea ? { "Content-Security-Policy": "default-src 'none'; object-src 'self'" } : {}),

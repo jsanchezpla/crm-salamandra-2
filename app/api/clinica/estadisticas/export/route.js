@@ -1,4 +1,5 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
+import { contentDisposition } from "../../../../../lib/utils/contentDisposition.js";
 import { error, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { calcularEstadisticas, gateEstadisticas, rangoPedido } from "../../../../../lib/clinica/estadisticas.js";
 import { buildEstadisticasXlsx, buildEstadisticasPdf } from "../../../../../lib/clinica/estadisticasExport.js";
@@ -39,7 +40,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
       status: 200,
       headers: {
         "Content-Type": formato === "pdf" ? "application/pdf" : XLSX_MIME,
-        "Content-Disposition": `attachment; filename="${base}.${formato}"`,
+        "Content-Disposition": contentDisposition("attachment", `${base}.${formato}`),
         "Content-Length": String(buffer.length),
         "X-Content-Type-Options": "nosniff",
         "Cache-Control": "private, no-cache",

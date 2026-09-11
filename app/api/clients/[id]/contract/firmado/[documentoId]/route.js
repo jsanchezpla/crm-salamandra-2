@@ -1,5 +1,6 @@
 import { Readable } from "node:stream";
 import { withTenant } from "@/lib/tenant/withTenant.js";
+import { contentDisposition } from "@/lib/utils/contentDisposition.js";
 import { error, forbidden, notFound, serverError } from "@/lib/utils/apiResponse.js";
 import { readDocumentStream } from "@/lib/documents/documentStorage.js";
 
@@ -51,13 +52,12 @@ export const GET = withTenant(async (request, rc, ctx) => {
     }
 
     const verEnPantalla = new URL(request.url).searchParams.get("ver") === "1";
-    const safeName = String(doc.fileName || "contrato-firmado.pdf").replace(/[\r\n"]/g, "_");
 
     return new Response(Readable.toWeb(stream), {
       status: 200,
       headers: {
         "Content-Type": doc.mimeType || "application/pdf",
-        "Content-Disposition": `${verEnPantalla ? "inline" : "attachment"}; filename="${safeName}"`,
+        "Content-Disposition": contentDisposition(verEnPantalla ? "inline" : "attachment", doc.fileName || "contrato-firmado.pdf"),
         "Content-Length": String(size),
         "X-Content-Type-Options": "nosniff",
         // Lleva datos personales y la firma: que no se quede en ninguna caché

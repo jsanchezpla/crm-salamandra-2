@@ -1,4 +1,5 @@
 import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
+import { contentDisposition } from "../../../../../../lib/utils/contentDisposition.js";
 import { error, forbidden, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
 import { UUID_RE, loadPlanTree } from "../../../../../../lib/nutricion/plans.js";
 import { buildMenuPdfBuffer, menuPdfFilename } from "../../../../../../lib/nutricion/menuPdf.js";
@@ -35,7 +36,7 @@ export const GET = withTenant(async (_request, ctx, { tenant, tenantModels, hasM
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${menuPdfFilename(tree, client)}"`,
+        "Content-Disposition": contentDisposition("attachment", menuPdfFilename(tree, client)),
         "Content-Length": String(buffer.length),
         "X-Content-Type-Options": "nosniff",
         "Cache-Control": "no-store",

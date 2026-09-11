@@ -1,4 +1,5 @@
 import { withPublicTenant } from "../../../../../../../../lib/tenant/publicTenantContext.js";
+import { contentDisposition } from "../../../../../../../../lib/utils/contentDisposition.js";
 import { unauthorized, forbidden, notFound, serverError } from "../../../../../../../../lib/utils/apiResponse.js";
 import { verifyPortalSession, readBearer } from "../../../../../../../../lib/citas/portalSession.js";
 import { normalizeEmail } from "../../../../../../../../lib/citas/validation.js";
@@ -71,13 +72,11 @@ export const GET = withPublicTenant(async (request, ctx, { slug, tenant, tenantM
       throw err;
     }
 
-    const safeName = String(row.fileName || "documento").replace(/[\r\n"]/g, "_");
-
     return new Response(stream, {
       status: 200,
       headers: {
         "Content-Type": row.mimeType || "application/octet-stream",
-        "Content-Disposition": `attachment; filename="${safeName}"`,
+        "Content-Disposition": contentDisposition("attachment", row.fileName || "documento"),
         "Content-Length": String(size),
         "Cache-Control": "private, no-cache",
       },

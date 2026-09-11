@@ -1,5 +1,6 @@
 import { Readable } from "node:stream";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
+import { contentDisposition } from "../../../../../lib/utils/contentDisposition.js";
 import { forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { MODULE_KEYS } from "../../../../../lib/tenant/moduleKeys.js";
 import { readDocumentStream } from "../../../../../lib/documents/documentStorage.js";
@@ -25,12 +26,11 @@ export const GET = withTenant(async (_request, _rc, ctx) => {
       throw err;
     }
 
-    const safeName = String(doc.fileName || "contrato.pdf").replace(/[\r\n"]/g, "_");
     return new Response(Readable.toWeb(stream), {
       status: 200,
       headers: {
         "Content-Type": doc.mimeType || "application/octet-stream",
-        "Content-Disposition": `inline; filename="${safeName}"`,
+        "Content-Disposition": contentDisposition("inline", doc.fileName || "contrato.pdf"),
         "Content-Length": String(size),
         "X-Content-Type-Options": "nosniff",
         "Cache-Control": "private, no-cache",

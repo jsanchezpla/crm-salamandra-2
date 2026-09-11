@@ -1,5 +1,6 @@
 import { Readable } from "node:stream";
 import { withPublicTenant } from "../../../../../../../../lib/tenant/publicTenantContext.js";
+import { contentDisposition } from "../../../../../../../../lib/utils/contentDisposition.js";
 import { notFound, serverError } from "../../../../../../../../lib/utils/apiResponse.js";
 import { readDocumentStream } from "../../../../../../../../lib/documents/documentStorage.js";
 import { gatePortal, resolvePortalContractSession, estadoContrato } from "../../../../../../../../lib/citas/portalContract.js";
@@ -34,12 +35,11 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
       throw err;
     }
 
-    const safeName = String(elegido.fileName || "contrato.pdf").replace(/[\r\n"]/g, "_");
     return new Response(Readable.toWeb(stream), {
       status: 200,
       headers: {
         "Content-Type": elegido.mimeType || "application/pdf",
-        "Content-Disposition": `inline; filename="${safeName}"`,
+        "Content-Disposition": contentDisposition("inline", elegido.fileName || "contrato.pdf"),
         "Content-Length": String(size),
         "X-Content-Type-Options": "nosniff",
         "Cache-Control": "private, no-cache",

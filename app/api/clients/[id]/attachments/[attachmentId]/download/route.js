@@ -1,4 +1,5 @@
 import { withTenant } from "../../../../../../../lib/tenant/withTenant.js";
+import { contentDisposition } from "../../../../../../../lib/utils/contentDisposition.js";
 import { forbidden, notFound, serverError } from "../../../../../../../lib/utils/apiResponse.js";
 import { readDocumentStream } from "../../../../../../../lib/documents/documentStorage.js";
 
@@ -35,13 +36,11 @@ export const GET = withTenant(
         throw err;
       }
 
-      const safeName = String(row.fileName || "archivo").replace(/[\r\n"]/g, "_");
-
       return new Response(stream, {
         status: 200,
         headers: {
           "Content-Type": row.mimeType || "application/octet-stream",
-          "Content-Disposition": `attachment; filename="${safeName}"`,
+          "Content-Disposition": contentDisposition("attachment", row.fileName || "archivo"),
           "Content-Length": String(size),
           "Cache-Control": "private, no-cache",
         },

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Op } from "sequelize";
 import ExcelJS from "exceljs";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
+import { contentDisposition } from "../../../../../lib/utils/contentDisposition.js";
 import { forbidden, error, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { filtrarPorTexto } from "../../../../../lib/utils/busquedaDb.js";
 import {
@@ -229,7 +230,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule, s
       headers: {
         "Content-Type":
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Content-Disposition": contentDisposition("attachment", filename),
         "Cache-Control": "private, no-cache",
       },
     });

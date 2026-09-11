@@ -1,4 +1,5 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
+import { contentDisposition } from "../../../../../lib/utils/contentDisposition.js";
 import { error, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { rangoPedido } from "../../../../../lib/utils/rangoFechas.js";
 import {
@@ -48,7 +49,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
       status: 200,
       headers: {
         "Content-Type": formato === "pdf" ? "application/pdf" : XLSX_MIME,
-        "Content-Disposition": `attachment; filename="${nombreDeFichero(datos)}.${formato}"`,
+        "Content-Disposition": contentDisposition("attachment", `${nombreDeFichero(datos)}.${formato}`),
         "Content-Length": String(buffer.length),
         "X-Content-Type-Options": "nosniff",
         "Cache-Control": "private, no-cache",

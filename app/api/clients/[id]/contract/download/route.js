@@ -1,5 +1,6 @@
 import { Readable } from "node:stream";
 import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
+import { contentDisposition } from "../../../../../../lib/utils/contentDisposition.js";
 import { error, forbidden, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
 import { readDocumentStream } from "../../../../../../lib/documents/documentStorage.js";
 import { findClientContract } from "../../../../../../lib/clients/clientContract.js";
@@ -35,12 +36,11 @@ export const GET = withTenant(async (_request, rc, ctx) => {
       throw err;
     }
 
-    const safeName = String(doc.fileName || "contrato.pdf").replace(/[\r\n"]/g, "_");
     return new Response(Readable.toWeb(stream), {
       status: 200,
       headers: {
         "Content-Type": doc.mimeType || "application/pdf",
-        "Content-Disposition": `attachment; filename="${safeName}"`,
+        "Content-Disposition": contentDisposition("attachment", doc.fileName || "contrato.pdf"),
         "Content-Length": String(size),
         "X-Content-Type-Options": "nosniff",
         "Cache-Control": "private, no-cache",

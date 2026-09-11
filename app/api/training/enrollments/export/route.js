@@ -1,4 +1,5 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
+import { contentDisposition } from "../../../../../lib/utils/contentDisposition.js";
 import { error } from "../../../../../lib/utils/apiResponse.js";
 import { ForbiddenError } from "../../../../../lib/utils/errors.js";
 import { Op } from "sequelize";
@@ -99,7 +100,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, tenantSequel
     status: 200,
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="alumnos-${date}.xlsx"`,
+      "Content-Disposition": contentDisposition("attachment", `alumnos-${date}.xlsx`),
     },
   });
 });

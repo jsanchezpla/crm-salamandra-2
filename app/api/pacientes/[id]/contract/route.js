@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
+import { contentDisposition } from "../../../../../lib/utils/contentDisposition.js";
 import { error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { readContract } from "../../../../../lib/clinica/contractStorage.js";
 
@@ -37,14 +38,13 @@ export const GET = withTenant(async (_request, rc, ctx) => {
       if (err.code === "ENOENT") return notFound("Archivo físico no encontrado");
       throw err;
     }
-    const safeName = String(cf.originalName || "contrato.pdf").replace(/[\r\n"]/g, "_");
     const ab = new ArrayBuffer(buffer.byteLength);
     new Uint8Array(ab).set(new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength));
     return new NextResponse(ab, {
       status: 200,
       headers: {
         "Content-Type": cf.mime || "application/pdf",
-        "Content-Disposition": `attachment; filename="${safeName}"`,
+        "Content-Disposition": contentDisposition("attachment", cf.originalName || "contrato.pdf"),
         "Content-Length": String(buffer.length),
         "Cache-Control": "private, no-cache",
       },

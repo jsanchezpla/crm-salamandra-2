@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
+import { contentDisposition } from "../../../../../../lib/utils/contentDisposition.js";
 import { error, forbidden, serverError } from "../../../../../../lib/utils/apiResponse.js";
 import { buildIvaReport } from "../../../../../../lib/billing/buildIvaReport.js";
 
@@ -115,7 +116,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, tenant, hasM
       status: 200,
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Content-Disposition": contentDisposition("attachment", filename),
         "Cache-Control": "no-store",
       },
     });

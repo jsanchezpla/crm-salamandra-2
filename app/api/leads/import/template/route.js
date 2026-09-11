@@ -1,4 +1,5 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
+import { contentDisposition } from "../../../../../lib/utils/contentDisposition.js";
 import { ForbiddenError } from "../../../../../lib/utils/errors.js";
 import ExcelJS from "exceljs";
 
@@ -136,7 +137,7 @@ export const GET = withTenant(async (_request, _ctx, { hasModule, tenant }) => {
     status: 200,
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": 'attachment; filename="plantilla_leads.xlsx"',
+      "Content-Disposition": contentDisposition("attachment", "plantilla_leads.xlsx"),
     },
   });
 });

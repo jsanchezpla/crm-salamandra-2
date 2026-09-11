@@ -1,4 +1,5 @@
 import { esEstadoDeFicha } from "../../../../lib/clients/estados.js";
+import { contentDisposition } from "../../../../lib/utils/contentDisposition.js";
 import { filtroDeVisibilidad } from "../../../../lib/clients/consultaExterna.js";
 import { rotuloCategoria } from "../../../../lib/booking/categorias.js";
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
@@ -154,7 +155,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     status: 200,
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="clientes_${fecha}.xlsx"`,
+      "Content-Disposition": contentDisposition("attachment", `clientes_${fecha}.xlsx`),
     },
   });
 });

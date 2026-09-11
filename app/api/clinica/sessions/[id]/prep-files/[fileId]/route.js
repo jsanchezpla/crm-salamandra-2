@@ -1,5 +1,6 @@
 import { Readable } from "node:stream";
 import { withTenant } from "../../../../../../../lib/tenant/withTenant.js";
+import { contentDisposition } from "../../../../../../../lib/utils/contentDisposition.js";
 import { error, forbidden, notFound, noContent, serverError } from "../../../../../../../lib/utils/apiResponse.js";
 import { logClinicaAudit } from "../../../../../../../lib/clinica/audit.js";
 import { buscarPrepFile, listaPrepFiles } from "../../../../../../../lib/clinica/prepFiles.js";
@@ -45,13 +46,12 @@ export const GET = withTenant(async (_request, rc, ctx) => {
       throw err;
     }
 
-    const safeName = String(adjunto.name || "adjunto").replace(/[\r\n"]/g, "_");
     return new Response(Readable.toWeb(stream), {
       status: 200,
       headers: {
         "Content-Type": adjunto.mimeType || "application/octet-stream",
         // `inline`: una foto o un audio se miran/escuchan sin descargarlos.
-        "Content-Disposition": `inline; filename="${safeName}"`,
+        "Content-Disposition": contentDisposition("inline", adjunto.name || "adjunto"),
         "Content-Length": String(size),
         "X-Content-Type-Options": "nosniff",
         "Cache-Control": "private, no-cache",
