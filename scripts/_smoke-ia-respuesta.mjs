@@ -30,7 +30,10 @@ import assert from "node:assert/strict";
 import { register } from "node:module";
 
 register(new URL("./_abrir-lib-hooks.mjs", import.meta.url));
-const { esErrorDeIa, mensajeDeErrorIa } = await import("../lib/ai/errorLegible.js");
+const { esErrorDeIa, mensajeDeErrorIa, esFalloDeSaldo, esFalloDeCuenta } = await import(
+  "../lib/ai/errorLegible.js"
+);
+const { avisoDeCuenta, avisarAdminsDelFalloIa } = await import("../lib/ai/avisoDeCuentaIa.js");
 const { extraerJson } = await import("../lib/projects/ai/parsePlan.js");
 const { respuestaConLatido } = await import("../lib/ai/respuestaConLatido.js");
 
@@ -83,6 +86,118 @@ describe("mensajeDeErrorIa", () => {
     assert.notEqual(mensajeDeErrorIa(err), err.message);
     assert.equal(mensajeDeErrorIa(new Error("boom")), "La IA no ha podido responder. Vuelve a intentarlo.");
     assert.equal(mensajeDeErrorIa(null, "otra cosa"), "otra cosa");
+  });
+});
+
+/* ── sin saldo en la cuenta de Anthropic (10/09/2026) ─────────────────────── */
+
+/** Lo que llegó de verdad la tarde del 10/09/2026: un 400 cuyo único rasgo es el texto. */
+function errorSinSaldo() {
+  const texto =
+    "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.";
+  const err = new Error(`400 {"type":"error","error":{"type":"invalid_request_error","message":"${texto}"}}`);
+  err.name = "BadRequestError";
+  err.status = 400;
+  err.error = { type: "error", error: { type: "invalid_request_error", message: texto } };
+  return err;
+}
+
+describe("sin saldo (esFalloDeSaldo / esFalloDeCuenta)", () => {
+  it("se reconoce por el texto, porque el código es el mismo 400 de «petición mal hecha»", () => {
+    assert.equal(esFalloDeSaldo(errorSinSaldo()), true);
+    assert.equal(esFalloDeSaldo(errorSdk("BadRequestError", 400)), false);
+    assert.equal(esFalloDeSaldo(errorSdk("AuthenticationError", 401)), false);
+    assert.equal(esFalloDeSaldo(null), false);
+  });
+
+  it("y también cuando el texto solo viene en el cuerpo que guarda el SDK", () => {
+    const err = Object.assign(new Error("400 status code (no body)"), {
+      status: 400,
+      error: { error: { message: "Your credit balance is too low" } },
+    });
+    assert.equal(esFalloDeSaldo(err), true);
+  });
+
+  it("la frase dice que es el SALDO y dónde se recarga, no «acorta el texto»", () => {
+    const msg = mensajeDeErrorIa(errorSinSaldo());
+    assert.match(msg, /sin saldo/i);
+    assert.match(msg, /console\.anthropic\.com/);
+    assert.match(msg, /No es un fallo del CRM/);
+    assert.doesNotMatch(msg, /acortar/i);
+    // Un 400 de verdad sigue con su frase de siempre.
+    assert.match(mensajeDeErrorIa(errorSdk("BadRequestError", 400)), /acortar/i);
+  });
+
+  it("es fallo de la CUENTA, como clave mala, sin permiso o límite; un 5xx o un timeout no", () => {
+    assert.equal(esFalloDeCuenta(errorSinSaldo()), true);
+    assert.equal(esFalloDeCuenta(errorSdk("AuthenticationError", 401)), true);
+    assert.equal(esFalloDeCuenta(errorSdk("PermissionDeniedError", 403)), true);
+    assert.equal(esFalloDeCuenta(errorSdk("RateLimitError", 429)), true);
+    assert.equal(esFalloDeCuenta(errorSdk("InternalServerError", 529)), false);
+    assert.equal(esFalloDeCuenta(errorSdk("APIConnectionTimeoutError")), false);
+    assert.equal(esFalloDeCuenta(new Error("boom")), false);
+    assert.equal(esFalloDeCuenta(null), false);
+  });
+});
+
+describe("avisarAdminsDelFalloIa", () => {
+  function entorno({ admins = [{ id: "a1" }, { id: "a2" }], recientes = [] } = {}) {
+    const creadas = [];
+    const Notification = {
+      async findOne({ where }) {
+        return recientes.includes(where.userId) ? { id: "x" } : null;
+      },
+      async create(fila) {
+        creadas.push(fila);
+        return fila;
+      },
+    };
+    const ctx = { tenant: { id: "t1" }, tenantModels: { Notification } };
+    return { ctx, creadas, buscarAdmins: async () => admins };
+  }
+
+  it("sin saldo: una campana a cada admin, con el título del saldo y la frase completa", async () => {
+    const { ctx, creadas, buscarAdmins } = entorno();
+    const n = await avisarAdminsDelFalloIa(ctx, errorSinSaldo(), { buscarAdmins });
+    assert.equal(n, 2);
+    assert.deepEqual(creadas.map((c) => c.userId), ["a1", "a2"]);
+    assert.equal(creadas[0].type, "ai_cuenta");
+    assert.equal(creadas[0].channel, "app");
+    assert.match(creadas[0].title, /sin saldo/i);
+    assert.match(creadas[0].body, /console\.anthropic\.com/);
+  });
+
+  it("no repite: al admin avisado hace poco no se le vuelve a avisar (129 intentos ≠ 129 campanas)", async () => {
+    const { ctx, creadas, buscarAdmins } = entorno({ recientes: ["a1"] });
+    const n = await avisarAdminsDelFalloIa(ctx, errorSinSaldo(), { buscarAdmins });
+    assert.equal(n, 1);
+    assert.deepEqual(creadas.map((c) => c.userId), ["a2"]);
+  });
+
+  it("un fallo que no es de la cuenta (saturación, timeout, bug nuestro) no molesta a nadie", async () => {
+    const { ctx, creadas, buscarAdmins } = entorno();
+    assert.equal(await avisarAdminsDelFalloIa(ctx, errorSdk("InternalServerError", 529), { buscarAdmins }), 0);
+    assert.equal(await avisarAdminsDelFalloIa(ctx, errorSdk("APIConnectionTimeoutError"), { buscarAdmins }), 0);
+    assert.equal(await avisarAdminsDelFalloIa(ctx, new TypeError("x is not a function"), { buscarAdmins }), 0);
+    assert.equal(creadas.length, 0);
+  });
+
+  it("nunca lanza: sin modelo de notificaciones, o con la base caída, devuelve 0", async () => {
+    const sinModelo = { tenant: { id: "t1" }, tenantModels: {} };
+    assert.equal(await avisarAdminsDelFalloIa(sinModelo, errorSinSaldo(), { buscarAdmins: async () => [{ id: "a1" }] }), 0);
+    const { ctx } = entorno();
+    const caida = async () => {
+      throw new Error("db caída");
+    };
+    assert.equal(await avisarAdminsDelFalloIa(ctx, errorSinSaldo(), { buscarAdmins: caida }), 0);
+  });
+
+  it("cada fallo de cuenta tiene su título: clave, permiso, límite; y lo demás, nada", () => {
+    assert.match(avisoDeCuenta(errorSinSaldo()).title, /sin saldo/i);
+    assert.match(avisoDeCuenta(errorSdk("AuthenticationError", 401)).title, /clave/i);
+    assert.match(avisoDeCuenta(errorSdk("PermissionDeniedError", 403)).title, /permiso/i);
+    assert.match(avisoDeCuenta(errorSdk("RateLimitError", 429)).title, /límite/i);
+    assert.equal(avisoDeCuenta(errorSdk("InternalServerError", 500)), null);
   });
 });
 

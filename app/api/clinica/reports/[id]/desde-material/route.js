@@ -4,6 +4,8 @@ import { assertNotDemoPaidCall } from "../../../../../../lib/demo/isDemo.js";
 import { vetoAi } from "../../../../../../lib/ai/aiAccess.js";
 import { getTenantAnthropicKey } from "../../../../../../lib/ai/anthropicKey.js";
 import { getTenantAnthropicModel } from "../../../../../../lib/ai/anthropicModel.js";
+import { mensajeDeErrorIa } from "../../../../../../lib/ai/errorLegible.js";
+import { avisarAdminsDelFalloIa } from "../../../../../../lib/ai/avisoDeCuentaIa.js";
 import { logClinicaAudit } from "../../../../../../lib/clinica/audit.js";
 import { apartadosPara } from "../../../../../../lib/clinica/plantillas.js";
 import { materialParaLaIA, MAX_NOTAS, MAX_TRANSCRIPCION } from "../../../../../../lib/clinica/registroCompleto.js";
@@ -144,9 +146,12 @@ export const POST = withTenant(async (request, rc, ctx) => {
     } catch (e) {
       if (e?.code === "NO_API_KEY") return error("El informe con IA no está configurado (falta la clave de Anthropic).", 503);
       console.error("[clinica:informe-material]", e);
+      // Si es la cuenta de IA del centro (sin saldo, clave, límite), que lo
+      // sepan sus admins y que la frase diga ESO (11/09/2026, Aumenta).
+      await avisarAdminsDelFalloIa(ctx, e);
       // El material sigue en pantalla: se puede volver a intentar sin perder
       // nada, que es lo que hay que decir en vez de «ha fallado».
-      return error("La IA no ha podido repartir esto por los apartados del informe. Vuelve a intentarlo: tu texto sigue aquí.", 502);
+      return error(mensajeDeErrorIa(e, "La IA no ha podido repartir esto por los apartados del informe. Vuelve a intentarlo: tu texto sigue aquí."), 502);
     }
 
     // Se audita QUÉ se propuso, nunca su texto: el contenido de un informe

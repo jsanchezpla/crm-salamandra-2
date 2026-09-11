@@ -274,6 +274,20 @@ enmascarada (p.ej. `AIza…1234`), y permite reemplazar o eliminar la clave.
 > La sección "Datos del tenant" (nombre, colores, logo) existió y se retiró a
 > petición. El endpoint sigue soportando `name` y `brand` por si se reactiva.
 
+> **Cuando la cuenta de Anthropic se queda sin saldo (11/09/2026).** Anthropic lo
+> devuelve como un 400 `invalid_request_error` —el mismo código que «petición mal
+> hecha»— y solo se distingue por el texto («credit balance is too low»).
+> `lib/ai/errorLegible.js` (`esFalloDeSaldo`, `esFalloDeCuenta`) lo reconoce y la
+> frase dice que es el SALDO y dónde se recarga (console.anthropic.com → Plans &
+> Billing), no «acorta el texto». Y `lib/ai/avisoDeCuentaIa.js`
+> (`avisarAdminsDelFalloIa`) pone una campana a cada admin del tenant —una cada
+> 12 h, no una por intento— con cualquier fallo de la CUENTA (saldo, clave, permiso
+> del modelo, límite): la llaman los endpoints clínicos que van a Claude (registro
+> de sesión, taller, completar, encargo, informe desde material, objetivos del
+> plan). Nació de la tarde del 10/09/2026 en Aumenta: 129 intentos fallidos en una
+> caja VERDE y cuatro tickets de «el CRM no va»; por eso el registro y el taller
+> devuelven además `avisoTipo: "fallo"` y la pantalla lo pinta en ámbar.
+
 ### 3. Descripción de empresa (alimenta Captación)
 
 Solo aparece si el tenant tiene el módulo **Outreach** (el GET de

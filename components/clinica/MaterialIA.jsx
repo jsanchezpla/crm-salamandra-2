@@ -58,6 +58,9 @@ export default function MaterialIA({
   onProcesar,
   procesando = false,
   aviso = null,
+  // «ok» (verde) o «fallo» (ámbar). Un fallo de la IA en la caja verde se
+  // leía como «ha ido bien» (AV-0122, 10/09/2026: «la notificación en verde»).
+  avisoTono = "ok",
   // Lo que se cuela dentro del aviso verde: en el registro, el enlace para
   // volver a abrir la propuesta.
   avisoExtra = null,
@@ -272,7 +275,13 @@ export default function MaterialIA({
       )}
 
       {aviso && (
-        <div className="mt-3 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-100 text-[11px] text-emerald-800 flex flex-wrap items-center gap-2">
+        <div
+          className={`mt-3 px-3 py-2 rounded-lg border text-[11px] flex flex-wrap items-center gap-2 ${
+            avisoTono === "fallo"
+              ? "bg-amber-50 border-amber-200 text-amber-900"
+              : "bg-emerald-50 border-emerald-100 text-emerald-800"
+          }`}
+        >
           <span className="flex-1 min-w-[12rem]">{aviso}</span>
           {avisoExtra}
         </div>

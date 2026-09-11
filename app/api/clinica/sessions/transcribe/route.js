@@ -5,6 +5,8 @@ import { vetoAi } from "../../../../../lib/ai/aiAccess.js";
 import { getTenantOpenAIKey } from "../../../../../lib/ai/openaiKey.js";
 import { getTenantAnthropicKey } from "../../../../../lib/ai/anthropicKey.js";
 import { getTenantAnthropicModel } from "../../../../../lib/ai/anthropicModel.js";
+import { mensajeDeErrorIa } from "../../../../../lib/ai/errorLegible.js";
+import { avisarAdminsDelFalloIa } from "../../../../../lib/ai/avisoDeCuentaIa.js";
 import { transcribirVarios, MAX_AUDIO_BYTES } from "../../../../../lib/clinica/whisper.js";
 import { MAX_AUDIOS } from "../../../../../lib/clinica/audios.js";
 import { structureSession } from "../../../../../lib/clinica/structureSession.js";
@@ -231,6 +233,11 @@ export const POST = withTenant(async (request, _rc, ctx) => {
   } catch (e) {
     if (e.code === "NO_API_KEY") return error("El resumen con IA no está configurado (falta la clave de Anthropic).", 503);
     console.error("[clinica:structure]", e);
+    // Si el fallo es de la CUENTA de IA del centro (sin saldo, clave caducada,
+    // límite), se avisa a sus administradores por la campana: quien teclea no
+    // suele ser quien paga, y repetir no lo arregla (11/09/2026, Aumenta).
+    await avisarAdminsDelFalloIa(ctx, e);
+    const motivo = mensajeDeErrorIa(e, "Vuelve a intentarlo en un momento.");
     // La transcripción ya está hecha y pagada: se devuelve aunque el reparto
     // falle, para que no haya que volver a subir el audio. La pantalla enseña
     // el texto y la profesional escribe a mano.
@@ -242,9 +249,13 @@ export const POST = withTenant(async (request, _rc, ctx) => {
       structured: null,
       audioDurationSec,
       demo: false,
+      // El MOTIVO va dentro del aviso, y `avisoTipo` le dice a la pantalla que
+      // esto no se pinta en verde: un fallo en una caja de éxito se lee como
+      // «ha ido bien» (AV-0122, 10/09/2026: «la notificación en verde»).
       avisoIA: hayAudio
-        ? "El audio se ha transcrito, pero el reparto por apartados ha fallado. Tienes la transcripción abajo para escribir el registro a mano o volver a intentarlo."
-        : "El reparto por apartados ha fallado. Tus notas siguen aquí: vuelve a intentarlo o escribe el registro a mano.",
+        ? `El audio se ha transcrito, pero el reparto por apartados ha fallado. ${motivo} Tienes la transcripción abajo para escribir el registro a mano.`
+        : `El reparto por apartados ha fallado. ${motivo} Tus notas siguen aquí para escribir el registro a mano.`,
+      avisoTipo: "fallo",
     });
   }
 

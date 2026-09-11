@@ -329,6 +329,9 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
   const [nuevosIA, setNuevosIA] = useState([]);
   const [verPropuesta, setVerPropuesta] = useState(false);
   const [avisoAudio, setAvisoAudio] = useState(null);
+  // El aviso que el servidor mandó como FALLO: mientras sea el que se enseña,
+  // va en ámbar. Cualquier otro mensaje que lo sustituya vuelve al verde solo.
+  const [avisoFallo, setAvisoFallo] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
   const [saving, setSaving] = useState(false);
   // ── LOS AUDIOS, EN PLURAL (04/09/2026, Rodrigo) ──────────────────────────
@@ -765,6 +768,7 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
         : fuera > 0
           ? ` (La IA proponía apartados nuevos, pero este registro ya tiene ${MAX_APARTADOS}: no caben.)`
           : "";
+      setAvisoFallo(j.data.avisoTipo === "fallo" ? j.data.avisoIA : null);
       setAvisoAudio(
         j.data.avisoIA ??
           (cuantos > 0
@@ -1291,6 +1295,7 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
               </>
             }
             aviso={avisoAudio ? `${avisoAudio}${result?.demo ? " (datos de demostración)" : ""}` : null}
+            avisoTono={avisoAudio && avisoAudio === avisoFallo ? "fallo" : "ok"}
             avisoExtra={
               /* El panel se puede volver a abrir mientras no se quite el
                  audio: se cierra sin querer, o se aplica media propuesta y

@@ -4,6 +4,8 @@ import { isDemoTenant } from "@/lib/demo/isDemo.js";
 import { vetoAi } from "@/lib/ai/aiAccess.js";
 import { getTenantAnthropicKey } from "@/lib/ai/anthropicKey.js";
 import { getTenantAnthropicModel } from "@/lib/ai/anthropicModel.js";
+import { mensajeDeErrorIa } from "@/lib/ai/errorLegible.js";
+import { avisarAdminsDelFalloIa } from "@/lib/ai/avisoDeCuentaIa.js";
 import { completeConParada } from "@/lib/outreach/analysis/anthropic.js";
 import { auditar, datosPeticion } from "@/lib/utils/auditoria.js";
 import { aFormulario, apartadosPara, valoresDeSesion } from "@/lib/clinica/plantillas.js";
@@ -172,7 +174,10 @@ export const POST = withTenant(async (request, rc, ctx) => {
     } catch (e) {
       if (e.code === "NO_API_KEY") return error("La IA no está configurada (falta la clave de Anthropic).", 503);
       console.error("[clinica:encargo]", e);
-      return error("La IA no ha podido escribirlo. Inténtalo de nuevo.", 502);
+      // Si es la cuenta de IA del centro (sin saldo, clave, límite), que lo
+      // sepan sus admins y que la frase diga ESO (11/09/2026, Aumenta).
+      await avisarAdminsDelFalloIa(ctx, e);
+      return error(mensajeDeErrorIa(e, "La IA no ha podido escribirlo. Inténtalo de nuevo."), 502);
     }
 
     /*
