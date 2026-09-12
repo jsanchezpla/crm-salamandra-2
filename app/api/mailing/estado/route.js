@@ -6,7 +6,7 @@ import { isDemoTenant } from "../../../../lib/demo/isDemo.js";
 import { vocabularioCliente } from "../../../../lib/clients/vocabulario.js";
 import { marcasYModulosAsignables } from "../../../../lib/clients/moduleAssignments.js";
 import { usaEstadoDeFicha, estadosDeFicha } from "../../../../lib/clients/estados.js";
-import { getTenantAnthropicKey } from "../../../../lib/ai/anthropicKey.js";
+import { getTenantIaKey } from "../../../../lib/ai/proveedorIa.js";
 
 /**
  * GET /api/mailing/estado — lo que la pantalla necesita saber antes de dejar
@@ -47,7 +47,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     },
     vocab: vocabularioCliente(tieneModulo),
     // IA (sprint 2): en la demo va simulada; fuera, hace falta la clave BYOK.
-    ia: { disponible: demo || !!getTenantAnthropicKey(ctx), simulada: demo },
+    ia: { disponible: demo || !!getTenantIaKey(ctx), simulada: demo },
     segmentos: {
       conClientes,
       conCitas: tieneModulo("citas"),

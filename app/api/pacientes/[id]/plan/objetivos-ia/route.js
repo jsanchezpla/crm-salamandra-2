@@ -1,8 +1,7 @@
 import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
 import { textosDeObjetivos } from "../../../../../../lib/clinica/objetivosDelPlan.js";
-import { getTenantAnthropicKey } from "../../../../../../lib/ai/anthropicKey.js";
-import { getTenantAnthropicModel } from "../../../../../../lib/ai/anthropicModel.js";
+import { getTenantIaKey, getTenantIaModel } from "../../../../../../lib/ai/proveedorIa.js";
 import { demoForcesFakeAi } from "../../../../../../lib/demo/isDemo.js";
 import { vetoAi } from "../../../../../../lib/ai/aiAccess.js";
 import { esErrorDeIa, mensajeDeErrorIa } from "../../../../../../lib/ai/errorLegible.js";
@@ -74,8 +73,8 @@ export const POST = withTenant(async (request, rc, ctx) => {
       return ok({ objetivos: objetivosDeEnsayo(ideas), fake: true });
     }
 
-    const apiKey = getTenantAnthropicKey(ctx);
-    const model = getTenantAnthropicModel(ctx);
+    const apiKey = getTenantIaKey(ctx);
+    const model = getTenantIaModel(ctx);
     const { system, systemCacheado, user } = promptObjetivos({
       ideas,
       plan,

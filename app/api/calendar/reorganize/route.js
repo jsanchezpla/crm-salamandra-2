@@ -2,8 +2,7 @@ import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { reorganizeWeek } from "../../../../lib/calendar/reorganizeWeek.js";
-import { getTenantAnthropicKey } from "../../../../lib/ai/anthropicKey.js";
-import { getTenantAnthropicModel } from "../../../../lib/ai/anthropicModel.js";
+import { getTenantIaKey, getTenantIaModel } from "../../../../lib/ai/proveedorIa.js";
 import { vetoAi } from "../../../../lib/ai/aiAccess.js";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -71,8 +70,8 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     // La IA solo mueve tareas de UN SOLO día (mantiene la hora); las multi-día se dejan como están.
     const movable = tasks.filter((t) => !t.endDate || t.endDate === t.startDate);
 
-    const apiKey = getTenantAnthropicKey(ctx);
-    const model = getTenantAnthropicModel(ctx);
+    const apiKey = getTenantIaKey(ctx);
+    const model = getTenantIaModel(ctx);
     let result;
     try {
       result = await reorganizeWeek({ tasks: movable, weekDates, apiKey, model, preferences, forceFake: ctx.slug === "demo" });

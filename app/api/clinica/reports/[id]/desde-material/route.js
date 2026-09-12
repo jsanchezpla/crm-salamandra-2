@@ -2,8 +2,7 @@ import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
 import { assertNotDemoPaidCall } from "../../../../../../lib/demo/isDemo.js";
 import { vetoAi } from "../../../../../../lib/ai/aiAccess.js";
-import { getTenantAnthropicKey } from "../../../../../../lib/ai/anthropicKey.js";
-import { getTenantAnthropicModel } from "../../../../../../lib/ai/anthropicModel.js";
+import { getTenantIaKey, getTenantIaModel, sinClaveDeIa } from "../../../../../../lib/ai/proveedorIa.js";
 import { mensajeDeErrorIa } from "../../../../../../lib/ai/errorLegible.js";
 import { avisarAdminsDelFalloIa } from "../../../../../../lib/ai/avisoDeCuentaIa.js";
 import { logClinicaAudit } from "../../../../../../lib/clinica/audit.js";
@@ -114,9 +113,9 @@ export const POST = withTenant(async (request, rc, ctx) => {
       return error("La transcripción es demasiado larga para volver a procesarla.", 413);
     }
 
-    const anthropicKey = getTenantAnthropicKey(ctx);
-    if (!anthropicKey) {
-      return error("Configura la clave de Anthropic en Configuración → IA para redactar el informe.", 503);
+    const iaKey = getTenantIaKey(ctx);
+    if (!iaKey) {
+      return error(sinClaveDeIa(ctx, "para redactar el informe"), 503);
     }
 
     // Con qué apartados se está escribiendo: los que manda la pantalla (sabe la
@@ -139,12 +138,12 @@ export const POST = withTenant(async (request, rc, ctx) => {
         escrito,
         paciente: informe.patient,
         tipo: informe.reportType,
-        apiKey: anthropicKey,
-        model: getTenantAnthropicModel(ctx),
+        apiKey: iaKey,
+        model: getTenantIaModel(ctx),
       });
       console.info("[clinica:informe-material] claude", `${Date.now() - t0}ms`, `${material.length} chars`);
     } catch (e) {
-      if (e?.code === "NO_API_KEY") return error("El informe con IA no está configurado (falta la clave de Anthropic).", 503);
+      if (e?.code === "NO_API_KEY") return error("El informe con IA no está configurado (falta la clave de IA).", 503);
       console.error("[clinica:informe-material]", e);
       // Si es la cuenta de IA del centro (sin saldo, clave, límite), que lo
       // sepan sus admins y que la frase diga ESO (11/09/2026, Aumenta).

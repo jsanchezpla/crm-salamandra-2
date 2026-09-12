@@ -467,7 +467,7 @@ export default function CampanaEditor({ id, vocab }) {
               {ia.abierto && (
                 <div className="mt-3 space-y-3">
                   {!estadoModulo?.ia?.disponible && (
-                    <p className="text-xs text-amber-700">Hace falta la clave de Anthropic del centro en Configuración → Conexiones. La IA es de pago por uso y sale de la cuenta del centro.</p>
+                    <p className="text-xs text-amber-700">Hace falta la clave de IA del centro (la de Anthropic o la de OpenAI, según el proveedor elegido) en Configuración → Conexiones. La IA es de pago por uso y sale de la cuenta del centro.</p>
                   )}
                   <Campo label="Qué quieres contar" ayuda="Cuanto más concreto, mejor: qué, para quién, fechas, enlaces. La IA no inventa lo que no le digas; donde falte un dato dejará [corchetes].">
                     <textarea className={`${inputCls} h-24`} value={ia.instruccion} maxLength={3000} onChange={(e) => setIa((x) => ({ ...x, instruccion: e.target.value }))} placeholder="Abrimos plazas para el taller de gestión emocional: 4 martes de octubre a las 18:00, 60 € el ciclo, inscripción en https://…" />

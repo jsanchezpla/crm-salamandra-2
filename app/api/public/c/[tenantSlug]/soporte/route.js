@@ -19,8 +19,7 @@ import {
   sanitizeFileName,
   extFromFileName,
 } from "@/lib/support/ticketStorage.js";
-import { getTenantAnthropicKey } from "@/lib/ai/anthropicKey.js";
-import { getTenantAnthropicModel } from "@/lib/ai/anthropicModel.js";
+import { getTenantIaKey, getTenantIaModel } from "@/lib/ai/proveedorIa.js";
 import { ticketAiClassify } from "@/lib/support/ai.js";
 
 /**
@@ -203,14 +202,14 @@ export const POST = withPublicTenant(
       //    clave BYOK. Best-effort con presupuesto corto: jamás bloquea el alta.
       if (settings.autoClassify) {
         try {
-          const apiKey = getTenantAnthropicKey(ctx);
+          const apiKey = getTenantIaKey(ctx);
           if (apiKey) {
             const categories = await tenantModels.TicketCategory.findAll({ where: { active: true }, raw: true });
             const sugerencia = await ticketAiClassify({
               ticket: ticket.toJSON(),
               categories,
               apiKey,
-              model: getTenantAnthropicModel(ctx),
+              model: getTenantIaModel(ctx),
             });
             if (sugerencia) {
               const cambios = {};

@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ANTHROPIC_MODELS } from "../../../lib/ai/anthropicModel.js";
+import { OPENAI_MODELS } from "../../../lib/ai/openaiModel.js";
 
 /**
- * Consumo estimado de la IA, dentro de la tarjeta de Anthropic de
- * Configuración → IA (11/09/2026).
+ * Consumo estimado de la IA, dentro de la tarjeta «Con qué IA se redacta» de
+ * Configuración → Conexiones (11/09/2026; hasta el 12/09 vivía en la de
+ * Anthropic, y se movió el día que la IA pudo ser también ChatGPT).
  *
  * Nace del día en que Aumenta se quedó sin saldo sin que nadie viera venirlo:
  * quien teclea no es quien paga, y quien paga no tenía dónde mirar. Aquí se
@@ -14,11 +17,10 @@ import { useEffect, useState } from "react";
  */
 
 const USD_POR_EUR = 1.1;
-const ETIQUETA_MODELO = {
-  "claude-haiku-4-5-20251001": "Haiku",
-  "claude-sonnet-5": "Sonnet",
-  "claude-opus-4-8": "Opus",
-};
+/** «Claude Haiku», «GPT-5.6 Luna»… desde los catálogos, para no copiar la lista a mano. */
+function etiquetaDeModelo(modelo) {
+  return [...ANTHROPIC_MODELS, ...OPENAI_MODELS].find((m) => m.id === modelo)?.label ?? modelo;
+}
 
 function usd(n) {
   return `${(Number(n) || 0).toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} $`;
@@ -68,7 +70,7 @@ export default function ConsumoIA() {
           </div>
         </div>
         <div className="text-xs text-neutral-500 text-right">
-          <div>{mes.total.llamadas.toLocaleString("es-ES")} llamadas · modelo {ETIQUETA_MODELO[modelo] ?? modelo}</div>
+          <div>{mes.total.llamadas.toLocaleString("es-ES")} llamadas · redacta {etiquetaDeModelo(modelo)}</div>
           {reutilizadas > 0 && <div>{reutilizadas.toLocaleString("es-ES")} {reutilizadas === 1 ? "devuelta" : "devueltas"} sin coste por repetidas</div>}
           {mes.total.minutosAudio > 0 && <div>{mes.total.minutosAudio.toLocaleString("es-ES")} min de audio transcritos</div>}
         </div>

@@ -3,8 +3,7 @@ import { ok, error, forbidden, notFound } from "../../../../../../../lib/utils/a
 import { assertNotDemoPaidCall } from "../../../../../../../lib/demo/isDemo.js";
 import { vetoAi } from "../../../../../../../lib/ai/aiAccess.js";
 import { getTenantOpenAIKey } from "../../../../../../../lib/ai/openaiKey.js";
-import { getTenantAnthropicKey } from "../../../../../../../lib/ai/anthropicKey.js";
-import { getTenantAnthropicModel } from "../../../../../../../lib/ai/anthropicModel.js";
+import { getTenantIaKey, getTenantIaModel, sinClaveDeIa } from "../../../../../../../lib/ai/proveedorIa.js";
 import { transcribeAudio, MAX_AUDIO_BYTES } from "../../../../../../../lib/clinica/whisper.js";
 import { materialParaLaIA, MAX_NOTAS } from "../../../../../../../lib/clinica/registroCompleto.js";
 import { apartadosConPlantillas, plantillasDe } from "../../../../../../../lib/clinica/plantillas.js";
@@ -116,15 +115,15 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     : apartadosConPlantillas(bloqueo.actaSections, plantillasDe(ctx.tenant, DOC_ACTA));
 
   const openaiKey = getTenantOpenAIKey(ctx);
-  const anthropicKey = getTenantAnthropicKey(ctx);
+  const iaKey = getTenantIaKey(ctx);
   // La clave de OpenAI solo hace falta si hay audio: un acta escrita a mano no
   // pasa por Whisper y no tiene por qué exigir una clave que el centro podría
   // no tener puesta.
   if (file && !openaiKey) {
     return error("Configura la clave de OpenAI en Configuración → IA para transcribir el audio.", 400);
   }
-  if (!anthropicKey) {
-    return error("Configura la clave de Anthropic en Configuración → IA para redactar el acta.", 400);
+  if (!iaKey) {
+    return error(sinClaveDeIa(ctx, "para redactar el acta"), 400);
   }
 
   // ── (audio → Whisper) + notas → Claude ──
@@ -167,8 +166,8 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       escrito,
       cuando: cuandoLegible(bloqueo),
       equipo,
-      apiKey: anthropicKey,
-      model: getTenantAnthropicModel(ctx),
+      apiKey: iaKey,
+      model: getTenantIaModel(ctx),
     });
     return ok({
       transcripcion,
@@ -181,7 +180,7 @@ export const POST = withTenant(async (request, { params }, ctx) => {
         : {}),
     });
   } catch (e) {
-    if (e.code === "NO_API_KEY") return error("La redacción con IA no está configurada (falta la clave de Anthropic).", 503);
+    if (e.code === "NO_API_KEY") return error("La redacción con IA no está configurada (falta la clave de IA).", 503);
     console.error("[reuniones:acta]", e);
     // La transcripción ya está hecha y pagada: se devuelve aunque el reparto
     // falle, para no tener que volver a subir el audio de la reunión.

@@ -872,7 +872,7 @@ export default function OutreachLeadDetail({ leadId }) {
                 Eliminar
               </button>
               {/* Cada análisis cuesta una llamada de API: nunca se dispara solo.
-                  Requiere la clave de Anthropic del tenant; sin ella se
+                  Requiere la clave de IA del tenant (Anthropic u OpenAI); sin ella se
                   deshabilita y el aviso de arriba enlaza a Configuración. */}
               <button
                 type="button"
@@ -880,7 +880,7 @@ export default function OutreachLeadDetail({ leadId }) {
                 disabled={analyzing || lines.length === 0 || !analyzeReady || noLinesSelected}
                 title={
                   !analyzeReady
-                    ? "Configura tu clave de Anthropic en Configuración → IA para analizar"
+                    ? "Configura tu clave de IA (Anthropic u OpenAI, según el proveedor elegido) en Configuración → Conexiones para analizar"
                     : noLinesSelected
                     ? "Selecciona al menos una línea de negocio para analizar"
                     : undefined

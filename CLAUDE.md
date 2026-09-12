@@ -60,7 +60,7 @@ viejas `P0`…`P3` se leen, no se escriben). Antes de apuntar nada,
 | Estilos | Tailwind CSS 4 |
 | Despliegue | VPS propio, Docker Compose, nginx nativo |
 | Automatizaciones | n8n (instancia propia); el CRM dispara webhooks |
-| IA | Claude (Anthropic) + Whisper (OpenAI), **clave por tenant** (BYOK) |
+| IA | Para redactar, Claude (Anthropic) o ChatGPT (OpenAI) —lo elige el tenant—; para transcribir, siempre Whisper (OpenAI). **Clave por tenant** (BYOK) |
 | Editor / lint | VS Code, ESLint 9 flat, Prettier 3 (config en sus ficheros) · terminal **PowerShell** en local, bash en el VPS (`curl.exe` en local, `curl` allí) |
 
 ---
@@ -265,12 +265,19 @@ despliegue que toque módulos.
 - **Verifactu**: API de Facturantia (10 €/mes). CRM crea factura → Facturantia
   → `qrUrl` + número → PDF con QR. Campos `facturantiaId`, `qrUrl`,
   `verifactuStatus`, `verifactuSentAt`. Detalle en `docs/modules/billing.md`.
-- **IA**: Claude para análisis de leads (`lib/outreach/analysis/`) y estructura
-  de sesiones clínicas (`lib/clinica/structureSession.js`); Whisper SOLO para
-  transcribir audio clínico (`lib/clinica/whisper.js`). **Clave y modelo POR
-  TENANT** (Configuración → IA; `lib/ai/anthropicKey.js`, `anthropicModel.js`,
-  `openaiKey.js`; Haiku por defecto desde el 11/09/2026, y el razonamiento
-  previo de Sonnet apagado en el cliente central: `parametrosDeRazonamiento`). **NO se usan las claves del entorno**:
+- **IA**: todo lo que REDACTA —análisis de leads (`lib/outreach/analysis/`),
+  sesiones e informes clínicos (`lib/clinica/structureSession.js`…), actas,
+  correos, asistente— sale del proveedor que elige el tenant, **Claude o
+  ChatGPT** (12/09/2026: `lib/ai/proveedorIa.js`, `settings.integrations.aiProvider`;
+  las rutas piden `getTenantIaKey(ctx)` / `getTenantIaModel(ctx)` y los dos
+  envoltorios despachan por el id del modelo, `lib/ai/openai.js` sin SDK;
+  `docs/decisions/2026-09-12-la-ia-de-texto-se-elige-por-proveedor.md`).
+  Whisper SOLO para transcribir audio clínico (`lib/clinica/whisper.js`), con
+  la clave de OpenAI siempre. **Clave y modelo POR TENANT y por proveedor**
+  (Configuración → Conexiones; `anthropicKey.js` + `anthropicModel.js`,
+  `openaiKey.js` + `openaiModel.js`; Haiku y GPT-5.6 Luna por defecto, y el
+  razonamiento previo apagado en los dos clientes: `parametrosDeRazonamiento`,
+  `parametrosDeRazonamientoOpenAI`). **NO se usan las claves del entorno**:
   sin clave → 503. Patrón: datos → prompt → pedir solo JSON → parsear con
   try/catch → persistir. Nada de IA se dispara solo: cuesta dinero.
 - **n8n** como motor de automatizaciones externo; el CRM dispara webhooks.

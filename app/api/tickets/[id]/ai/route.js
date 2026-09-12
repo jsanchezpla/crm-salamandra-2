@@ -2,8 +2,7 @@ import { withTenant } from "@/lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, unauthorized, serverError } from "@/lib/utils/apiResponse.js";
 import { MODULE_KEYS } from "@/lib/tenant/moduleKeys.js";
 import { UUID_RE } from "@/lib/support/context.js";
-import { getTenantAnthropicKey } from "@/lib/ai/anthropicKey.js";
-import { getTenantAnthropicModel } from "@/lib/ai/anthropicModel.js";
+import { getTenantIaKey, getTenantIaModel } from "@/lib/ai/proveedorIa.js";
 import { demoForcesFakeAi } from "@/lib/demo/isDemo.js";
 import { vetoAi } from "@/lib/ai/aiAccess.js";
 import {
@@ -38,11 +37,11 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     if (veto) return veto;
 
     const esFake = demoForcesFakeAi(ctx);
-    const apiKey = esFake ? null : getTenantAnthropicKey(ctx);
+    const apiKey = esFake ? null : getTenantIaKey(ctx);
     if (!esFake && !apiKey) {
       return error("Este cliente no tiene configurada la clave de IA (Configuración → IA)", 503);
     }
-    const model = getTenantAnthropicModel(ctx);
+    const model = getTenantIaModel(ctx);
 
     let body;
     try {

@@ -2,8 +2,7 @@ import { withTenant } from "@/lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "@/lib/utils/apiResponse.js";
 import { isDemoTenant } from "@/lib/demo/isDemo.js";
 import { vetoAi } from "@/lib/ai/aiAccess.js";
-import { getTenantAnthropicKey } from "@/lib/ai/anthropicKey.js";
-import { getTenantAnthropicModel } from "@/lib/ai/anthropicModel.js";
+import { getTenantIaKey, getTenantIaModel, sinClaveDeIa } from "@/lib/ai/proveedorIa.js";
 import { mensajeDeErrorIa } from "@/lib/ai/errorLegible.js";
 import { avisarAdminsDelFalloIa } from "@/lib/ai/avisoDeCuentaIa.js";
 import { structureSession } from "@/lib/clinica/structureSession.js";
@@ -105,10 +104,10 @@ export const POST = withTenant(async (request, rc, ctx) => {
     // hay claves y sin esto la pantalla no se puede ni ver. LIMITADO a
     // desarrollo — en producción siempre se llama a Claude de verdad.
     const isDev = process.env.NODE_ENV !== "production";
-    const anthropicKey = getTenantAnthropicKey(ctx);
-    const fake = isDev && (process.env.CLINICA_FAKE_AI === "1" || !anthropicKey);
-    if (!fake && !anthropicKey) {
-      return error("Configura la clave de Anthropic en Configuración → IA para completar el registro.", 400);
+    const iaKey = getTenantIaKey(ctx);
+    const fake = isDev && (process.env.CLINICA_FAKE_AI === "1" || !iaKey);
+    if (!fake && !iaKey) {
+      return error(sinClaveDeIa(ctx, "para completar el registro"), 400);
     }
 
     // Con QUÉ apartados se escribió esta sesión: su propia foto si la tiene y,
@@ -143,13 +142,13 @@ export const POST = withTenant(async (request, rc, ctx) => {
         // Edad y áreas del paciente para el prompt; su nombre no viaja nunca
         // (`lineaDePaciente`). Si la ficha ya no está, se redacta sin contexto.
         paciente: await Patient.findByPk(s.patientId).catch(() => null),
-        apiKey: anthropicKey,
-        model: getTenantAnthropicModel(ctx),
+        apiKey: iaKey,
+        model: getTenantIaModel(ctx),
       });
       propuesta = r.propuesta;
       nuevos = r.nuevos ?? [];
     } catch (e) {
-      if (e.code === "NO_API_KEY") return error("El resumen con IA no está configurado (falta la clave de Anthropic).", 503);
+      if (e.code === "NO_API_KEY") return error("El resumen con IA no está configurado (falta la clave de IA).", 503);
       console.error("[clinica:completar]", e);
       // Si es la cuenta de IA del centro (sin saldo, clave, límite), que lo
       // sepan sus admins y que la frase diga ESO (11/09/2026, Aumenta).

@@ -6,8 +6,7 @@ import { buscarOFallar, exigirMailing, idDeRuta, leerBody, texto } from "../../.
 import { asuntosAlternativos, fakeAsuntos, fakeRedaccion, redactarConIa } from "../../../../../../lib/mailing/ia.js";
 import { centroDe } from "../../../../../../lib/mailing/envio.js";
 import { normalizarBloques } from "../../../../../../lib/mailing/bloques.js";
-import { getTenantAnthropicKey } from "../../../../../../lib/ai/anthropicKey.js";
-import { getTenantAnthropicModel } from "../../../../../../lib/ai/anthropicModel.js";
+import { getTenantIaKey, getTenantIaModel } from "../../../../../../lib/ai/proveedorIa.js";
 import { demoForcesFakeAi } from "../../../../../../lib/demo/isDemo.js";
 import { vetoAi } from "../../../../../../lib/ai/aiAccess.js";
 import { vocabularioCliente } from "../../../../../../lib/clients/vocabulario.js";
@@ -39,9 +38,9 @@ export const POST = withTenant(async (request, rc, ctx) => {
   if (veto) return veto;
 
   const esFake = demoForcesFakeAi(ctx);
-  const apiKey = esFake ? null : getTenantAnthropicKey(ctx);
+  const apiKey = esFake ? null : getTenantIaKey(ctx);
   if (!esFake && !apiKey) throw new AppError("Este cliente no tiene configurada la clave de IA (Configuración → Conexiones → Anthropic)", 503);
-  const model = getTenantAnthropicModel(ctx);
+  const model = getTenantIaModel(ctx);
   const centro = centroDe(ctx);
 
   if (accion === "asuntos") {

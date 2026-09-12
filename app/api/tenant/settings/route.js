@@ -7,6 +7,8 @@ import { invalidateTenantCache } from "../../../../lib/tenant/tenantResolver.js"
 import { isDemoTenant, assertNotDemoMasterWrite } from "../../../../lib/demo/isDemo.js";
 import { encryptSecret, decryptSecret, isEncryptionConfigured } from "../../../../lib/crypto/secretBox.js";
 import { isAllowedAnthropicModel, DEFAULT_ANTHROPIC_MODEL } from "../../../../lib/ai/anthropicModel.js";
+import { isAllowedOpenAIModel, DEFAULT_OPENAI_MODEL } from "../../../../lib/ai/openaiModel.js";
+import { esProveedorIa, proveedorIaDe } from "../../../../lib/ai/proveedores.js";
 import { getTenantStripeConfig } from "../../../../lib/payments/stripeConfig.js";
 import { getTenantCloudflareConfig } from "../../../../lib/analytics/cloudflareConfig.js";
 import { getTenantGocardlessConfig } from "../../../../lib/banco/gocardlessConfig.js";
@@ -110,11 +112,13 @@ const CAMPOS_SECRETOS_AUDIT = [
 
 // Estos NO son secretos y su valor sí ayuda a entender qué pasó.
 const CAMPOS_ABIERTOS_AUDIT = [
+  "aiProvider",
   "anthropicModel",
   "cloudflareAccountId",
   "cloudflareSiteTag",
   "gocardlessSecretId",
   "googleCalendarClientId",
+  "openaiModel",
   "resendFromEmail",
   "resendReplyTo",
   "sesAccessKeyId",
@@ -468,12 +472,18 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
       isotipoUrl: brand.isotipoUrl ?? null,
     },
     integrations: {
+      // Con qué IA se redacta (12/09/2026): «anthropic» o «openai». Cada
+      // proveedor lleva su clave y su modelo; este dice cuál de los dos manda.
+      proveedorIa: proveedorIaDe(integ),
       anthropic: {
         ...ks(integ.anthropicApiKey),
         model: isAllowedAnthropicModel(integ.anthropicModel) ? integ.anthropicModel : DEFAULT_ANTHROPIC_MODEL,
       },
       googlePlaces: ks(integ.googlePlacesApiKey),
-      openai: ks(integ.openaiApiKey),
+      openai: {
+        ...ks(integ.openaiApiKey),
+        model: isAllowedOpenAIModel(integ.openaiModel) ? integ.openaiModel : DEFAULT_OPENAI_MODEL,
+      },
       // Visitas de la web (módulo Analíticas). `ready` = se puede consultar de
       // verdad: sin id de cuenta el token no sirve para nada, igual que en
       // Stripe hacen falta las dos piezas.
@@ -702,6 +712,12 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   if (typeof body.anthropicModel === "string" && isAllowedAnthropicModel(body.anthropicModel)) {
     settings.integrations.anthropicModel = body.anthropicModel;
   }
+  // Modelo de ChatGPT y proveedor con el que se redacta (12/09/2026). Tampoco
+  // son secretos, y tampoco se guardan si no están en su lista cerrada.
+  if (typeof body.openaiModel === "string" && isAllowedOpenAIModel(body.openaiModel)) {
+    settings.integrations.openaiModel = body.openaiModel;
+  }
+  if (esProveedorIa(body.aiProvider)) settings.integrations.aiProvider = body.aiProvider;
   applyPlain(settings.integrations, "resendReplyTo", body.resendReplyTo);
 
   // Cuentas de Resend (25/08/2026): una clave por dominio verificado. Van
@@ -1092,12 +1108,16 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
       logoUrl: settings.brand.logoUrl ?? null,
     },
     integrations: {
+      proveedorIa: proveedorIaDe(settings.integrations),
       anthropic: {
         ...keyStatus(settings.integrations.anthropicApiKey),
         model: isAllowedAnthropicModel(settings.integrations.anthropicModel) ? settings.integrations.anthropicModel : DEFAULT_ANTHROPIC_MODEL,
       },
       googlePlaces: keyStatus(settings.integrations.googlePlacesApiKey),
-      openai: keyStatus(settings.integrations.openaiApiKey),
+      openai: {
+        ...keyStatus(settings.integrations.openaiApiKey),
+        model: isAllowedOpenAIModel(settings.integrations.openaiModel) ? settings.integrations.openaiModel : DEFAULT_OPENAI_MODEL,
+      },
       cloudflare: {
         ...keyStatus(settings.integrations.cloudflareApiToken),
         accountId: settings.integrations.cloudflareAccountId ?? null,

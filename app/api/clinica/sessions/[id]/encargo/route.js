@@ -2,8 +2,7 @@ import { withTenant } from "@/lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "@/lib/utils/apiResponse.js";
 import { isDemoTenant } from "@/lib/demo/isDemo.js";
 import { vetoAi } from "@/lib/ai/aiAccess.js";
-import { getTenantAnthropicKey } from "@/lib/ai/anthropicKey.js";
-import { getTenantAnthropicModel } from "@/lib/ai/anthropicModel.js";
+import { getTenantIaKey, getTenantIaModel, sinClaveDeIa } from "@/lib/ai/proveedorIa.js";
 import { mensajeDeErrorIa } from "@/lib/ai/errorLegible.js";
 import { avisarAdminsDelFalloIa } from "@/lib/ai/avisoDeCuentaIa.js";
 import { completeConParada } from "@/lib/outreach/analysis/anthropic.js";
@@ -124,9 +123,9 @@ export const POST = withTenant(async (request, rc, ctx) => {
     const veto = await vetoAi(ctx, request, "pedirle un texto a la IA desde un registro");
     if (veto) return veto;
 
-    const anthropicKey = getTenantAnthropicKey(ctx);
-    if (!anthropicKey) {
-      return error("Configura la clave de Anthropic en Configuración → IA para usar la IA.", 400);
+    const iaKey = getTenantIaKey(ctx);
+    if (!iaKey) {
+      return error(sinClaveDeIa(ctx, "para usar la IA"), 400);
     }
 
     // Los apartados que de verdad tiene ESTA sesión: su propia foto si la
@@ -164,15 +163,15 @@ export const POST = withTenant(async (request, rc, ctx) => {
         // mismos ~29.000 tokens de los otros cuatro prompts clínicos.
         ...partesDelPromptDeEncargo({ destino, paciente, centro: perfilDelCentro(ctx.tenant) }),
         user: mensajeDeEncargo({ peticion, contexto }),
-        model: getTenantAnthropicModel(ctx),
+        model: getTenantIaModel(ctx),
         maxTokens: MAX_TOKENS,
-        apiKey: anthropicKey,
+        apiKey: iaKey,
         stream: true,
       });
       texto = limpiarRespuesta(r.texto);
       parada = r.parada;
     } catch (e) {
-      if (e.code === "NO_API_KEY") return error("La IA no está configurada (falta la clave de Anthropic).", 503);
+      if (e.code === "NO_API_KEY") return error("La IA no está configurada (falta la clave de IA).", 503);
       console.error("[clinica:encargo]", e);
       // Si es la cuenta de IA del centro (sin saldo, clave, límite), que lo
       // sepan sus admins y que la frase diga ESO (11/09/2026, Aumenta).

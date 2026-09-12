@@ -220,7 +220,8 @@ export const GET = withTenant(async (_request, _rc, ctx) => {
         contacto: leerContacto(t),
         ajustes: {
           remitenteCorreo: integ.resendFromEmail ?? null,
-          modeloIA: integ.anthropicModel ?? null,
+          proveedorIA: integ.aiProvider ?? "anthropic",
+          modeloIA: integ.aiProvider === "openai" ? (integ.openaiModel ?? null) : (integ.anthropicModel ?? null),
           accesoIA: t.settings?.aiAccess ?? "libre",
           modoVideollamada: t.settings?.citas?.meetModo ?? "manual",
           recordatorios: t.settings?.citas?.recordatorios === true,

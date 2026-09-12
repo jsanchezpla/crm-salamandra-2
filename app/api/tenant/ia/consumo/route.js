@@ -1,7 +1,7 @@
 import { withTenant } from "@/lib/tenant/withTenant.js";
 import { ok, forbidden, serverError } from "@/lib/utils/apiResponse.js";
 import { getMasterModels } from "@/lib/db/masterDb.js";
-import { getTenantAnthropicModel } from "@/lib/ai/anthropicModel.js";
+import { getTenantIaModel, getTenantProveedorIa } from "@/lib/ai/proveedorIa.js";
 
 /**
  * GET /api/tenant/ia/consumo — cuánto lleva gastado este tenant en IA
@@ -13,7 +13,9 @@ import { getTenantAnthropicModel } from "@/lib/ai/anthropicModel.js";
  * llenarse el día que se desplegó, así que el primer mes va incompleto y la
  * pantalla lo dice.
  *
- * Respuesta: { modelo, desdeCuando, mes: Tramo, anterior: Tramo }
+ * Respuesta: { proveedor, modelo, desdeCuando, mes: Tramo, anterior: Tramo }
+ *   (`proveedor` y `modelo` son los que redactan HOY, `lib/ai/proveedorIa.js`;
+ *   las filas del mes pueden ser de los dos si se cambió a mitad)
  *   Tramo = { desde, hasta, total: { llamadas, reutilizadas, costeUsd,
  *             minutosAudio, tokensEntrada, tokensSalida }, porAccion: [...] }
  */
@@ -55,7 +57,9 @@ async function tramo(sequelize, tenantId, mesesAtras) {
     total.tokensSalida += Number(f.tokens_salida);
     porAccion.push({
       proveedor: f.proveedor,
-      accion: f.accion ?? (f.proveedor === "openai" ? "transcribir audio" : "otros usos"),
+      // Sin etiqueta, lo único que distingue a Whisper es que trae audio:
+      // desde el 12/09/2026 OpenAI también redacta.
+      accion: f.accion ?? (f.segundos_audio > 0 ? "transcribir audio" : "otros usos"),
       llamadas: f.llamadas,
       reutilizadas: f.reutilizadas,
       costeUsd: Math.round(Number(f.coste_usd) * 10000) / 10000,
@@ -80,11 +84,11 @@ export const GET = withTenant(async (request, rc, ctx) => {
       { replacements: { tenantId } }
     );
     const [mes, anterior] = await Promise.all([tramo(sequelize, tenantId, 0), tramo(sequelize, tenantId, 1)]);
-    return ok({ modelo: getTenantAnthropicModel(ctx), desdeCuando: primera?.desde ?? null, mes, anterior });
+    return ok({ proveedor: getTenantProveedorIa(ctx), modelo: getTenantIaModel(ctx), desdeCuando: primera?.desde ?? null, mes, anterior });
   } catch (err) {
     // Sin la tabla migrada (42P01) la pantalla no debe caerse: se contesta vacío.
     if (err?.original?.code === "42P01" || err?.parent?.code === "42P01") {
-      return ok({ modelo: getTenantAnthropicModel(ctx), desdeCuando: null, mes: null, anterior: null, sinTabla: true });
+      return ok({ proveedor: getTenantProveedorIa(ctx), modelo: getTenantIaModel(ctx), desdeCuando: null, mes: null, anterior: null, sinTabla: true });
     }
     return serverError(err);
   }

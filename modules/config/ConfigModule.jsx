@@ -6,6 +6,7 @@ import Link from "next/link";
 import Select from "../../components/ui/Select.jsx";
 import ConectarWhatsapp from "./ConectarWhatsapp.jsx";
 import { ANTHROPIC_MODELS } from "../../lib/ai/anthropicModel.js";
+import { OPENAI_MODELS } from "../../lib/ai/openaiModel.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 import CorreoSalidaCard from "./CorreoSalidaCard.jsx";
 import ConsumoIA from "./tarjetas/ConsumoIA.jsx";
@@ -26,6 +27,7 @@ import {
   EstadoCobro,
   EventosWebhook,
   GoogleCalendarIdField,
+  ProveedorIaCard,
   SesCamposField,
   UrlWebhook,
   WhatsappPhoneField,
@@ -441,6 +443,20 @@ export default function ConfigModule({ modulos = null }) {
 
       {pestanaViva === "conexiones" && (
         <div className="space-y-4">
+          {/* Con qué IA se redacta (12/09/2026): Claude o ChatGPT. Va delante de
+              las dos claves entre las que elige, y el consumo del mes cuelga
+              de aquí porque es de la IA entera, no de una de las dos cuentas. */}
+          {enZona(
+            "proveedorIa",
+            <ProveedorIaCard
+              proveedor={cfg.integrations?.proveedorIa}
+              isAdmin={isAdmin}
+              onChange={(v) => patchTenant({ aiProvider: v }, "Proveedor de IA actualizado")}
+              claves={{ anthropic: cfg.integrations?.anthropic, openai: cfg.integrations?.openai }}
+              extra={isAdmin ? <ConsumoIA /> : null}
+            />
+          )}
+
           {enZona(
             "anthropic",
             <ApiKeyCard
@@ -451,8 +467,7 @@ export default function ConfigModule({ modulos = null }) {
               onClear={() => patchTenant({ anthropicApiKey: null }, "Clave de Anthropic eliminada")}
               models={ANTHROPIC_MODELS}
               currentModel={cfg.integrations?.anthropic?.model}
-              onModelChange={(v) => patchTenant({ anthropicModel: v }, "Modelo de IA actualizado")}
-              extra={isAdmin ? <ConsumoIA /> : null}
+              onModelChange={(v) => patchTenant({ anthropicModel: v }, "Modelo de Claude actualizado")}
             />
           )}
 
@@ -464,6 +479,9 @@ export default function ConfigModule({ modulos = null }) {
               isAdmin={isAdmin}
               onSave={(value) => patchTenant({ openaiApiKey: value }, "Clave de OpenAI guardada")}
               onClear={() => patchTenant({ openaiApiKey: null }, "Clave de OpenAI eliminada")}
+              models={OPENAI_MODELS}
+              currentModel={cfg.integrations?.openai?.model}
+              onModelChange={(v) => patchTenant({ openaiModel: v }, "Modelo de ChatGPT actualizado")}
             />
           )}
 

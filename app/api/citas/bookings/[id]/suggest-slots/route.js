@@ -3,8 +3,7 @@ import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
 import { findBookingOverlap } from "../../../../../../lib/citas/booking.js";
 import { buildCandidates, chooseSlots } from "../../../../../../lib/citas/suggestSlots.js";
-import { getTenantAnthropicKey } from "../../../../../../lib/ai/anthropicKey.js";
-import { getTenantAnthropicModel } from "../../../../../../lib/ai/anthropicModel.js";
+import { getTenantIaKey, getTenantIaModel } from "../../../../../../lib/ai/proveedorIa.js";
 import { resolveCurrentTeamMemberId } from "../../../../../../lib/team/currentTeamMember.js";
 import { cargarFestivos } from "../../../../../../lib/citas/festivos.js";
 import { vetoAi } from "../../../../../../lib/ai/aiAccess.js";
@@ -104,8 +103,8 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       const p = await Patient.findByPk(booking.patientId, { attributes: ["firstName", "lastName"] });
       if (p) patientName = `${p.firstName} ${p.lastName}`.trim();
     }
-    const apiKey = getTenantAnthropicKey(ctx);
-    const model = getTenantAnthropicModel(ctx);
+    const apiKey = getTenantIaKey(ctx);
+    const model = getTenantIaModel(ctx);
     let chosen;
     try {
       chosen = await chooseSlots({

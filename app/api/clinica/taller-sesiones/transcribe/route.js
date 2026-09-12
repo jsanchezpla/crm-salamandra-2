@@ -3,8 +3,7 @@ import { ok, error, forbidden } from "../../../../../lib/utils/apiResponse.js";
 import { assertNotDemoPaidCall } from "../../../../../lib/demo/isDemo.js";
 import { vetoAi } from "../../../../../lib/ai/aiAccess.js";
 import { getTenantOpenAIKey } from "../../../../../lib/ai/openaiKey.js";
-import { getTenantAnthropicKey } from "../../../../../lib/ai/anthropicKey.js";
-import { getTenantAnthropicModel } from "../../../../../lib/ai/anthropicModel.js";
+import { getTenantIaKey, getTenantIaModel, sinClaveDeIa } from "../../../../../lib/ai/proveedorIa.js";
 import { mensajeDeErrorIa } from "../../../../../lib/ai/errorLegible.js";
 import { avisarAdminsDelFalloIa } from "../../../../../lib/ai/avisoDeCuentaIa.js";
 import { transcribirVarios, MAX_AUDIO_BYTES } from "../../../../../lib/clinica/whisper.js";
@@ -73,7 +72,7 @@ export const POST = withTenant(async (request, _rc, ctx) => {
 
   const isDev = process.env.NODE_ENV !== "production";
   const openaiKey = getTenantOpenAIKey(ctx);
-  const anthropicKey = getTenantAnthropicKey(ctx);
+  const iaKey = getTenantIaKey(ctx);
 
   let form = null;
   try {
@@ -105,10 +104,10 @@ export const POST = withTenant(async (request, _rc, ctx) => {
 
   // Mismo modo canned que el registro normal: LIMITADO a desarrollo.
   const hayAudio = files.length > 0;
-  const fake = isDev && (process.env.CLINICA_FAKE_AI === "1" || !anthropicKey || (hayAudio && !openaiKey));
+  const fake = isDev && (process.env.CLINICA_FAKE_AI === "1" || !iaKey || (hayAudio && !openaiKey));
   if (!fake) {
     if (hayAudio && !openaiKey) return error("Configura la clave de OpenAI en Configuración → IA para transcribir el audio.", 400);
-    if (!anthropicKey) return error("Configura la clave de Anthropic en Configuración → IA para estructurar la sesión.", 400);
+    if (!iaKey) return error(sinClaveDeIa(ctx, "para estructurar la sesión"), 400);
   }
 
   if (fake) {
@@ -167,11 +166,11 @@ export const POST = withTenant(async (request, _rc, ctx) => {
       asistentes,
       etiquetaNota,
       escrito,
-      apiKey: anthropicKey,
-      model: getTenantAnthropicModel(ctx),
+      apiKey: iaKey,
+      model: getTenantIaModel(ctx),
     });
   } catch (e) {
-    if (e.code === "NO_API_KEY") return error("El resumen con IA no está configurado (falta la clave de Anthropic).", 503);
+    if (e.code === "NO_API_KEY") return error("El resumen con IA no está configurado (falta la clave de IA).", 503);
     console.error("[clinica:structure-taller]", e);
     // Si el fallo es de la CUENTA de IA del centro (sin saldo, clave caducada,
     // límite), se avisa a sus administradores por la campana: quien teclea no

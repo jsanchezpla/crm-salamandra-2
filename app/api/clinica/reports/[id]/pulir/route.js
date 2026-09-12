@@ -1,7 +1,6 @@
 import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
-import { getTenantAnthropicKey } from "../../../../../../lib/ai/anthropicKey.js";
-import { getTenantAnthropicModel } from "../../../../../../lib/ai/anthropicModel.js";
+import { getTenantIaKey, getTenantIaModel } from "../../../../../../lib/ai/proveedorIa.js";
 import { demoForcesFakeAi } from "../../../../../../lib/demo/isDemo.js";
 import { vetoAi } from "../../../../../../lib/ai/aiAccess.js";
 import { logClinicaAudit } from "../../../../../../lib/clinica/audit.js";
@@ -58,7 +57,7 @@ export const POST = withTenant(async (request, rc, ctx) => {
     if (veto) return veto;
 
     const esFake = demoForcesFakeAi(ctx);
-    const apiKey = esFake ? null : getTenantAnthropicKey(ctx);
+    const apiKey = esFake ? null : getTenantIaKey(ctx);
     if (!esFake && !apiKey) {
       return error("Este cliente no tiene configurada la clave de IA (Configuración → IA)", 503);
     }
@@ -72,7 +71,7 @@ export const POST = withTenant(async (request, rc, ctx) => {
 
     const { propuesta, avisos } = esFake
       ? fakePulirInforme({ contentSections: cs })
-      : await pulirInforme({ contentSections: cs, paciente, centro: perfilDelCentro(ctx.tenant), apiKey, model: getTenantAnthropicModel(ctx) });
+      : await pulirInforme({ contentSections: cs, paciente, centro: perfilDelCentro(ctx.tenant), apiKey, model: getTenantIaModel(ctx) });
 
     // Se audita QUÉ apartados se propusieron, nunca su texto: el contenido de un
     // informe clínico no se duplica en master.audit_logs.

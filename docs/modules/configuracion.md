@@ -13,7 +13,7 @@
 | **Lógica** | `lib/configuracion/pestanas.js` (**el reparto en zonas y qué módulo hace útil cada tarjeta**) · `lib/tenant/normalizarCentro.js` (28/08/2026: qué se guarda en `settings.centro` —recorta, tira las sedes vacías y descarta lo que no es texto—; `LIMITES`, `normalizarCentro`, `normalizarSede`, `centroVacio`) · `lib/configuracion/avisoCambio.js` (recibo por correo de cada cambio, enviado con la cuenta de Salamandra) · `lib/crypto/secretBox.js` (AES-256-GCM, prefijo `enc:v1:`) · resolvers que LEEN lo que aquí se guarda: `lib/ai/anthropicKey.js`, `lib/ai/anthropicModel.js` (`ANTHROPIC_MODELS`, Haiku por defecto desde el 11/09/2026; `parametrosDeRazonamiento`) · `lib/ai/usoDeIA.js` + `lib/ai/precios.js` (contabilidad de cada llamada en `master.ai_uso`) · `lib/ai/cacheDeRespuestas.js`, `lib/ai/openaiKey.js`, `lib/ai/aiAccess.js` (`vetoAi`, candado `settings.aiAccess`), `lib/outreach/resendConfig.js`, `lib/payments/stripeConfig.js`, `lib/analytics/cloudflareConfig.js`, `lib/whatsapp/whatsappConfig.js`, `lib/citas/videollamada.js` (`settings.citas.meetModo`), `lib/citas/coloresBloqueo.js` · back-office: `lib/provisioning/credencialesCliente.js` (solo escribir), `lib/provisioning/contactoCliente.js` (`settings.contacto`) · plantilla del recibo: `lib/email/templates/configuracion/cambioAplicado.js` |
 | **UI** | `modules/config/ConfigModule.jsx` (el armazón: pestañas, aviso de solo-lectura y la sección fiscal) + `modules/config/tarjetas/` (un fichero por pestaña: `Empresa`, `Conexiones`, `Agenda`, `Reservas`, `Portal`, `Modulos`, `Cuenta`, más `DatosCentro.jsx` —la tarjeta «Datos del centro», 28/08/2026— y `ui.jsx` con `BotonZona`, `Tarjeta` —atenúa y explica—, `Section`, `Field`; partido el 27/08/2026) · no hay `components/config/`; usa `components/ui/Select.jsx` y `components/ui/HelpTooltip.jsx` |
 | **Modelos** | `models/master/Tenant.model.js` — todo va en `master.tenants.settings` (JSONB: `brand`, `integrations`, `aiAccess`, `citas`, `clientes`, `centro`, `contacto`), sin migración · `models/tenant/AiPermission.model.js` (`ai_permissions`: solicitudes y concesiones del candado de IA) · `models/master/AuditLog.model.js` (`master.audit_logs`) recibe cada cambio, sin el valor de los secretos |
-| **Interruptores y parámetros** | ninguno que lea el código (no hay fila en `tenant_modules`). Lo que esta pantalla escribe vive en `master.tenants.settings`, no en `featureFlags`: `integrations.*` (Anthropic, OpenAI, Google Places, Resend, Stripe, WhatsApp, Cloudflare; los secretos cifrados, `anthropicModel` en claro), `aiAccess` (`libre` / `restringido`), `citas.*` (`meetModo`, `recordatoriosCitas`, `agendaCompartida`, `avisosWhatsapp`, `portalBloqueoImpago`, `cancelacionBloqueada`, `reservaOnlineCerrada`, `formularioObligatorio`, `contratoObligatorio`, `soloConPago`, `identidadObligatoria`, `formularioUrl`, `portalUrl`, `reservaUrl`, `colorBloqueos`), `clientes.categoriasExternas`, `centro` (los datos que imprime el informe clínico), `brand`, `name` |
+| **Interruptores y parámetros** | ninguno que lea el código (no hay fila en `tenant_modules`). Lo que esta pantalla escribe vive en `master.tenants.settings`, no en `featureFlags`: `integrations.*` (Anthropic, OpenAI, Google Places, Resend, Stripe, WhatsApp, Cloudflare; los secretos cifrados; en claro `aiProvider` —con qué IA se redacta, 12/09/2026—, `anthropicModel` y `openaiModel`), `aiAccess` (`libre` / `restringido`), `citas.*` (`meetModo`, `recordatoriosCitas`, `agendaCompartida`, `avisosWhatsapp`, `portalBloqueoImpago`, `cancelacionBloqueada`, `reservaOnlineCerrada`, `formularioObligatorio`, `contratoObligatorio`, `soloConPago`, `identidadObligatoria`, `formularioUrl`, `portalUrl`, `reservaUrl`, `colorBloqueos`), `clientes.categoriasExternas`, `centro` (los datos que imprime el informe clínico), `brand`, `name` |
 | **Pantallas propias** | ninguna (`app/(dashboard)/configuracion/page.jsx` no tiene mapa `UI_OVERRIDES`) |
 | **Scripts** | no hay activación: no es módulo · `_hechos/encrypt-tenant-secrets.js` (cifra en reposo claves guardadas antes en claro; idempotente) · `migrate-ai-permissions.js` (crea `ai_permissions` en todos los schemas) · `configure-stripe-tenant.js` (claves de Stripe leídas de variables de entorno, nunca de argumentos) · solo lectura: `inspect-tenant-modules.js <slug>` |
 | **Pruebas** | `scripts/_smoke-config-pestanas.mjs` (`node:test`, 23/08/2026, ligera, en `npm test`): el reparto en zonas, que ninguna tarjeta se cae ni se duplica, y que el aviso «necesita el módulo X» solo sale cuando falta de verdad · `scripts/_smoke-datos-centro.mjs` (`node:test`, 28/08/2026, ligera, en `npm test`): lo que se guarda en `settings.centro` —que la forma no cambia nunca, que lo que no es texto no entra, que las sedes vacías se tiran y cuándo se BORRA la clave— · `_smoke-backoffice-ciclo.mjs` (base de datos; el camino del back-office: la clave se guarda cifrada, no se devuelve jamás, a una demo no se le pone) · `scripts/_smoke-plantillas-resto-layout.mjs` (`node:test`, 21/08/2026, ligera, en `npm test`) fija el recibo de cambio de configuración (`configuracion/cambioAplicado`): que el asunto avisa distinto según haya tocado o no una credencial, que traduce las tres acciones (puesta / cambiada / borrada) y que **NUNCA lleva el valor de una credencial**, solo qué pasó con ella · nada cubre `/api/tenant/settings` ni `/api/ai-permisos` directamente; `_smoke-retencion-viva-o-muerta.mjs` solo usa `secretBox` para sembrar |
@@ -58,7 +58,7 @@ El reparto es por PREGUNTA, no por orden de llegada:
 | Zona | La pregunta que responde | Tarjetas |
 | --- | --- | --- |
 | **Empresa** | ¿Quién eres? | **Datos del centro** (lo que imprime el informe clínico) · Datos fiscales · Descripción de empresa y líneas de negocio |
-| **Conexiones** | ¿Con qué te conectas? | Anthropic, OpenAI, Google Places, Resend (+ remitente), Cloudflare, WhatsApp · Cobro online con Stripe |
+| **Conexiones** | ¿Con qué te conectas? | **Con qué IA se redacta** (Claude o ChatGPT, 12/09/2026), Anthropic, OpenAI, Google Places, Resend (+ remitente), Cloudflare, WhatsApp · Cobro online con Stripe |
 | **Agenda** | ¿Cómo funciona tu agenda? | Recordatorios · Agenda compartida · Color de bloqueos · Videollamada · Avisos por WhatsApp · **Semana de lunes a viernes** (02/09/2026: `settings.citas.semanaLaboral`, `lv`/`completa`; la regla y las horas de la rejilla en `lib/citas/vistaAgenda.js`) |
 | **Reserva online** | ¿Qué puede reservar la gente sola? | Reserva abierta/cerrada · Cancelación · Las cuatro puertas · Página de reservas |
 | **Portal del cliente** | ¿Qué ve luego en su área? | Área privada · Bloqueo por impago |
@@ -111,8 +111,10 @@ una contra quien LEE cada credencial, no por dónde caía en la pantalla:
 - **Stripe cuelga de `citas`, no de `billing`.** Todo lo que cobra pasa por
   `hasModule("citas")` y no genera factura (`pagos.md`). Es la que más se
   presta a error, porque «cobrar» suena a Facturación.
-- **Whisper (OpenAI) solo lo usa Clínica**: su único consumidor es
-  `/api/clinica/sessions/transcribe`.
+- **OpenAI es universal desde el 12/09/2026.** Hasta entonces solo la usaba
+  Whisper (`/api/clinica/sessions/transcribe`) y por eso se rotulaba «Clínica»;
+  ahora es también el proveedor con el que se puede REDACTAR todo lo que
+  redacta Anthropic (`lib/ai/proveedorIa.js`), así que va sin rótulo.
 - **La puerta de admisión depende de `formularios`**, no de `citas`: exigir el
   formulario antes de reservar solo tiene efecto si hay bandeja donde caiga.
 - **Anthropic y WhatsApp son universales** — ocho endpoints de seis módulos el
@@ -234,8 +236,9 @@ Places, 07/2026); hoy:
 
 | Tarjeta | Clave | La usa | Plataforma |
 | ------- | ----- | ------ | ---------- |
-| **Anthropic (Claude)** | `anthropicApiKey` (+ selector `anthropicModel`) | La IA de TODO el CRM: Outreach (`/analizar`), sesiones e informes clínicos, Proyectos, Soporte, Citas, Calendario, asistente | console.anthropic.com |
-| **OpenAI (Whisper)** | `openaiApiKey` | Transcripción de audio de sesiones clínicas (voz → texto) con la API de Whisper | platform.openai.com |
+| **Con qué IA se redacta** (12/09/2026) | `aiProvider` (`anthropic` por defecto / `openai`, en claro) | Decide cuál de las dos siguientes escribe TODO lo que redacta la IA. Debajo, el consumo estimado del mes (`ConsumoIA.jsx`). Avisa en ámbar si el proveedor elegido no tiene clave | — |
+| **Anthropic (Claude)** | `anthropicApiKey` (+ selector `anthropicModel`) | Con Claude elegido: Outreach (`/analizar`), sesiones e informes clínicos, Proyectos, Soporte, Citas, Calendario, actas, Mailing, asistente | console.anthropic.com |
+| **OpenAI (Whisper y ChatGPT)** | `openaiApiKey` (+ selector `openaiModel`, 12/09/2026) | SIEMPRE la transcripción de audio de sesiones clínicas (voz → texto) con Whisper; y con ChatGPT elegido, todo lo de la fila de arriba (`lib/ai/openai.js`) | platform.openai.com |
 | **WhatsApp (Meta Cloud API)** | `whatsappToken` (+ `whatsappPhoneNumberId`, en claro) | Avisos de cita por WhatsApp (`lib/whatsapp/whatsappConfig.js`); ver más abajo | developers.facebook.com |
 | **Google Cloud (Places)** | `googlePlacesApiKey` | `"Buscar nuevos"` de Google Maps (Outreach) | console.cloud.google.com |
 | **Cloudflare (visitas de la web)** | `cloudflareApiToken` (+ `cloudflareAccountId`, `cloudflareSiteTag`, en claro; `ready` solo con las piezas) | Módulo Analíticas (`lib/analytics/cloudflareConfig.js`). El token se valida por FORMA al pegarlo (≥30 caracteres `[A-Za-z0-9_-]`) | dash.cloudflare.com |
@@ -261,10 +264,29 @@ esconde sola con el 403 de quien no tiene Clínica).
 > por-tenant, cifrada; resolver `lib/ai/openaiKey.js`). Luego Claude hace el
 > resumen/estructura (texto → sesión).
 
+> **Con qué IA se redacta (12/09/2026):** Rodrigo: «un par de clientes quieren
+> hacer con ChatGPT lo que hace Claude, con su clave de OpenAI». La tarjeta
+> nueva, delante de las dos claves, guarda `settings.integrations.aiProvider`
+> (`anthropic` por defecto, `openai`) y decide el proveedor de TODO lo que
+> redacta la IA; Whisper no entra (siempre OpenAI). Las veinte rutas piden
+> `getTenantIaKey(ctx)` / `getTenantIaModel(ctx)` (`lib/ai/proveedorIa.js`) y
+> los dos envoltorios despachan por el id del modelo: `gpt-…` →
+> `lib/ai/openai.js` (sin SDK, `fetch` a Chat Completions, misma `{ texto,
+> parada }`, misma caché de respuestas, misma fila en `master.ai_uso`); lo demás
+> → Anthropic. Modelos de OpenAI: `OPENAI_MODELS` (`lib/ai/openaiModel.js`;
+> **GPT-5.6 Luna por defecto** · Terra · Sol, precios en `precios.js`). Los
+> errores de OpenAI (`proveedor: "openai"`; su «sin saldo» es un 429
+> `insufficient_quota`) los traduce el mismo `errorLegible.js` nombrando la
+> cuenta que toca. Decisión entera:
+> `docs/decisions/2026-09-12-la-ia-de-texto-se-elige-por-proveedor.md`. Prueba:
+> `scripts/_smoke-proveedor-ia.mjs`. La llamada real a OpenAI no se ha podido
+> probar en local (sin clave): el primer centro que lo encienda es la prueba.
+
 > **Modelo de Claude (selector):** debajo de la clave de Anthropic hay un selector de
 > modelo — **Haiku (por defecto desde el 11/09/2026)** · Sonnet · Opus. Se guarda en
 > `settings.integrations.anthropicModel` (sin cifrar, no es secreto) y se aplica a
-> **TODO el CRM** vía `getTenantAnthropicModel(ctx)` (`lib/ai/anthropicModel.js`).
+> **TODO el CRM** —cuando el proveedor elegido es Claude— vía `getTenantIaModel(ctx)`
+> (`lib/ai/proveedorIa.js` → `getTenantAnthropicModel`, `lib/ai/anthropicModel.js`).
 > Haiku por defecto porque Aumenta se quedó sin saldo en diez días con Sonnet: un
 > registro dictado costaba 0,07-0,12 $ y con Haiku ~0,015 $ (las terapeutas lo
 > dieron por bueno). Lista de modelos admitidos: `ANTHROPIC_MODELS` (misma fuente
@@ -282,7 +304,8 @@ esconde sola con el 403 de quien no tiene Clínica).
 > usuario viajan por `AsyncLocalStorage` desde `withTenant`, la acción la apunta
 > `vetoAi`; best-effort, nunca rompe una llamada; migración
 > `scripts/migrate-ai-uso.js`, ONE_OFF de master). Y (4) **«Consumo estimado de
-> este mes»** dentro de la tarjeta de Anthropic, solo admins
+> este mes»** dentro de la tarjeta «Con qué IA se redacta» (hasta el 12/09/2026,
+> en la de Anthropic), solo admins
 > (`modules/config/tarjetas/ConsumoIA.jsx` ← `GET /api/tenant/ia/consumo`): total
 > del mes y del anterior en $ y ≈ €, por acción, llamadas devueltas sin coste y
 > minutos de Whisper. Es una estimación con precios públicos; la cifra oficial
@@ -445,8 +468,8 @@ cualquiera.
 
 | Método | Qué hace |
 | ------ | -------- |
-| `GET` | Devuelve `name`, `slug`, `plan`, `readOnly` (la demo), `brand`, `aiAccess`, `meetModo`, `salasVideollamada`, los diez booleanos de Citas (`recordatoriosCitas`, `agendaCompartida`, `portalBloqueoImpago`, `cancelacionBloqueada`, `reservaOnlineCerrada`, `avisosWhatsapp`, `formularioObligatorio`, `contratoObligatorio`, `soloConPago`, `identidadObligatoria`), `formularioUrl`, `portalUrl`, `reservaUrl`, `colorBloqueos`, `categoriasExternas`, `centro` (siempre con sus cinco claves, aunque en la base no haya nada) e `integrations: { anthropic:{configured,hint,model}, googlePlaces, openai, cloudflare:{…,accountId,siteTag,ready}, whatsapp:{…,phoneNumberId}, resend:{…,fromEmail,replyTo}, stripe:{…,publishableKey,webhook,ready,liveMode} }`. Cada clave, solo `{ configured, hint }`; nunca en claro, y **en la demo ni la pista** (`hint: null`) · desde el 02/09/2026 también `semanaLaboral` («lv»/«completa») y `coordinadoras` (ids de equipo), que el `PATCH` acepta con los mismos nombres |
-| `PATCH` | Acepta `name`, `brand`; los secretos `anthropicApiKey`, `openaiApiKey`, `googlePlacesApiKey`, `resendApiKey`, `whatsappToken`, `cloudflareApiToken`, `stripeSecretKey`, `stripeWebhookSecret` (cifrados con `applyKey`; **500 si falta `SETTINGS_ENCRYPTION_KEY`**, para no guardar nunca uno en claro); los planos `anthropicModel` (lista cerrada), `resendFromEmail`, `resendReplyTo`, `whatsappPhoneNumberId`, `cloudflareAccountId`, `cloudflareSiteTag`, `stripePublishableKey`; `aiAccess` (`libre`/`restringido`); `meetModo` (`manual`/`automatico`); los diez booleanos de Citas; `formularioUrl`, `portalUrl`, `reservaUrl` (solo http(s) absolutas: se le sirven a un tercero en un enlace); `colorBloqueos` (hex); `categoriasExternas` (lista, se guarda limpia y deduplicada); `centro` (objeto; `undefined` = no se toca, `null` o todo vacío = se borra la clave; se guarda normalizado por `lib/tenant/normalizarCentro.js`, y si no es un objeto → 400). Calcula el diff, audita `configuracion.updated` (sin el valor de los secretos), manda el recibo por correo e invalida la caché de tenant |
+| `GET` | Devuelve `name`, `slug`, `plan`, `readOnly` (la demo), `brand`, `aiAccess`, `meetModo`, `salasVideollamada`, los diez booleanos de Citas (`recordatoriosCitas`, `agendaCompartida`, `portalBloqueoImpago`, `cancelacionBloqueada`, `reservaOnlineCerrada`, `avisosWhatsapp`, `formularioObligatorio`, `contratoObligatorio`, `soloConPago`, `identidadObligatoria`), `formularioUrl`, `portalUrl`, `reservaUrl`, `colorBloqueos`, `categoriasExternas`, `centro` (siempre con sus cinco claves, aunque en la base no haya nada) e `integrations: { proveedorIa, anthropic:{configured,hint,model}, googlePlaces, openai:{configured,hint,model}, cloudflare:{…,accountId,siteTag,ready}, whatsapp:{…,phoneNumberId}, resend:{…,fromEmail,replyTo}, stripe:{…,publishableKey,webhook,ready,liveMode} }`. Cada clave, solo `{ configured, hint }`; nunca en claro, y **en la demo ni la pista** (`hint: null`) · desde el 02/09/2026 también `semanaLaboral` («lv»/«completa») y `coordinadoras` (ids de equipo), que el `PATCH` acepta con los mismos nombres |
+| `PATCH` | Acepta `name`, `brand`; los secretos `anthropicApiKey`, `openaiApiKey`, `googlePlacesApiKey`, `resendApiKey`, `whatsappToken`, `cloudflareApiToken`, `stripeSecretKey`, `stripeWebhookSecret` (cifrados con `applyKey`; **500 si falta `SETTINGS_ENCRYPTION_KEY`**, para no guardar nunca uno en claro); los planos `anthropicModel` y `openaiModel` (listas cerradas), `aiProvider` (`anthropic`/`openai`, 12/09/2026), `resendFromEmail`, `resendReplyTo`, `whatsappPhoneNumberId`, `cloudflareAccountId`, `cloudflareSiteTag`, `stripePublishableKey`; `aiAccess` (`libre`/`restringido`); `meetModo` (`manual`/`automatico`); los diez booleanos de Citas; `formularioUrl`, `portalUrl`, `reservaUrl` (solo http(s) absolutas: se le sirven a un tercero en un enlace); `colorBloqueos` (hex); `categoriasExternas` (lista, se guarda limpia y deduplicada); `centro` (objeto; `undefined` = no se toca, `null` o todo vacío = se borra la clave; se guarda normalizado por `lib/tenant/normalizarCentro.js`, y si no es un objeto → 400). Calcula el diff, audita `configuracion.updated` (sin el valor de los secretos), manda el recibo por correo e invalida la caché de tenant |
 
 Semántica de las claves en `PATCH`:
 

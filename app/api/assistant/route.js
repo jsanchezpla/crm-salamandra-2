@@ -3,9 +3,8 @@ import { withTenant } from "../../../lib/tenant/withTenant.js";
 import { ok, error, serverError } from "../../../lib/utils/apiResponse.js";
 import { findRelevant } from "../../../lib/assistant/knowledge.js";
 import { answerQuestion } from "../../../lib/assistant/answer.js";
-import { getTenantAnthropicKey } from "../../../lib/ai/anthropicKey.js";
 import { vetoAi } from "../../../lib/ai/aiAccess.js";
-import { getTenantAnthropicModel } from "../../../lib/ai/anthropicModel.js";
+import { getTenantIaKey, getTenantIaModel } from "../../../lib/ai/proveedorIa.js";
 import { filtroPorAtributos } from "../../../lib/utils/busquedaDb.js";
 
 const MAX_MSGS = 12;
@@ -61,8 +60,8 @@ export const POST = withTenant(async (request, _rc, ctx) => {
 
     const relevant = findRelevant(query);
     const clients = await searchClients(ctx.tenantModels, query);
-    const apiKey = getTenantAnthropicKey(ctx);
-    const model = getTenantAnthropicModel(ctx);
+    const apiKey = getTenantIaKey(ctx);
+    const model = getTenantIaModel(ctx);
 
     let result;
     try {

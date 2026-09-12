@@ -2,8 +2,7 @@ import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { error, forbidden } from "../../../../../../lib/utils/apiResponse.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../../../../../../lib/utils/errors.js";
 import { isAdminRole, isLeadOfProject } from "../../../../../../lib/projects/projectAuth.js";
-import { getTenantAnthropicKey } from "../../../../../../lib/ai/anthropicKey.js";
-import { getTenantAnthropicModel } from "../../../../../../lib/ai/anthropicModel.js";
+import { getTenantIaKey, getTenantIaModel } from "../../../../../../lib/ai/proveedorIa.js";
 import { vetoAi } from "../../../../../../lib/ai/aiAccess.js";
 import { demoForcesFakeAi } from "../../../../../../lib/demo/isDemo.js";
 import { complete } from "../../../../../../lib/outreach/analysis/anthropic.js";
@@ -117,9 +116,9 @@ export const POST = withTenant(async (request, { params }, ctx) => {
 
     // Patrón demo Caso B: la demo pública simula la propuesta (sin coste).
     const esFake = demoForcesFakeAi(ctx);
-    const apiKey = esFake ? null : getTenantAnthropicKey(ctx);
+    const apiKey = esFake ? null : getTenantIaKey(ctx);
     if (!esFake && !apiKey) return error(NO_KEY_MSG, 503);
-    const model = getTenantAnthropicModel(ctx);
+    const model = getTenantIaModel(ctx);
 
     /*
      * Desde aquí la respuesta ya viaja (`respuestaConLatido`): lo que puede

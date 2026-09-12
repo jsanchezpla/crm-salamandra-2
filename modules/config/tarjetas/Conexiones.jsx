@@ -10,11 +10,12 @@
 import { useEffect, useState } from "react";
 import { EVENTOS_WEBHOOK_STRIPE } from "../../../lib/payments/eventosWebhook.js";
 import Select from "../../../components/ui/Select.jsx";
+import { PROVEEDORES_IA } from "../../../lib/ai/proveedores.js";
 import { inputCls } from "./ui.jsx";
 export const AI_PROVIDERS = {
   anthropic: {
     title: "Anthropic (Claude)",
-    subtitle: "IA de todo el CRM: análisis de leads (Outreach) y resumen de sesiones clínicas. El modelo elegido se aplica en todo.",
+    subtitle: "Redacta todo lo que escribe la IA del CRM —registros, informes, actas, correos, análisis de leads, el asistente— cuando el proveedor elegido arriba es Claude. El modelo elegido se aplica en todo.",
     field: "anthropicApiKey",
     prefix: "sk-ant-",
     platformUrl: "https://console.anthropic.com/settings/keys",
@@ -45,8 +46,8 @@ export const AI_PROVIDERS = {
     note: "Meta cobra por conversación iniciada por el negocio. El primer mensaje a alguien que no te ha escrito en 24h debe usar una plantilla aprobada por Meta.",
   },
   openai: {
-    title: "OpenAI (Whisper)",
-    subtitle: "Transcripción de audio de sesiones clínicas (voz → texto) con la API de Whisper. Luego Claude resume la sesión.",
+    title: "OpenAI (Whisper y ChatGPT)",
+    subtitle: "Siempre transcribe el audio de las sesiones clínicas (voz → texto) con Whisper. Y si el proveedor elegido arriba es ChatGPT, también redacta con el modelo de abajo.",
     field: "openaiApiKey",
     prefix: "sk-",
     platformUrl: "https://platform.openai.com/api-keys",
@@ -59,7 +60,7 @@ export const AI_PROVIDERS = {
       "Copia la clave (empieza por sk-). Solo se muestra una vez.",
       "Pégala abajo y pulsa Guardar.",
     ],
-    note: "Solo se usa Whisper para transcribir; el coste es muy bajo (~0,006 $ por minuto de audio).",
+    note: "Transcribir cuesta muy poco (~0,006 $ por minuto de audio). Redactar con ChatGPT es de pago por uso, como con Claude: añade saldo en Settings → Billing dentro de la plataforma.",
   },
   googlePlaces: {
     title: "Google Cloud (Places)",
@@ -316,6 +317,45 @@ export function ApiKeyCard({ provider, status, isAdmin, onSave, onClear, models,
           />
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Con qué IA se redacta: Claude o ChatGPT (12/09/2026) ─────────────────────
+// Rodrigo: dos clientes quieren hacer con ChatGPT lo que el CRM hace con
+// Claude, con su clave de OpenAI. El interruptor va DELANTE de las dos tarjetas
+// de clave porque decide cuál de las dos se usa para escribir; la transcripción
+// de audio no entra aquí (siempre es Whisper, de OpenAI). `claves` es el estado
+// de las dos claves, para avisar si la del proveedor elegido no está puesta.
+export function ProveedorIaCard({ proveedor, isAdmin, onChange, claves, extra }) {
+  const elegido = PROVEEDORES_IA.find((p) => p.id === proveedor) ?? PROVEEDORES_IA[0];
+  const sinClave = !claves?.[elegido.id]?.configured;
+  return (
+    <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="font-display text-lg text-[var(--ink-900)]">Con qué IA se redacta</h3>
+          <p className="text-xs text-neutral-500 mt-1">
+            Registros de sesión, informes, actas, correos, análisis de leads y el asistente: todo lo que escribe la IA
+            sale del proveedor que elijas aquí, con su clave y su modelo. La transcripción de audio es siempre Whisper
+            (OpenAI), se elija lo que se elija.
+          </p>
+        </div>
+        <Select
+          disabled={!isAdmin}
+          value={elegido.id}
+          onChange={(v) => onChange?.(v)}
+          options={PROVEEDORES_IA.map((p) => ({ value: p.id, label: p.label }))}
+          className={inputCls + " sm:w-56 shrink-0"}
+        />
+      </div>
+      {sinClave && (
+        <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+          Has elegido {elegido.label} pero su clave no está puesta: la IA no responderá hasta que la pegues en la tarjeta
+          de {elegido.cuenta}, aquí debajo.
+        </p>
+      )}
+      {extra}
     </div>
   );
 }

@@ -274,7 +274,9 @@ test("la etiqueta «de qué módulo es esto»", async (t) => {
   await t.test("las universales NO llevan rótulo: su ausencia ya lo dice", () => {
     // Con el rótulo en todas partes, no llevarlo significa «vale para todo el
     // CRM». Repetirlo sobre Anthropic, Resend y el remitente sería ruido.
-    for (const clave of ["anthropic", "resend", "remitente", "whatsapp", "permisosIa"]) {
+    // Y desde el 12/09/2026 también OpenAI y el selector de proveedor: con
+    // ChatGPT se puede redactar todo, no solo transcribir en Clínica.
+    for (const clave of ["proveedorIa", "anthropic", "openai", "resend", "remitente", "whatsapp", "permisosIa"]) {
       assert.equal(TARJETAS[clave].requiere, null, `${clave} debería ser universal`);
       assert.equal(etiquetaDeModulo(clave), null, `${clave} no debería llevar rótulo`);
     }
@@ -283,7 +285,7 @@ test("la etiqueta «de qué módulo es esto»", async (t) => {
   await t.test("cada zona rotula lo que toca", () => {
     assert.equal(etiquetaDeModulo("derivaciones"), "Clínica o Pacientes");
     assert.equal(etiquetaDeModulo("consultasExternas"), "Clientes");
-    assert.equal(etiquetaDeModulo("openai"), "Clínica");        // Conexiones
+    assert.equal(etiquetaDeModulo("googlePlaces"), "Captación"); // Conexiones
     assert.equal(etiquetaDeModulo("cloudflare"), "Analíticas"); // Conexiones
     assert.equal(etiquetaDeModulo("recordatorios"), "Citas");   // Agenda
     assert.equal(etiquetaDeModulo("areaPrivada"), "Citas");     // Portal
@@ -321,11 +323,13 @@ test("las dependencias que NO son las que parecen", async (t) => {
     assert.equal(avisoDeTarjeta("stripe", con("citas")), null);
   });
 
-  await t.test("Whisper (OpenAI) solo lo usa Clínica", () => {
-    // Único consumidor: app/api/clinica/sessions/transcribe.
-    assert.deepEqual(TARJETAS.openai.requiere, ["clinica"]);
-    assert.equal(avisoDeTarjeta("openai", con("clinica")), null);
-    assert.ok(avisoDeTarjeta("openai", con("nutricion", "citas", "billing")));
+  await t.test("OpenAI es universal desde que también redacta (12/09/2026)", () => {
+    // Hasta ese día su único consumidor era Whisper (sessions/transcribe) y
+    // pedía Clínica. Ahora es el otro proveedor de TODO lo que redacta la IA
+    // (lib/ai/proveedorIa.js): un centro sin Clínica puede elegir ChatGPT.
+    assert.equal(TARJETAS.openai.requiere, null);
+    assert.equal(avisoDeTarjeta("openai", con("nutricion", "citas", "billing")), null);
+    assert.equal(TARJETAS.proveedorIa.requiere, null);
   });
 
   await t.test("Anthropic y WhatsApp son universales y no avisan nunca", () => {
