@@ -25,6 +25,7 @@
 
 import { useState } from "react";
 import { useDialogo } from "../ui/Dialogo.jsx";
+import { alcanceDeSerie, aplicarALasSiguientes, contarSiguientes } from "./siguientesDeLaCita.js";
 import {
   RESULTADOS_CITA,
   admiteResultado,
@@ -51,7 +52,7 @@ export default function CitasDelPaciente({ citas = [], patientId = null, onActua
   const [guardando, setGuardando] = useState(null);
   const [quitando, setQuitando] = useState(false);
   const [error, setError] = useState(null);
-  const { pedirTexto, confirmar, avisar, dialogo } = useDialogo();
+  const { pedirTexto, confirmar, avisar, elegir, dialogo } = useDialogo();
 
   /*
    * QUITAR LAS FUTURAS DE UNA VEZ (05/09/2026, AV-0049 de Aumenta: «al querer
@@ -109,8 +110,22 @@ export default function CitasDelPaciente({ citas = [], patientId = null, onActua
     }
   }
 
+  /*
+   * Poner el resultado de una cita. Y al CANCELAR, preguntar por las que
+   * vienen después (12/09/2026, Rodrigo: «que me proponga borrar o mover esa y
+   * todas las citas futuras, por si me he equivocado»).
+   *
+   * Solo al cancelar: completar una cita o marcar una falta es de ESE día y no
+   * se generaliza. Aquí los botones salen únicamente en citas que ya han
+   * empezado (`admiteResultado`), así que «las siguientes» son las que esa
+   * repetición tiene por delante — lo que se hace al dejar de venir a mitad de
+   * curso—. No es lo mismo que «Quitar las futuras», que se lleva TODAS las
+   * citas del paciente: esto solo las iguales a esta.
+   */
   async function poner(cita, clave) {
     const resultado = resultadoPorClave(clave);
+    // Se cuenta ANTES de tocarla: las hermanas se deducen de esta cita.
+    const serie = clave === "cancelada" ? await contarSiguientes(cita.id) : null;
     let motivo = null;
     if (resultado.motivo) {
       motivo = await pedirTexto({
@@ -119,6 +134,8 @@ export default function CitasDelPaciente({ citas = [], patientId = null, onActua
       });
       if (motivo === null) return; // se echó atrás
     }
+    const alcance = clave === "cancelada" ? await alcanceDeSerie("cancelar", { serie, elegir }) : "solo";
+    if (!alcance) return;
     setGuardando(cita.id);
     setError(null);
     try {
@@ -131,6 +148,12 @@ export default function CitasDelPaciente({ citas = [], patientId = null, onActua
       if (!j.ok) throw new Error(j.error || "No se pudo guardar");
       setAbierta(null);
       onActualizada?.(j.data);
+      if (alcance === "serie") {
+        await aplicarALasSiguientes("cancelar", { bookingId: cita.id, motivo, avisar });
+        // Con varias canceladas la lista de la ficha ya no dice la verdad: se
+        // vuelve a pedir, igual que tras una baja en bloque.
+        onDesprogramadas?.();
+      }
     } catch (e) {
       setError(e.message);
     } finally {

@@ -339,8 +339,29 @@ export function CitaDetalleModal({
   async function applySuggestion(s) {
     const payload = { scheduledAt: s.datetime, avisarPaciente: await preguntarSiAvisar(s.datetime) };
     if (s.teamMemberId) payload.teamMemberId = s.teamMemberId;
+    /*
+     * ¿Y las que vienen después? (12/09/2026). Solo se pregunta si la cita se
+     * queda con la MISMA profesional: cambiando de profesional, las de las
+     * semanas siguientes ya no son «iguales a esta» y moverlas sería otra cosa
+     * de la que nadie ha hablado.
+     */
+    const cambiaProfesional = Boolean(s.teamMemberId) && s.teamMemberId !== openBooking.teamMemberId;
+    const serie = cambiaProfesional ? null : await contarSiguientes(openBooking.id);
     const okp = await patchBooking(payload);
-    if (okp) { setSuggestOpen(false); setSuggestions([]); }
+    if (okp) {
+      setSuggestOpen(false);
+      setSuggestions([]);
+      const hecho = await ofrecerMoverSiguientes({
+        bookingId: openBooking.id,
+        serie,
+        anterior: openBooking.scheduledAt,
+        nuevo: new Date(s.datetime).toISOString(),
+        confirmar,
+        avisar,
+        ocupado: setSaving,
+      });
+      if (hecho?.hechas) onChanged({ ...openBooking, scheduledAt: s.datetime });
+    }
   }
   // Terapeuta no-admin: en vez de aplicar, MANDA la propuesta al centro (no es
   // definitivo hasta que el admin la aprueba).

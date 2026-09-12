@@ -677,7 +677,7 @@ semana a otra hora) se queda fuera, y dos repeticiones idénticas se ven como un
 
 Prueba: `_smoke-siguientes-iguales.mjs`.
 
-### Borrar y mover la serie entera, y en las cinco vías (12/09/2026, Rodrigo)
+### Borrar y mover la serie entera, y en todas las vías (12/09/2026, Rodrigo)
 
 «En las citas necesito que si borro o muevo una cita me proponga borrar o mover
 esa y todas las citas futuras, por si me he equivocado.» Lo del 11/09 solo
@@ -691,7 +691,7 @@ enero de 1970. Así que buscaba las hermanas de una cita de 1970 y contestaba
 SIEMPRE «0 siguientes». Arreglado con la fecha vacía descartada antes de
 construirla; se vio al probarlo en `sandbox` con una serie de cinco citas.
 
-**Las cinco vías, y CUÁNDO preguntan.** Mover pregunta DESPUÉS (la cita ya está
+**Dónde pregunta, y CUÁNDO.** Mover pregunta DESPUÉS (la cita ya está
 donde se quería, y decir que no deja a las demás como estaban); cancelar y
 borrar preguntan ANTES, porque una cita borrada no vuelve, y por eso son tres
 respuestas —«solo esta», «esta y las N siguientes», «dejarlo como está»
@@ -704,6 +704,8 @@ respuestas —«solo esta», «esta y las N siguientes», «dejarlo como está»
 | Ficha → «Eliminar» | pregunta el alcance con sus advertencias de siempre dentro |
 | Agenda → arrastrar | igual que «Cambiar hora» (la hora vieja sale de `info.oldEvent`) |
 | Agenda → cortar y pegar | igual, con la hora vieja de `cita.startStr` |
+| Ficha → hueco propuesto por la IA | igual, pero **solo si no cambia de profesional**: con otra persona las de las semanas siguientes ya no son iguales a esta |
+| Ficha del PACIENTE → «Cancelar» de una cita | pregunta el alcance; ahí los botones salen solo en citas ya empezadas, así que «las siguientes» son las que la repetición tiene por delante. No es «Quitar las futuras», que se lleva TODAS las del paciente |
 
 El texto de cada pregunta y el del resumen viven en
 `lib/citas/preguntaDeSerie.js` (sin un solo `import`: lo lee el navegador, y

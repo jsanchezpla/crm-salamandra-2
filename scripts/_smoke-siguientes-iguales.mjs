@@ -159,6 +159,7 @@ const MODAL = leer("modules/default/citas/CitaDetalleModal.jsx");
 const AGENDA = leer("modules/default/CitasModule.jsx");
 const ETIQUETAS = leer("lib/actividad/etiquetas.js");
 const BORRAR = leer("lib/citas/borrarCita.js");
+const FICHA = leer("components/citas/CitasDelPaciente.jsx");
 
 test("el endpoint de las siguientes sabe mover, cancelar y borrar", () => {
   assert.ok(RUTA.includes('body?.accion === "cancelar"'), "tiene que aceptar la cancelación en bloque");
@@ -181,7 +182,8 @@ test("el dinero frena el borrado, y quien llama se entera", () => {
 });
 
 test("la ficha de la cita cuenta las siguientes antes de mover, cancelar y borrar", () => {
-  assert.equal((MODAL.match(/contarSiguientes\(openBooking\.id\)/g) ?? []).length, 3);
+  // Cuatro: cambiar la hora, cancelar, borrar y aplicar un hueco de la IA.
+  assert.equal((MODAL.match(/contarSiguientes\(openBooking\.id\)/g) ?? []).length, 4);
   assert.ok(MODAL.includes('alcanceDeSerie("cancelar"'));
   assert.ok(MODAL.includes('alcanceDeSerie("borrar"'));
   const enBloque = MODAL.indexOf('aplicarALasSiguientes("borrar"');
@@ -196,4 +198,11 @@ test("arrastrar una cita y pegarla tras cortarla preguntan también", () => {
   const cuenta = AGENDA.indexOf("contarSiguientes(info.event.id)");
   const patch = AGENDA.indexOf("scheduledAt: nuevoIso", cuenta);
   assert.ok(cuenta > 0 && cuenta < patch, "hay que contar con la hora que la cita todavía tiene");
+});
+
+test("en la ficha del paciente la serie se ofrece SOLO al cancelar", () => {
+  assert.ok(FICHA.includes('clave === "cancelada" ? await contarSiguientes(cita.id) : null'), "cuenta antes, y solo al cancelar");
+  assert.ok(FICHA.includes('alcanceDeSerie("cancelar"'), "y pregunta con el alcance de cancelar");
+  // Completar una cita o marcar una falta es de ESE día: no se generaliza.
+  assert.ok(!/alcanceDeSerie\("(completada|falta)/.test(FICHA));
 });

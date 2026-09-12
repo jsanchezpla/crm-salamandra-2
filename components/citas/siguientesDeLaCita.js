@@ -7,10 +7,11 @@
  * equivocado»).
  *
  * ── POR QUÉ ESTO NO ESTÁ EN LA PANTALLA ────────────────────────────────────
- * La pregunta sale desde CINCO sitios: la ficha de la cita (al cambiar la
- * hora, al cancelarla y al borrarla), arrastrar una cita en el calendario y
- * pegarla tras cortarla. Son dos ficheros de 1.500 líneas cada uno
- * (`CitaDetalleModal.jsx` y `CitasModule.jsx`); con el `fetch` y el diálogo
+ * La pregunta sale desde SIETE sitios: la ficha de la cita (al cambiar la
+ * hora, al cancelarla, al borrarla y al aplicar un hueco propuesto por la IA),
+ * arrastrar una cita en el calendario, pegarla tras cortarla, y cancelar una
+ * cita desde la ficha del paciente, en tres ficheros distintos (dos de ellos de
+ * 1.500 líneas: `CitaDetalleModal.jsx` y `CitasModule.jsx`). Con el `fetch` y el diálogo
  * escritos en cada sitio, en un mes una vía preguntaría y otra no —que es
  * exactamente el fallo del que nace esto: arrastrar una cita no preguntaba
  * nada aunque la ficha ya lo hiciera desde el 11/09—.
