@@ -110,6 +110,22 @@ export function defineDiagnostico(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      /**
+       * El COBRO de la entrevista inicial (fila de `payments`), atado por id
+       * (12/09/2026, segunda entrega). La primera entrega lo encontraba por
+       * nota + fecha (`cobrosDeExpedientes`), que valía para enseñarlo pero no
+       * para DESCONTARLO: desde la respuesta de Aumenta, los 50 € de una
+       * entrevista ya cobrada se restan del producto al «Seguir», y para
+       * restar hay que saber sin adivinar cuál es. Lo escribe `parar` (el
+       * cobro que nace) o el alta que adopta una entrevista ya hecha. Null en
+       * los expedientes anteriores: para ellos sigue valiendo la búsqueda por
+       * nota + fecha. Sin FK: hay Clínica sin Facturación, y anular un cobro
+       * no puede llevarse el expediente.
+       */
+      entrevistaPaymentId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       /** El informe de valoración diagnóstica al que se une (segunda entrega). */
       informeId: {
         type: DataTypes.UUID,

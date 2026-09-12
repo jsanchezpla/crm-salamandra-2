@@ -163,13 +163,39 @@ describe("productos de diagnóstico", () => {
       conceptId: "b",
       texto: "Diagnóstico Simple",
       importeEuros: 350,
+      descuentoEuros: 0,
     });
-    assert.deepEqual(cobroDelProducto(completo, null), { conceptId: null, texto: "Diagnóstico completo", importeEuros: 650 });
+    assert.deepEqual(cobroDelProducto(completo, null), { conceptId: null, texto: "Diagnóstico completo", importeEuros: 650, descuentoEuros: 0 });
     assert.deepEqual(cobroDelProducto({ key: "x", nombre: "Sin precio", conceptId: null, precioEuros: null }, null), {
       conceptId: null,
       texto: "Sin precio",
       importeEuros: null,
+      descuentoEuros: 0,
     });
+  });
+
+  it("la entrevista ya cobrada se DESCUENTA del producto y la nota lo dice (12/09/2026, Aumenta)", () => {
+    const [simple, completo] = PRODUCTOS_DE_FABRICA;
+    assert.deepEqual(cobroDelProducto(completo, { id: "c", name: "Diagnóstico Completo", unitPrice: "650.00" }, { descuentoEuros: 50 }), {
+      conceptId: "c",
+      texto: "Diagnóstico Completo (descontada la entrevista inicial de 50 €)",
+      importeEuros: 600,
+      descuentoEuros: 50,
+    });
+    // Sin concepto, sobre el precio de caída; con céntimos, con coma.
+    const c = cobroDelProducto(simple, null, { descuentoEuros: "47.50" });
+    assert.equal(c.importeEuros, 302.5);
+    assert.equal(c.texto, "Diagnóstico simple (descontada la entrevista inicial de 47,50 €)");
+    // Nunca por debajo de 0.
+    assert.equal(cobroDelProducto({ key: "x", nombre: "Barato", conceptId: null, precioEuros: 30 }, null, { descuentoEuros: 50 }).importeEuros, 0);
+    // Sin precio no hay de dónde descontar: ni importe ni promesa en la nota.
+    const sin = cobroDelProducto({ key: "x", nombre: "Sin precio", conceptId: null, precioEuros: null }, null, { descuentoEuros: 50 });
+    assert.equal(sin.importeEuros, null);
+    assert.equal(sin.descuentoEuros, 0);
+    assert.equal(sin.texto, "Sin precio");
+    // Un descuento que no es un número, o negativo, es 0: lo de siempre.
+    assert.equal(cobroDelProducto(simple, null, { descuentoEuros: "abc" }).importeEuros, 350);
+    assert.equal(cobroDelProducto(simple, null, { descuentoEuros: -5 }).importeEuros, 350);
   });
 
   it("el cobro de la entrevista al parar: el concepto «Entrevista Inicial» si lo hay; si no, 50 € con su texto", () => {

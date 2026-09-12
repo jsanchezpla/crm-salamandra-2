@@ -90,6 +90,22 @@
  * lib/clinica/prepararSesion.js). Y las sesiones preparadas antes de que
  * existiera `bookingId` se adoptan por paciente + hora exacta la primera vez,
  * para que las que hoy se duplican dejen de hacerlo.
+ *
+ * ── UN REGISTRO DE DIAGNÓSTICO ES ESTE MISMO REGISTRO (12/09/2026, Rodrigo con
+ * Isa, Aumenta) ─────────────────────────────────────────────────────────────
+ * «Entradas por fecha y título que al final se unen con IA en el informe
+ * completo.» No es otra pantalla: es esta, con dos cosas más cuando el registro
+ * es de un expediente de diagnóstico (`?diagnostico=<id>` en la URL al
+ * estrenar, o `diagnosticoId` de la sesión al seguir):
+ *
+ *   · un TÍTULO («Sesión de diagnóstico 3», «Pruebas WISC-V»), porque es una
+ *     entrada de un índice; sin escribirlo, el expediente le pone el suyo;
+ *   · el chip de arriba con «Volver al expediente», y Cancelar / guardar vuelven
+ *     al expediente y no a la ficha: se vino de allí y allí está la lista.
+ *
+ * `diagnosticoId` viaja SOLO al crear (el servidor lo ata una vez y no se pisa;
+ * con cita, hereda el de la cita por encima de esto). La firma no cambia:
+ * `?prof=` ya trae al terapeuta asignado del expediente.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -102,6 +118,8 @@ import useAudios from "@/components/clinica/useAudios.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 import {
   fechaDePreparacion,
+  limpiarTitulo,
+  MAX_TITULO,
   paraInputLocal,
   payloadDePreparacion,
   plantillaDePreparacion,
@@ -110,6 +128,7 @@ import {
   proximasSesionesPendientes,
   sesionDeLaCita,
 } from "@/lib/clinica/prepararSesion.js";
+import { leerDiagnosticoDeLaUrl } from "@/lib/clinica/registroDeDiagnostico.js";
 import ApartadosEditor from "@/components/clinica/ApartadosEditor.jsx";
 import MaterialIA, { ACEPTA_AUDIO } from "@/components/clinica/MaterialIA.jsx";
 import EncargoIA from "@/components/clinica/EncargoIA.jsx";
@@ -260,6 +279,13 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
   // valoración inicial pide la de la entrevista. Solo estrenando: una sesión
   // que ya existe se abre con SU foto.
   const plantillaPedida = sessionId ? "" : plantillaDePreparacion(query.get("plantilla"));
+  // De qué EXPEDIENTE DE DIAGNÓSTICO es el registro y con qué título se
+  // propone (12/09/2026): `?diagnostico=<uuid>&titulo=`. Solo estrenando —al
+  // seguir una sesión, su `diagnosticoId` viene del GET y no se toca desde una
+  // URL—. Dos cadenas, por lo mismo que las de arriba: en los efectos no entra
+  // `query`.
+  const expedienteDeLaUrl = sessionId ? "" : leerDiagnosticoDeLaUrl(query).diagnosticoId;
+  const tituloDeLaUrl = sessionId ? "" : leerDiagnosticoDeLaUrl(query).titulo;
 
   const [patient, setPatient] = useState(null);
   const [loadingPatient, setLoadingPatient] = useState(true);
@@ -280,6 +306,10 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
   const yaHeredado = useRef(false);
   // La sesión que se está editando, ya cargada. `null` mientras se estrena una.
   const [sesion, setSesion] = useState(null);
+  // El TÍTULO del registro (12/09/2026): solo tiene sentido —y solo se enseña—
+  // cuando el registro es de un expediente de diagnóstico. Vacío quiere decir
+  // «el que le toque»: el expediente le pone «Sesión de diagnóstico N».
+  const [titulo, setTitulo] = useState("");
   // «Cargando» de VERDAD: mientras esto esté puesto no se pinta el formulario.
   // Es lo que evita que, llegando desde una cita que ya tiene registro, se vea
   // medio segundo un formulario en blanco y alguien se ponga a escribir en él.
@@ -490,6 +520,7 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
     const lista = suyos.length ? suyos : PLANTILLA_BASE.registro.apartados.map((a) => ({ ...a }));
     setSesion(s);
     setTerapeutaId(s.therapistId ?? "");
+    setTitulo(s.titulo ?? "");
     setApartados(lista);
     setPlantillaKey(s.contentSections?.[CLAVE_PLANTILLA] ?? plantillasDelCentro?.[0]?.key ?? "");
     setFecha(paraInputLocal(s.sessionDate));
@@ -864,6 +895,27 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
   }
 
   /**
+   * ── EL EXPEDIENTE DE DIAGNÓSTICO, SI LO HAY (12/09/2026) ─────────────────
+   * Estrenando, el de la URL; siguiendo, el de la sesión (que lo ató el
+   * servidor al crearla). Es lo que enciende el título, el chip de arriba y
+   * el sitio al que se vuelve al salir: quien viene del expediente vuelve al
+   * expediente, no a la ficha del paciente.
+   */
+  const diagnosticoId = sesion ? String(sesion.diagnosticoId ?? "") : expedienteDeLaUrl;
+  const urlDelExpediente = diagnosticoId ? `/clinica/diagnosticos/${diagnosticoId}` : null;
+  const destinoAlSalir = urlDelExpediente ?? `/pacientes/${id}`;
+
+  /**
+   * Lo que viaja del título: solo cuando el registro es de un expediente
+   * (fuera de ahí el campo ni se ve, y mandar `null` quitaría uno que hubiera).
+   * Vacío → `null`, que es lo que le dice al servidor «quítalo»: el expediente
+   * vuelve a ponerle el suyo por orden.
+   */
+  function tituloParaGuardar() {
+    return diagnosticoId ? { titulo: limpiarTitulo(titulo) } : {};
+  }
+
+  /**
    * Guardar una sesión que TODAVÍA NO SE HA DADO (flujo de la mañana del 26/08).
    * El cuerpo lo arma `payloadDePreparacion`, que NO manda los campos de la IA:
    * una sesión preparada no ha pasado por Whisper ni por Claude.
@@ -890,6 +942,7 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
             // Quién la da también se corrige desde aquí: el servidor descarta el
             // campo si no ha cambiado y rechaza a quien no sea del centro.
             ...(firma ? { therapistId: firma } : {}),
+            ...tituloParaGuardar(),
           },
           "Preparación guardada"
         );
@@ -905,6 +958,11 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
         // sin ella, la entrevista inicial se reabriría con el registro normal.
         plantilla: plantillaKey,
         apartados,
+        // De qué expediente de diagnóstico es y cómo se titula (12/09/2026).
+        // `payloadDePreparacion` solo los mete si vienen; con cita, el
+        // servidor hereda el expediente de ella por encima de esto.
+        diagnosticoId: diagnosticoId || null,
+        titulo: diagnosticoId ? titulo : null,
       });
       const r = await fetch("/api/clinica/sessions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const j = await r.json();
@@ -949,7 +1007,8 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
       setSaving(false);
       return;
     }
-    router.push(`/pacientes/${id}`);
+    // Al expediente de diagnóstico si el registro es de uno; si no, a la ficha.
+    router.push(destinoAlSalir);
   }
 
   // Un registro sin NADA escrito no es un registro: algo tiene que llevar.
@@ -993,6 +1052,9 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
         // elegido; el servidor lo descarta si es el mismo que ya estaba y
         // rechaza el que no sea del equipo del centro.
         ...(firma ? { therapistId: firma } : {}),
+        // El título, solo en un registro de diagnóstico (12/09/2026). Va en el
+        // alta y en el PATCH: se edita libremente.
+        ...tituloParaGuardar(),
       };
 
       // ── Editando: PATCH sobre la misma sesión ───────────────────────────
@@ -1027,6 +1089,10 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
         // De qué cita sale, si sale de una: es lo que hace que volver a esa
         // cita traiga ESTE registro y no uno nuevo (01/09/2026).
         ...(cita ? { bookingId: cita } : {}),
+        // De qué expediente de diagnóstico es (12/09/2026). SOLO al crear: el
+        // servidor lo escribe una vez y no lo pisa (con cita, hereda el de la
+        // cita por encima de esto; sin cita, exige que sea del mismo paciente).
+        ...(diagnosticoId ? { diagnosticoId } : {}),
         status: cerrar ? "published" : "registered",
         // Solo si pasó por la IA. `aiTranscription` guarda el MATERIAL entero
         // —la transcripción del audio, las notas pegadas, o las dos—: es de
@@ -1202,6 +1268,25 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
         <span className="text-neutral-700">{sesion ? "Registro de sesión" : "Nuevo registro"}</span>
       </nav>
 
+      {/* ── De un expediente de diagnóstico (12/09/2026) ──────────────────
+          Se dice arriba del todo, porque cambia adónde se vuelve al salir y
+          qué título lleva el registro; y se enlaza el expediente, que es de
+          donde se viene y donde está la lista de registros. */}
+      {urlDelExpediente && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 rounded-lg bg-sky-50 border border-sky-100 text-xs text-sky-900">
+          <span className="inline-flex items-center gap-1.5 font-medium">
+            <span className="w-1.5 h-1.5 rounded-full bg-sky-500" />
+            Registro de diagnóstico
+          </span>
+          <span className="text-sky-700">
+            Es una entrada del expediente de diagnóstico de {patient.firstName}: al guardar vuelves al expediente.
+          </span>
+          <Link href={urlDelExpediente} className="ml-auto font-medium underline hover:no-underline">
+            Volver al expediente
+          </Link>
+        </div>
+      )}
+
       {/* ── El registro ya cerrado (01/09/2026) ────────────────────────────
           Editar una nota clínica cerrada es legítimo —se corrige una errata,
           se añade lo que la familia contó después—, pero tiene que verse que
@@ -1250,13 +1335,39 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
           <div className="bg-white border border-neutral-100 rounded-xl p-5 lg:p-7">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
-                <div className="eyebrow mb-1">{sesion ? "Registro de sesión" : "Nuevo registro de sesión"}</div>
+                <div className="eyebrow mb-1">
+                  {diagnosticoId
+                    ? sesion
+                      ? "Registro de diagnóstico"
+                      : "Nuevo registro de diagnóstico"
+                    : sesion
+                      ? "Registro de sesión"
+                      : "Nuevo registro de sesión"}
+                </div>
                 <h1 className="font-display text-2xl lg:text-3xl text-[var(--ink-900)] tracking-tight">{patient.firstName} {patient.lastName}</h1>
                 <FirmaDeLaSesion equipo={equipo} valor={terapeutaId} onCambio={setTerapeutaId} nombre={therapistName} />
               </div>
-              <div>
-                <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1.5">Día y hora de la sesión</div>
-                <input type="datetime-local" className={ta} value={fecha} onChange={(e) => setFecha(e.target.value)} />
+              <div className="flex flex-wrap items-end gap-3">
+                {/* El título, solo en un registro de diagnóstico: es una
+                    entrada de un índice. Vacío, el expediente le pone el suyo
+                    (el del placeholder, que es el que le toca por orden). */}
+                {diagnosticoId && (
+                  <div className="w-full sm:w-64">
+                    <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1.5">Título</div>
+                    <input
+                      type="text"
+                      className={ta}
+                      value={titulo}
+                      maxLength={MAX_TITULO}
+                      placeholder={tituloDeLaUrl || "Sesión de diagnóstico"}
+                      onChange={(e) => setTitulo(e.target.value)}
+                    />
+                  </div>
+                )}
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1.5">Día y hora de la sesión</div>
+                  <input type="datetime-local" className={ta} value={fecha} onChange={(e) => setFecha(e.target.value)} />
+                </div>
               </div>
             </div>
           </div>
@@ -1410,7 +1521,7 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
                 Guárdala solo como preparación
               </button>
             </p>
-            <button onClick={() => router.push(`/pacientes/${id}`)} disabled={saving} className="text-xs px-4 py-2 text-neutral-500 hover:underline disabled:opacity-50">Cancelar</button>
+            <button onClick={() => router.push(destinoAlSalir)} disabled={saving} className="text-xs px-4 py-2 text-neutral-500 hover:underline disabled:opacity-50">Cancelar</button>
             {/* ── «…hasta que le dé a finalizar» (01/09/2026, Rodrigo) ──────
                 Cerrar el registro se hacía SOLO desde el cajón de la ficha, así
                 que el paso natural —escribo la sesión y la doy por terminada—
@@ -1478,6 +1589,21 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
               </p>
             )}
 
+            {/* El mismo título que en el registro completo: se prepara con él. */}
+            {diagnosticoId && (
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1.5">Título</div>
+                <input
+                  type="text"
+                  className={ta}
+                  value={titulo}
+                  maxLength={MAX_TITULO}
+                  placeholder={tituloDeLaUrl || "Sesión de diagnóstico"}
+                  onChange={(e) => setTitulo(e.target.value)}
+                />
+              </div>
+            )}
+
             <div>
               <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1.5">Día y hora de la sesión</div>
               <input
@@ -1507,7 +1633,7 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
             {adjuntosPrep}
 
             <div className="flex flex-wrap gap-2 justify-end pt-1">
-              <button onClick={() => router.push(`/pacientes/${id}`)} disabled={saving} className="text-xs px-4 py-2 text-neutral-500 hover:underline disabled:opacity-50">Cancelar</button>
+              <button onClick={() => router.push(destinoAlSalir)} disabled={saving} className="text-xs px-4 py-2 text-neutral-500 hover:underline disabled:opacity-50">Cancelar</button>
               <button onClick={() => setState(STATE.FORM)} disabled={saving} className="text-xs px-4 py-2 rounded-lg border border-neutral-200 hover:border-neutral-400 text-neutral-700 disabled:opacity-50">Hacer el registro completo</button>
               <button
                 onClick={guardarPreparacion}

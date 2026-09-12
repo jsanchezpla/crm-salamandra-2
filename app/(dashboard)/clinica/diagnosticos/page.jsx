@@ -18,31 +18,43 @@
  *   «Parar» / «Seguir»           solo dirección o quien lleve Facturación:
  *                                parar apunta el cobro de la entrevista (50 €);
  *                                seguir da un bono sin tope y el cobro del
- *                                producto (350 / 650 €). La confirmación dice
- *                                el importe que va a nacer, calculado por el
+ *                                producto (350 / 650 €, con la entrevista ya
+ *                                cobrada descontada). La confirmación dice el
+ *                                importe que va a nacer, calculado por el
  *                                servidor con la misma regla que lo apuntará.
  *   «Añadir horas»               a la agenda con la cita del bono; apagado si
  *                                no quedan horas (la agenda daría 422)
  *   «Desbloquear horas»          sube el tope, de media en media, auditado
- *   «Cerrar»                     a mano; la unión con el informe es la
- *                                segunda entrega
- *   «Informe de diagnóstico»     la ficha del paciente con el informe de
- *                                valoración diagnóstica preparado
+ *   «Cerrar»                     a mano
+ *   «Expediente»                 la ficha del expediente: registros de
+ *                                diagnóstico por fecha, citas e informe
+ *                                (segunda entrega, 12/09/2026)
+ *   «Informe»                    el informe de valoración, cuando ya existe
  *
  * Qué botones salen lo decide LA FILA de la API (`acciones`, cruzado con
- * estado y permiso); aquí solo se pintan y se confirman. Lo ve todo el equipo
- * con `clinica`; crear expediente, cualquiera del equipo.
+ * estado y permiso); aquí solo se pintan y se confirman. Las confirmaciones y
+ * las llamadas viven en `useAccionesDeDiagnostico`, el mismo hook que usa la
+ * ficha. Lo ve todo el equipo con `clinica`; crear expediente, cualquiera del
+ * equipo.
+ *
+ * ── «EMPEZAR DESDE LO QUE YA HAY» ──────────────────────────────────────────
+ * Debajo de la lista, plegado, el bloque de candidatos
+ * (`CandidatosDiagnostico`): los pacientes con citas de diagnóstico o
+ * entrevista inicial hecha y sin expediente. Su «Abrir expediente» abre el
+ * panel de alta con el paciente fijo, el terapeuta sugerido y la casilla de
+ * meter dentro lo que ya hay; al crear, se va a la ficha del expediente.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
-import { useDialogo } from "@/components/ui/Dialogo.jsx";
 import DiagnosticoFila from "@/components/clinica/DiagnosticoFila.jsx";
 import { LeyendaDeHoras } from "@/components/clinica/BarraDeHoras.jsx";
 import NuevoDiagnosticoPanel from "@/components/clinica/NuevoDiagnosticoPanel.jsx";
+import CandidatosDiagnostico from "@/components/clinica/CandidatosDiagnostico.jsx";
+import { useAccionesDeDiagnostico } from "@/components/clinica/useAccionesDeDiagnostico.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
-import { formatoHoras, puedeDesbloquear, HORAS_MAX_TOPE } from "@/lib/clinica/diagnostico.js";
 import { coincidePorNombre } from "@/lib/utils/busqueda.js";
 
 const FILTROS = [
@@ -51,27 +63,22 @@ const FILTROS = [
   { key: "todos", label: "Todos" },
 ];
 
-const euros = (n) => `${Number(n ?? 0).toLocaleString("es-ES", { minimumFractionDigits: 2 })} €`;
-
 export default function DiagnosticosPage() {
+  const router = useRouter();
   const [filtro, setFiltro] = useState("en_curso");
   const [mios, setMios] = useState(false);
   const [busca, setBusca] = useState("");
   const [data, setData] = useState(null);
   const [cargando, setCargando] = useState(true);
-  const [errorMsg, setErrorMsg] = useState(null);
-  const [okMsg, setOkMsg] = useState(null);
-  const [panelAbierto, setPanelAbierto] = useState(false);
-  // El expediente sobre el que hay una petición en vuelo: sus botones se apagan.
-  const [ocupadoId, setOcupadoId] = useState(null);
+  const [errorCarga, setErrorCarga] = useState(null);
+  // null = cerrado; {} = alta normal; { candidato } = desde «Empezar desde lo que ya hay».
+  const [panel, setPanel] = useState(null);
   // Si quien mira tiene acceso a Citas: sin él, los enlaces a la agenda darían 403.
   const [tieneCitas, setTieneCitas] = useState(true);
 
-  const { confirmar, avisar, pedirTexto, dialogo } = useDialogo();
-
   const cargar = useCallback(async () => {
     setCargando(true);
-    setErrorMsg(null);
+    setErrorCarga(null);
     try {
       const q = new URLSearchParams({ estado: filtro });
       if (mios) q.set("mios", "1");
@@ -80,7 +87,7 @@ export default function DiagnosticosPage() {
       if (!j.ok) throw new Error(j.error || "No se pudieron cargar los diagnósticos");
       setData(j.data);
     } catch (e) {
-      setErrorMsg(e.message);
+      setErrorCarga(e.message);
     } finally {
       setCargando(false);
     }
@@ -95,10 +102,15 @@ export default function DiagnosticosPage() {
       .catch(() => {});
   }, []);
 
-  const flash = (msg) => {
-    setOkMsg(msg);
-    setTimeout(() => setOkMsg(null), 5000);
-  };
+  /** Sustituye una fila por la que devuelve la API, sin recargar la lista entera. */
+  const reemplazar = useCallback(
+    (fila) => setData((d) => (d ? { ...d, expedientes: d.expedientes.map((e) => (e.id === fila.id ? fila : e)) } : d)),
+    []
+  );
+
+  const acciones = useAccionesDeDiagnostico({ cobroEntrevista: data?.cobroEntrevista ?? null, reemplazar, recargar: cargar });
+  const { flash } = acciones;
+  const errorMsg = errorCarga ?? acciones.errorMsg;
 
   // Memorizado para que el buscador de abajo no se recalcule en cada render.
   const expedientes = useMemo(() => data?.expedientes ?? [], [data]);
@@ -116,113 +128,6 @@ export default function DiagnosticosPage() {
         ? "Este centro no tiene un tipo de cita DIAGNÓSTICO: créalo en Citas → Tipos de cita"
         : null;
 
-  /** Sustituye una fila por la que devuelve la API, sin recargar la lista entera. */
-  const reemplaza = (fila) =>
-    setData((d) => (d ? { ...d, expedientes: d.expedientes.map((e) => (e.id === fila.id ? fila : e)) } : d));
-
-  async function llamar(exp, url, opciones, despues) {
-    setOcupadoId(exp.id);
-    setErrorMsg(null);
-    try {
-      const r = await fetch(url, { headers: { "Content-Type": "application/json" }, ...opciones });
-      const j = await r.json();
-      if (!j.ok) throw new Error(j.error || "No se pudo hacer");
-      await despues?.(j.data);
-    } catch (e) {
-      setErrorMsg(e.message);
-    } finally {
-      setOcupadoId(null);
-    }
-  }
-
-  function cambiarTerapeuta(exp, therapistId) {
-    return llamar(exp, `/api/clinica/diagnosticos/${exp.id}`, { method: "PATCH", body: JSON.stringify({ therapistId }) }, (d) => {
-      reemplaza(d.expediente);
-      flash(d.expediente.terapeuta ? `Ahora lo lleva ${d.expediente.terapeuta.nombre}` : "Diagnóstico sin terapeuta asignado");
-    });
-  }
-
-  async function parar(exp) {
-    const cobro = data?.cobroEntrevista;
-    const frase = cobro
-      ? `Nace un cobro pendiente de ${euros(cobro.importeEuros)} («${cobro.texto}») para la familia, que aparecerá en Cobros.`
-      : "Nace el cobro pendiente de la entrevista inicial para la familia.";
-    const ok = await confirmar({
-      titulo: `¿Parar el diagnóstico de ${exp.paciente?.nombre ?? "este paciente"}?`,
-      texto: `${frase}\n\nEl expediente pasa a «No continúa» y no admite más citas. No se puede volver a «En curso»: si la familia cambia de idea, se abre otro diagnóstico.`,
-      confirmar: "Parar el diagnóstico",
-    });
-    if (!ok) return;
-    return llamar(exp, `/api/clinica/diagnosticos/${exp.id}/parar`, { method: "POST" }, async (d) => {
-      await cargar();
-      flash(
-        d.cobro
-          ? `Diagnóstico parado · cobro pendiente de ${euros(d.cobro.importe)} apuntado en Cobros`
-          : `Diagnóstico parado${d.avisos?.length ? ` · ${d.avisos.join(" ")}` : ""}`
-      );
-    });
-  }
-
-  async function seguir(exp) {
-    const producto = (data?.productos ?? []).find((p) => p.key === exp.producto?.key) ?? null;
-    const importe = producto?.cobro?.importeEuros ?? producto?.precioEuros ?? null;
-    const frase =
-      importe !== null
-        ? `Nace un bono DIAGNÓSTICO sin tope de sesiones para el paciente y un cobro pendiente de ${euros(importe)}${producto?.cobro?.texto ? ` («${producto.cobro.texto}»)` : ""}, que aparecerá en Cobros. La entrevista inicial va dentro de ese precio.`
-        : `Nace un bono DIAGNÓSTICO sin tope de sesiones para el paciente. No hay precio para «${exp.producto?.nombre}»: el bono nacerá sin cobro.`;
-    const ok = await confirmar({
-      titulo: `¿Seguir con el diagnóstico de ${exp.paciente?.nombre ?? "este paciente"}?`,
-      texto: `${frase}\n\nDesde entonces «Añadir horas» apunta citas contra ese bono hasta las ${formatoHoras(exp.horasMax)} h del producto.`,
-      confirmar: "Seguir con el diagnóstico",
-    });
-    if (!ok) return;
-    return llamar(exp, `/api/clinica/diagnosticos/${exp.id}/seguir`, { method: "POST" }, async (d) => {
-      await cargar();
-      flash(
-        d.cobro
-          ? `En curso · bono sin tope creado y cobro pendiente de ${euros(d.cobro.importe)} apuntado en Cobros${d.avisos?.length ? ` · ${d.avisos.join(" ")}` : ""}`
-          : `En curso · bono sin tope creado${d.avisos?.length ? ` · ${d.avisos.join(" ")}` : ""}`
-      );
-    });
-  }
-
-  async function desbloquear(exp) {
-    const actual = Number(exp.horasMax) || 0;
-    const texto = await pedirTexto({
-      titulo: "Desbloquear horas",
-      texto: `${exp.paciente?.nombre ?? "Este paciente"} tiene ${formatoHoras(actual)} h en su ${exp.producto?.nombre ?? "diagnóstico"}${exp.horas?.libres ? ` (${formatoHoras(exp.horas.libres)} libres)` : " y no le queda ninguna libre"}. ¿Hasta cuántas horas en total? Solo hacia arriba, de media en media y como mucho ${HORAS_MAX_TOPE}. Quedará apuntado quién lo hizo.`,
-      valorInicial: String(actual + 5),
-      placeholder: String(actual + 5),
-      obligatorio: true,
-      confirmar: "Desbloquear",
-    });
-    if (texto === null) return;
-    const nuevo = Number(String(texto).replace(",", "."));
-    const v = puedeDesbloquear(actual, nuevo);
-    if (!v.ok) { await avisar({ titulo: "No se puede", texto: v.motivo }); return; }
-    return llamar(exp, `/api/clinica/diagnosticos/${exp.id}/horas`, { method: "POST", body: JSON.stringify({ horasMax: nuevo }) }, (d) => {
-      reemplaza(d.expediente);
-      flash(`Tope subido de ${formatoHoras(d.horasMax.antes)} a ${formatoHoras(d.horasMax.ahora)} h`);
-    });
-  }
-
-  async function cerrar(exp) {
-    const avisos = [];
-    if (exp.horas?.reservadas > 0) avisos.push(`Tiene ${formatoHoras(exp.horas.reservadas)} h de citas por delante en la agenda: seguirán ahí, pero el expediente no admitirá más.`);
-    if (exp.horas?.libres > 0 && exp.status === "en_curso") avisos.push(`Quedan ${formatoHoras(exp.horas.libres)} h sin dar de las ${formatoHoras(exp.horasMax)}.`);
-    if (exp.cobroPendiente) avisos.push(`Sigue habiendo ${euros(exp.cobroPendiente.importe)} sin cobrar: cerrar no lo retira de Cobros.`);
-    const ok = await confirmar({
-      titulo: `¿Cerrar el diagnóstico de ${exp.paciente?.nombre ?? "este paciente"}?`,
-      texto: `${avisos.join(" ")}${avisos.length ? "\n\n" : ""}El expediente pasa a «Cerrado» y deja de salir en «En curso». El bono y el cobro no se tocan.`,
-      confirmar: "Cerrar el diagnóstico",
-    });
-    if (!ok) return;
-    return llamar(exp, `/api/clinica/diagnosticos/${exp.id}/cerrar`, { method: "POST" }, async (d) => {
-      await cargar();
-      flash(d.horasSinDar > 0 ? `Diagnóstico cerrado con ${formatoHoras(d.horasSinDar)} h sin dar` : "Diagnóstico cerrado");
-    });
-  }
-
   const abiertos = expedientes.filter((e) => e.abierto).length;
 
   return (
@@ -236,7 +141,8 @@ export default function DiagnosticosPage() {
               Un producto cerrado de horas —simple, 10 h; completo, 20 h— con un terapeuta asignado. La barra
               se cuenta desde las citas: la entrevista inicial vale una hora, cada sesión lo que dure, y las
               citas futuras reservan. Al parar se cobra la entrevista; al seguir, el producto entero con un
-              bono sin tope. Cuando se acaban las horas, dirección las desbloquea desde aquí.
+              bono sin tope. Cuando se acaban las horas, dirección las desbloquea desde aquí. Cada expediente
+              tiene su ficha con los registros de diagnóstico por fecha y el informe que los une.
             </HelpTooltip>
           </h1>
           <p className="text-xs text-neutral-400 mt-1">
@@ -250,7 +156,7 @@ export default function DiagnosticosPage() {
         <div className="flex items-center gap-2 self-start lg:self-auto">
           <Link href="/clinica" className="text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">← Clínica</Link>
           <button
-            onClick={() => setPanelAbierto(true)}
+            onClick={() => setPanel({})}
             disabled={!!data?.sinMigrar}
             className="inline-flex items-center gap-1.5 text-xs font-medium px-4 py-2 rounded-lg text-white hover:opacity-90 transition-opacity disabled:opacity-40"
             style={{ background: "var(--color-primary, #1B3A2D)" }}
@@ -274,7 +180,7 @@ export default function DiagnosticosPage() {
         </div>
       )}
       {errorMsg && <div className="px-4 py-3 rounded-lg bg-rose-50 border border-rose-100 text-xs text-rose-700">{errorMsg}</div>}
-      {okMsg && <div className="px-4 py-3 rounded-lg bg-emerald-50 border border-emerald-100 text-xs text-emerald-700">{okMsg}</div>}
+      {acciones.okMsg && <div className="px-4 py-3 rounded-lg bg-emerald-50 border border-emerald-100 text-xs text-emerald-700">{acciones.okMsg}</div>}
 
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <div className="flex flex-wrap gap-1.5">
@@ -350,12 +256,12 @@ export default function DiagnosticosPage() {
                   expediente={e}
                   equipo={data?.equipo ?? []}
                   motivoSinAgenda={motivoSinAgenda}
-                  ocupado={ocupadoId === e.id}
-                  onCambiarTerapeuta={cambiarTerapeuta}
-                  onParar={parar}
-                  onSeguir={seguir}
-                  onDesbloquear={desbloquear}
-                  onCerrar={cerrar}
+                  ocupado={acciones.ocupadoId === e.id}
+                  onCambiarTerapeuta={acciones.cambiarTerapeuta}
+                  onParar={acciones.parar}
+                  onSeguir={acciones.seguir}
+                  onDesbloquear={acciones.desbloquear}
+                  onCerrar={acciones.cerrar}
                 />
               ))}
             </tbody>
@@ -366,13 +272,30 @@ export default function DiagnosticosPage() {
         </div>
       </div>
 
-      {panelAbierto && (
+      {data && !data.sinMigrar && (
+        <CandidatosDiagnostico
+          deshabilitado={!!panel}
+          onAbrirExpediente={(candidato) => setPanel({ candidato })}
+        />
+      )}
+
+      {panel && (
         <NuevoDiagnosticoPanel
           productos={data?.productos ?? []}
           equipo={data?.equipo ?? []}
-          onClose={() => setPanelAbierto(false)}
+          pacienteFijo={panel.candidato?.paciente ? { ...panel.candidato.paciente, clientId: panel.candidato.clientId } : null}
+          terapeutaSugerido={panel.candidato?.terapeutaSugerido?.id ?? null}
+          adopcion={panel.candidato ? { resumen: panel.candidato.resumen, adoptar: panel.candidato.adoptar } : null}
+          onClose={() => setPanel(null)}
           onCreado={async (d) => {
-            setPanelAbierto(false);
+            const desdeCandidato = Boolean(panel.candidato);
+            setPanel(null);
+            // Desde «Empezar desde lo que ya hay» se va al expediente recién
+            // abierto: lo que se quiere ver es qué ha entrado dentro.
+            if (desdeCandidato && d.expediente?.id) {
+              router.push(`/clinica/diagnosticos/${d.expediente.id}`);
+              return;
+            }
             if (filtro === "cerrado") setFiltro("en_curso");
             else await cargar();
             flash(
@@ -382,7 +305,7 @@ export default function DiagnosticosPage() {
         />
       )}
 
-      {dialogo}
+      {acciones.dialogo}
     </div>
   );
 }

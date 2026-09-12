@@ -158,9 +158,29 @@ La respuesta añade `diagnostico: { id, tramo, ocupadas, max }`.
 **Con qué plantilla se prepara el registro** lo decide
 `lib/clinica/plantillaDeLaCita.js` (`plantillaDeLaCita(booking)`, en la misma
 prueba): el tramo `entrevista` abre `entrevista_inicial` aunque el tipo sea
-DIAGNÓSTICO, la valoración inicial del centro (`isInitialAssessment`) también,
+DIAGNÓSTICO, el tramo `horas` abre `sesion_diagnostico` —la plantilla de
+fábrica de la segunda entrega, 12/09/2026: prueba administrada, qué evalúa,
+observaciones durante la prueba, puntuaciones e interpretación—, la valoración
+inicial del centro (`isInitialAssessment`) también abre `entrevista_inicial`,
 y el resto nada. Era un ternario dentro de `CitaDetalleModal`; ahora es un
 `if` con nombre.
+
+**Las citas que ya existían se pueden METER en un expediente** (12/09/2026,
+segunda entrega; el porqué, en `clinica.md`): al abrir un diagnóstico desde
+«Empezar desde lo que ya hay», `POST /api/clinica/diagnosticos` escribe
+`bookings.diagnostico_id` y `diagnostico_tramo` en las citas del paciente que
+ya estaban en la agenda —las de tipos con `informe_tipo = 'diagnostico'` sin
+expediente y no canceladas, más la entrevista inicial—, en la misma
+transacción que el alta y con `diagnostico_id IS NULL` + el paciente en cada
+UPDATE, para no robarle una cita a otro expediente. Quién decide qué entra es
+el SERVIDOR (`lib/clinica/adoptarEnDiagnostico.js`), por esas columnas y nunca
+por el nombre del tipo; del navegador solo se acepta cuál es la entrevista.
+Las citas no cambian de dueño ni de dinero: las pasadas siguen con el cobro
+que tuvieran, y las futuras **no** se enganchan al bono del diagnóstico (el
+bono nace al «Seguir»). ⚠️ Y la barra las cuenta con la regla de los bonos
+(`gastaSesion`): en Aumenta las citas pasadas se quedan en `confirmed` porque
+nadie las marca como hechas, así que el expediente recién abierto las pinta
+como RESERVADAS hasta que alguien las marque.
 
 **La ficha de la cita** (`GET /api/citas/bookings/[id]`) añade
 `diagnostico: { id, status, estado, productoNombre, horas, rotulo }` con

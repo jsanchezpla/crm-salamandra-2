@@ -37,11 +37,27 @@
  *
  * (Componente y no página, como `RegistroSesionEditor` y por lo mismo: la ruta
  * es una línea y el formulario vive en un solo sitio.)
+ *
+ * ── EL INFORME DE UN DIAGNÓSTICO (12/09/2026, Rodrigo con Isa, Aumenta) ─────
+ * «Entradas por fecha y título que al final se unen con IA en el informe
+ * completo.» El informe de valoración diagnóstica nace desde el expediente
+ * (`POST /api/clinica/diagnosticos/[id]/informe`) con `contentSections.
+ * diagnosticoId`, y cuando lo trae esta pantalla enseña una tarjeta más:
+ * cuántos registros terminados tiene el expediente y el botón «Unir los
+ * registros con la IA», que llama a `/unir` y recibe la propuesta por el MISMO
+ * camino que el dictado (`desde-material`): a `PropuestaIA`, apartado por
+ * apartado, sin escribir nada solo. `?unir=1` en la URL —el enlace del
+ * expediente— lleva a esa tarjeta al cargar.
+ *
+ * Y la FIRMA se elige aquí, en la cabecera: «en cada registro/informe se puede
+ * firmar con otro (desplegable, por defecto el asignado)». El registro ya lo
+ * tenía; el informe no, y un informe de diagnóstico lo firma quien lo cierra,
+ * que no siempre es el terapeuta asignado del expediente.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Select from "@/components/ui/Select.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 import useZonaSoltar, { useEvitarSoltarFuera } from "@/components/ui/useZonaSoltar.js";
@@ -66,6 +82,7 @@ import { SECCIONES_BECA } from "@/lib/clinica/beca.js";
 import { CLAVE_PRUEBAS, TIPO_DIAGNOSTICO, normalizarPruebas } from "@/lib/clinica/pruebasDiagnosticas.js";
 import PruebasDiagnosticas from "@/components/clinica/PruebasDiagnosticas.jsx";
 import { REPORT_TYPES_NUEVOS, REPORT_TYPE_LABEL, nombreDelInforme } from "@/lib/clinica/serialize.js";
+import { ESTADOS_TERMINADOS } from "@/lib/clinica/registroDeDiagnostico.js";
 import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 
 const TA = "w-full px-3 py-2 text-xs border border-neutral-200 rounded-lg focus:outline-none focus:border-neutral-400 leading-relaxed";
@@ -104,6 +121,7 @@ const NOMBRES_PULIDO = {
 
 export default function InformeEditor({ reportId }) {
   const router = useRouter();
+  const query = useSearchParams();
   const { confirmar, dialogo } = useDialogo();
 
   const [report, setReport] = useState(null);
@@ -114,6 +132,23 @@ export default function InformeEditor({ reportId }) {
   const [tipo, setTipo] = useState("evolution");
   const [fecha, setFecha] = useState("");
   const [entrega, setEntrega] = useState("");
+  // Quién FIRMA el informe (12/09/2026): el equipo activo para el desplegable
+  // de la cabecera. Resiliente como en la ficha del paciente: sin módulo de
+  // equipo da 403, la lista queda vacía y se enseña el nombre de siempre.
+  const [equipo, setEquipo] = useState([]);
+  const [cambiandoFirma, setCambiandoFirma] = useState(false);
+
+  // ── El expediente de diagnóstico del que sale este informe (12/09/2026) ──
+  // Solo cuando `contentSections.diagnosticoId` existe: la fila que devuelve
+  // `GET /api/clinica/diagnosticos/<id>`, de la que aquí interesan sus
+  // `registros[]` (cuántos están terminados) y su URL.
+  const [expediente, setExpediente] = useState(null);
+  const [expedienteFallo, setExpedienteFallo] = useState(false);
+  const [uniendo, setUniendo] = useState(false);
+  const tarjetaUnirRef = useRef(null);
+  // `?unir=1`: se viene del expediente a unir. Cadena, no `query`, en el
+  // efecto de abajo (misma cautela que en el editor del registro).
+  const pideUnir = String(query.get("unir") ?? "").trim() === "1";
 
   const [plantillas, setPlantillas] = useState([]);
   const [plantillaKey, setPlantillaKey] = useState("");
@@ -226,6 +261,94 @@ export default function InformeEditor({ reportId }) {
       .then((j) => setDerivaciones(j?.data?.especialidades ?? []))
       .catch(() => {});
   }, [tipo, derivaciones.length]);
+
+  // El equipo activo, para el desplegable de la firma (como en la ficha del
+  // paciente). Quien ya no está y firma este informe sigue saliendo en el
+  // desplegable con su nombre: se añade abajo, al montar las opciones.
+  useEffect(() => {
+    fetch(`/api/team?status=active&limit=200`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setEquipo(j?.data?.members ?? []))
+      .catch(() => {});
+  }, []);
+
+  /* ═══ El expediente de diagnóstico ═════════════════════════════════════ */
+
+  const diagnosticoId = String(report?.contentSections?.diagnosticoId ?? "").trim();
+  const urlDelExpediente = diagnosticoId ? `/clinica/diagnosticos/${diagnosticoId}` : null;
+
+  /** Pide el expediente al servidor: sus registros dicen cuántos se pueden unir. */
+  function pedirExpediente(id) {
+    return fetch(`/api/clinica/diagnosticos/${id}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => (j?.ok ? (j.data?.expediente ?? null) : null))
+      .catch(() => null);
+  }
+
+  useEffect(() => {
+    if (!diagnosticoId) return;
+    let vivo = true;
+    pedirExpediente(diagnosticoId).then((fila) => {
+      if (!vivo) return;
+      setExpediente(fila);
+      setExpedienteFallo(!fila);
+    });
+    return () => {
+      vivo = false;
+    };
+  }, [diagnosticoId]);
+
+  // Los registros TERMINADOS del expediente: los que son material para el
+  // informe (`registered`/`published`; un borrador no, misma regla que
+  // `desde-sesiones` y que el endpoint `/unir`).
+  const registrosTerminados = useMemo(
+    () => (expediente?.registros ?? []).filter((r) => ESTADOS_TERMINADOS.includes(r?.status)),
+    [expediente]
+  );
+
+  /**
+   * `?unir=1`: se viene del expediente a unir los registros. Al cargar se lleva
+   * la tarjeta a la vista —no se pulsa el botón solo: cada llamada a la IA la
+   * paga el centro, y unir es una decisión suya—.
+   */
+  const yaLlevado = useRef(false);
+  useEffect(() => {
+    if (!pideUnir || cargando || !diagnosticoId || yaLlevado.current) return;
+    if (!tarjetaUnirRef.current) return;
+    yaLlevado.current = true;
+    tarjetaUnirRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [pideUnir, cargando, diagnosticoId]);
+
+  /**
+   * Cambiar quién firma el informe (12/09/2026). Se guarda en el acto —un
+   * PATCH con solo `therapistId`—, sin pasar por «Guardar informe»: es un dato
+   * de la cabecera, como la fecha, y el servidor comprueba que sea del equipo.
+   */
+  async function cambiarFirma(therapistId) {
+    if (!therapistId || therapistId === report?.therapistId) return;
+    setCambiandoFirma(true);
+    setErrorMsg(null);
+    try {
+      const r = await fetch(`/api/clinica/reports/${reportId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ therapistId }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error(j.error || "No se pudo cambiar la firma");
+      // El PATCH no trae al terapeuta incluido: el nombre se toma del equipo.
+      const miembro = equipo.find((m) => m.id === therapistId);
+      setReport((prev) => ({
+        ...(j.data ?? prev),
+        patient: j.data?.patient ?? prev?.patient ?? null,
+        therapist: j.data?.therapist ?? (miembro ? { ...(prev?.therapist ?? {}), id: miembro.id, name: miembro.displayName } : prev?.therapist ?? null),
+      }));
+    } catch (e) {
+      setErrorMsg(e.message);
+    } finally {
+      setCambiandoFirma(false);
+    }
+  }
 
   /* ═══ Apartados ════════════════════════════════════════════════════════ */
 
@@ -518,35 +641,94 @@ export default function InformeEditor({ reportId }) {
       const r = await fetch(`/api/clinica/reports/${reportId}/desde-material`, { method: "POST", body: fd });
       const j = await leerRespuestaApi(r);
       if (!r.ok || !j.ok) throw new Error(j.error || "No se pudo redactar");
-      const p = j.data.propuesta ?? {};
-      const cuantos = Object.values(p).filter((v) => String(v ?? "").trim()).length;
-      const { entran, fuera } = cabenNuevos(j.data.nuevos ?? [], apartados.length, MAX_APARTADOS);
-      setPropuesta(p);
-      setNuevosIA(entran);
-      setMaterialIA(String(j.data.material ?? "").trim());
-      setTituloPropuesta(
-        conAudio && texto
-          ? "Lo que ha sacado la IA del audio y tus notas"
-          : conAudio
-            ? "Lo que ha sacado la IA del audio"
-            : "Lo que ha sacado la IA de tus notas"
-      );
-      setVerPropuesta(cuantos > 0 || entran.length > 0);
-      const conNuevos = entran.length
-        ? ` Y propone ${entran.length} apartado${entran.length === 1 ? "" : "s"} nuevo${entran.length === 1 ? "" : "s"} para lo que no cabía en los tuyos.`
-        : fuera > 0
-          ? ` (Proponía apartados nuevos, pero este informe ya tiene ${MAX_APARTADOS}: no caben.)`
-          : "";
-      setAvisoIA(
-        j.data.avisoIA ??
-          (cuantos > 0 || entran.length > 0
-            ? `La IA propone ${cuantos} apartado(s). Revísalos y elige cuáles entran.${conNuevos}`
-            : "La IA no ha sacado nada que repartir de este material.")
-      );
+      recibirPropuesta(j.data, {
+        titulo:
+          conAudio && texto
+            ? "Lo que ha sacado la IA del audio y tus notas"
+            : conAudio
+              ? "Lo que ha sacado la IA del audio"
+              : "Lo que ha sacado la IA de tus notas",
+        sinNada: "La IA no ha sacado nada que repartir de este material.",
+      });
     } catch (e) {
       setErrorMsg(e.message);
     } finally {
       setProcesando(false);
+    }
+  }
+
+  /**
+   * Lo que devuelve la IA —del dictado (`desde-material`) o de unir los
+   * registros de un diagnóstico (`/unir`), que contestan con el MISMO
+   * contrato— entra por aquí y por ningún otro sitio: la propuesta al panel,
+   * los apartados nuevos que quepan, el material a su caja plegada, y el aviso
+   * que dice qué ha traído. Nada se escribe en el informe: eso lo decide ella
+   * en `PropuestaIA`, apartado por apartado.
+   */
+  function recibirPropuesta(data, { titulo, sinNada }) {
+    const p = data?.propuesta ?? {};
+    const cuantos = Object.values(p).filter((v) => String(v ?? "").trim()).length;
+    const { entran, fuera } = cabenNuevos(data?.nuevos ?? [], apartados.length, MAX_APARTADOS);
+    setPropuesta(p);
+    setNuevosIA(entran);
+    setMaterialIA(String(data?.material ?? "").trim());
+    setTituloPropuesta(titulo);
+    setVerPropuesta(cuantos > 0 || entran.length > 0);
+    const conNuevos = entran.length
+      ? ` Y propone ${entran.length} apartado${entran.length === 1 ? "" : "s"} nuevo${entran.length === 1 ? "" : "s"} para lo que no cabía en los tuyos.`
+      : fuera > 0
+        ? ` (Proponía apartados nuevos, pero este informe ya tiene ${MAX_APARTADOS}: no caben.)`
+        : "";
+    setAvisoIA(
+      data?.avisoIA ??
+        (cuantos > 0 || entran.length > 0
+          ? `La IA propone ${cuantos} apartado(s). Revísalos y elige cuáles entran.${conNuevos}`
+          : sinNada)
+    );
+  }
+
+  /**
+   * «Unir los registros con la IA» (12/09/2026): el servidor junta el texto de
+   * los registros TERMINADOS del expediente y se lo da a la IA con los
+   * apartados de ESTE informe. Vuelve una propuesta, no un informe escrito:
+   * entra por `recibirPropuesta` como el dictado. Lo único que el servidor
+   * guarda es qué registros se usaron (el anexo del PDF).
+   *
+   * Se manda lo que hay en pantalla (`apartados` y `escrito`), igual que
+   * `desde-material`: sin ellos el servidor propondría sobre los apartados de
+   * fábrica y sin saber qué está ya escrito. Y se guarda antes por lo mismo
+   * que el dictado: el endpoint lee el informe de la base de datos.
+   */
+  async function unirRegistros() {
+    if (!diagnosticoId || uniendo) return;
+    setUniendo(true);
+    setErrorMsg(null);
+    setAvisoIA(null);
+    try {
+      if (!(await guardar({ callado: true }))) return;
+      const r = await fetch(`/api/clinica/diagnosticos/${diagnosticoId}/unir`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apartados, escrito: form }),
+      });
+      const j = await leerRespuestaApi(r);
+      if (!r.ok || !j.ok) throw new Error(j.error || "No se pudieron unir los registros");
+      const n = Number(j.data?.registros ?? registrosTerminados.length) || 0;
+      recibirPropuesta(j.data, {
+        titulo: `Lo que ha sacado la IA de ${n === 1 ? "1 registro" : `${n} registros`} de diagnóstico`,
+        sinNada: "La IA no ha sacado nada que repartir de los registros.",
+      });
+      // La incidencia de la IA (si la hubo) va delante del aviso: es lo que
+      // explica una propuesta a medias.
+      const incidencia = typeof j.data?.incidencia === "string" ? j.data.incidencia.trim() : "";
+      if (incidencia) setAvisoIA((a) => `${incidencia} ${a ?? ""}`.trim());
+      // El expediente cambia (guarda qué registros se usaron): se relee.
+      const fila = await pedirExpediente(diagnosticoId);
+      if (fila) setExpediente(fila);
+    } catch (e) {
+      setErrorMsg(e.message);
+    } finally {
+      setUniendo(false);
     }
   }
 
@@ -673,6 +855,14 @@ export default function InformeEditor({ reportId }) {
   const opcionesTipo = (REPORT_TYPES_NUEVOS.includes(tipo) ? REPORT_TYPES_NUEVOS : [tipo, ...REPORT_TYPES_NUEVOS]).map(
     (value) => ({ value, label: REPORT_TYPE_LABEL[value] ?? value })
   );
+  // Quién firma: el equipo activo y, si quien firma hoy ya no está en él (se
+  // fue del centro), su nombre delante para que el desplegable no lo cambie
+  // solo. Sin equipo (sin módulo) no hay desplegable: el nombre a secas.
+  const firmaFueraDelEquipo =
+    report.therapistId && !equipo.some((m) => m.id === report.therapistId)
+      ? [{ value: report.therapistId, label: `${therapist.name} (ya no está)`, pinned: true }]
+      : [];
+  const opcionesFirma = [...firmaFueraDelEquipo, ...equipo.map((m) => ({ value: m.id, label: m.displayName }))];
 
   return (
     <div className={`${anchoPantalla("listado")} space-y-4`}>
@@ -719,7 +909,22 @@ export default function InformeEditor({ reportId }) {
               </span>
             </p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full lg:w-auto">
+          <div className={`grid grid-cols-1 sm:grid-cols-2 ${equipo.length > 0 ? "lg:grid-cols-4" : "lg:grid-cols-3"} gap-3 w-full lg:w-auto`}>
+            {/* La firma (12/09/2026): se guarda al elegir, sin pasar por
+                «Guardar informe». Sin equipo, el nombre ya está arriba. */}
+            {equipo.length > 0 && (
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1.5">Firma</div>
+                <Select
+                  value={report.therapistId ?? ""}
+                  onChange={cambiarFirma}
+                  options={opcionesFirma}
+                  placeholder="Sin firma"
+                  disabled={cambiandoFirma}
+                  className={TA}
+                />
+              </div>
+            )}
             <div>
               <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1.5">Tipo</div>
               <Select value={tipo} onChange={setTipo} options={opcionesTipo} className={TA} />
@@ -760,6 +965,85 @@ export default function InformeEditor({ reportId }) {
 
       {errorMsg && <div className="px-4 py-3 rounded-lg bg-rose-50 border border-rose-100 text-xs text-rose-700">{errorMsg}</div>}
 
+      {/* ── 0 · El diagnóstico del que sale (12/09/2026) ──────────────────
+          Solo cuando el informe nació desde un expediente. Va antes del
+          material porque es SU material: los registros que ya están escritos.
+          El botón no se pulsa solo ni con `?unir=1`: cada llamada la paga el
+          centro. */}
+      {diagnosticoId && (
+        <div
+          ref={tarjetaUnirRef}
+          className="bg-white border border-sky-100 rounded-xl p-4 lg:p-5 scroll-mt-20"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="eyebrow mb-1">Informe de un diagnóstico</div>
+              <p className="text-[11px] text-neutral-600 leading-relaxed">
+                {expediente ? (
+                  registrosTerminados.length > 0 ? (
+                    <>
+                      El expediente tiene{" "}
+                      <span className="font-medium text-neutral-800">
+                        {registrosTerminados.length === 1
+                          ? "1 registro terminado"
+                          : `${registrosTerminados.length} registros terminados`}
+                      </span>
+                      {(expediente.registros?.length ?? 0) > registrosTerminados.length &&
+                        ` (y ${expediente.registros.length - registrosTerminados.length} en borrador, que no entra${
+                          expediente.registros.length - registrosTerminados.length === 1 ? "" : "n"
+                        })`}
+                      . La IA los junta y te propone el informe apartado por apartado: tú eliges qué entra.
+                    </>
+                  ) : (
+                    <>
+                      El expediente todavía no tiene ningún registro terminado
+                      {(expediente.registros?.length ?? 0) > 0 && " (los que hay están en borrador)"}. Escríbelos desde
+                      el expediente y vuelve aquí a unirlos.
+                    </>
+                  )
+                ) : expedienteFallo ? (
+                  "No se ha podido leer el expediente. Puedes seguir escribiendo el informe; recarga para volver a intentarlo."
+                ) : (
+                  "Leyendo el expediente…"
+                )}
+              </p>
+              {registrosTerminados.length > 0 && (
+                <ul className="mt-2 flex flex-wrap gap-1.5">
+                  {registrosTerminados.map((r) => (
+                    <li key={r.id} className="text-[10px] text-neutral-600 bg-neutral-50 border border-neutral-100 rounded-full px-2 py-0.5">
+                      {fmtDate(r.sessionDate)} · {r.titulo}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              {urlDelExpediente && (
+                <Link href={urlDelExpediente} className="text-xs px-3 py-2 rounded-lg border border-neutral-200 text-neutral-700 hover:border-neutral-400">
+                  Ver el expediente
+                </Link>
+              )}
+              <button
+                type="button"
+                onClick={unirRegistros}
+                disabled={uniendo || procesando || guardando || entregado || registrosTerminados.length === 0}
+                title={
+                  entregado
+                    ? "Este informe ya está entregado."
+                    : registrosTerminados.length === 0
+                      ? "No hay registros terminados que unir."
+                      : "Junta el texto de los registros terminados y pide a la IA la propuesta del informe. No escribe nada solo."
+                }
+                className="text-xs font-medium px-3 py-2 rounded-lg text-white disabled:opacity-40"
+                style={{ background: "var(--color-primary, #1B3A2D)" }}
+              >
+                {uniendo ? "Uniendo…" : "Unir los registros con la IA"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── 1 · El material: audio y notas (en la beca también vale) ──────── */}
       <MaterialIA
         audios={audios}
@@ -777,7 +1061,7 @@ export default function InformeEditor({ reportId }) {
         queEntra={queEntra}
         conAudio={conAudio}
         onProcesar={procesarConIA}
-        procesando={procesando || guardando}
+        procesando={procesando || guardando || uniendo}
         sustantivo="el informe"
         titulo="¿Quieres dictar el informe o pegar tus notas?"
         descripcion={`Arrastra aquí los audios, pégalos con Ctrl+V o búscalos — puedes añadir varios (hasta ${MAX_AUDIOS}) y transcribirlos de una vez. O pega abajo lo que tengas apuntado. La IA reparte lo que cuentes por los apartados del informe; tú eliges qué entra. m4a, mp3, wav, ogg, webm · máx. 25 MB cada uno.`}

@@ -1299,6 +1299,22 @@ export default function PacienteFichaPage() {
                           {se.tallerSesionId && (
                             <span className="text-[9px] font-medium text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded-full">Taller</span>
                           )}
+                          {/* Es un REGISTRO DE DIAGNÓSTICO (12/09/2026): una
+                              entrada del expediente. El chip lleva a la ficha
+                              del expediente; es un span y no un Link porque la
+                              fila entera ya es un botón (abre el registro). */}
+                          {se.diagnosticoId && (
+                            <span
+                              role="link"
+                              tabIndex={0}
+                              title="Abrir el expediente de diagnóstico"
+                              onClick={(ev) => { ev.stopPropagation(); router.push(`/clinica/diagnosticos/${se.diagnosticoId}`); }}
+                              onKeyDown={(ev) => { if (ev.key === "Enter") { ev.stopPropagation(); router.push(`/clinica/diagnosticos/${se.diagnosticoId}`); } }}
+                              className="text-[9px] font-medium text-sky-700 bg-sky-50 px-1.5 py-0.5 rounded-full hover:underline"
+                            >
+                              Diagnóstico
+                            </span>
+                          )}
                           <span className="text-[10px] text-neutral-400">{se.duration ?? "—"} min</span>
                         </div>
                         <p className="text-[11px] text-neutral-600 mt-1 line-clamp-2">{se.preview}</p>

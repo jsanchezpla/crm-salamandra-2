@@ -44,18 +44,19 @@ describe("la plantilla «Entrevista inicial»", () => {
 
   it("se ofrece siempre para el REGISTRO, detrás de la del centro, y nunca para el informe", () => {
     const sinNada = plantillasDe({ settings: {} }, "registro");
-    assert.deepEqual(sinNada.map((p) => p.key), ["base", "entrevista_inicial", "taller"]);
+    // Detrás van las de fábrica extra: entrevista, taller y, desde el 12/09/2026, la sesión de diagnóstico.
+    assert.deepEqual(sinNada.map((p) => p.key), ["base", "entrevista_inicial", "taller", "sesion_diagnostico"]);
     const conLaSuya = plantillasDe({ settings: { clinica: { plantillas: { registro: [{ key: "mia", name: "La mía", apartados: [{ key: "a", label: "A" }] }] } } } }, "registro");
-    assert.deepEqual(conLaSuya.map((p) => p.key), ["mia", "entrevista_inicial", "taller"]);
+    assert.deepEqual(conLaSuya.map((p) => p.key), ["mia", "entrevista_inicial", "taller", "sesion_diagnostico"]);
     assert.equal(plantillasDe({ settings: {} }, "informe").some((p) => p.key === "entrevista_inicial"), false);
   });
 
   it("si el centro la BORRA desde Configuración, no vuelve a aparecer (y si la vuelve a incluir, sí)", () => {
     const guardada = [{ key: "base", name: "Registro", apartados: [{ key: "a", label: "A" }] }];
-    assert.deepEqual(ocultasTrasGuardar("registro", guardada), ["entrevista_inicial", "taller"]);
-    assert.deepEqual(ocultasTrasGuardar("registro", [...guardada, { key: "entrevista_inicial", name: "E", apartados: [{ key: "x", label: "X" }] }]), ["taller"]);
+    assert.deepEqual(ocultasTrasGuardar("registro", guardada), ["entrevista_inicial", "taller", "sesion_diagnostico"]);
+    assert.deepEqual(ocultasTrasGuardar("registro", [...guardada, { key: "entrevista_inicial", name: "E", apartados: [{ key: "x", label: "X" }] }]), ["taller", "sesion_diagnostico"]);
     const t = { settings: { clinica: { plantillas: { registro: guardada }, plantillasOcultas: { registro: ["entrevista_inicial"] } } } };
-    assert.deepEqual(plantillasDe(t, "registro").map((p) => p.key), ["base", "taller"]);
+    assert.deepEqual(plantillasDe(t, "registro").map((p) => p.key), ["base", "taller", "sesion_diagnostico"]);
   });
 
   it("si el centro guarda su propia «entrevista_inicial», manda la suya y no salen dos", () => {

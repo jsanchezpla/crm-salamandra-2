@@ -12,7 +12,13 @@ function gate(ctx) {
 }
 const TYPES = REPORT_TYPES;
 const STATUSES = ["draft", "reviewed", "delivered"];
-const PATCH_FIELDS = ["reportType", "reportDate", "dueDate", "contentSections", "status"];
+// `therapistId` (12/09/2026, segunda entrega del Diagnóstico): QUIÉN firma el
+// informe. El informe de valoración diagnóstica nace firmado por el terapeuta
+// asignado del expediente, y la cabecera del editor tiene un desplegable
+// «Firma» para cambiarlo —una compañera termina lo que otra empezó—. Se
+// comprueba abajo contra `team_members` de ESTE schema, como en el registro de
+// sesión: un id con forma de id no basta para firmar un documento clínico.
+const PATCH_FIELDS = ["reportType", "reportDate", "dueDate", "contentSections", "status", "therapistId"];
 
 export const GET = withTenant(async (request, rc, ctx) => {
   if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
@@ -50,6 +56,20 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
   // Los apartados (título, tipo y orden) los escribe un navegador desde el
   // cajón del informe: se limpian antes de guardarlos (lib/clinica/plantillas.js).
   if ("contentSections" in updates) updates.contentSections = limpiarContentSections(updates.contentSections);
+  // ── Quién firma: se cambia, pero solo a alguien del equipo ───────────────
+  // Se admite alguien de baja («inactive»): corregir la firma hacia quien ya
+  // no está es uno de los casos que hay que poder arreglar.
+  if ("therapistId" in updates) {
+    const nuevo = String(updates.therapistId ?? "").trim();
+    if (!UUID_RE.test(nuevo)) return error("therapistId inválido", 422);
+    if (nuevo === String(r.therapistId ?? "")) delete updates.therapistId;
+    else {
+      const { TeamMember } = ctx.tenantModels;
+      const existe = TeamMember ? await TeamMember.findByPk(nuevo, { attributes: ["id"] }) : null;
+      if (!existe) return error("Ese profesional no es del centro", 422);
+      updates.therapistId = nuevo;
+    }
+  }
   // Al marcar como entregado, sellar deliveredAt; al revertir, limpiarla.
   if ("status" in updates) {
     if (updates.status === "delivered" && !r.deliveredAt) updates.deliveredAt = new Date();

@@ -4,6 +4,7 @@ import { ok, error, forbidden, notFound } from "../../../../../lib/utils/apiResp
 import { serializeSession } from "../../../../../lib/clinica/serialize.js";
 import { logClinicaAudit, auditSummary } from "../../../../../lib/clinica/audit.js";
 import { limpiarContentSections } from "../../../../../lib/clinica/plantillas.js";
+import { limpiarTitulo } from "../../../../../lib/clinica/registroDeDiagnostico.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function gate(ctx) {
@@ -35,7 +36,11 @@ const STATUSES = ["draft", "ai_pending", "registered", "published"];
 // id. Queda en el AuditLog con el antes y el después (`therapistId` está en la
 // lista blanca de `auditSummary`), que es lo que hace que cambiar la firma de
 // una nota clínica no sea un movimiento invisible.
-const PATCH_FIELDS = ["sessionDate", "duration", "objectives", "activities", "performance", "observations", "status", "prepText", "parentFeedback", "internalNotes", "contentSections", "aiTranscription", "aiReviewedAt", "bookingId", "therapistId"];
+// `titulo` y `diagnosticoId` (12/09/2026, segunda entrega del Diagnóstico): el
+// título de la entrada del expediente se escribe y se corrige libremente (null
+// lo quita); el expediente al que pertenece va con candado abajo, como
+// `bookingId`: se escribe UNA vez, comprobado contra el paciente, y no se pisa.
+const PATCH_FIELDS = ["sessionDate", "duration", "objectives", "activities", "performance", "observations", "status", "prepText", "parentFeedback", "internalNotes", "contentSections", "aiTranscription", "aiReviewedAt", "bookingId", "therapistId", "titulo", "diagnosticoId"];
 
 export const GET = withTenant(async (request, rc, ctx) => {
   if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
@@ -108,6 +113,33 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
       const existe = await TeamMember.findByPk(nuevo, { attributes: ["id"] });
       if (!existe) return error("Ese profesional no es del centro");
       updates.therapistId = nuevo;
+    }
+  }
+  // ── El título de la entrada: libre, hasta 160, vacío lo quita ────────────
+  if ("titulo" in updates) updates.titulo = limpiarTitulo(updates.titulo);
+  // ── El diagnóstico de un registro también se escribe UNA vez ─────────────
+  // Mover una sesión a OTRO expediente desde el navegador cambiaría de sitio
+  // el texto clínico de un niño —y su informe se uniría con él— sin que nadie
+  // se enterara. Aquí solo se permite atar una sesión que todavía no era de
+  // ningún diagnóstico, y solo a un expediente que exista y sea del MISMO
+  // paciente (la misma comprobación que el POST). Ya atada, se ignora en
+  // silencio, como `bookingId`; un id de otro paciente es un 422 con frase,
+  // porque eso sí tiene que verse.
+  if ("diagnosticoId" in updates) {
+    const nuevo = String(updates.diagnosticoId ?? "").trim();
+    if (String(s.diagnosticoId ?? "").trim() || !UUID_RE.test(nuevo)) delete updates.diagnosticoId;
+    else {
+      const { Diagnostico } = ctx.tenantModels;
+      let expediente = null;
+      try {
+        expediente = Diagnostico ? await Diagnostico.findByPk(nuevo, { attributes: ["id", "patientId"] }) : null;
+      } catch (err) {
+        // Sin la tabla (tenant sin la migración): no hay expediente al que atar.
+        if (err?.parent?.code !== "42P01" && err?.original?.code !== "42P01") throw err;
+      }
+      if (!expediente) return error("Ese diagnóstico no existe", 422);
+      if (String(expediente.patientId) !== String(s.patientId)) return error("Ese diagnóstico no es de este paciente", 422);
+      updates.diagnosticoId = expediente.id;
     }
   }
   if ("aiReviewedAt" in updates) {

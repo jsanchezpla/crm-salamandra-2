@@ -214,6 +214,23 @@ export function defineClinicSession(sequelize) {
         allowNull: true,
         field: "diagnostico_id",
       },
+      /**
+       * ── EL TÍTULO de la entrada (12/09/2026, segunda entrega) ────────────
+       *
+       * «Entradas por fecha y título» (Rodrigo): un registro de diagnóstico es
+       * una línea de un índice —«Sesión de diagnóstico 3», «Pruebas WISC-V»—
+       * y hasta hoy no había dónde escribir ese nombre: el registro de
+       * siempre se identifica por su fecha. 160 caracteres, que es un título
+       * y no un cuerpo (`MAX_TITULO` en `lib/clinica/registroDeDiagnostico.js`,
+       * el mismo número que la columna). Null en las 22.045 sesiones de
+       * siempre: sin título, el expediente enseña uno por defecto con su
+       * número correlativo (`tituloDe`), y las sesiones que no son de
+       * diagnóstico ni lo enseñan.
+       */
+      titulo: {
+        type: DataTypes.STRING(160),
+        allowNull: true,
+      },
       // Cliente/pagador (2026-07-23). Foto tomada del paciente al crear la
       // sesión, para llegar a la ficha del cliente sin depender del salto
       // paciente→cliente, que es frágil. El terapeuta ya se guarda aparte.

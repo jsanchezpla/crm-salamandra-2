@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import SelectorPaciente from "../citas/SelectorPaciente.jsx";
 import Select from "../ui/Select.jsx";
+import { useDialogo } from "../ui/Dialogo.jsx";
 import { formatoHoras } from "../../lib/clinica/diagnostico.js";
 
 /**
@@ -18,7 +20,17 @@ import { formatoHoras } from "../../lib/clinica/diagnostico.js";
  * Si el paciente ya tiene un diagnóstico abierto la API contesta 409 y aquí
  * se pregunta si de verdad se quiere otro (`permitirOtro`): lo normal es un
  * doble clic, pero un simple cerrado y un completo que empieza son dos
- * expedientes legítimos.
+ * expedientes legítimos. Se pregunta con `useDialogo`, no con el `confirm`
+ * del navegador (que Chrome puede silenciar y entonces siempre dice que no).
+ *
+ * ── «EMPEZAR DESDE LO QUE YA HAY» (12/09/2026, respuesta de Aumenta) ───────
+ * Desde el bloque de candidatos (`CandidatosDiagnostico`) el panel se abre
+ * con el paciente FIJO (`pacienteFijo`, sin buscador), el terapeuta que más
+ * se repite en sus citas ya puesto (`terapeutaSugerido`) y una casilla
+ * marcada «Meter en el expediente lo que ya hay: …» con la frase que ya trae
+ * la fila del servidor (`adopcion.resumen`). Al crear, se manda
+ * `adoptar` tal cual llegó (`adopcion.adoptar`): el servidor recalcula qué
+ * citas entran; aquí no se decide nada.
  *
  * Panel lateral con la regla #13: barra móvil (`top-14 lg:top-0 … bottom-0`),
  * fondo `z-40` y panel `z-50`, alto en `dvh` para que el pie no quede bajo la
@@ -30,17 +42,29 @@ const inputCls =
 
 const euros = (n) => (n === null || n === undefined ? null : `${Number(n).toLocaleString("es-ES", { minimumFractionDigits: 2 })} €`);
 
-export default function NuevoDiagnosticoPanel({ productos = [], equipo = [], onClose, onCreado }) {
-  const [patientId, setPatientId] = useState("");
-  const [paciente, setPaciente] = useState(null);
+export default function NuevoDiagnosticoPanel({
+  productos = [],
+  equipo = [],
+  pacienteFijo = null,
+  terapeutaSugerido = null,
+  adopcion = null,
+  onClose,
+  onCreado,
+}) {
+  const [patientId, setPatientId] = useState(pacienteFijo?.id ?? "");
+  const [paciente, setPaciente] = useState(pacienteFijo ?? null);
   const [productoKey, setProductoKey] = useState(productos[0]?.key ?? "");
-  const [therapistId, setTherapistId] = useState("");
+  const [therapistId, setTherapistId] = useState(terapeutaSugerido ?? "");
   const [notes, setNotes] = useState("");
+  const [adoptar, setAdoptar] = useState(Boolean(adopcion?.adoptar));
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState(null);
 
+  const { confirmar, dialogo } = useDialogo();
+
   const producto = productos.find((p) => p.key === productoKey) ?? null;
   const precio = producto?.cobro?.importeEuros ?? producto?.precioEuros ?? null;
+  const sinFamilia = paciente && !paciente.clientId && !paciente.client;
 
   async function crear(permitirOtro = false) {
     if (!patientId) { setError("Elige al paciente"); return; }
@@ -57,12 +81,19 @@ export default function NuevoDiagnosticoPanel({ productos = [], equipo = [], onC
           therapistId: therapistId || null,
           notes: notes.trim() || null,
           ...(permitirOtro ? { permitirOtro: true } : {}),
+          ...(adoptar && adopcion?.adoptar ? { adoptar: adopcion.adoptar } : {}),
         }),
       });
       const j = await r.json();
       if (r.status === 409 && j?.id && !permitirOtro) {
         // Ya tiene uno abierto: se dice y se deja abrir otro a propósito.
-        if (confirm(`${j.error}.\n\n¿Abrir otro de todas formas?`)) return crear(true);
+        setGuardando(false);
+        const otro = await confirmar({
+          titulo: "Ya tiene un diagnóstico abierto",
+          texto: `${j.error}.\n\n¿Abrir otro de todas formas?`,
+          confirmar: "Abrir otro",
+        });
+        if (otro) return crear(true);
         return;
       }
       if (!j.ok) throw new Error(j.error || "No se pudo abrir el diagnóstico");
@@ -89,14 +120,23 @@ export default function NuevoDiagnosticoPanel({ productos = [], equipo = [], onC
 
         <label className="block">
           <span className="text-[12px] text-neutral-500">Paciente *</span>
-          <SelectorPaciente
-            value={patientId}
-            onChange={(id) => { setPatientId(id ?? ""); if (!id) setPaciente(null); }}
-            onPaciente={(p) => setPaciente(p ?? null)}
-            className={inputCls}
-            aria-label="Paciente del diagnóstico"
-          />
-          {paciente && !paciente.clientId && !paciente.client && (
+          {pacienteFijo ? (
+            <div className={`${inputCls} flex items-center justify-between gap-2 bg-neutral-50`}>
+              <span className="font-medium text-neutral-800 truncate">{pacienteFijo.nombre}</span>
+              <Link href={`/pacientes/${pacienteFijo.id}`} className="text-[11px] text-neutral-400 hover:text-neutral-700 whitespace-nowrap">
+                Ver ficha
+              </Link>
+            </div>
+          ) : (
+            <SelectorPaciente
+              value={patientId}
+              onChange={(id) => { setPatientId(id ?? ""); if (!id) setPaciente(null); }}
+              onPaciente={(p) => setPaciente(p ?? null)}
+              className={inputCls}
+              aria-label="Paciente del diagnóstico"
+            />
+          )}
+          {sinFamilia && (
             <span className="block text-[11px] text-amber-700 mt-1">
               Este paciente no tiene ficha de familia: se podrá abrir el diagnóstico, pero no cobrarlo.
             </span>
@@ -133,9 +173,30 @@ export default function NuevoDiagnosticoPanel({ productos = [], equipo = [], onC
             aria-label="Terapeuta asignado"
           />
           <span className="block text-[11px] text-neutral-400 mt-1">
-            Quien lleva el diagnóstico. Se puede cambiar después desde la lista.
+            {terapeutaSugerido && therapistId === terapeutaSugerido
+              ? "Quien más citas de diagnóstico le ha dado. Se puede cambiar aquí o después desde la lista."
+              : "Quien lleva el diagnóstico. Se puede cambiar después desde la lista."}
           </span>
         </label>
+
+        {adopcion && (
+          <label className="flex items-start gap-2 rounded-lg border border-sky-100 bg-sky-50 px-3 py-2.5 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={adoptar}
+              onChange={(e) => setAdoptar(e.target.checked)}
+              disabled={!adopcion.adoptar}
+              className="mt-0.5 w-3.5 h-3.5 rounded border-neutral-300 accent-[var(--color-primary,#1B3A2D)]"
+            />
+            <span className="text-[12px] text-sky-900">
+              Meter en el expediente lo que ya hay: <strong>{adopcion.resumen ?? "nada que meter"}</strong>.
+              <span className="block text-[11px] text-sky-700 mt-0.5">
+                Las citas de diagnóstico pasan a contar en la barra y, si la entrevista ya está cobrada, se descontará del
+                precio del producto al seguir.
+              </span>
+            </span>
+          </label>
+        )}
 
         <label className="block">
           <span className="text-[12px] text-neutral-500">Notas</span>
@@ -150,10 +211,12 @@ export default function NuevoDiagnosticoPanel({ productos = [], equipo = [], onC
           {guardando ? "Abriendo…" : "Abrir diagnóstico"}
         </button>
         <p className="text-[11px] text-neutral-400">
-          Nace en «Entrevista inicial» y sin dinero. Después, «Abrir entrevista inicial» lleva a la agenda con la
-          cita preparada; el cobro aparece al decidir si la familia sigue o no.
+          {adopcion && adoptar
+            ? "Nace con lo que ya hay dentro y sin dinero nuevo: el cobro del producto aparece al decidir si la familia sigue."
+            : "Nace en «Entrevista inicial» y sin dinero. Después, «Abrir entrevista inicial» lleva a la agenda con la cita preparada; el cobro aparece al decidir si la familia sigue o no."}
         </p>
       </div>
+      {dialogo}
     </>
   );
 }

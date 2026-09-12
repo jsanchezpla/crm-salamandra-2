@@ -36,6 +36,8 @@ import {
   payloadDePreparacion,
   pidePreparar,
   profesionalDePreparacion,
+  limpiarTitulo,
+  MAX_TITULO,
 } from "../lib/clinica/prepararSesion.js";
 
 const AHORA = new Date("2026-08-26T12:00:00.000Z");
@@ -250,6 +252,35 @@ describe("payloadDePreparacion — lo que se manda al alta de sesión", () => {
       incidents: "",
     });
     assert.deepEqual(p.objectives, []);
+  });
+
+  it("con expediente y título los lleva; sin ellos, ni los menciona (12/09/2026)", () => {
+    // Un registro de diagnóstico nace atado a su expediente y con su título;
+    // uno de siempre no es de ningún expediente y no lleva la clave.
+    const DIAG = "3f2b9c1e-9d4a-4b1e-8c7d-1a2b3c4d5e6f";
+    const p = payloadDePreparacion({ ...base, diagnosticoId: DIAG, titulo: "  Sesión de   diagnóstico 2 " });
+    assert.equal(p.diagnosticoId, DIAG);
+    assert.equal(p.titulo, "Sesión de diagnóstico 2");
+    assert.equal("diagnosticoId" in payloadDePreparacion(base), false);
+    assert.equal("titulo" in payloadDePreparacion(base), false);
+    assert.equal("titulo" in payloadDePreparacion({ ...base, titulo: "   " }), false);
+  });
+
+  it("un expediente que no es un uuid no viaja: viene de la URL", () => {
+    assert.equal("diagnosticoId" in payloadDePreparacion({ ...base, diagnosticoId: "123" }), false);
+    assert.equal("diagnosticoId" in payloadDePreparacion({ ...base, diagnosticoId: "javascript:alert(1)" }), false);
+  });
+});
+
+describe("limpiarTitulo — el título de un registro, acotado", () => {
+  it("recorta espacios, junta los dobles y corta a MAX_TITULO", () => {
+    assert.equal(MAX_TITULO, 160);
+    assert.equal(limpiarTitulo("  Pruebas   WISC-V  "), "Pruebas WISC-V");
+    assert.equal(limpiarTitulo("x".repeat(200)).length, 160);
+  });
+
+  it("sin nada es null, que es lo que quita el título que había", () => {
+    for (const vacio of ["", "   ", null, undefined]) assert.equal(limpiarTitulo(vacio), null, `${vacio}`);
   });
 });
 

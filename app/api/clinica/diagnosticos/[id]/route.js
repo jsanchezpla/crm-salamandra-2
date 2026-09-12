@@ -4,18 +4,30 @@ import { auditar, datosPeticion, resumen } from "../../../../../lib/utils/audito
 import { puedeDarBonos } from "../../../../../lib/citas/quienDaBonos.js";
 import { productoDe, conceptoDeProducto, ROTULO_ESTADO } from "../../../../../lib/clinica/diagnostico.js";
 import { UUID_RE } from "../../../../../lib/clinica/diagnosticoFila.js";
-import { tablaAusente, catalogoDelCentro, filasDe } from "../../../../../lib/clinica/diagnosticoDb.js";
+import { tablaAusente, catalogoDelCentro } from "../../../../../lib/clinica/diagnosticoDb.js";
+import { fichaDeExpediente } from "../../../../../lib/clinica/registrosDelExpediente.js";
 
 /**
  * GET/PATCH /api/clinica/diagnosticos/[id] — un expediente de diagnóstico y lo
  * que se le puede cambiar sin decidir nada (12/09/2026).
  *
- * GET   — la misma fila que la lista, más sus citas (`citas`), que es lo que
- *         enseña la ficha del expediente.
+ * GET   — la misma fila que la lista, más lo que solo enseña la FICHA del
+ *         expediente (segunda entrega, 12/09/2026): sus citas (`citas[]`, cada
+ *         una con `sessionId` y `urls.registro` para seguir el registro que
+ *         hay o estrenar uno con `cita=`), sus registros de diagnóstico por
+ *         fecha (`registros[]`, con título, quien firma, estado y `url`), el
+ *         informe de valoración (`informe`, o null si aún no existe; si la
+ *         columna apuntaba a un informe borrado, se limpia), el título que
+ *         toca al siguiente registro (`siguienteTitulo`) y `urls.nuevoRegistro`
+ *         / `urls.informe`. Todo lo monta `fichaDeExpediente`
+ *         (`lib/clinica/registrosDelExpediente.js`), que es la misma fila de
+ *         `filaDeExpediente` con esas piezas de más.
  * PATCH — `{ therapistId?, notes?, productoKey? }`. El terapeuta se cambia
  *         desde el desplegable de la lista y queda auditado; el producto solo
  *         mientras está en `entrevista` (después ya hay un bono y un cobro con
  *         el precio del que se contrató, y cambiarlo sería reescribirlos).
+ *         Devuelve la misma ficha entera que el GET: la pantalla del
+ *         expediente la sustituye sin volver a pedirla.
  *
  * Parar, seguir, desbloquear y cerrar tienen su POST cada uno: son decisiones
  * y dejan su línea propia en la auditoría.
@@ -24,7 +36,7 @@ import { tablaAusente, catalogoDelCentro, filasDe } from "../../../../../lib/cli
 const limpiaTexto = (v, max = 4000) => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null);
 
 export const GET = withTenant(async (request, routeCtx, ctx) => {
-  const { tenantModels, hasModule } = ctx;
+  const { tenant, tenantModels, hasModule } = ctx;
   if (!hasModule("clinica")) return forbidden();
   try {
     const { Diagnostico } = tenantModels;
@@ -35,7 +47,7 @@ export const GET = withTenant(async (request, routeCtx, ctx) => {
     if (!expediente) return notFound("Ese diagnóstico no existe");
 
     const puedeDecidir = puedeDarBonos({ role: request.headers.get("x-user-role") ?? "user", hasModule });
-    const [fila] = await filasDe({ tenantModels, expedientes: [expediente], puedeDecidir, conCitas: true });
+    const fila = await fichaDeExpediente({ tenant, tenantModels, expediente, puedeDecidir });
     return ok({ expediente: fila });
   } catch (err) {
     if (tablaAusente(err)) return notFound("Ese diagnóstico no existe");
@@ -110,7 +122,7 @@ export const PATCH = withTenant(async (request, routeCtx, ctx) => {
     }
 
     const puedeDecidir = puedeDarBonos({ role: request.headers.get("x-user-role") ?? "user", hasModule });
-    const [fila] = await filasDe({ tenantModels, expedientes: [expediente], puedeDecidir });
+    const fila = await fichaDeExpediente({ tenant, tenantModels, expediente, puedeDecidir });
     return ok({ expediente: fila });
   } catch (err) {
     if (tablaAusente(err)) return notFound("Ese diagnóstico no existe");

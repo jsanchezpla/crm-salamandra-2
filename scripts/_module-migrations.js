@@ -525,6 +525,10 @@ export const MODULES = {
     // la de arriba: el MODELO la declara y `clinic_sessions` existe con
     // `pacientes` suelto. VA ANTES del despliegue.
     "migrate-diagnosticos",
+    // Segunda entrega (12/09/2026): `clinic_sessions.titulo` —el título de un
+    // registro de diagnóstico— y `diagnosticos.entrevista_payment_id`. Aquí
+    // por lo mismo que la de arriba. VA ANTES del despliegue.
+    "migrate-diagnosticos-2",
   ],
 
   clinica: [
@@ -626,6 +630,16 @@ export const MODULES = {
      * Las reglas, en `lib/clinica/diagnostico.js`. VA ANTES del despliegue.
      */
     "migrate-diagnosticos",
+    /*
+     * Segunda entrega del Diagnóstico (12/09/2026): los registros por fecha y
+     * título y «Unir en informe». Dos columnas: `clinic_sessions.titulo` (el
+     * título de la entrada) donde hay `clinic_sessions` —también en
+     * `pacientes`, que el modelo la declara para todos— y
+     * `diagnosticos.entrevista_payment_id` (el cobro de la entrevista atado
+     * por id, para descontarlo del producto) donde hay expedientes. VA ANTES
+     * del despliegue.
+     */
+    "migrate-diagnosticos-2",
   ],
 
   // Control horario. Depende de `team_members`, que crea el módulo Equipo: la

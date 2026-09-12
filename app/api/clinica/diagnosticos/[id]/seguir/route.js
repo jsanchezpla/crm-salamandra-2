@@ -4,13 +4,16 @@ import { auditar, datosPeticion, resumen } from "../../../../../../lib/utils/aud
 import { puedeDarBonos } from "../../../../../../lib/citas/quienDaBonos.js";
 import { clientIdOfPatient } from "../../../../../../lib/clinica/patientClient.js";
 import { crearBonoConSuCobro } from "../../../../../../lib/billing/altaDeBono.js";
-import { puedePasarA, cobroDelProducto, ROTULO_ESTADO } from "../../../../../../lib/clinica/diagnostico.js";
+import { puedePasarA, cobroDelProducto, cobroDeLaEntrevista, ROTULO_ESTADO } from "../../../../../../lib/clinica/diagnostico.js";
+import { descuentoDeLaEntrevista } from "../../../../../../lib/clinica/adoptarEnDiagnostico.js";
 import { UUID_RE, MOTIVO_SIN_PERMISO_DIAGNOSTICO, textoEnFacturaDe, centimosDe } from "../../../../../../lib/clinica/diagnosticoFila.js";
 import {
   tablaAusente,
   catalogoDelCentro,
   conceptoDelExpediente,
   productoDelExpediente,
+  cobroDeEntrevistaDelExpediente,
+  resumenDeCobro,
   nombreDeQuienPide,
   filasDe,
 } from "../../../../../../lib/clinica/diagnosticoDb.js";
@@ -29,6 +32,16 @@ import {
  *     («Diagnóstico Simple» 350 €, «Diagnóstico Completo» 650 €) o, sin él,
  *     el precio de caída del producto. La entrevista va DENTRO de ese precio.
  * Y el expediente pasa a `en_curso` con su `packId`.
+ *
+ * ── Y SE DESCUENTA LA ENTREVISTA YA COBRADA (12/09/2026, Aumenta) ─────────
+ * «Los 50 € de la entrevista inicial de Lea descuentan del importe de la
+ * valoración completa»: si el expediente tiene su cobro de entrevista —el
+ * atado por `entrevistaPaymentId` (el alta que adopta una entrevista ya
+ * cobrada) o, en los expedientes anteriores a la columna, el que encuentra
+ * `cobrosDeExpedientes`—, el producto nace por `precio − entrevista`
+ * (`descuentoDeLaEntrevista`, cobrada o pendiente y no devuelta) y la nota
+ * del cobro lo dice. Es el MISMO cálculo que `cobroAlSeguir` en la fila: lo
+ * que la pantalla anuncia en la confirmación es lo que se apunta.
  *
  * Solo dirección o quien lleve Facturación (`puedeDarBonos`). 409 si ya tiene
  * bono. Si un intento anterior dejó el bono creado y el expediente sin
@@ -74,7 +87,12 @@ export const POST = withTenant(async (request, routeCtx, ctx) => {
 
     const producto = productoDelExpediente({ tenant, expediente });
     const concepto = conceptoDelExpediente({ tenant, expediente, catalogo });
-    const cobro = cobroDelProducto(producto, concepto);
+    // La entrevista ya cobrada (o debida) se descuenta del producto.
+    const cobroEntrevista = await cobroDeEntrevistaDelExpediente(tenantModels, expediente, {
+      textoEntrevista: cobroDeLaEntrevista(catalogo.conceptoEntrevista).texto,
+    });
+    const descuentoEuros = descuentoDeLaEntrevista(cobroEntrevista);
+    const cobro = cobroDelProducto(producto, concepto, { descuentoEuros });
     const importeCentimos = centimosDe(cobro.importeEuros);
 
     const avisos = [];
@@ -108,7 +126,13 @@ export const POST = withTenant(async (request, routeCtx, ctx) => {
         diagnosticoId: expediente.id,
         cobro: { conceptId: cobro.conceptId, texto: cobro.texto, invoiceText: textoEnFacturaDe(concepto) },
       }));
-      if (!huboCobro) avisos.push(`El bono ha nacido sin cobro: no hay precio para «${producto.nombre}» (ni concepto en el catálogo ni precio de caída).`);
+      if (!huboCobro) {
+        avisos.push(
+          cobro.importeEuros === 0 && cobro.descuentoEuros > 0
+            ? `La entrevista ya cobrada (${cobro.descuentoEuros} €) cubre el precio de «${producto.nombre}»: el bono ha nacido sin cobro.`
+            : `El bono ha nacido sin cobro: no hay precio para «${producto.nombre}» (ni concepto en el catálogo ni precio de caída).`
+        );
+      }
     }
 
     await expediente.update({
@@ -128,15 +152,18 @@ export const POST = withTenant(async (request, routeCtx, ctx) => {
       after: {
         ...resumen(expediente, ["id", "patientId", "clientId", "productoKey", "packId", "status"]),
         importe: cobro.importeEuros !== null ? String(cobro.importeEuros) : null,
+        descuento: cobro.descuentoEuros > 0 ? String(cobro.descuentoEuros) : null,
+        entrevistaPaymentId: cobroEntrevista?.id ?? null,
         cobro: huboCobro,
       },
     });
 
-    const [fila] = await filasDe({ tenantModels, expedientes: [expediente], puedeDecidir, catalogo });
+    const [fila] = await filasDe({ tenantModels, tenant, expedientes: [expediente], puedeDecidir, catalogo });
     return ok({
       expediente: fila,
       bono: { id: bono.id, sinTope: true },
-      cobro: huboCobro ? { importe: cobro.importeEuros, status: "pending", texto: cobro.texto } : null,
+      cobro: huboCobro ? { importe: cobro.importeEuros, descuento: cobro.descuentoEuros, status: "pending", texto: cobro.texto } : null,
+      entrevista: resumenDeCobro(cobroEntrevista),
       avisos,
     });
   } catch (err) {

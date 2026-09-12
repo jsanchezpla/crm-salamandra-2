@@ -138,3 +138,122 @@ da sin cobrar nada; después, o la familia para (y se le cobra la entrevista,
 - Detalle de pantallas, endpoints, fila y pruebas en `docs/modules/clinica.md`
   («Diagnóstico: el expediente con su barra de horas» y «Diagnósticos: la
   lista y lo visible») y `docs/modules/citas.md` («La cita de un diagnóstico»).
+
+## Segunda entrega (12/09/2026, tras las respuestas de Aumenta)
+
+La misma tarde, Aumenta contestó a las preguntas del PDF y Rodrigo pidió lo
+que faltaba: «Informe de diagnóstico por paciente: entradas por fecha y título
+(registros de diagnóstico, con IA como un registro de sesión) que al final se
+unen con IA en el informe completo». Tres respuestas de Isa cambiaron además
+lo ya decidido: **(A)** los apartados del registro son los cinco que se les
+propuso menos «notas internas» («ese informe es el que se entrega al
+paciente»); **(B)** las citas de «INFORME PARA DIAGNOSTICO» SON horas del
+diagnóstico, y una entrevista inicial de terapia hecha antes de decidir cuenta
+como la primera hora y **sus 50 € ya cobrados se descuentan del producto**;
+**(C)** los seis pacientes que ya están en diagnóstico los dan de alta ellos,
+«lo único que hay que saber cómo hacerlo».
+
+12. **Un registro de diagnóstico es una `clinic_sessions` con `diagnostico_id`,
+    y el informe es un `clinical_reports`.** Ni módulo ni tabla nuevos: es el
+    mismo registro de sesión de siempre —apartados de plantilla, audio →
+    Whisper → IA, firma con desplegable— escrito con la plantilla de fábrica
+    `sesion_diagnostico` (los cinco apartados de la respuesta A) y con un
+    TÍTULO, porque es una entrada de un índice. Solo dos columnas:
+    `clinic_sessions.titulo` VARCHAR(160) y
+    `diagnosticos.entrevista_payment_id` UUID. **A qué expediente se ata lo
+    decide el SERVIDOR**, nunca el navegador: con cita, el de la cita (si la
+    cita es de este paciente); sin ella, el del cuerpo solo si existe y es del
+    MISMO paciente; y el `PATCH` lo escribe una vez y no lo pisa, como
+    `bookingId`. Atar una nota clínica al expediente de otro niño no es un
+    error de formulario.
+
+13. **«Unir en informe» son dos pasos y ninguno inventa.** `POST
+    /[id]/informe` crea el informe de valoración diagnóstica del expediente
+    una sola vez (`informe_id`, con cerrojo en la transacción), firmado por el
+    terapeuta asignado; `POST /[id]/unir` junta el texto de los registros
+    TERMINADOS (`registered`/`published`: un borrador no es material) y se lo
+    da a `structureInforme`, que devuelve la propuesta **SIN guardar**, con
+    los mismos gates y el mismo contrato que el dictado
+    (`reports/[id]/desde-material`, que es su molde). La profesional acepta
+    apartado por apartado en `PropuestaIA`. Al material no viajan nunca
+    `prepText`, `prepFiles`, `internalNotes` ni `aiTranscription` —la
+    consulta ni siquiera los pide—, ni el nombre del paciente.
+
+14. **El expediente tiene ficha propia** (`/clinica/diagnosticos/[id]`) con
+    tres bloques —Registros, Citas e Informe— y las MISMAS acciones que la
+    lista, compartidas por un hook (`useAccionesDeDiagnostico.js`) y no
+    copiadas. El enlace «Informe» de la lista deja de llevar a la ficha del
+    paciente con `?informe=diagnostico`: ahora solo existe cuando el informe
+    existe, y el informe nace desde el expediente.
+
+15. **La entrevista ya cobrada se DESCUENTA del producto** (respuesta B), no
+    se anula ni se vuelve a cobrar: `cobroDelProducto(producto, concepto, {
+    descuentoEuros })` da `max(0, precio − descuento)` y la nota lo dice
+    («Diagnóstico Completo (descontada la entrevista inicial de 50 €)»). El
+    cobro se ata por `entrevista_payment_id` —`parar` lo escribe, y el alta
+    que adopta también—, así que deja de reconocerse por nota + fecha; un
+    cobro pendiente descuenta igual que uno cobrado (la familia debe la
+    entrevista, no la entrevista más el producto entero), y uno devuelto no
+    descuenta nada. Cada fila dice su propio `cobroAlSeguir`, que es lo que
+    la pantalla anuncia en la confirmación.
+
+16. **«Empezar desde lo que ya hay»** (respuesta C): `GET
+    /api/clinica/diagnosticos/candidatos` lista, con buscador y ventana de
+    meses, los pacientes con citas de diagnóstico o entrevista hecha y sin
+    expediente, y el alta (`POST /api/clinica/diagnosticos` con `adoptar`)
+    mete todo eso dentro en la MISMA transacción que el `create`. Qué es una
+    cita de diagnóstico se decide **por columnas** (`event_types.informe_tipo
+    = 'diagnostico'`, `is_initial_assessment`) y jamás por el nombre del tipo
+    ni por un id de Aumenta.
+
+### Alternativas descartadas (segunda entrega)
+
+- **Guardar el número del registro** («Sesión de diagnóstico 3») en una
+  columna, o un contador en el expediente. Es la misma trampa que las horas
+  (decisión 3): borrar el segundo registro dejaría un índice que salta del 1
+  al 3, y corregir una fecha no lo reordenaría. El número se CUENTA por orden
+  de fecha entre los que no son la entrevista (`registrosPorFecha`), y un
+  título escrito a mano conserva su sitio pero no su número. Lo único que se
+  guarda es lo que una persona escribió.
+- **Anular el cobro de la entrevista al seguir**, o cobrar el producto entero
+  y devolver 50 €. Las dos dejan rastro en Cobros de algo que nunca pasó —una
+  devolución que la familia no vio, o un cobro anulado que sí facturó— y
+  obligan a mirar dos filas para saber cuánto se ha cobrado. Descontar es una
+  sola fila, con el motivo escrito en su propia nota.
+- **Que el navegador mande la lista de citas que se adoptan.** Sería el
+  camino corto: la tabla de candidatos ya las tiene calculadas. Pero una
+  lista de ids desde el navegador es una lista de ids: bastaría cambiar una
+  para meter en el expediente de un niño la cita de otro. El servidor las
+  RECALCULA con las mismas reglas y del cliente solo acepta
+  `entrevistaBookingId` —y lo comprueba contra el paciente antes de
+  escribirlo—; cada UPDATE exige además `diagnostico_id IS NULL` y el
+  paciente, para no robarle una cita a otro expediente.
+- **Que «Unir» escriba el informe.** Es lo que pediría el botón, y es justo
+  lo que no puede hacer: un informe clínico lo firma una persona, y una IA
+  que sobrescribe lo ya redactado borra trabajo sin preguntar. `/unir`
+  devuelve la propuesta y lo único que guarda es `sourceSessionIds`
+  —metadatos: el anexo del PDF—. Tampoco se dispara sola al llegar con
+  `?unir=1`: cada llamada la paga el centro.
+- **Cambiar la regla de `gastaSesion` para las citas pasadas en
+  `confirmed`.** En Aumenta nadie las marca como hechas, así que un
+  expediente recién adoptado enseña como RESERVADAS horas que ya se dieron.
+  Tentador, y no: es la regla de los BONOS, y tocarla cambiaría lo que cuenta
+  y lo que se cobra en todos los bonos del CRM. Se dice en la doc y en la
+  guía: marcar la cita como «hecha» es lo que la mueve de tramo.
+
+### Consecuencias (segunda entrega)
+
+- `scripts/migrate-diagnosticos-2.js` **VA ANTES del despliegue** (los modelos
+  ya declaran `titulo` y `entrevista_payment_id`), registrada en los bloques
+  `clinica` y `pacientes` —no en `citas`: `bookings` no cambia—.
+- `PATCH /api/clinica/reports/[id]` admite `therapistId` (del equipo): la
+  cabecera del editor del informe gana el desplegable «Firma».
+- `GET /api/clinica/diagnosticos/[id]` ESCRIBE en un caso: si `informe_id`
+  apunta a un informe borrado o de otro paciente, limpia la columna y
+  devuelve `informe: null`, para que la ficha vuelva a ofrecer «Unir en
+  informe» en vez de un botón que abre un 404.
+- Auditoría nueva: `diagnostico.informe_creado` y `diagnostico.informe_unido`
+  (ids y recuentos, nunca texto clínico); `.abierto` gana `adoptadas`,
+  `.seguido` el `descuento`, `.parado` el `yaExistia`.
+- Detalle en `docs/modules/clinica.md` («Diagnóstico, segunda entrega: los
+  registros por fecha, «Unir en informe» y empezar desde lo que ya hay»).

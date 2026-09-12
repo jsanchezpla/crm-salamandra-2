@@ -14,8 +14,13 @@
  *     `cobroPendiente` apunta a la primera fila pendiente con el TOTAL que
  *     falta (un pendiente partido en dos sigue siendo una deuda);
  *   · la forma exacta de la fila: paciente, producto, terapeuta, barra,
- *     rótulo, urls de alta en Citas y de informe, permisos y acciones;
- *   · la entrevista se deduce de las citas si Citas no escribió la columna.
+ *     rótulo, urls de alta en Citas, del expediente, del nuevo registro y del
+ *     informe (solo si existe), permisos y acciones;
+ *   · la entrevista se deduce de las citas si Citas no escribió la columna;
+ *   · segunda entrega (12/09/2026): el dinero de ESTE expediente
+ *     (`dinero.entrevista`, `cobroAlSeguir`), los registros por fecha con su
+ *     enlace, el `siguienteTitulo`, y cada cita con `sessionId` y
+ *     `urls.registro` (seguir el que hay o estrenar uno con `cita=`).
  *
  * Y `lib/billing/cobroDelBono.js`: con `texto`, `conceptId` e `invoiceText` el
  * pendiente del bono se llama como el producto; sin ellos, exactamente como
@@ -42,6 +47,9 @@ const ID = "3f2b9c1e-9d4a-4b1e-8c7d-1a2b3c4d5e6f";
 const PACIENTE = "9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d";
 const AHORA = new Date("2026-09-12T10:00:00Z");
 const enHoras = (h) => new Date(AHORA.getTime() + h * 3_600_000).toISOString();
+// Dos profesionales con id de verdad: la cola de la URL solo cuelga `prof` si es un uuid.
+const ISA = "6c1f3a12-9d84-4b77-8e21-0a5f2c7d4b90";
+const SILVIA = "7d2e4b23-ae95-4c88-9f32-1b6a3d8e5ca1";
 
 const EXPEDIENTE = {
   id: ID,
@@ -160,14 +168,91 @@ describe("filaDeExpediente", () => {
 
   it("el dinero y el cobro pendiente", () => {
     assert.deepEqual(fila.cobroPendiente, { id: "p1", importe: 350, status: "pending" });
-    assert.deepEqual(fila.dinero, { pendiente: 350, cobrado: 0, devuelto: 0 });
+    assert.deepEqual(fila.dinero, { pendiente: 350, cobrado: 0, devuelto: 0, entrevista: null });
     assert.equal(fila.packId, "pk-1");
   });
 
-  it("las urls: alta en Citas (entrevista y horas) e informe del paciente", () => {
+  it("las urls: alta en Citas (entrevista y horas), el expediente y el nuevo registro; el informe solo si existe", () => {
     assert.equal(fila.urls.entrevista, `/citas?nueva=1&diagnostico=${ID}&tramo=entrevista&paciente=${PACIENTE}&duracion=60`);
     assert.equal(fila.urls.horas, `/citas?nueva=1&diagnostico=${ID}&tramo=horas&paciente=${PACIENTE}`);
-    assert.equal(fila.urls.informe, `/pacientes/${PACIENTE}?informe=diagnostico`);
+    assert.equal(fila.urls.expediente, `/clinica/diagnosticos/${ID}`);
+    // Segunda entrega: el informe nace desde el expediente; sin él, sin enlace
+    // (antes llevaba a la ficha con `?informe=diagnostico`).
+    assert.equal(fila.urls.informe, null);
+    assert.equal(fila.informe, null);
+    // «Nuevo registro»: sin cita, tramo horas, firmado por el asignado, con el
+    // título que toca y la plantilla de la sesión de diagnóstico.
+    const q = new URL(fila.urls.nuevoRegistro, "http://x");
+    assert.equal(q.pathname, `/pacientes/${PACIENTE}/sesiones/nueva`);
+    assert.equal(q.searchParams.get("preparar"), "1");
+    assert.equal(q.searchParams.get("plantilla"), "sesion_diagnostico");
+    // «tm-1» no es un uuid y la cola lo acota (como `profesionalDePreparacion`): con uno de verdad, firma el asignado.
+    assert.equal(q.searchParams.has("prof"), false);
+    const conUuid = filaDeExpediente({ expediente: { ...EXPEDIENTE, therapistId: ISA }, ahora: AHORA });
+    assert.equal(new URL(conUuid.urls.nuevoRegistro, "http://x").searchParams.get("prof"), ISA);
+    assert.equal(q.searchParams.get("diagnostico"), ID);
+    assert.equal(q.searchParams.get("titulo"), "Sesión de diagnóstico 1");
+    assert.equal(q.searchParams.has("cita"), false);
+    assert.equal(fila.siguienteTitulo, "Sesión de diagnóstico 1");
+  });
+
+  it("con informe, el enlace va al informe y la fila lo resume", () => {
+    const con = filaDeExpediente({
+      expediente: { ...EXPEDIENTE, informeId: "inf-1" },
+      informe: { id: "inf-1", status: "draft", statusLabel: "Borrador", reportDate: "2026-09-12" },
+      ahora: AHORA,
+    });
+    assert.deepEqual(con.informe, { id: "inf-1", status: "draft", statusLabel: "Borrador", reportDate: "2026-09-12", url: "/clinica/informes/inf-1" });
+    assert.equal(con.urls.informe, "/clinica/informes/inf-1");
+    assert.equal(con.informeId, "inf-1");
+    // Solo la columna, sin la fila del informe: el enlace sale igual (la API
+    // limpia la columna si el informe se borró).
+    assert.equal(filaDeExpediente({ expediente: { ...EXPEDIENTE, informeId: "inf-2" }, ahora: AHORA }).urls.informe, "/clinica/informes/inf-2");
+  });
+
+  it("el dinero de ESTE expediente: la entrevista cobrada y lo que costará seguir (12/09/2026)", () => {
+    const con = filaDeExpediente({
+      expediente: { ...EXPEDIENTE, status: "entrevista" },
+      cobroEntrevista: { id: "pe-1", amount: "50.00", status: "completed" },
+      cobroAlSeguir: { importe: 300, descuento: 50, texto: "Diagnóstico Simple (descontada la entrevista inicial de 50 €)" },
+      ahora: AHORA,
+    });
+    assert.deepEqual(con.dinero.entrevista, { id: "pe-1", importe: 50, status: "completed" });
+    assert.equal(con.entrevistaPaymentId, "pe-1");
+    assert.deepEqual(con.cobroAlSeguir, { importe: 300, descuento: 50, texto: "Diagnóstico Simple (descontada la entrevista inicial de 50 €)" });
+    // La columna manda sobre la fila encontrada por nota+fecha.
+    assert.equal(filaDeExpediente({ expediente: { ...EXPEDIENTE, entrevistaPaymentId: "pe-col" }, cobroEntrevista: { id: "pe-1", amount: 50, status: "completed" }, ahora: AHORA }).entrevistaPaymentId, "pe-col");
+    // Sin nada: null en los dos, y la forma de `dinero` con su clave.
+    assert.equal(fila.dinero.entrevista, null);
+    assert.equal(fila.cobroAlSeguir, null);
+    assert.equal(fila.entrevistaPaymentId, null);
+    // `cobroAlSeguir` también acepta la salida de `cobroDelProducto` tal cual.
+    assert.deepEqual(
+      filaDeExpediente({ expediente: EXPEDIENTE, cobroAlSeguir: { conceptId: "c", texto: "X", importeEuros: 600, descuentoEuros: 50 }, ahora: AHORA }).cobroAlSeguir,
+      { importe: 600, descuento: 50, texto: "X" }
+    );
+  });
+
+  it("los registros van por fecha, numerados, con quien firma y su enlace", () => {
+    const registros = [
+      { id: "s2", sessionDate: "2026-09-05T10:00:00Z", therapistId: "tm-2", status: "registered", bookingId: "c2", contentSections: { plantilla: "sesion_diagnostico" } },
+      { id: "s1", sessionDate: "2026-09-01T10:00:00Z", therapistId: "tm-1", status: "published", bookingId: "c1", contentSections: { plantilla: "entrevista_inicial" } },
+      { id: "s3", sessionDate: "2026-09-08T10:00:00Z", therapistId: null, status: "draft", titulo: "Pruebas WISC-V" },
+    ];
+    const terapeutas = new Map([["tm-1", { id: "tm-1", displayName: "Isa" }], ["tm-2", { id: "tm-2", displayName: "Silvia" }]]);
+    const con = filaDeExpediente({ expediente: EXPEDIENTE, registros, terapeutas, ahora: AHORA });
+    assert.deepEqual(
+      con.registros.map((r) => [r.id, r.titulo, r.esEntrevista, r.terapeuta?.nombre ?? null, r.url]),
+      [
+        ["s1", "Entrevista inicial", true, "Isa", `/pacientes/${PACIENTE}/sesiones/s1`],
+        ["s2", "Sesión de diagnóstico 1", false, "Silvia", `/pacientes/${PACIENTE}/sesiones/s2`],
+        ["s3", "Pruebas WISC-V", false, null, `/pacientes/${PACIENTE}/sesiones/s3`],
+      ]
+    );
+    assert.equal(con.siguienteTitulo, "Sesión de diagnóstico 3");
+    // Y el que viene ya calculado manda.
+    assert.equal(filaDeExpediente({ expediente: EXPEDIENTE, registros, siguienteTitulo: "Lo que sea", ahora: AHORA }).siguienteTitulo, "Lo que sea");
+    assert.deepEqual(fila.registros, []);
   });
 
   it("permisos y acciones van con la fila", () => {
@@ -188,8 +273,42 @@ describe("filaDeExpediente", () => {
     assert.equal("citas" in fila, false);
     const conCitas = filaDeExpediente({ expediente: EXPEDIENTE, citas, ahora: AHORA, conCitas: true });
     assert.equal(conCitas.citas.length, 3);
-    assert.deepEqual(Object.keys(conCitas.citas[0]), ["id", "scheduledAt", "duration", "status", "tramo", "teamMemberId", "packId", "sessionNumber"]);
+    assert.deepEqual(Object.keys(conCitas.citas[0]), ["id", "scheduledAt", "duration", "status", "tramo", "teamMemberId", "packId", "sessionNumber", "sessionId", "urls"]);
     assert.equal(conCitas.citas[0].tramo, "entrevista");
+  });
+
+  it("cada cita dice si ya tiene registro y a dónde ir: seguirlo o estrenarlo con la cita (12/09/2026)", () => {
+    const conCitas = filaDeExpediente({
+      expediente: { ...EXPEDIENTE, therapistId: ISA },
+      citas: citas.map((c) => ({ ...c, teamMemberId: c.id === "c2" ? SILVIA : null })),
+      sesionesPorCita: new Map([["c1", "s1"]]),
+      registros: [{ id: "s1", bookingId: "c1", sessionDate: enHoras(-72), contentSections: { plantilla: "entrevista_inicial" } }],
+      ahora: AHORA,
+      conCitas: true,
+    });
+    const [c1, c2, c3] = conCitas.citas;
+    // La entrevista ya tiene registro: se sigue.
+    assert.equal(c1.sessionId, "s1");
+    assert.equal(c1.urls.registro, `/pacientes/${PACIENTE}/sesiones/s1`);
+    // Una hora sin registro: se estrena con la cita, su fecha, SU profesional y la plantilla de sesión.
+    assert.equal(c2.sessionId, null);
+    const q2 = new URL(c2.urls.registro, "http://x");
+    assert.equal(q2.pathname, `/pacientes/${PACIENTE}/sesiones/nueva`);
+    assert.equal(q2.searchParams.get("cita"), "c2");
+    assert.equal(q2.searchParams.get("fecha"), enHoras(-48));
+    assert.equal(q2.searchParams.get("prof"), SILVIA);
+    assert.equal(q2.searchParams.get("plantilla"), "sesion_diagnostico");
+    assert.equal(q2.searchParams.get("diagnostico"), ID);
+    assert.equal(q2.searchParams.get("titulo"), "Sesión de diagnóstico 1");
+    // Sin profesional en la cita, firma el asignado del expediente.
+    assert.equal(new URL(c3.urls.registro, "http://x").searchParams.get("prof"), ISA);
+    // Y una entrevista sin registro se estrena con SU plantilla y su título.
+    const sinRegistro = filaDeExpediente({ expediente: EXPEDIENTE, citas, ahora: AHORA, conCitas: true }).citas[0];
+    const q1 = new URL(sinRegistro.urls.registro, "http://x");
+    assert.equal(q1.searchParams.get("plantilla"), "entrevista_inicial");
+    assert.equal(q1.searchParams.get("titulo"), "Entrevista inicial");
+    // También vale un objeto plano como mapa.
+    assert.equal(filaDeExpediente({ expediente: EXPEDIENTE, citas, sesionesPorCita: { c3: "s9" }, ahora: AHORA, conCitas: true }).citas[2].sessionId, "s9");
   });
 
   it("un paciente borrado no tumba la fila", () => {

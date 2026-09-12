@@ -18,7 +18,8 @@
  *   · la cita tiene que ser del paciente del expediente;
  *   · la entrevista nace «sin coste» con el texto de fábrica;
  *   · el tramo entrevista abre `entrevista_inicial` aunque el tipo sea
- *     DIAGNÓSTICO; la valoración inicial del centro también; el resto, nada.
+ *     DIAGNÓSTICO; el tramo horas abre `sesion_diagnostico` (12/09/2026); la
+ *     valoración inicial del centro también la entrevista; el resto, nada.
  *
  * Forma: `node:test` + `node:assert/strict`, como `_smoke-citas-dinero.mjs`.
  */
@@ -37,7 +38,7 @@ import {
 } from "../lib/clinica/citaDeDiagnostico.js";
 import { plantillaDeLaCita } from "../lib/clinica/plantillaDeLaCita.js";
 import { ENTREVISTA, mensajeTope } from "../lib/clinica/diagnostico.js";
-import { PLANTILLA_ENTREVISTA } from "../lib/clinica/plantillas.js";
+import { PLANTILLA_ENTREVISTA, PLANTILLA_SESION_DIAGNOSTICO } from "../lib/clinica/plantillas.js";
 
 const ID = "3f2b9c1e-9d4a-4b1e-8c7d-1a2b3c4d5e6f";
 const PACIENTE = "9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d";
@@ -182,11 +183,19 @@ describe("plantillaDeLaCita: con qué plantilla se prepara el registro", () => {
     assert.equal(plantillaDeLaCita(cita), PLANTILLA_ENTREVISTA.key);
   });
 
-  it("las horas de un diagnóstico no: se escriben con la plantilla de siempre", () => {
+  it("las horas de un diagnóstico abren sesion_diagnostico (segunda entrega, 12/09/2026)", () => {
+    const cita = { diagnosticoId: ID, diagnosticoTramo: "horas", eventType: { name: "DIAGNÓSTICO", isInitialAssessment: false, informeTipo: "diagnostico" } };
+    assert.equal(plantillaDeLaCita(cita), "sesion_diagnostico");
+    assert.equal(plantillaDeLaCita(cita), PLANTILLA_SESION_DIAGNOSTICO.key);
+    // Y aunque el tipo fuera la valoración inicial del centro: el tramo manda.
     assert.equal(
-      plantillaDeLaCita({ diagnosticoId: ID, diagnosticoTramo: "horas", eventType: { isInitialAssessment: false } }),
-      null
+      plantillaDeLaCita({ diagnosticoId: ID, diagnosticoTramo: "horas", eventType: { isInitialAssessment: true } }),
+      "sesion_diagnostico"
     );
+  });
+
+  it("un tramo horas sin expediente no cuenta: es un dato suelto", () => {
+    assert.equal(plantillaDeLaCita({ diagnosticoTramo: "horas", eventType: { isInitialAssessment: false } }), null);
   });
 
   it("la valoración inicial del centro sigue abriendo la entrevista, como desde el 02/09/2026", () => {
