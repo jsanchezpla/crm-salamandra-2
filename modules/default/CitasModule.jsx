@@ -31,6 +31,7 @@ import { CitaDetalleModal } from "./citas/CitaDetalleModal.jsx";
 import { CitaMenuContextual } from "./citas/CitaMenuContextual.jsx";
 import { BloqueoModal } from "./citas/BloqueoModal.jsx";
 import { destinoDePegado, sePuedeMover } from "@/lib/citas/pegarCita.js";
+import { contarSiguientes, ofrecerMoverSiguientes } from "@/components/citas/siguientesDeLaCita.js";
 import { fichaDeLaCita } from "@/lib/citas/fichaDeLaCita.js";
 import { mesDeLaCita, urlCobrarMes } from "@/lib/citas/cobrarMes.js";
 import { NuevaCitaDrawer } from "./citas/NuevaCitaDrawer.jsx";
@@ -335,7 +336,7 @@ export default function CitasModule({
   const [festivosAbierto, setFestivosAbierto] = useState(false);
 
   // Preguntas y avisos, dentro del CRM y no del navegador (12/08/2026, Rodrigo).
-  const { confirmar, avisar, pedirTexto, dialogo } = useDialogo();
+  const { confirmar, avisar, pedirTexto, elegir, dialogo } = useDialogo();
 
   // Cuántas solicitudes pendientes hay (para el globito de la pestaña). No
   // cambia de vista: el usuario decidió arrancar SIEMPRE en el calendario.
@@ -936,6 +937,9 @@ export default function CitasModule({
     try {
       if (modo === "cortar") {
         const avisarPaciente = await preguntarSiAvisar(cita.props, destino);
+        // ¿Cuántas iguales vienen después? Se cuenta ANTES de mover, con la
+        // hora que la cita todavía tiene (12/09/2026, Rodrigo).
+        const serie = await contarSiguientes(cita.id);
         const res = await fetch(`/api/citas/bookings/${cita.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -943,6 +947,14 @@ export default function CitasModule({
         });
         const j = await res.json();
         if (!j.ok) throw new Error(j.error || "No se pudo mover la cita");
+        await ofrecerMoverSiguientes({
+          bookingId: cita.id,
+          serie,
+          anterior: new Date(cita.startStr).toISOString(),
+          nuevo: destino,
+          confirmar,
+          avisar,
+        });
       } else {
         const p = cita.props ?? {};
         const res = await fetch("/api/citas/bookings", {
@@ -1038,10 +1050,16 @@ export default function CitasModule({
     }
     const nuevoIso = info.event.start ? info.event.start.toISOString() : null;
     if (!nuevoIso) { info.revert(); return; }
+    // De dónde venía, que es por donde se buscan las que se repiten después.
+    const anteriorIso = info.oldEvent?.start ? info.oldEvent.start.toISOString() : null;
     try {
       // Antes de guardar, ¿se avisa a la familia? (03/09/2026). La cita ya
       // está pintada en el hueco nuevo mientras se contesta.
       const avisarPaciente = await preguntarSiAvisar(info.event.extendedProps, nuevoIso);
+      // Y cuántas iguales vienen después, con la hora que todavía tiene en la
+      // base: arrastrar no preguntaba nada aunque la ficha sí lo hiciera
+      // (12/09/2026, Rodrigo).
+      const serie = anteriorIso ? await contarSiguientes(info.event.id) : null;
       const res = await fetch(`/api/citas/bookings/${info.event.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -1049,6 +1067,14 @@ export default function CitasModule({
       });
       const j = await res.json();
       if (!j.ok) throw new Error(j.error || "No se pudo mover la cita");
+      await ofrecerMoverSiguientes({
+        bookingId: info.event.id,
+        serie,
+        anterior: anteriorIso,
+        nuevo: nuevoIso,
+        confirmar,
+        avisar,
+      });
       // FullCalendar ya la ha pintado en el hueco nuevo; refrescamos para
       // reconciliar con el servidor (color/estado/hora exacta).
       refrescarAgenda();
@@ -1696,6 +1722,7 @@ export default function CitasModule({
           confirmar={confirmar}
           avisar={avisar}
           pedirTexto={pedirTexto}
+          elegir={elegir}
           onClose={() => setOpenBooking(null)}
           onChanged={(data) => {
             setOpenBooking(data);

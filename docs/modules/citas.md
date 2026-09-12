@@ -677,6 +677,64 @@ semana a otra hora) se queda fuera, y dos repeticiones idénticas se ven como un
 
 Prueba: `_smoke-siguientes-iguales.mjs`.
 
+### Borrar y mover la serie entera, y en las cinco vías (12/09/2026, Rodrigo)
+
+«En las citas necesito que si borro o muevo una cita me proponga borrar o mover
+esa y todas las citas futuras, por si me he equivocado.» Lo del 11/09 solo
+estaba en «Cambiar hora» de la ficha; arrastrar una cita en el calendario o
+pegarla tras cortarla la movían sola y sin preguntar, y cancelar y borrar no
+preguntaban nada.
+
+⚠️ **Y lo del 11/09 no llegó a salir ni una vez.** `GET …/siguientes` sin
+`?anterior=` hacía `new Date(null)`, que no es una fecha inválida: es el 1 de
+enero de 1970. Así que buscaba las hermanas de una cita de 1970 y contestaba
+SIEMPRE «0 siguientes». Arreglado con la fecha vacía descartada antes de
+construirla; se vio al probarlo en `sandbox` con una serie de cinco citas.
+
+**Las cinco vías, y CUÁNDO preguntan.** Mover pregunta DESPUÉS (la cita ya está
+donde se quería, y decir que no deja a las demás como estaban); cancelar y
+borrar preguntan ANTES, porque una cita borrada no vuelve, y por eso son tres
+respuestas —«solo esta», «esta y las N siguientes», «dejarlo como está»
+(`elegir`, no un sí/no)—:
+
+| Dónde | Qué hace |
+| --- | --- |
+| Ficha → «Cambiar hora» | cuenta antes, mueve esta y ofrece mover las siguientes |
+| Ficha → «Cancelar cita» | pide el motivo, pregunta el alcance y cancela lo elegido |
+| Ficha → «Eliminar» | pregunta el alcance con sus advertencias de siempre dentro |
+| Agenda → arrastrar | igual que «Cambiar hora» (la hora vieja sale de `info.oldEvent`) |
+| Agenda → cortar y pegar | igual, con la hora vieja de `cita.startStr` |
+
+El texto de cada pregunta y el del resumen viven en
+`lib/citas/preguntaDeSerie.js` (sin un solo `import`: lo lee el navegador, y
+`siguientesIguales.js` arrastra Sequelize por `festivos.js`); el cómo —contar,
+preguntar, aplicar y decir qué salió— en `components/citas/siguientesDeLaCita.js`,
+que usan la ficha y el calendario.
+
+**El servidor toca SOLO las siguientes**; la cita de la que se parte la mueve,
+cancela o borra quien llama, por su camino de siempre —con su correo, su
+reembolso y su línea de auditoría—. Al borrar, el orden no es caprichoso:
+primero las siguientes (se deducen de esta, que tiene que existir todavía) y
+esta al final.
+
+- `POST …/siguientes { accion: "cancelar", motivo }` cancela una a una, con lo
+  que cancelar una cita hace además de cambiar el estado: retirar el borrador de
+  sesión y resolver su dinero (`reembolsarCitaSiProcede`), igual que la baja de
+  un paciente. **Sin un solo correo**: cuarenta avisos de golpe por una baja ya
+  hablada en el centro son cuarenta llamadas al día siguiente, y el diálogo lo
+  dice antes de que se elija. Audita `citas.canceladas_en_bloque`.
+- `DELETE …/siguientes` borra de verdad, con la regla de borrar una sola cita,
+  que desde hoy vive en `lib/citas/borrarCita.js` (la comparten esta ruta y
+  `DELETE /api/citas/bookings/[id]?hard=true`): la que está cobrada, con
+  retención o con devolución registrada NO se borra —el rastro del dinero tiene
+  que quedar— y se cuenta para decir cuáles siguen ahí. Audita
+  `citas.borradas_en_bloque`.
+
+Probado en `sandbox` con una serie de cinco: mover las cinco desde la ficha,
+cancelar «esta y las 4 siguientes», y borrar «esta y las 4 siguientes» con una
+cobrada, que se quedó y salió por su nombre («30/09/2026: está cobrada»).
+Prueba: `_smoke-siguientes-iguales.mjs`.
+
 ### El bono se elige en la cita, y vale sin correo (07/09/2026, AV-0055 de Aumenta)
 
 Olga: «hemos intentado crear una cita de un paciente que tiene bono y no existe

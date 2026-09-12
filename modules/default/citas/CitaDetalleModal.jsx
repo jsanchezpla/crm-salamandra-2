@@ -13,6 +13,12 @@
 import { useEffect, useState } from "react";
 import SelectorPaciente from "../../../components/citas/SelectorPaciente.jsx";
 import PanelTallerCita from "../../../components/citas/PanelTallerCita.jsx";
+import {
+  alcanceDeSerie,
+  aplicarALasSiguientes,
+  contarSiguientes,
+  ofrecerMoverSiguientes,
+} from "../../../components/citas/siguientesDeLaCita.js";
 import SesionTallerDrawer from "../../../components/clinica/SesionTallerDrawer.jsx";
 import { colaDePreparacion } from "../../../lib/clinica/prepararSesion.js";
 import { plantillaDeLaCita } from "../../../lib/clinica/plantillaDeLaCita.js";
@@ -85,6 +91,7 @@ export function CitaDetalleModal({
   confirmar,
   avisar,
   pedirTexto,
+  elegir,
   onClose,
   onChanged,
   onDeleted,
@@ -243,7 +250,7 @@ export function CitaDetalleModal({
     const avisarPaciente = await preguntarSiAvisar(instante);
     // ¿Cuántas iguales vienen después? Se pregunta ANTES de mover, con la hora
     // que todavía tiene (11/09/2026): después ya no sería la misma serie.
-    const siguientes = await contarSiguientes();
+    const serie = await contarSiguientes(openBooking.id);
     const res = await patchBooking({
       scheduledAt: instante.toISOString(),
       avisarPaciente,
@@ -252,64 +259,18 @@ export function CitaDetalleModal({
     // Si salió el correo se dice, y si no, POR QUÉ. Callarse es lo que hace que
     // alguien dé por avisado a un paciente que no lo está.
     setAvisoHora(mensajeDelAviso(res?.avisoCambioHora));
-    if (res && siguientes?.siguientes > 0) await moverSiguientes(siguientes, instante);
-  }
-
-  /*
-   * ── ESTA Y LAS SIGUIENTES (11/09/2026, Aumenta: AV-0107, AV-0118, AV-0105) ──
-   * «Cuando hago un cambio en una cita, debería preguntarme si quiero
-   * generalizar ese cambio a todas las que tiene programadas para el futuro.»
-   * No hay serie (cada repetición es una cita suelta, a propósito), así que el
-   * servidor deduce cuáles son «las siguientes» —mismo niño, mismo tipo, misma
-   * terapeuta, mismo día de la semana y misma hora— y aquí se enseña el número
-   * antes de preguntar. Se pregunta DESPUÉS de mover esta: si alguien dice que
-   * no, la cita de hoy ya está donde la quería y las demás siguen como estaban.
-   */
-  async function contarSiguientes() {
-    try {
-      const r = await fetch(`/api/citas/bookings/${openBooking.id}/siguientes`, { cache: "no-store" });
-      const j = await r.json();
-      return j.ok ? j.data : null;
-    } catch {
-      return null;
-    }
-  }
-
-  async function moverSiguientes({ siguientes: n, hasta }, instante) {
-    const quiere = await confirmar({
-      titulo: "¿Mover también las siguientes?",
-      texto:
-        `Hay ${n} ${n === 1 ? "cita más como esta" : "citas más como esta"} de aquí en adelante ` +
-        `(mismo día de la semana y misma hora${hasta ? `, hasta el ${hasta}` : ""}). ` +
-        "¿Las muevo también a la nueva hora? Si alguna choca con otra cita, esa se queda donde está y te lo digo.",
-      confirmar: n === 1 ? "Sí, moverla también" : "Sí, moverlas también",
-      cancelar: "Solo esta",
-    });
-    if (!quiere) return;
-    setSaving(true);
-    try {
-      const r = await fetch(`/api/citas/bookings/${openBooking.id}/siguientes`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scheduledAtAnterior: openBooking.scheduledAt, scheduledAt: instante.toISOString() }),
-      });
-      const j = await r.json();
-      if (!j.ok) throw new Error(j.error || "No se han podido mover las siguientes");
-      const { movidas, saltadas } = j.data;
-      const lineas = (saltadas ?? []).slice(0, 8).map((x) => `· ${x.fecha}: ${x.motivo}`);
-      if (saltadas?.length > 8) lineas.push(`· … y ${saltadas.length - 8} más`);
-      await avisar({
-        titulo: saltadas?.length ? "Movidas, con huecos" : "Movidas",
-        texto:
-          `${movidas} ${movidas === 1 ? "cita movida" : "citas movidas"} a la nueva hora.` +
-          (saltadas?.length ? "\n\nEstas se han quedado donde estaban:\n" + lineas.join("\n") : ""),
+    if (res) {
+      const hecho = await ofrecerMoverSiguientes({
+        bookingId: openBooking.id,
+        serie,
+        anterior: openBooking.scheduledAt,
+        nuevo: instante.toISOString(),
+        confirmar,
+        avisar,
+        ocupado: setSaving,
       });
       // El padre vuelve a pintar el calendario con las que se han movido.
-      onChanged({ ...openBooking, scheduledAt: instante.toISOString() });
-    } catch (e) {
-      await avisar({ titulo: "Las siguientes no se han movido", texto: e.message });
-    } finally {
-      setSaving(false);
+      if (hecho?.hechas) onChanged({ ...openBooking, scheduledAt: instante.toISOString() });
     }
   }
 
@@ -422,11 +383,40 @@ export function CitaDetalleModal({
     if (motivo === null) return;
     await patchBooking(cuerpoDelResultado(clave, motivo));
   }
+  /*
+   * ── ESTA Y LAS SIGUIENTES (11/09/2026, Aumenta: AV-0107, AV-0118, AV-0105;
+   * cancelar y borrar desde el 12/09/2026, Rodrigo) ──────────────────────────
+   * «Cuando hago un cambio en una cita, debería preguntarme si quiero
+   * generalizar ese cambio a todas las que tiene programadas para el futuro»,
+   * y Rodrigo: «por si me he equivocado». Lo preguntan las tres cosas que se
+   * le hacen a una cita que se repite: cambiarle la hora, cancelarla y
+   * borrarla.
+   *
+   * Cambiar la hora pregunta DESPUÉS (la cita ya está donde se quería y decir
+   * que no deja a las demás como estaban); cancelar y borrar preguntan ANTES,
+   * porque una cita borrada no vuelve. El cómo —contar, preguntar, aplicar y
+   * decir qué salió— vive en `components/citas/siguientesDeLaCita.js`: la
+   * misma pregunta la hace el calendario al arrastrar una cita y al pegarla
+   * tras cortarla.
+   */
   async function cancelBooking() {
+    // Se cuenta antes de cancelarla: las hermanas se deducen de esta cita.
+    const serie = await contarSiguientes(openBooking.id);
     const reason = await pedirTexto({ ...resultadoPorClave("cancelada").motivo, tono: "peligro" });
     if (reason === null) return;
-    await patchBooking(cuerpoDelResultado("cancelada", reason));
+    const alcance = await alcanceDeSerie("cancelar", { serie, elegir });
+    if (!alcance) return;
+    const res = await patchBooking(cuerpoDelResultado("cancelada", reason));
+    if (res && alcance === "serie") {
+      // Esta ya avisó a la familia por correo; las siguientes no mandan
+      // ninguno (cuarenta correos de golpe son cuarenta llamadas al día
+      // siguiente), y el diálogo lo dice antes de que se elija.
+      await aplicarALasSiguientes("cancelar", { bookingId: openBooking.id, motivo: reason, avisar, ocupado: setSaving });
+      // El padre vuelve a pintar el calendario con las que se han cancelado.
+      onChanged(res);
+    }
   }
+
   async function saveNotes() { await patchBooking({ notes: detailNotes.trim() || null }); }
   /**
    * Guarda el enlace de videollamada. Con `enviar`, además manda el email al
@@ -515,15 +505,23 @@ export function CitaDetalleModal({
     if (openBooking.sessionNumber > 0) {
       letraPequena.push(`Es la sesión ${openBooking.sessionNumber} de un bono: esa sesión le vuelve a quedar libre.`);
     }
-    const seguro = await confirmar({
-      titulo: "Borrar la cita",
-      texto: ["Desaparece del calendario y del historial. No se puede deshacer.", ...letraPequena].join("\n\n"),
-      confirmar: "Borrar",
-      tono: "peligro",
+    // Las siguientes se DEDUCEN de esta cita: se cuentan antes de borrarla y
+    // se borran antes que ella (12/09/2026).
+    const serie = await contarSiguientes(openBooking.id);
+    const lineas = ["Desaparece del calendario y del historial. No se puede deshacer.", ...letraPequena];
+    const alcance = await alcanceDeSerie("borrar", {
+      serie,
+      lineas,
+      elegir,
+      confirmar,
+      sinSerie: { titulo: "Borrar la cita", texto: lineas.join("\n\n"), confirmar: "Borrar", tono: "peligro" },
     });
-    if (!seguro) return;
+    if (!alcance) return;
     setSaving(true);
     try {
+      if (alcance === "serie") {
+        await aplicarALasSiguientes("borrar", { bookingId: openBooking.id, avisar });
+      }
       const res = await fetch(`/api/citas/bookings/${openBooking.id}?hard=true`, { method: "DELETE" });
       if (!res.ok && res.status !== 204) {
         const j = await res.json().catch(() => null);
