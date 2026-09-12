@@ -210,6 +210,7 @@ export default function KanbanBoard({
 
   // Task activa (para el DragOverlay) — buscar en data.columns, no en filteredColumns,
   // así el ghost sobrevive aunque el filtro deje la card fuera de vista.
+  const activeColumn = activeId ? data.columns.find((c) => c.tasks.some((t) => t.id === activeId)) ?? null : null;
   const activeTask = activeId
     ? data.columns.flatMap((c) => c.tasks).find((t) => t.id === activeId) ?? null
     : null;
@@ -235,7 +236,7 @@ export default function KanbanBoard({
           ))}
         </div>
         <DragOverlay dropAnimation={null}>
-          {activeTask ? <TaskCard task={activeTask} isDragOverlay /> : null}
+          {activeTask ? <TaskCard task={activeTask} isDragOverlay hecha={Boolean(activeColumn?.isDoneColumn)} /> : null}
         </DragOverlay>
       </DndContext>
 

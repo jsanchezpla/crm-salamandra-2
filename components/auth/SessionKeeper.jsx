@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { sesionCortaVigente } from "../../lib/auth/sesionCorta.js";
 
 /**
  * SessionKeeper — mantiene viva la sesión refrescando el access token antes de
@@ -30,6 +31,16 @@ import { useEffect, useRef } from "react";
  * (15 min) caducado mientras el refresh token (7 días) sigue vivo. Si el
  * refresh funciona, se reintenta la petición original y el usuario no se entera
  * de nada. Solo si el refresh también falla se manda al login.
+ *
+ * ── Sesión corta: no se renueva (12/09/2026) ─────────────────────────────────
+ * La sesión «como admin» del calendario global lleva solo access token, sin
+ * refresh token (app/api/auth/saltar/route.js). Aquí el intervalo y el foco la
+ * renovaban igual: el refresh daba 401 y mandaba al login a los 12 minutos (o
+ * a los 10 al volver a la pestaña), con el token vivo y lo que hubiera a medio
+ * escribir. Si la cookie `sesion_corta` dice que sigue vigente, el intervalo y
+ * el foco no hacen nada. El interceptor de 401 NO cambia: cuando el token
+ * caduca de verdad, la primera petición da 401, el refresh falla y va al
+ * login, que es el final correcto.
  */
 const REFRESH_INTERVAL_MS = 12 * 60 * 1000;
 const MIN_GAP_MS = 10 * 60 * 1000;
@@ -58,6 +69,16 @@ function goToLogin() {
   window.location.href = url.toString();
 }
 
+// ¿Sesión corta aún viva? Leer `document.cookie` puede lanzar (navegadores que
+// bloquean las cookies del sitio): ante la duda, se renueva como siempre.
+function enSesionCorta() {
+  try {
+    return sesionCortaVigente(document.cookie);
+  } catch {
+    return false;
+  }
+}
+
 export default function SessionKeeper() {
   const lastRef = useRef(Date.now());
   const inFlightRef = useRef(false);
@@ -67,6 +88,7 @@ export default function SessionKeeper() {
 
     const refresh = async (force) => {
       if (inFlightRef.current) return;
+      if (enSesionCorta()) return;
       const now = Date.now();
       if (!force && now - lastRef.current < MIN_GAP_MS) return;
       inFlightRef.current = true;

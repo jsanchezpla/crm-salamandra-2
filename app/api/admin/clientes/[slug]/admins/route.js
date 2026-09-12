@@ -36,6 +36,7 @@ const ADMIN_ROLES = new Set(["admin", "superadmin"]);
  * claves pero no las lee nunca. Si una directora pierde la suya, la recupera
  * ella por su correo (`lib/auth/recuperacion.js`); si eso tampoco vale, el
  * script de siempre por SSH, mirando lo que se hace.
+ * (12/09/2026: «entrar como» un admin sí existe ya, pero solo desde el calendario global y auditado: docs/decisions/2026-09-12-el-calendario-global-ve-todos-y-los-proyectos.md.)
  *
  * Tres candados, los mismos que el resto del back-office: módulo
  * `provisioning` (que solo tiene nuestro tenant), rol admin leído FRESCO de la

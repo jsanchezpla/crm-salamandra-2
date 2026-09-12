@@ -125,6 +125,10 @@ PostgreSQL DB: salamandra
   varios tenants por `master.calendario_global_vinculos` (la fila ES la
   autorización) y salta al CRM con un pase de un solo uso (`/api/auth/saltar`,
   `CRM_PUBLIC_URL`). Ver `docs/decisions/2026-09-03-el-calendario-global.md`.
+  Desde el 12/09/2026, las cuentas admin de Salamandra ven además TODOS los
+  clientes (y sus proyectos) sin fila y saltan como su admin, con sesión corta
+  y auditada en el cliente (`lib/calendario-global/acceso.js`,
+  `docs/decisions/2026-09-12-el-calendario-global-ve-todos-y-los-proyectos.md`).
 
 **Carpetas**: `app/` (rutas: `/api`, `(auth)`, `(dashboard)`, `admin/`,
 `portal/`, `widget/`), `components/`, `lib/` (33 carpetas: db, tenant, auth,

@@ -58,8 +58,17 @@ export default function BoardColumn({ column, onSelectTask, onCreateTask, phaseP
         }
       >
         <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
+          {/* `hecha` (12/09/2026): en la columna de hecho la fecha límite pasada
+              no se pinta como vencida (ver TaskCard). Vale para este tablero y
+              para el del calendario global. */}
           {column.tasks.map((task) => (
-            <TaskCard key={task.id} task={task} onSelect={onSelectTask} fase={phasePorId?.get(task.phaseId) ?? null} />
+            <TaskCard
+              key={task.id}
+              task={task}
+              onSelect={onSelectTask}
+              fase={phasePorId?.get(task.phaseId) ?? null}
+              hecha={Boolean(column.isDoneColumn)}
+            />
           ))}
         </SortableContext>
 
@@ -70,12 +79,17 @@ export default function BoardColumn({ column, onSelectTask, onCreateTask, phaseP
         )}
       </div>
 
-      <button
-        onClick={() => onCreateTask?.(column.id)}
-        className="w-full px-3 py-2 text-xs font-medium text-neutral-500 hover:text-neutral-800 hover:bg-neutral-100 rounded-b-xl transition-colors border-t border-neutral-200/70"
-      >
-        + Añadir tarea
-      </button>
+      {/* Sin `onCreateTask` no hay dónde crear (12/09/2026: el tablero del
+          calendario global solo ve y mueve; las tareas se crean en el CRM del
+          cliente). El Kanban del CRM siempre lo pasa, así que allí sale igual. */}
+      {onCreateTask && (
+        <button
+          onClick={() => onCreateTask(column.id)}
+          className="w-full px-3 py-2 text-xs font-medium text-neutral-500 hover:text-neutral-800 hover:bg-neutral-100 rounded-b-xl transition-colors border-t border-neutral-200/70"
+        >
+          + Añadir tarea
+        </button>
+      )}
     </div>
   );
 }

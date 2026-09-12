@@ -7,270 +7,346 @@ import timeGridPlugin from "@fullcalendar/timegrid";
 import listPlugin from "@fullcalendar/list";
 import interactionPlugin from "@fullcalendar/interaction";
 import esLocale from "@fullcalendar/core/locales/es";
+import MarcoGlobal from "../../components/calendario-global/MarcoGlobal.jsx";
+import SelectorClientes from "../../components/calendario-global/SelectorClientes.jsx";
+import DetalleEvento from "../../components/calendario-global/DetalleEvento.jsx";
+import Aviso, { useAviso } from "../../components/calendario-global/Aviso.jsx";
+import { useClientes } from "../../components/calendario-global/useClientes.js";
+import { usePreferencia } from "../../components/calendario-global/almacen.js";
+import { useEsMovil } from "../../components/calendario-global/useEsMovil.js";
+import { pedirJson } from "../../components/calendario-global/api.js";
+import { FECHA, parteFecha, prioridad } from "../../components/calendario-global/formato.js";
 
 /**
  * El calendario global (03/09/2026, Rodrigo): «poder controlar todos mis
  * calendarios desde un mismo macro calendario».
  *
  * ── QUÉ SE HACE AQUÍ Y QUÉ SE HACE EN EL TENANT ─────────────────────────────
- * Aquí se VE (todos los calendarios vinculados, cada uno de su color) y se
+ * Aquí se VE (los calendarios de los clientes, cada uno de su color) y se
  * MUEVE: arrastrar, estirar, marcar hecha. Todo lo demás —el título, las
- * notas, quién se encarga, la convocatoria— se edita en el CRM del cliente:
- * el botón «Abrir en …» de la ficha pide un pase y abre allí la sesión, en
- * ese evento. Es la regla que pidió Rodrigo, y por eso la ficha no tiene
- * formulario: si lo tuviera, la gente editaría aquí a medias.
+ * notas, quién se encarga— se edita en el CRM del cliente: el botón «Abrir en
+ * el CRM» de la ficha pide un pase y abre allí la sesión.
+ *
+ * ── 12/09/2026: TODOS LOS CLIENTES, SELECCIÓN RECORDADA Y PROYECTOS ─────────
+ * Rodrigo: «No puedo seleccionar los calendarios que quiera ver […] y no se
+ * ven las tareas traídas de proyectos». Y de la pantalla: «La UI es un poco
+ * fea, está mal hecha, menos la parte del calendario puro».
+ *   - El FullCalendar se deja COMO ESTABA (vistas, barra, horario, locale): es
+ *     lo que le gusta. Se rehace todo lo de alrededor con las piezas de
+ *     `components/calendario-global/`, que comparte la pestaña Proyectos.
+ *   - La selección de clientes se recuerda (`useClientes`) y viaja al servidor
+ *     en `?slugs=`: solo se leen los clientes que se miran.
+ *   - Llegan también las fechas límite de tarjetas y los hitos de Proyectos
+ *     (`?proyectos=0|1`, interruptor en la barra). Cada evento dice qué es en
+ *     `extendedProps.kind` y el arrastre se ramifica por eso: un evento del
+ *     calendario va a `PATCH /eventos/<slug>/<id>`; una tarjeta o un hito
+ *     cambian su FECHA LÍMITE (`dueDate`, solo día) y, al guardar, se vuelven
+ *     a pedir los eventos para que lo soltado en una franja con hora vuelva a
+ *     ser de día entero. Estirar un evento de proyecto no significa nada: se
+ *     deshace (el servidor además les pone `durationEditable: false`).
  *
  * Los ids de los eventos llevan el slug delante (`aumenta:uuid`); el de
- * verdad viaja en `extendedProps.taskId`.
+ * verdad viaja en `extendedProps.taskId` / `milestoneId`.
+ *
+ * ── EN EL MÓVIL, OTRA BARRA (12/09/2026) ────────────────────────────────────
+ * En escritorio el FullCalendar sigue exactamente igual. A 375-430 px la barra
+ * de escritorio no cabe (el título partido en tres líneas, los botones
+ * amontonados), así que en el móvil (`useEsMovil`, ≤ 640 px) arriba van las
+ * flechas, el título y «Hoy», y abajo las vistas; y se arranca en «Lista» de
+ * la semana, que en un teléfono se lee (siete columnas de franjas, no). Sin
+ * «Semana» en la barra del móvil: es la vista que no se puede leer ahí.
  */
 
-const PRIORITY_COLORS = { high: "#ef4444", medium: "#f97316", low: "#22c55e" };
-const PRIORITY_LABELS = { high: "Alta", medium: "Media", low: "Baja" };
-const STATUS_LABELS = { pending: "Pendiente", done: "Hecha", cancelled: "Cancelada" };
-const STATUS_CHIP = {
-  pending: "bg-amber-50 text-amber-800 border-amber-200",
-  done: "bg-emerald-50 text-emerald-800 border-emerald-200",
-  cancelled: "bg-neutral-100 text-neutral-500 border-neutral-200",
-};
+const CLAVE_COLOR_POR = "calendario-global:colorPor";
+const CLAVE_PROYECTOS = "calendario-global:proyectos";
 
-function parseISOToFields(iso) {
-  if (!iso) return { date: "", time: "" };
-  const [date, rest] = iso.split("T");
-  return { date, time: rest ? rest.slice(0, 5) : "" };
+const BARRA_ESCRITORIO = { left: "prev,next today", center: "title", right: "dayGridMonth,timeGridWeek,timeGridDay,listWeek" };
+const BARRA_MOVIL = { left: "prev,next", center: "title", right: "today" };
+const PIE_MOVIL = { center: "dayGridMonth,timeGridDay,listWeek" };
+
+// Acotado a `.calendario-global` y solo en el móvil: el resto del CRM usa el
+// mismo FullCalendar con los estilos de `app/globals.css`, que no se tocan.
+// Va aquí y no como clases de Tailwind porque esas reglas no están en ninguna
+// capa y ganarían a cualquier utilidad.
+const ESTILO_MOVIL = `
+@media (max-width: 640px) {
+  .calendario-global .fc .fc-toolbar-title { font-size: 15px; white-space: nowrap; }
+  .calendario-global .fc .fc-toolbar.fc-header-toolbar { margin-bottom: 0.5rem; gap: 0.5rem; }
+  .calendario-global .fc .fc-toolbar.fc-footer-toolbar { margin-top: 0.5rem; }
+}
+`;
+
+function esDeProyecto(ep) {
+  return ep?.kind === "projectTask" || ep?.kind === "projectMilestone";
 }
 
-function fmtFecha(ev) {
-  const start = parseISOToFields(ev.startStr);
-  const end = parseISOToFields(ev.endStr);
-  const d = new Date(`${start.date}T12:00:00`);
-  const dia = d.toLocaleDateString("es-ES", { weekday: "short", day: "2-digit", month: "short" });
-  if (ev.allDay) {
-    if (end.date && end.date !== start.date) {
-      const d2 = new Date(`${end.date}T12:00:00`);
-      // FullCalendar da el fin de un todo-el-día EXCLUSIVO: el día siguiente.
-      d2.setDate(d2.getDate() - 1);
-      const dia2 = d2.toLocaleDateString("es-ES", { weekday: "short", day: "2-digit", month: "short" });
-      if (dia2 !== dia) return `${dia} → ${dia2} · todo el día`;
-    }
-    return `${dia} · todo el día`;
-  }
-  const horas = start.time ? (end.time ? `${start.time}–${end.time}` : start.time) : "";
-  return horas ? `${dia} · ${horas}` : dia;
+/**
+ * «Color por prioridad»: cada tipo trae su color de otra forma. Los eventos
+ * del calendario lo traen calculado (`colorPrioridad`); las tarjetas por su
+ * prioridad; los hitos conservan el color de su estado (`colorOriginal`).
+ */
+function pintar(ev, colorPor) {
+  if (colorPor !== "prioridad") return ev;
+  const ep = ev.extendedProps ?? {};
+  let color;
+  if (ep.kind === "projectTask") color = prioridad(ep.priority).color;
+  else if (ep.kind === "projectMilestone") color = ep.colorOriginal;
+  else color = ep.colorPrioridad;
+  color = color ?? ev.backgroundColor;
+  return { ...ev, backgroundColor: color, borderColor: color };
+}
+
+/** El EventApi de FullCalendar es vivo y muere al recargar: a la ficha va una copia. */
+function instantanea(event) {
+  return {
+    id: event.id,
+    title: event.title,
+    startStr: event.startStr,
+    endStr: event.endStr,
+    allDay: event.allDay,
+    extendedProps: { ...(event.extendedProps ?? {}) },
+  };
 }
 
 export default function CalendarioGlobalPage() {
   const calendarRef = useRef(null);
-  const [yo, setYo] = useState(null);
-  const [calendarios, setCalendarios] = useState([]);
-  const [ocultos, setOcultos] = useState(() => new Set());
-  const ocultosRef = useRef(ocultos);
-  const [colorPor, setColorPor] = useState("cliente");
-  const colorPorRef = useRef("cliente");
+  const seleccion = useClientes();
+  const { clientes, visibles, fusionarFichas } = seleccion;
+  const [colorPor, setColorPor] = usePreferencia(CLAVE_COLOR_POR, "cliente", ["cliente", "prioridad"]);
+  const [proyectosGuardado, setProyectosGuardado] = usePreferencia(CLAVE_PROYECTOS, "1", ["1", "0"]);
+  const conProyectos = proyectosGuardado === "1";
   const [detalle, setDetalle] = useState(null);
-  const [ocupado, setOcupado] = useState(false);
-  const [aviso, setAviso] = useState(null);
-  const [cargando, setCargando] = useState(true);
+  const [cargandoEventos, setCargandoEventos] = useState(false);
+  const { aviso, avisar, cerrarAviso } = useAviso();
 
-  useEffect(() => {
-    fetch("/api/calendario-global/vinculos", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => {
-        if (!j.ok) throw new Error(j.error || "No se pudo cargar");
-        setYo(j.data.yo);
-        setCalendarios(j.data.calendarios);
-      })
-      .catch((e) => setAviso({ tono: "error", texto: e.message }))
-      .finally(() => setCargando(false));
-  }, []);
+  const listo = !seleccion.cargando && !seleccion.error;
 
-  function pintar(ev) {
-    const ep = ev.extendedProps ?? {};
-    const color = colorPorRef.current === "prioridad" ? (ep.colorPrioridad ?? ev.backgroundColor) : ev.backgroundColor;
-    return { ...ev, backgroundColor: color, borderColor: color };
-  }
+  // Lo que la función de eventos necesita y FullCalendar no le pasa. Vive en
+  // una ref porque `events` tiene que ser una función ESTABLE: si cambiara en
+  // cada pintado, FullCalendar volvería a pedir los eventos cada vez.
+  const consultaRef = useRef({ listo: false, slugs: [], proyectos: true, colorPor: "cliente" });
+  // La última respuesta, para repintar al cambiar «Color por» sin pedir nada.
+  const ultimaRef = useRef({ clave: null, eventos: [] });
+  const soloRepintarRef = useRef(false);
 
-  const fetchEvents = useCallback(async (info, success, failure) => {
-    try {
+  const cargarEventos = useCallback(
+    async (info, success, failure) => {
+      const { listo: preparado, slugs, proyectos, colorPor: modo } = consultaRef.current;
+      // Hasta saber qué clientes se miran no se pide nada (evita leerlos todos
+      // y tirar la respuesta); sin ninguno a la vista, tampoco.
+      if (!preparado || slugs.length === 0) {
+        soloRepintarRef.current = false;
+        success([]);
+        return;
+      }
       const params = new URLSearchParams({
         start: info.startStr.split("T")[0],
         end: info.endStr.split("T")[0],
+        slugs: slugs.join(","),
+        proyectos: proyectos ? "1" : "0",
       });
-      const res = await fetch(`/api/calendario-global/eventos?${params}`);
-      const json = await res.json();
-      if (!res.ok || !json.ok) throw new Error(json.error || "Error cargando eventos");
-      // Las fichas de los calendarios vienen con cada carga: así se ve al
-      // momento si alguno no responde.
-      setCalendarios((prev) =>
-        (json.data.calendarios ?? []).map((c) => ({ ...(prev.find((p) => p.slug === c.slug) ?? {}), ...c }))
-      );
-      const ocultosAhora = ocultosRef.current;
-      success((json.data.eventos ?? []).filter((e) => !ocultosAhora.has(e.extendedProps?.calendario?.slug)).map(pintar));
-    } catch (err) {
-      failure(err);
+      const clave = params.toString();
+      if (soloRepintarRef.current && ultimaRef.current.clave === clave) {
+        soloRepintarRef.current = false;
+        success(ultimaRef.current.eventos.map((e) => pintar(e, modo)));
+        return;
+      }
+      soloRepintarRef.current = false;
+      try {
+        const data = await pedirJson(`/api/calendario-global/eventos?${params}`);
+        const eventos = Array.isArray(data?.eventos) ? data.eventos : [];
+        ultimaRef.current = { clave, eventos };
+        // Las fichas vienen con cada carga: así se ve al momento si alguno no responde.
+        fusionarFichas(data?.calendarios);
+        success(eventos.map((e) => pintar(e, modo)));
+      } catch (err) {
+        failure(err);
+      }
+    },
+    [fusionarFichas]
+  );
+
+  // Al cambiar la selección, el interruptor de proyectos o el color: se
+  // actualiza lo que lee `cargarEventos` y se recarga. Si solo cambia el
+  // color, se repinta con la última respuesta.
+  useEffect(() => {
+    const antes = consultaRef.current;
+    const cambianDatos =
+      antes.listo !== listo || antes.slugs.join(",") !== visibles.join(",") || antes.proyectos !== conProyectos;
+    const cambiaColor = antes.colorPor !== colorPor;
+    consultaRef.current = { listo, slugs: visibles, proyectos: conProyectos, colorPor };
+    if (!cambianDatos && !cambiaColor) return;
+    soloRepintarRef.current = !cambianDatos;
+    calendarRef.current?.getApi().refetchEvents();
+  }, [listo, visibles, conProyectos, colorPor]);
+
+  function recargar() {
+    calendarRef.current?.getApi().refetchEvents();
+  }
+
+  // ── Móvil ───────────────────────────────────────────────────────────────
+  // `initialView` solo se lee al montar FullCalendar, y al hidratar la página
+  // `useEsMovil` todavía dice «escritorio»: cuando se sabe que es un móvil, la
+  // semana se pasa a lista a mano (como en CitasModule). Si se vuelve a
+  // escritorio (girar una tableta), se deshace solo lo que se cambió aquí.
+  const esMovil = useEsMovil();
+  const vistaCambiadaRef = useRef(false);
+  useEffect(() => {
+    const api = calendarRef.current?.getApi?.();
+    if (!api) return;
+    const vista = api.view?.type;
+    if (esMovil && vista === "timeGridWeek") {
+      api.changeView("listWeek");
+      vistaCambiadaRef.current = true;
+    } else if (!esMovil && vistaCambiadaRef.current) {
+      if (vista === "listWeek") api.changeView("timeGridWeek");
+      vistaCambiadaRef.current = false;
     }
-  }, []);
+  }, [esMovil]);
 
-  function alternarCalendario(slug) {
-    setOcultos((prev) => {
-      const s = new Set(prev);
-      if (s.has(slug)) s.delete(slug);
-      else s.add(slug);
-      ocultosRef.current = s;
-      return s;
-    });
-    calendarRef.current?.getApi().refetchEvents();
-  }
-
-  function cambiarColorPor(modo) {
-    colorPorRef.current = modo;
-    setColorPor(modo);
-    calendarRef.current?.getApi().refetchEvents();
-  }
-
-  async function patch(ev, cambios) {
-    const ep = ev.extendedProps;
-    const res = await fetch(`/api/calendario-global/eventos/${ep.calendario.slug}/${ep.taskId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(cambios),
-    });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok || !json.ok) throw new Error(json.error || "No se pudo guardar");
-    return json.data;
-  }
-
-  async function handleMove(info) {
+  // ── Arrastrar y estirar ─────────────────────────────────────────────────
+  async function moverEventoDelCalendario(info) {
     const { event } = info;
-    const start = parseISOToFields(event.startStr);
-    const end = parseISOToFields(event.endStr);
+    const ep = event.extendedProps ?? {};
+    const start = parteFecha(event.startStr);
+    const end = parteFecha(event.endStr);
     try {
-      await patch(event, {
-        startDate: start.date,
-        startTime: start.time || null,
-        endDate: end.date || null,
-        endTime: end.time || null,
-        allDay: event.allDay,
-      });
+      await pedirJson(
+        `/api/calendario-global/eventos/${encodeURIComponent(ep.calendario?.slug ?? "")}/${encodeURIComponent(ep.taskId ?? "")}`,
+        {
+          method: "PATCH",
+          body: {
+            startDate: start.date,
+            startTime: start.time || null,
+            endDate: end.date || null,
+            endTime: end.time || null,
+            allDay: event.allDay,
+          },
+        }
+      );
+      // La última respuesta ya no es la verdad: el evento está en otro sitio.
+      // Sin esto, cambiar «Color por» repintaba esa foto y el evento volvía a
+      // su hueco viejo (y estirarlo allí deshacía el arrastre en el servidor).
+      // No se recarga ahora: lo que se ve ya es lo guardado (12/09/2026).
+      ultimaRef.current.clave = null;
     } catch (e) {
       info.revert();
-      setAviso({ tono: "error", texto: e.message });
+      avisar(e.message);
     }
   }
 
-  function handleEventClick({ event }) {
-    setDetalle(event);
+  async function moverFechaDeProyecto(info) {
+    const ep = info.event.extendedProps ?? {};
+    const slug = ep.calendario?.slug;
+    const esTarjeta = ep.kind === "projectTask";
+    const id = esTarjeta ? ep.taskId : ep.milestoneId;
+    // Solo el día: soltado en una franja con hora, `startStr` trae la hora y
+    // el desfase, y la fecha límite no tiene hora.
+    const dueDate = String(info.event.startStr ?? "").split("T")[0];
+    if (!slug || !id || !FECHA.test(dueDate)) {
+      info.revert();
+      avisar("No se ha podido leer la fecha de ese elemento. Recarga la página.");
+      return;
+    }
+    const url = esTarjeta
+      ? `/api/calendario-global/proyectos/${encodeURIComponent(slug)}/tareas/${encodeURIComponent(id)}`
+      : `/api/calendario-global/proyectos/${encodeURIComponent(slug)}/hitos/${encodeURIComponent(id)}`;
+    try {
+      await pedirJson(url, { method: "PATCH", body: { dueDate } });
+      recargar();
+    } catch (e) {
+      info.revert();
+      avisar(e.message);
+    }
   }
 
+  function alSoltar(info) {
+    if (esDeProyecto(info.event.extendedProps)) return moverFechaDeProyecto(info);
+    return moverEventoDelCalendario(info);
+  }
+
+  function alEstirar(info) {
+    if (esDeProyecto(info.event.extendedProps)) {
+      info.revert();
+      return undefined;
+    }
+    return moverEventoDelCalendario(info);
+  }
+
+  // ── Ficha ───────────────────────────────────────────────────────────────
   async function cambiarEstado(status) {
-    if (!detalle || ocupado) return;
-    setOcupado(true);
-    try {
-      await patch(detalle, { status });
-      setDetalle(null);
-      calendarRef.current?.getApi().refetchEvents();
-    } catch (e) {
-      setAviso({ tono: "error", texto: e.message });
-    } finally {
-      setOcupado(false);
-    }
+    const ep = detalle?.extendedProps ?? {};
+    await pedirJson(
+      `/api/calendario-global/eventos/${encodeURIComponent(ep.calendario?.slug ?? "")}/${encodeURIComponent(ep.taskId ?? "")}`,
+      { method: "PATCH", body: { status } }
+    );
+    const id = detalle.id;
+    setDetalle((d) => (d && d.id === id ? { ...d, extendedProps: { ...d.extendedProps, status } } : d));
+    recargar();
   }
 
-  async function abrirEnTenant() {
-    if (!detalle || ocupado) return;
-    const ep = detalle.extendedProps;
-    setOcupado(true);
-    try {
-      const res = await fetch("/api/calendario-global/salto", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          slug: ep.calendario.slug,
-          taskId: ep.taskId,
-          fecha: parseISOToFields(detalle.startStr).date || null,
-        }),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok || !json.ok) throw new Error(json.error || "No se pudo abrir el CRM del cliente");
-      // Se abre en OTRA pestaña: el global se queda donde estaba, que es lo
-      // que se quiere cuando se está repasando la semana de todos.
-      window.open(json.data.url, "_blank", "noopener");
-    } catch (e) {
-      setAviso({ tono: "error", texto: e.message });
-    } finally {
-      setOcupado(false);
-    }
-  }
+  const fichaDelDetalle = detalle
+    ? clientes.find((c) => c.slug === detalle.extendedProps?.calendario?.slug) ?? null
+    : null;
 
-  const calDe = (ev) => calendarios.find((c) => c.slug === ev?.extendedProps?.calendario?.slug);
-  const sinVinculos = !cargando && calendarios.length === 0;
+  // ── Avisos de la franja ─────────────────────────────────────────────────
+  const visiblesSet = new Set(visibles);
+  const sinRespuesta = clientes.filter((c) => c.fallo && visiblesSet.has(c.slug));
+  const sinClientes = listo && clientes.length === 0;
+  const ningunoVisible = listo && clientes.length > 0 && visibles.length === 0;
+
+  const lateral = (
+    <SelectorClientes
+      seleccion={seleccion}
+      modulo="calendario"
+      proyectos={conProyectos}
+      onProyectos={(v) => setProyectosGuardado(v ? "1" : "0")}
+      colorPor={colorPor}
+      onColorPor={setColorPor}
+    />
+  );
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
-      {/* Leyenda: qué calendarios se están mirando */}
-      <aside className="lg:w-64 shrink-0 border-b lg:border-b-0 lg:border-r border-neutral-200 bg-white px-4 py-3 lg:py-4 flex flex-col gap-3">
-        <div>
-          <div className="text-[11px] uppercase tracking-[0.16em] text-neutral-400">Calendarios</div>
-          {yo?.email && <div className="text-[12px] text-neutral-500 mt-0.5 truncate">{yo.email}</div>}
-        </div>
-        {sinVinculos && (
-          <p className="text-[13px] text-neutral-600 leading-relaxed">
-            Tu cuenta no tiene ningún calendario vinculado. Se vinculan desde el back-office o con
-            <code className="mx-1 text-[11px] bg-neutral-100 px-1 rounded">calendario-global-vincular.js</code>.
-          </p>
+    <MarcoGlobal lateral={lateral} contador={listo ? visibles.length : null}>
+      <div className="flex-1 min-h-0 flex flex-col gap-2 p-3 lg:p-4">
+        {seleccion.error && (
+          <Aviso tono="error" accion={{ texto: "Reintentar", onClick: seleccion.reintentar }}>
+            No se ha podido cargar la lista de clientes. {seleccion.error}
+          </Aviso>
         )}
-        <ul className="flex flex-wrap lg:flex-col gap-1.5">
-          {calendarios.map((c) => {
-            const oculto = ocultos.has(c.slug);
-            return (
-              <li key={c.slug}>
-                <button
-                  type="button"
-                  onClick={() => alternarCalendario(c.slug)}
-                  className={`w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-neutral-50 ${oculto ? "opacity-45" : ""}`}
-                  title={oculto ? "Mostrar" : "Ocultar"}
-                >
-                  <span className="w-3 h-3 rounded-sm shrink-0" style={{ background: c.color, outline: oculto ? "1px solid #d4d4d4" : "none" }} />
-                  <span className="truncate">{c.nombre}</span>
-                  {!c.calendario && <span className="ml-auto text-[10px] text-neutral-400">sin Calendario</span>}
-                  {c.calendario && c.fallo && <span className="ml-auto text-[10px] text-red-600">no responde</span>}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-        <div className="mt-auto pt-2">
-          <div className="text-[11px] uppercase tracking-[0.16em] text-neutral-400 mb-1.5">Color por</div>
-          <div className="inline-flex rounded-md border border-neutral-200 overflow-hidden text-[12px]">
-            {[["cliente", "Cliente"], ["prioridad", "Prioridad"]].map(([k, t]) => (
-              <button
-                key={k}
-                type="button"
-                onClick={() => cambiarColorPor(k)}
-                className={`px-2.5 py-1 ${colorPor === k ? "bg-[#1B3A2D] text-white" : "bg-white text-neutral-600 hover:bg-neutral-50"}`}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
-        </div>
-      </aside>
-
-      {/* El calendario */}
-      <section className="flex-1 min-h-0 flex flex-col p-3 lg:p-4">
+        {sinClientes && <Aviso tono="info">Tu cuenta no ve ningún cliente todavía.</Aviso>}
+        {ningunoVisible && (
+          <Aviso tono="info" accion={{ texto: "Ver todos", onClick: seleccion.todos }}>
+            No hay ningún cliente a la vista.
+          </Aviso>
+        )}
+        {sinRespuesta.length > 0 && (
+          <Aviso tono="error" accion={{ texto: "Reintentar", onClick: recargar }}>
+            No responde{sinRespuesta.length > 1 ? "n" : ""}: {sinRespuesta.map((c) => c.nombre).join(", ")}. El resto se ve
+            con normalidad.
+          </Aviso>
+        )}
         {aviso && (
-          <div
-            className={`mb-3 rounded-md border px-3 py-2 text-[13px] flex items-start justify-between gap-3 ${aviso.tono === "error" ? "bg-red-50 border-red-200 text-red-800" : "bg-emerald-50 border-emerald-200 text-emerald-800"}`}
-          >
-            <span>{aviso.texto}</span>
-            <button type="button" onClick={() => setAviso(null)} className="text-current/60 hover:text-current" aria-label="Cerrar">×</button>
-          </div>
+          <Aviso tono={aviso.tono} onCerrar={cerrarAviso}>
+            {aviso.texto}
+          </Aviso>
         )}
-        <div className="flex-1 min-h-[520px] bg-white rounded-xl border border-neutral-200 p-2 lg:p-3 calendario-global">
+
+        <div className="relative flex-1 min-h-[520px] bg-white rounded-[10px] border border-[#E7E7E1] p-2 lg:p-3 calendario-global">
+          <style>{ESTILO_MOVIL}</style>
+          {cargandoEventos && (
+            <div
+              role="status"
+              aria-label="Cargando eventos"
+              className="absolute left-3 right-3 top-0 h-0.5 rounded-full bg-[#3E5C57]/40 animate-pulse"
+            />
+          )}
           <FullCalendar
             ref={calendarRef}
             plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
-            initialView="timeGridWeek"
-            headerToolbar={{ left: "prev,next today", center: "title", right: "dayGridMonth,timeGridWeek,timeGridDay,listWeek" }}
+            initialView={esMovil ? "listWeek" : "timeGridWeek"}
+            headerToolbar={esMovil ? BARRA_MOVIL : BARRA_ESCRITORIO}
+            footerToolbar={esMovil ? PIE_MOVIL : false}
             locale={esLocale}
             buttonText={{ today: "Hoy", month: "Mes", week: "Semana", day: "Día", list: "Lista" }}
             firstDay={1}
@@ -279,10 +355,15 @@ export default function CalendarioGlobalPage() {
             nowIndicator
             editable
             eventResizableFromStart
-            events={fetchEvents}
-            eventClick={handleEventClick}
-            eventDrop={handleMove}
-            eventResize={handleMove}
+            events={cargarEventos}
+            loading={(cargando) => setCargandoEventos(cargando)}
+            eventSourceFailure={(err) => avisar(err?.message || "No se han podido cargar los eventos.")}
+            eventClick={({ event, jsEvent }) => {
+              jsEvent?.preventDefault?.();
+              setDetalle(instantanea(event));
+            }}
+            eventDrop={alSoltar}
+            eventResize={alEstirar}
             height="100%"
             eventDidMount={(info) => {
               const c = info.event.extendedProps?.calendario;
@@ -290,107 +371,17 @@ export default function CalendarioGlobalPage() {
             }}
           />
         </div>
-      </section>
+      </div>
 
-      {/* Ficha del evento, en modo LECTURA. Lo de dentro se edita en el tenant. */}
-      {detalle && (() => {
-        const ep = detalle.extendedProps ?? {};
-        const cal = calDe(detalle);
-        const status = ep.status ?? "pending";
-        return (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
-            onClick={(e) => { if (e.target === e.currentTarget) setDetalle(null); }}
-          >
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[92dvh] flex flex-col">
-              <div className="px-5 py-4 border-b border-neutral-100 flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="inline-flex items-center gap-1.5 text-[11px] text-neutral-500 mb-1">
-                    <span className="w-2.5 h-2.5 rounded-sm" style={{ background: ep.calendario?.color }} />
-                    {ep.calendario?.nombre}
-                  </div>
-                  <div className="text-base font-semibold text-neutral-900 leading-snug">{detalle.title}</div>
-                  <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-                    <span className={`text-[11px] px-2 py-0.5 rounded-full border ${STATUS_CHIP[status] ?? STATUS_CHIP.pending}`}>
-                      {STATUS_LABELS[status] ?? status}
-                    </span>
-                    <span className="inline-flex items-center gap-1 text-[11px] text-neutral-500">
-                      <span className="w-2 h-2 rounded-full" style={{ background: PRIORITY_COLORS[ep.priority] ?? PRIORITY_COLORS.medium }} />
-                      Prioridad {(PRIORITY_LABELS[ep.priority] ?? PRIORITY_LABELS.medium).toLowerCase()}
-                    </span>
-                    {ep.categoryName && (
-                      <span className="inline-flex items-center gap-1 text-[11px] text-neutral-500">
-                        <span className="w-2 h-2 rounded-full" style={{ background: ep.colorCategoria ?? "#A3A3A3" }} />
-                        {ep.categoryName}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <button onClick={() => setDetalle(null)} className="text-neutral-400 hover:text-neutral-700 p-0.5" aria-label="Cerrar">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              <div className="px-5 py-4 space-y-2 overflow-y-auto flex-1 text-[13px]">
-                <div className="flex">
-                  <span className="w-24 text-neutral-400 shrink-0">Fecha</span>
-                  <span className="text-neutral-800">{fmtFecha(detalle)}</span>
-                </div>
-                {ep.clientName && (
-                  <div className="flex">
-                    <span className="w-24 text-neutral-400 shrink-0">Cliente</span>
-                    <span className="text-neutral-800">{ep.clientName}</span>
-                  </div>
-                )}
-                {ep.teamMemberName && (
-                  <div className="flex">
-                    <span className="w-24 text-neutral-400 shrink-0">Responsable</span>
-                    <span className="text-neutral-800">{ep.teamMemberName}</span>
-                  </div>
-                )}
-                {ep.meetUrl && (
-                  <div className="flex">
-                    <span className="w-24 text-neutral-400 shrink-0">Videollamada</span>
-                    <a href={ep.meetUrl} target="_blank" rel="noopener noreferrer" className="text-neutral-800 underline break-all">{ep.meetUrl}</a>
-                  </div>
-                )}
-                {ep.notes && (
-                  <div className="flex">
-                    <span className="w-24 text-neutral-400 shrink-0">Notas</span>
-                    <span className="text-neutral-700 whitespace-pre-wrap">{ep.notes}</span>
-                  </div>
-                )}
-                <p className="pt-2 text-[12px] text-neutral-400 leading-relaxed">
-                  Desde aquí se mueve y se marca. Para cambiar el contenido, ábrelo en el CRM de {ep.calendario?.nombre}.
-                </p>
-              </div>
-              <div className="px-5 py-3.5 border-t border-[#F0F0F0] flex flex-wrap justify-end gap-2">
-                <button onClick={() => setDetalle(null)} className="text-xs text-neutral-500 px-3 py-1.5">Cerrar</button>
-                {status === "done" ? (
-                  <button onClick={() => cambiarEstado("pending")} disabled={ocupado} className="text-xs font-medium px-3 py-1.5 rounded-md border border-neutral-200 text-neutral-700 hover:bg-neutral-50 disabled:opacity-50">
-                    Reabrir
-                  </button>
-                ) : (
-                  <button onClick={() => cambiarEstado("done")} disabled={ocupado} className="text-xs font-medium px-3 py-1.5 rounded-md border border-neutral-200 text-neutral-700 hover:bg-neutral-50 disabled:opacity-50">
-                    Marcar hecha
-                  </button>
-                )}
-                {cal?.puedeSaltar ? (
-                  <button onClick={abrirEnTenant} disabled={ocupado} className="text-xs font-medium px-3 py-1.5 rounded-md text-white disabled:opacity-50" style={{ backgroundColor: "#1B3A2D" }}>
-                    {ocupado ? "Abriendo…" : `Abrir en ${ep.calendario?.nombre} ↗`}
-                  </button>
-                ) : (
-                  <span className="text-[11px] text-neutral-400 self-center" title="Este calendario no tiene cuenta de salto vinculada">
-                    Sin cuenta para abrir el CRM
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-    </div>
+      {detalle && (
+        <DetalleEvento
+          key={detalle.id}
+          evento={detalle}
+          ficha={fichaDelDetalle}
+          onCerrar={() => setDetalle(null)}
+          onCambiarEstado={cambiarEstado}
+        />
+      )}
+    </MarcoGlobal>
   );
 }

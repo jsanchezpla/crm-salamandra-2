@@ -90,3 +90,5 @@ middleware, back-office, master
   decisión.
 - Las acciones de auditoría nuevas (`calendario_global.*`) tienen frase en
   `lib/actividad/etiquetas.js` y cuelgan del módulo «Calendario».
+
+Ampliada el 12/09/2026: ver [El calendario global ve todos los clientes, y también sus proyectos](2026-09-12-el-calendario-global-ve-todos-y-los-proyectos.md) (los admins de Salamandra ven todos los clientes sin fila y saltan como su admin; los puntos 2 y 6 siguen valiendo para el resto).

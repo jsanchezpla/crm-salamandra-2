@@ -31,19 +31,26 @@ function isOverdue(d) {
  * Cuando isDragOverlay=true, se renderiza como clon estático (sin
  * useSortable) dentro del <DragOverlay> de @dnd-kit para que el ghost
  * siga al cursor y no desaparezca al cruzar columnas.
+ *
+ * `hecha` (12/09/2026): la tarjeta está en la columna de hecho
+ * (`isDoneColumn`). Una tarea terminada no está «vencida» aunque su fecha
+ * límite ya haya pasado, así que su fecha no se pinta en rojo. Salió en el
+ * tablero del calendario global («Dominio y hosting» en Hecho, en rojo), pero
+ * el arreglo va aquí y lo pasa `BoardColumn`, así que mejora igual el Kanban
+ * del CRM de cada cliente: la reina lo querría. Sin la prop, como antes.
  */
-export default function TaskCard({ task, onSelect, isDragOverlay = false, fase = null }) {
+export default function TaskCard({ task, onSelect, isDragOverlay = false, fase = null, hecha = false }) {
   if (isDragOverlay) {
     return (
       <article className="bg-white rounded-lg border border-neutral-300 p-3 shadow-2xl rotate-2 cursor-grabbing">
-        <TaskCardBody task={task} fase={fase} />
+        <TaskCardBody task={task} fase={fase} hecha={hecha} />
       </article>
     );
   }
-  return <SortableTaskCard task={task} onSelect={onSelect} fase={fase} />;
+  return <SortableTaskCard task={task} onSelect={onSelect} fase={fase} hecha={hecha} />;
 }
 
-function SortableTaskCard({ task, onSelect, fase }) {
+function SortableTaskCard({ task, onSelect, fase, hecha }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
     data: { type: "task", boardColumnId: task.boardColumnId, order: task.order },
@@ -73,13 +80,13 @@ function SortableTaskCard({ task, onSelect, fase }) {
       }}
       className="group bg-white rounded-lg border border-neutral-200 p-3 cursor-grab active:cursor-grabbing hover:border-neutral-300 transition-colors"
     >
-      <TaskCardBody task={task} fase={fase} />
+      <TaskCardBody task={task} fase={fase} hecha={hecha} />
     </article>
   );
 }
 
-function TaskCardBody({ task, fase = null }) {
-  const dueOverdue = isOverdue(task.dueDate);
+function TaskCardBody({ task, fase = null, hecha = false }) {
+  const dueOverdue = !hecha && isOverdue(task.dueDate);
   const checklistDone = Array.isArray(task.checklist)
     ? task.checklist.filter((it) => it.done).length
     : 0;
