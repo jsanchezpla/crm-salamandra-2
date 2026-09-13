@@ -10,6 +10,7 @@ import {
   VALID_MODALITIES,
 } from "../../../../lib/citas/validation.js";
 import { logCitasAudit } from "../../../../lib/citas/audit.js";
+import { resumenDeCita } from "../../../../lib/citas/resumenDeCita.js";
 import { enlaceCancelacion } from "../../../../lib/citas/cancelacion.js";
 import { findBookingOverlap, noEsCarritoAbandonado } from "../../../../lib/citas/booking.js";
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
@@ -681,7 +682,8 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       entity: "Booking",
       entityId: row.id,
       before: null,
-      after: { ...row.toJSON(), source: "manual" },
+      // Un RESUMEN, nunca la fila: nombre, contacto y notas no van a master.
+      after: { ...resumenDeCita(row), source: "manual" },
       ip,
     });
 

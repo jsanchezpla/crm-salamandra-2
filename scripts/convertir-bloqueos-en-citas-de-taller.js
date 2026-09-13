@@ -91,6 +91,7 @@ import { getTenantDb } from "../lib/db/tenantDb.js";
 import { montarCitaDeTaller } from "../lib/clinica/citaDeTaller.js";
 import { terapeutasDeGrupo } from "../lib/clinica/grupoDeTaller.js";
 import { logCitasAudit } from "../lib/citas/audit.js";
+import { resumenDeCita } from "../lib/citas/resumenDeCita.js";
 
 const argv = process.argv.slice(2);
 const conValor = new Set(["--alias", "--grupo", "--serie", "--desde", "--hasta"]);
@@ -325,7 +326,8 @@ for (const p of plan) {
       entity: "Booking",
       entityId: row.id,
       before: { bloqueo: { id: b.id, label: b.label, startAt: b.startAt, endAt: b.endAt, teamMemberId: b.teamMemberId } },
-      after: { ...row.toJSON(), source: "convertir-bloqueos-en-citas-de-taller", ...montado },
+      // Un RESUMEN, nunca la fila (13/09/2026): las notas del bloqueo no van a master.
+      after: { ...resumenDeCita(row), source: "convertir-bloqueos-en-citas-de-taller", ...montado },
     });
     await b.destroy();
     hechas++;

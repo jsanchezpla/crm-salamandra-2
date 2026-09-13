@@ -25,6 +25,7 @@ import {
   noEsCarritoAbandonado,
 } from "../../../../../../lib/citas/booking.js";
 import { logCitasAudit } from "../../../../../../lib/citas/audit.js";
+import { resumenDeCita } from "../../../../../../lib/citas/resumenDeCita.js";
 import { notifyAdmins } from "../../../../../../lib/notifications/notifyUsers.js";
 import { verifyPortalSession, readBearer } from "../../../../../../lib/citas/portalSession.js";
 import {
@@ -929,7 +930,9 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
       entity: "Booking",
       entityId: row.id,
       before: null,
-      after: { ...row.toJSON(), source: "landing" },
+      // Un RESUMEN, nunca la fila: nombre, contacto, respuestas y el token de
+      // cancelar no van a master (13/09/2026, `resumenDeCita.js`).
+      after: { ...resumenDeCita(row), source: "landing" },
       ip,
     });
 

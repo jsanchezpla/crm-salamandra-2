@@ -15,6 +15,7 @@ import {
   VALID_MODALITIES,
 } from "../../../../../lib/citas/validation.js";
 import { logCitasAudit } from "../../../../../lib/citas/audit.js";
+import { resumenDeCita, cambiosDeCita, fijosDeCita } from "../../../../../lib/citas/resumenDeCita.js";
 import { borrarCitaDeVerdad } from "../../../../../lib/citas/borrarCita.js";
 import { findBookingOverlap } from "../../../../../lib/citas/booking.js";
 import { resolveCurrentTeamMemberId } from "../../../../../lib/team/currentTeamMember.js";
@@ -569,15 +570,24 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
       });
     }
 
+    // Qué cambió, no la fila entera (13/09/2026, `resumenDeCita.js`): de ids,
+    // hora, estado y dinero, el antes y el después; del contacto, las notas y
+    // el resto de lo privado, solo QUÉ campo cambió. El valor sigue en bookings.
+    // Y SIEMPRE, en los dos lados, hora, duración, profesional, estado, tipo y
+    // paciente (`fijosDeCita`, null explícito): mover solo la hora tiene que
+    // decir de quién es y cuánto dura (lo lee la comprobación de bloqueos).
+    const cambios = cambiosDeCita(before, row);
     await logCitasAudit({
       tenantId: tenant.id,
       userId,
       action: "citas.booking_updated",
       entity: "Booking",
       entityId: row.id,
-      before,
+      before: { ...fijosDeCita(before), ...cambios.antes },
       after: {
-        ...row.toJSON(),
+        ...fijosDeCita(row),
+        ...cambios.despues,
+        ...(cambios.cambiadosSinValor.length ? { cambiadosSinValor: cambios.cambiadosSinValor } : {}),
         ...(reembolso ? { reembolso } : {}),
         // Cuántos borradores en blanco se retiraron con la falta (y cuántos se
         // conservaron por tener algo escrito): lo destructivo, en la auditoría.
@@ -816,7 +826,8 @@ export const DELETE = withTenant(async (request, { params }, ctx) => {
 
     if (row.status === "cancelled") return noContent();
 
-    const before = row.toJSON();
+    // Un RESUMEN para la auditoría, nunca la fila (13/09/2026).
+    const before = resumenDeCita(row);
     await row.update({
       status: "cancelled",
       cancelledAt: new Date(),
