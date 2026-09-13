@@ -153,12 +153,14 @@ export default function CoordinacionesPage() {
               ) : (
                 <div className="text-[11px] text-neutral-500 mb-1">Participantes: {c.participants || "—"}</div>
               )}
-              <p className="text-xs text-neutral-700 leading-relaxed">{c.topics || "—"}</p>
+              {/* Un tema por línea (13/09/2026): unidos con comas volvía la
+                  ambigüedad de la coma, ahora al pintar. */}
+              <p className="text-xs text-neutral-700 leading-relaxed whitespace-pre-line">{(c.topicsList?.length ? c.topicsList.filter(Boolean).join("\n") : c.topics) || "—"}</p>
               {c.agreements?.length > 0 && (
                 <div className="mt-2">
                   <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-0.5">Acuerdos</div>
                   <ul className="list-disc list-outside ml-4 text-xs text-neutral-700 space-y-0.5">
-                    {c.agreements.map((a, i) => <li key={i}>{a}</li>)}
+                    {c.agreements.map((a, i) => <li key={i} className="whitespace-pre-line">{a}</li>)}
                   </ul>
                 </div>
               )}
@@ -166,7 +168,7 @@ export default function CoordinacionesPage() {
                 <div className="mt-2">
                   <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-0.5">Próximos pasos</div>
                   <ul className="list-disc list-outside ml-4 text-xs text-neutral-700 space-y-0.5">
-                    {c.nextActions.map((a, i) => <li key={i}>{a}</li>)}
+                    {c.nextActions.map((a, i) => <li key={i} className="whitespace-pre-line">{a}</li>)}
                   </ul>
                 </div>
               )}

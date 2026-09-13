@@ -14,6 +14,10 @@
  * sesión. La pantalla no tiene por qué saber ids de fichas de equipo. Sí hay un
  * campo de NOMBRE libre («La registró»), para la reunión que llevó alguien sin
  * ficha de equipo; si se deja vacío manda el usuario de la sesión.
+ *
+ * Temas, acuerdos y próximos pasos se mandan como TEXTO y los trocea el
+ * servidor por líneas (`lib/clinica/actaCoordinacion.js`, 13/09/2026): la coma
+ * no parte la frase.
  */
 
 import { useEffect, useState } from "react";
@@ -184,20 +188,39 @@ export default function NuevaCoordinacionModal({ patientId = null, patientName =
             )}
 
             <div>
-              <label className={label}>Participantes (separados por comas)</label>
+              <label className={label}>Participantes · separados por comas</label>
               <input className={input} value={form.participants} onChange={(e) => set("participants", e.target.value)} />
             </div>
             <div>
-              <label className={label}>Temas tratados</label>
-              <textarea rows={2} className={input} value={form.topics} onChange={(e) => set("topics", e.target.value)} />
+              <label className={label}>Temas tratados · uno por línea</label>
+              <textarea
+                rows={3}
+                className={input}
+                placeholder={"Adaptaciones en el aula\nConducta en el recreo"}
+                value={form.topics}
+                onChange={(e) => set("topics", e.target.value)}
+              />
             </div>
             <div>
-              <label className={label}>Acuerdos</label>
-              <textarea rows={2} className={input} value={form.agreements} onChange={(e) => set("agreements", e.target.value)} />
+              <label className={label}>Acuerdos · uno por línea</label>
+              <textarea
+                rows={3}
+                className={input}
+                placeholder={"Reforzar pautas en casa, revisar en un mes\nAmpliar el tiempo de los exámenes"}
+                value={form.agreements}
+                onChange={(e) => set("agreements", e.target.value)}
+              />
+              <p className="text-[10px] text-neutral-400 mt-1">Cada línea es un punto del acta. Las comas no parten la frase.</p>
             </div>
             <div>
-              <label className={label}>Próximos pasos</label>
-              <textarea rows={2} className={input} value={form.nextActions} onChange={(e) => set("nextActions", e.target.value)} />
+              <label className={label}>Próximos pasos · uno por línea</label>
+              <textarea
+                rows={3}
+                className={input}
+                placeholder="Enviar las pautas por escrito al colegio"
+                value={form.nextActions}
+                onChange={(e) => set("nextActions", e.target.value)}
+              />
             </div>
             {/* Quién la registró, en texto libre. Normalmente NO hace falta: el
                 servidor pone al usuario de la sesión. Está para la reunión que

@@ -1417,7 +1417,7 @@ export default function PacienteFichaPage() {
                     <span className="text-[10px] text-neutral-400 tabular">{fmtDate(c.date)}</span>
                   </div>
                   <div className="text-[11px] text-neutral-500 mb-1">Participantes: {c.participants || "—"}</div>
-                  <p className="text-xs text-neutral-700 leading-relaxed">{c.topics || "—"}</p>
+                  <p className="text-xs text-neutral-700 leading-relaxed whitespace-pre-line">{(c.topicsList?.length ? c.topicsList.filter(Boolean).join("\n") : c.topics) || "—"}</p>
                 </div>
               ))}
             </div>

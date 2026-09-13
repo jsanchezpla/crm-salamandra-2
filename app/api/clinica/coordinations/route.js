@@ -4,6 +4,7 @@ import { ok, created, error, forbidden } from "../../../../lib/utils/apiResponse
 import { serializeCoordination } from "../../../../lib/clinica/serialize.js";
 import { logClinicaAudit, auditSummary } from "../../../../lib/clinica/audit.js";
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
+import { lineasDelFormulario, asistentesDelFormulario } from "../../../../lib/clinica/actaCoordinacion.js";
 
 function gate(ctx) {
   return ctx.hasModule("clinica") || ctx.hasModule("pacientes");
@@ -31,11 +32,6 @@ async function contactoValido(models, patientId, contactoId) {
     attributes: ["id"],
   });
   return c ? c.id : null;
-}
-function toArr(v) {
-  if (Array.isArray(v)) return v;
-  if (v == null || v === "") return [];
-  return String(v).split(",").map((x) => x.trim()).filter(Boolean);
 }
 
 export const GET = withTenant(async (request, _rc, ctx) => {
@@ -87,10 +83,11 @@ export const POST = withTenant(async (request, _rc, ctx) => {
   const payload = {
     coordinationType: body.coordinationType,
     coordinationDate: body.coordinationDate ? new Date(body.coordinationDate) : new Date(),
-    participants: toArr(body.participants),
-    topics: toArr(body.topics),
-    agreements: toArr(body.agreements),
-    nextActions: toArr(body.nextActions),
+    // Temas, acuerdos y próximos pasos por LÍNEAS; la coma no parte (13/09/2026, lib/clinica/actaCoordinacion.js).
+    participants: asistentesDelFormulario(body.participants),
+    topics: lineasDelFormulario(body.topics),
+    agreements: lineasDelFormulario(body.agreements),
+    nextActions: lineasDelFormulario(body.nextActions),
     relatedPatientId: body.relatedPatientId || null,
     createdById: createdById || null,
     createdByName,

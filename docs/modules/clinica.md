@@ -1829,9 +1829,9 @@ Tabla: `coordinations`. Acta de una reunión de coordinación.
 | `coordinationType` | ENUM | `family`, `school`, `psychiatrist`, `neuropediatrician`, `other_therapist`, `orientator`, `other`. |
 | `participants` | JSONB DEFAULT `[]` | Asistentes. **Dos formas conviven** (ver abajo). |
 | `coordinationDate` | TIMESTAMPTZ NOT NULL | Fecha. |
-| `topics` | JSONB DEFAULT `[]` | Temas tratados. |
-| `agreements` | JSONB DEFAULT `[]` | Acuerdos alcanzados. |
-| `nextActions` | JSONB DEFAULT `[]` | Próximas actuaciones con responsable. |
+| `topics` | JSONB DEFAULT `[]` | Temas tratados: una cadena por punto; al dar de alta, una línea = un punto (13/09/2026). |
+| `agreements` | JSONB DEFAULT `[]` | Acuerdos: una cadena por punto (en las importadas, hasta dos: acuerdos y seguimiento). |
+| `nextActions` | JSONB DEFAULT `[]` | Próximos pasos: una cadena por punto, sin responsable ni fecha (vacío en las importadas). |
 | `relatedPatientId` | UUID nullable | FK a `patients` (ON DELETE SET NULL). |
 | `scope` | ENUM nullable | `internal` (entre terapeutas del centro) / `external` (colegios, hospitales, otros profesionales). Sprint Aumenta 2026-07-28; las actas antiguas quedan sin clasificar. |
 | `externalEntity` | VARCHAR(200) nullable | Con `external`, con quién («Colegio San José»). |
@@ -1860,6 +1860,55 @@ nombre en texto libre.
 De las 171 sin ficha, 61 son de niños que hoy sí tienen terapeuta: los
 reasignaron cuando esas profesionales se fueron. Poner al terapeuta de hoy
 falsearía quién estuvo en aquella reunión.
+
+#### Temas, acuerdos y próximos pasos: una línea, un punto (13/09/2026)
+
+**Qué pasaba.** El POST de `app/api/clinica/coordinations` pasaba los cuatro
+campos por el mismo `split(",")`. En Participantes está bien (es una lista de
+nombres y el campo lo avisa), pero Temas, Acuerdos y Próximos pasos son FRASES:
+«Reforzar pautas en casa, revisar en un mes» se guardaba como dos acuerdos.
+Troceó el 100 % de lo escrito a mano: las 3 actas de Aumenta del 09/09 al
+11/09/2026 (31 trozos de acuerdos, 14 de próximos pasos y 19 de temas). Las
+695 importadas de Organízate no pasaron por ahí.
+
+**La regla**, en `lib/clinica/actaCoordinacion.js` (pura, con
+`scripts/_smoke-acta-coordinacion.mjs`):
+
+- Temas, acuerdos y próximos pasos se parten por **LÍNEAS**
+  (`lineasDelFormulario`); la coma no parte. Es la convención de las listas del
+  CRM (`plantillas.js` `desdeFormulario`).
+- Se quita la viñeta escrita a mano («- », «• », «1. », «2) », «a) » o una
+  viñeta sola en su línea), porque la pantalla ya pinta la suya. **En eso se
+  aparta de `desdeFormulario`**, que no la quita. Guion, asterisco, número y
+  letra solo son viñeta con espacio detrás o solos en la línea: «-5 %»,
+  «10.30», «1.5 h», «1.er» y «+34» se quedan como están.
+- Participantes, por comas, «;» o líneas (`asistentesDelFormulario`), como el
+  importador (`trocearAsistentes`).
+- Un array por la API no se re-parte: cada elemento ya es un punto. Se recorta,
+  se quitan vacíos y se descarta lo que no es texto (un objeto en `agreements`
+  tumbaría el `<li>` del listado).
+
+La forma guardada (JSONB, array de cadenas) y la lectura (`serializeCoordination`)
+no cambian; no hay migración. La pantalla dice «uno por línea» en los tres
+campos, pinta los saltos de acuerdos y próximos pasos (`whitespace-pre-line`) y
+**los temas uno por línea** desde `topicsList`, en el listado y en la ficha del
+paciente —si se unieran con comas, como `topics`, volvería la ambigüedad al
+pintar—. Eso cambia cómo se ven las importadas con varios temas; los datos no.
+
+**Las 3 actas ya troceadas**: `scripts/reparar-coordinaciones-troceadas.js`
+(`repararTroceado`: vuelve a unir con ", " y parte por las líneas). Simula sin
+`--confirm`; `--antes <fecha del despliegue>` es obligatorio y solo mira actas
+con auditoría `clinica.coordination.created` anterior, no importadas y SIN una
+`clinica.coordination.repaired` —el freno: `repararTroceado` no es idempotente
+y una segunda pasada uniría lo reparado—. `--antes` con hora exige zona
+(`2026-09-14T10:32+02:00`): la base compara en UTC y la hora del VPS es de
+Madrid; sin zona cortaría dos horas tarde. Y una red debajo: se salta el acta
+en la que algún punto ya lleva coma (un `split(",")` nunca dejó uno así, luego
+es del POST nuevo o ya reparada). Guarda antes una copia en `/tmp` del
+contenedor (nunca bajo `/app`) y audita solo recuentos. Lo que no devuelve:
+«a,b» queda «a, b» y una línea que acababa en coma se une con la siguiente.
+Lanzarlo con `--confirm` en Aumenta está **pendiente de Jorge**; si decide no
+repararlas, el script se borra.
 
 #### Asistentes: dos listas, y dos formatos
 
@@ -1942,7 +1991,7 @@ REALES de la API (ya no hay datos hardcoded).
 | `/clinica` | Landing del módulo. KPIs (sesiones, informes pendientes, coordinaciones, próxima entrega), accesos rápidos a Pacientes e Informes, pacientes recientes. H1: "Área clínica". |
 | `/clinica/informes` | Listado de informes con filtros. «Nuevo informe» crea el borrador y **abre su pantalla**. Click en fila abre el **drawer** de revisión (`InformeDrawer.jsx`), con «Editar informe». |
 | `/clinica/informes/[id]` | **LA pantalla del informe** (04/09/2026, `InformeEditor.jsx`): cabecera con tipo y fechas, material para dictarlo o pegarlo (`MaterialIA`), volcado desde sesiones, IA (`PropuestaIA`) y sus apartados (`ApartadosEditor`). |
-| `/clinica/coordinaciones` | Listado GENERAL de coordinaciones del centro con filtros por tipo y ámbito, y alta (`NuevaCoordinacionModal.jsx`). Hasta el sprint 2026-07 solo se veían paciente a paciente. |
+| `/clinica/coordinaciones` | Listado GENERAL de coordinaciones del centro con filtros por tipo y ámbito, y alta (`NuevaCoordinacionModal.jsx`). Hasta el sprint 2026-07 solo se veían paciente a paciente. Temas, acuerdos y próximos pasos se escriben uno por línea (13/09/2026: la coma ya no parte la frase). |
 | `/clinica/talleres` | Talleres: actividades de grupo e inscripciones (02/08/2026). Desde el 31/08/2026 el taller puede llevar su concepto de cobro del catálogo (`talleres.concept_id` → `billing_concepts`, FK suave; migración `migrate-talleres-concepto`): el formulario ofrece el selector si el centro tiene catálogo y el detalle dice al apuntar qué se cobrará; el GET del listado y el del detalle cuelgan `concepto` a mano. Desde el 01/09/2026 el taller tiene **sesiones**: la ficha las lista y `SesionTallerDrawer.jsx` registra una (registro del grupo + nota por paciente). |
 | `/clinica/estadisticas` | Estadísticas del centro (solo admin): actividad clínica, agenda y ausencias, captación; Excel y PDF. El dinero vive en Facturación a propósito. |
 
