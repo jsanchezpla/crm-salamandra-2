@@ -1,8 +1,11 @@
 import { Op } from "sequelize";
 import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
-import { findBookingOverlap } from "../../../../../../lib/citas/booking.js";
+import { findBookingOverlap, ocupaHuecoWhere } from "../../../../../../lib/citas/booking.js";
 import { buildCandidates, chooseSlots } from "../../../../../../lib/citas/suggestSlots.js";
+import { cargarAusencias } from "../../../../../../lib/citas/ausencias.js";
+import { bloqueosQueChocan } from "../../../../../../lib/citas/choqueConBloqueos.js";
+import { duracionDeContacto } from "../../../../../../lib/citas/slots.js";
 import { getTenantIaKey, getTenantIaModel } from "../../../../../../lib/ai/proveedorIa.js";
 import { resolveCurrentTeamMemberId } from "../../../../../../lib/team/currentTeamMember.js";
 import { cargarFestivos } from "../../../../../../lib/citas/festivos.js";
@@ -39,6 +42,10 @@ export const POST = withTenant(async (request, { params }, ctx) => {
 
     const eventType = await EventType.findByPk(booking.eventTypeId);
     if (!eventType) return error("La cita no tiene un tipo válido", 422);
+    // El hueco tiene que caberle a ESTA cita, que no siempre dura lo que su tipo
+    // (un diagnóstico de 180 con un tipo de 60). La rejilla sigue siendo la del
+    // tipo: ver `generateSlotsForDay` (13/09/2026).
+    const duracion = booking.duration || duracionDeContacto(eventType);
 
     let body = {};
     try { body = await request.json(); } catch { /* body opcional */ }
@@ -70,10 +77,15 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       }
     }
 
-    // Citas activas futuras: se reparten por miembro (una sin profesional bloquea a todos).
+    // Citas que OCUPAN su hueco en el horizonte: se reparten por miembro (una sin
+    // profesional bloquea a todos). Con el mismo criterio que el guardado
+    // (`ocupaHuecoWhere`, que libera los carritos abandonados) y con tope: lo
+    // que empieza después del último día mirado no puede tapar ningún hueco.
+    const DIA_MS = 24 * 60 * 60 * 1000;
     const now = new Date();
+    const fin = new Date(now.getTime() + (horizonDays + 1) * DIA_MS);
     const activeBookings = await Booking.findAll({
-      where: { status: { [Op.notIn]: ["cancelled", "no_show"] }, scheduledAt: { [Op.gte]: now }, id: { [Op.ne]: booking.id } },
+      where: { ...ocupaHuecoWhere(now), scheduledAt: { [Op.gte]: now, [Op.lt]: fin }, id: { [Op.ne]: booking.id } },
       attributes: ["scheduledAt", "duration", "teamMemberId"],
     });
     for (const m of members) {
@@ -89,12 +101,21 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       centerAvailabilities = av.map((a) => ({ dayOfWeek: a.dayOfWeek, startTime: a.startTime, endTime: a.endTime, eventTypeId: null }));
     }
 
-    // 1) Candidatos VÁLIDOS (horario propio − citas).
-    // Un festivo del centro no puede salir como hueco sugerido.
+    // 1) Candidatos VÁLIDOS (horario propio − citas − festivos − bloqueos).
+    // Un festivo del centro no puede salir como hueco sugerido, y un tramo
+    // bloqueado de la agenda (vacaciones, reunión, «libre pacientes»…) tampoco:
+    // antes solo se miraban los festivos y en nutri_laura 7 de 143 candidatos (y
+    // 1 de las 3 tarjetas) caían dentro de un bloqueo (13/09/2026). Cuentan como
+    // una cita más, sin correr la rejilla: `lib/citas/choqueConBloqueos.js`.
     const festivos = await cargarFestivos(ctx.tenantModels);
-    const candidates = buildCandidates({ eventType, members, horizonDays, now, centerAvailabilities, blockedDates: festivos });
+    const bloqueos = await cargarAusencias(ctx.tenantModels, {
+      desde: now,
+      hasta: fin,
+      profesionalIds: members.map((m) => m.id).filter(Boolean),
+    });
+    const candidates = buildCandidates({ eventType, duracion, members, horizonDays, now, centerAvailabilities, blockedDates: festivos, bloqueos });
     if (candidates.length === 0) {
-      return ok({ suggestions: [], model: "none", note: "No hay huecos libres en el horizonte. Configura el horario de los terapeutas o amplía los días." });
+      return ok({ suggestions: [], model: "none", note: "No hay huecos libres en el horizonte (ya descontadas las citas, los festivos y los bloqueos). Configura el horario de los terapeutas o amplía los días." });
     }
 
     // 2) La IA elige 3 (o simulado / sin-ia).
@@ -109,7 +130,7 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     try {
       chosen = await chooseSlots({
         candidates,
-        context: { serviceName: eventType.name, duration: eventType.duration, patientName, preferences, scope },
+        context: { serviceName: eventType.name, duration: duracion, patientName, preferences, scope },
         apiKey, model, forceFake: ctx.slug === "demo",
       });
     } catch {
@@ -120,11 +141,14 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     }
 
     // 3) Mapear + RE-VALIDAR cada propuesta (tercera red: por si entró otra cita).
+    // Mide con la duración de ESTA cita, y un bloqueo que aplica a esa persona
+    // (o del centro) la descarta, con la misma regla que el generador.
     const byId = new Map(candidates.map((c) => [c.slotId, c]));
     const suggestions = [];
     const pushValid = async (c, reason) => {
+      if (bloqueosQueChocan(bloqueos, { inicio: new Date(c.datetime), duracion, profesionalId: c.teamMemberId }).length) return;
       const overlap = await findBookingOverlap(Booking, {
-        scheduledAt: new Date(c.datetime), duration: eventType.duration, excludeId: booking.id, teamMemberId: c.teamMemberId,
+        scheduledAt: new Date(c.datetime), duration: duracion, excludeId: booking.id, teamMemberId: c.teamMemberId,
       });
       if (overlap) return;
       if (suggestions.some((x) => x.datetime === c.datetime && x.teamMemberId === c.teamMemberId)) return;
