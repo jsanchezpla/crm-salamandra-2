@@ -8,7 +8,8 @@ import { avisarAdminsDelFalloIa } from "../../../../../../lib/ai/avisoDeCuentaIa
 import { auditar, datosPeticion } from "../../../../../../lib/utils/auditoria.js";
 import { apartadosPara, plantillasDe } from "../../../../../../lib/clinica/plantillas.js";
 import { MAX_TRANSCRIPCION } from "../../../../../../lib/clinica/registroCompleto.js";
-import { bloquesDelInforme } from "../../../../../../lib/clinica/informeMaterial.js";
+import { bloquesDelInforme, tablaDePruebasParaLaIA } from "../../../../../../lib/clinica/informeMaterial.js";
+import { CLAVE_PRUEBAS, MAX_PRUEBAS_PARA_IA, normalizarPruebas } from "../../../../../../lib/clinica/pruebasDiagnosticas.js";
 import { structureInforme } from "../../../../../../lib/clinica/structureInforme.js";
 import { perfilDelCentro } from "../../../../../../lib/clinica/perfilDelCentro.js";
 import { UUID_RE } from "../../../../../../lib/clinica/diagnosticoFila.js";
@@ -40,17 +41,21 @@ import { registrosDe, informeDe } from "../../../../../../lib/clinica/registrosD
  * borrador no es material, la misma regla que `desde-sesiones`), y de ellos
  * nunca `prepText`, `prepFiles`, `internalNotes` ni `aiTranscription`
  * (`registrosDe` ni los pide). El NOMBRE del paciente no viaja: la línea de
- * contexto la monta `estiloClinico.js` con edad y áreas.
+ * contexto la monta `estiloClinico.js` con edad y áreas. Y, en su propio
+ * bloque del mensaje, la tabla de puntuaciones del informe
+ * (`contentSections.pruebas`, leída de lo GUARDADO; nunca en la beca;
+ * 13/09/2026).
  *
  * Body JSON (opcional): `{ apartados?, escrito? }` como los de `desde-material`
  * —los apartados tal como se están viendo en pantalla y lo ya tecleado, para
  * que la propuesta no lo contradiga—. Sin ellos, los del informe guardado.
  *
- * Devuelve `{ propuesta, nuevos, bloques, material, registros, incidencia }`
+ * Devuelve `{ propuesta, nuevos, bloques, material, registros, pruebas, incidencia }`
  * (+ `avisoIA` si la respuesta vino cortada o ilegible). Errores: 409 sin
  * informe («Crea primero el informe desde el expediente») o informe ya
  * entregado; 422 sin registros terminados (o sin nada escrito en ellos); 413
- * material más largo que `MAX_TRANSCRIPCION`; 503 sin clave de Anthropic; 502
+ * material más largo que `MAX_TRANSCRIPCION` o tabla de pruebas más larga que
+ * `MAX_PRUEBAS_PARA_IA`; 503 sin clave de Anthropic; 502
  * si la IA falla (con la frase de `mensajeDeErrorIa` y aviso a los admins).
  */
 export const POST = withTenant(async (request, routeCtx, ctx) => {
@@ -121,6 +126,16 @@ export const POST = withTenant(async (request, routeCtx, ctx) => {
     const apartados = Array.isArray(body.apartados) && body.apartados.length ? body.apartados : apartadosPara(cs, tenant, "informe");
     const escrito = body.escrito && typeof body.escrito === "object" && !Array.isArray(body.escrito) ? body.escrito : null;
 
+    // La tabla de puntuaciones del propio informe (13/09/2026): no es registro
+    // ni apartado, así que `materialDeLosRegistros` no la trae y la IA escribía
+    // la integración sin resultados. Viaja en su propio bloque del mensaje, leída
+    // de lo GUARDADO (la pantalla guarda antes de llamar). En la beca, nada.
+    const tablaDePruebas = tablaDePruebasParaLaIA({ pruebas: cs[CLAVE_PRUEBAS], tipo: informe.reportType });
+    if (tablaDePruebas.length > MAX_PRUEBAS_PARA_IA) {
+      return error("La tabla de pruebas del informe es demasiado larga para mandarla a la IA de una vez: acorta las descripciones o las interpretaciones de las pruebas.", 413);
+    }
+    const pruebasQueViajan = tablaDePruebas ? normalizarPruebas(cs[CLAVE_PRUEBAS]).length : 0;
+
     let salida;
     const t0 = Date.now();
     try {
@@ -129,12 +144,13 @@ export const POST = withTenant(async (request, routeCtx, ctx) => {
         transcription: material,
         apartados,
         escrito,
+        pruebas: cs[CLAVE_PRUEBAS],
         paciente: informe.patient,
         tipo: informe.reportType,
         apiKey: iaKey,
         model: getTenantIaModel(ctx),
       });
-      console.info("[clinica:diagnostico-unir] claude", `${Date.now() - t0}ms`, `${material.length} chars`, `${terminados.length} registros`);
+      console.info("[clinica:diagnostico-unir] claude", `${Date.now() - t0}ms`, `${material.length} chars`, `${terminados.length} registros`, `${tablaDePruebas.length} chars de pruebas`);
     } catch (e) {
       if (e?.code === "NO_API_KEY") return error("El informe con IA no está configurado (falta la clave de IA).", 503);
       console.error("[clinica:diagnostico-unir]", e);
@@ -159,6 +175,7 @@ export const POST = withTenant(async (request, routeCtx, ctx) => {
       after: {
         informeId: informe.id,
         registros: terminados.length,
+        pruebas: pruebasQueViajan,
         apartados: Object.keys(salida.propuesta ?? {}).length,
         nuevos: (salida.nuevos ?? []).length,
         incidencia: salida.incidencia ?? null,
@@ -180,6 +197,7 @@ export const POST = withTenant(async (request, routeCtx, ctx) => {
       bloques: salida.bloques ?? bloquesDelInforme(apartados),
       material,
       registros: terminados.length,
+      pruebas: pruebasQueViajan,
       incidencia: salida.incidencia ?? null,
       ...(aviso ? { avisoIA: aviso } : {}),
     });

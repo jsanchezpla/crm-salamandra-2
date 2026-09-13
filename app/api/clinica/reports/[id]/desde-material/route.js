@@ -8,7 +8,8 @@ import { avisarAdminsDelFalloIa } from "../../../../../../lib/ai/avisoDeCuentaIa
 import { logClinicaAudit } from "../../../../../../lib/clinica/audit.js";
 import { apartadosPara } from "../../../../../../lib/clinica/plantillas.js";
 import { materialParaLaIA, MAX_NOTAS, MAX_TRANSCRIPCION } from "../../../../../../lib/clinica/registroCompleto.js";
-import { bloquesDelInforme } from "../../../../../../lib/clinica/informeMaterial.js";
+import { bloquesDelInforme, tablaDePruebasParaLaIA } from "../../../../../../lib/clinica/informeMaterial.js";
+import { CLAVE_PRUEBAS, MAX_PRUEBAS_PARA_IA, normalizarPruebas } from "../../../../../../lib/clinica/pruebasDiagnosticas.js";
 import { structureInforme } from "../../../../../../lib/clinica/structureInforme.js";
 import { perfilDelCentro } from "../../../../../../lib/clinica/perfilDelCentro.js";
 
@@ -40,9 +41,17 @@ import { perfilDelCentro } from "../../../../../../lib/clinica/perfilDelCentro.j
  *   · `escrito`       (opcional, JSON) lo ya tecleado, como contexto para que
  *                     la propuesta no contradiga a la profesional.
  *
- * Devuelve `{ propuesta, nuevos, bloques, material }`. `nuevos` son apartados
- * que el modelo propone CREAR porque lo dictado no cabía en ninguno de los del
- * informe (`lib/clinica/apartadosPropuestos.js`).
+ * Devuelve `{ propuesta, nuevos, bloques, material, pruebas }`. `nuevos` son
+ * apartados que el modelo propone CREAR porque lo dictado no cabía en ninguno
+ * de los del informe (`lib/clinica/apartadosPropuestos.js`); `pruebas`, cuántas
+ * pruebas de la tabla viajaron.
+ *
+ * ── LA TABLA DE PRUEBAS (13/09/2026) ──────────────────────────────────────
+ * Si el informe tiene tabla de puntuaciones (`contentSections.pruebas`, la del
+ * diagnóstico), viaja sola, en su propio bloque del mensaje, leída de lo
+ * GUARDADO —la pantalla guarda antes de llamar—. En la beca no viaja, como no
+ * se imprime. Más larga que `MAX_PRUEBAS_PARA_IA`, 413. Sin notas ni
+ * transcripción sigue siendo 400: la tabla sola no es material para dictar.
  */
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -126,6 +135,16 @@ export const POST = withTenant(async (request, rc, ctx) => {
     const escrito = jsonDelForm(form, "escrito");
     const material = materialParaLaIA({ transcripcion, notas });
 
+    // La tabla de puntuaciones del informe (13/09/2026): el dictado de un
+    // informe de diagnóstico también tiene que ver sus resultados, que no son
+    // apartado. Leída de lo GUARDADO (la pantalla guarda antes de llamar). En
+    // la beca, nada.
+    const tablaDePruebas = tablaDePruebasParaLaIA({ pruebas: cs[CLAVE_PRUEBAS], tipo: informe.reportType });
+    if (tablaDePruebas.length > MAX_PRUEBAS_PARA_IA) {
+      return error("La tabla de pruebas del informe es demasiado larga para mandarla a la IA de una vez: acorta las descripciones o las interpretaciones de las pruebas.", 413);
+    }
+    const pruebasQueViajan = tablaDePruebas ? normalizarPruebas(cs[CLAVE_PRUEBAS]).length : 0;
+
     let salida;
     const t0 = Date.now();
     try {
@@ -136,12 +155,13 @@ export const POST = withTenant(async (request, rc, ctx) => {
         transcription: material,
         apartados,
         escrito,
+        pruebas: cs[CLAVE_PRUEBAS],
         paciente: informe.patient,
         tipo: informe.reportType,
         apiKey: iaKey,
         model: getTenantIaModel(ctx),
       });
-      console.info("[clinica:informe-material] claude", `${Date.now() - t0}ms`, `${material.length} chars`);
+      console.info("[clinica:informe-material] claude", `${Date.now() - t0}ms`, `${material.length} chars`, `${tablaDePruebas.length} chars de pruebas`);
     } catch (e) {
       if (e?.code === "NO_API_KEY") return error("El informe con IA no está configurado (falta la clave de IA).", 503);
       console.error("[clinica:informe-material]", e);
@@ -166,6 +186,7 @@ export const POST = withTenant(async (request, rc, ctx) => {
         nuevos: (salida.nuevos ?? []).length,
         deAudio: Boolean(transcripcion),
         deNotas: Boolean(notas),
+        pruebas: pruebasQueViajan,
       },
       ip: request.headers.get("x-forwarded-for"),
     });
@@ -184,6 +205,7 @@ export const POST = withTenant(async (request, rc, ctx) => {
       nuevos: salida.nuevos,
       bloques: salida.bloques ?? bloquesDelInforme(apartados),
       material,
+      pruebas: pruebasQueViajan,
       ...(aviso ? { avisoIA: aviso } : {}),
     });
   } catch (err) {

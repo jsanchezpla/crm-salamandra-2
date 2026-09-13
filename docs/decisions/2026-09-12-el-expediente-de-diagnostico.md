@@ -255,5 +255,15 @@ como la primera hora y **sus 50 € ya cobrados se descuentan del producto**;
 - Auditoría nueva: `diagnostico.informe_creado` y `diagnostico.informe_unido`
   (ids y recuentos, nunca texto clínico); `.abierto` gana `adoptadas`,
   `.seguido` el `descuento`, `.parado` el `yaExistia`.
+- **13/09/2026:** «Unir» y el dictado del informe mandan también
+  `contentSections.pruebas` a la IA —es donde la plantilla `sesion_diagnostico`
+  pide dejar las tablas («las tablas van en el informe»), y sin ellas la
+  integración y la conclusión salían sin resultados—. Se lee de lo guardado,
+  en su propio bloque del mensaje y nunca en la beca. El tope
+  (`MAX_PRUEBAS_PARA_IA`) es 120.000 caracteres para no bloquear un
+  diagnóstico completo con interpretaciones largas (~108.000 medidos); pasarse
+  es un 413, nunca un recorte. El comprobador de `pulir` no cambia: no redacta
+  esos apartados. `diagnostico.informe_unido` y `clinica.report.dictated`
+  ganan el recuento `pruebas`.
 - Detalle en `docs/modules/clinica.md` («Diagnóstico, segunda entrega: los
   registros por fecha, «Unir en informe» y empezar desde lo que ya hay»).
