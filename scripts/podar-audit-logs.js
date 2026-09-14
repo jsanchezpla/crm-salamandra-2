@@ -19,12 +19,22 @@
  *
  * Es SOLO borrado por antigüedad: jamás toca una fila reciente.
  *
+ * QUÉ ES DEMO (14/09/2026, decisión de Jorge): la lista sale de
+ * `lib/demo/demos.js` (`slugsDemoParaPoda`), no de un `IN (...)` escrito aquí.
+ * Antes solo contaban `demo` y `demo_golden`, y desde el 13/08 las demos por
+ * oficio (`demo_clinica`, `demo_nutricion`, `demo_agencia`) —igual de públicas y
+ * con sesión de admin para cualquiera— se guardaban 3 años como un cliente real.
+ *
+ * Lo lanza el temporizador `crm-poda.timer` del VPS (domingos 04:30 UTC, con
+ * `--confirm`; unidades en `scripts/deploy/`).
+ *
  * Uso:
  *   node --env-file=.env.local scripts/podar-audit-logs.js            (simula)
  *   docker exec crm-salamandra-app-1 node scripts/podar-audit-logs.js --confirm
  */
 
 import { Sequelize } from "sequelize";
+import { slugsDemoParaPoda } from "../lib/demo/demos.js";
 
 const CONFIRM = process.argv.includes("--confirm");
 
@@ -49,11 +59,13 @@ async function main() {
   const [[{ total }]] = await s.query(`SELECT count(*)::int AS total FROM master.audit_logs`);
   log(`Filas ahora: ${total}`);
 
-  // Tenants de juguete: la demo pública y su copia dorada.
+  // Tenants de juguete: las demos públicas (y sus copias doradas, si existen).
   const [demos] = await s.query(
-    `SELECT id, slug FROM master.tenants WHERE slug IN ('demo', 'demo_golden')`
+    `SELECT id, slug FROM master.tenants WHERE slug = ANY($1) ORDER BY slug`,
+    { bind: [slugsDemoParaPoda()] }
   );
   const idsDemo = demos.map((d) => d.id);
+  log(`Demos: ${demos.map((d) => d.slug).join(", ") || "ninguna"}`);
 
   const cuenta = async (sql, bind) => {
     const [[fila]] = await s.query(sql, { bind });

@@ -428,7 +428,7 @@ mobile-first, el CRM en escritorio es prioritario), `xlsx`, `docx`, `pdf`,
   se duplican en master); cada acción con su frase en
   `lib/actividad/etiquetas.js`; **los campos del resumen tienen que existir en
   ese modelo** (`Cost` no tiene `amount`). Los logs no se borran ni modifican
-  salvo `scripts/podar-audit-logs.js` (demo 7 días; reales 3 años, suelo 1).
+  salvo `scripts/podar-audit-logs.js` (las cuatro demos de `lib/demo/demos.js` 7 días; reales 3 años, suelo 1; `crm-poda.timer`, domingos).
   Detalle: `docs/decisions/2026-07-28-repaso-de-seguridad.md`.
 
 ---
