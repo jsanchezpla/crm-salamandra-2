@@ -1963,6 +1963,31 @@ cazarla.
 node --env-file=.env.local scripts/_smoke-bloqueos-quien-ve.mjs
 ```
 
+#### El nombre del paciente, solo donde hay pacientes; y la agenda que no carga lo dice (14/09/2026, Rocío en nutri_laura)
+
+«No sé qué ha pasado en la web que se ha cambiado y no me sale ninguna de las
+citas que tenía para hoy. Ni para hoy ni del resto de la semana.» Las citas
+estaban (esa semana, 8 suyas y 1 sin profesional); lo que no cargaba era la
+agenda.
+
+El 08/09/2026 (AV-0088, «en la rejilla manda el paciente») `GET
+/api/citas/bookings/calendar` empezó a cruzar cada cita con `patients` bajo un
+`if (Patient)`. El modelo existe en todos los tenants, la tabla no: **nutri_laura
+es el único cliente con Citas y sin `patients`** (medido en producción ese día),
+así que cada carga de su agenda dio un 500 (`42P01`) desde el 08/09 a las 22:02
+hasta el arreglo — a Laura también. En el log de nginx: 8 el 10/09 y 22 el 14/09.
+
+- El include del paciente lo decide `includeDelPaciente` (`lib/citas/nombreEnLaAgenda.js`):
+  solo si el **centro** tiene `clinica` o `pacientes` (`tenantHasModule`, no
+  `hasModule`: la pregunta es si existe la tabla). Sin él, la caja lleva
+  `client_name`, como siempre.
+- **Por qué nadie lo vio en seis días**: `fetchEvents` le pasaba el error a
+  FullCalendar, que no lo enseña. Ahora `CitasModule` pone encima del calendario
+  «No se han podido cargar las citas», con la referencia del log y «Reintentar».
+  La vista por terapeuta (`AgendaPorTerapeuta.jsx`) sigue sin ese aviso.
+- Lo fija `_smoke-nombre-en-la-agenda.mjs` (ligera): el include vacío con los
+  módulos de nutri_laura, y que la ruta no vuelva a montar `model: Patient` a mano.
+
 ### Override nutri_laura — **Histórico (hasta 22/07/2026)**
 
 `modules/overrides/nutri-laura/CitasModule.jsx` **ya no existe**. Fue la

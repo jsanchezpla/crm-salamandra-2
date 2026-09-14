@@ -7,7 +7,7 @@ import { veTodaLaAgenda, soloLoSuyo, filtroDeProfesionales } from "../../../../.
 import { citasDeTallerQueImparte, conteoDeAsistentes } from "../../../../../lib/clinica/citaDeTaller.js";
 import { colorCitasDe, colorDeCita } from "../../../../../lib/citas/colorCitas.js";
 import { colorTextoSobre } from "../../../../../lib/citas/coloresBloqueo.js";
-import { nombreDeLaCita } from "../../../../../lib/citas/nombreEnLaAgenda.js";
+import { nombreDeLaCita, includeDelPaciente } from "../../../../../lib/citas/nombreEnLaAgenda.js";
 
 const STATUS_COLOR_DIM = {
   cancelled: "#9ca3af",
@@ -137,10 +137,13 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
      *
      * `required: false`: una cita sin paciente —taller, adulto, una cita suelta—
      * tiene que seguir saliendo igual.
+     *
+     * Y SOLO donde el centro tiene la tabla (14/09/2026): aquí había un
+     * `if (Patient)`, que es siempre verdad, y la agenda de nutri_laura —Citas
+     * sin pacientes— estuvo seis días en blanco con un 500 por debajo. El porqué
+     * entero, en `includeDelPaciente`.
      */
-    if (Patient) {
-      include.push({ model: Patient, as: "patient", attributes: ["id", "firstName", "lastName"], required: false });
-    }
+    include.push(...includeDelPaciente({ Patient, tenantHasModule }));
 
     const rows = await Booking.findAll({
       where,

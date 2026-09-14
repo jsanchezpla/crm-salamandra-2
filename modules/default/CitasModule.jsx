@@ -334,6 +334,14 @@ export default function CitasModule({
   const [visibleTmIds, setVisibleTmIds] = useState(null); // null = todos los profesionales
   const [patients, setPatients] = useState([]); // vacío si el tenant no tiene Clínica/Pacientes
   const [festivosAbierto, setFestivosAbierto] = useState(false);
+  /*
+   * La agenda que NO carga lo dice (14/09/2026). `fetchEvents` le pasaba el
+   * error a FullCalendar, que no lo enseña: pintaba la semana en blanco. En
+   * nutri_laura fueron seis días de 500 leídos como «no me sale ninguna de las
+   * citas que tenía para hoy» — nadie avisó de un fallo, sino de citas perdidas.
+   * null = cargó bien; { ref } = falló (con la referencia del log, si la trae).
+   */
+  const [falloAgenda, setFalloAgenda] = useState(null);
 
   // Preguntas y avisos, dentro del CRM y no del navegador (12/08/2026, Rodrigo).
   const { confirmar, avisar, pedirTexto, elegir, dialogo } = useDialogo();
@@ -739,8 +747,13 @@ export default function CitasModule({
         }
       } catch { /* la agenda se ve igual, sin sombrear */ }
 
+      setFalloAgenda(null);
       success([...(j.data ?? []), ...fondos]);
     } catch (err) {
+      // «Error interno del servidor (ref. ZZFFCKWG)»: la referencia es lo que
+      // encuentra el fallo en el log; el resto no le dice nada a quien mira.
+      const ref = /\(ref\. ([A-Z0-9]+)\)/.exec(String(err?.message ?? ""))?.[1] ?? null;
+      setFalloAgenda({ ref });
       failure(err);
     }
   }, [visibleEtIds, visibleTmIds]);
@@ -1395,6 +1408,25 @@ export default function CitasModule({
             />
           )}
           <div className="flex-1 min-w-0 min-h-0 flex flex-col">
+          {falloAgenda && !porTerapeuta && (
+            <div
+              role="alert"
+              className="mb-2 shrink-0 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[13px] text-rose-800"
+            >
+              <span>
+                <strong className="font-semibold">No se han podido cargar las citas.</strong>{" "}
+                Es un fallo al leer la agenda: no quiere decir que no haya citas. Si al reintentar sigue igual,
+                avísanos desde Ayuda{falloAgenda.ref ? ` con la referencia ${falloAgenda.ref}` : ""}.
+              </span>
+              <button
+                type="button"
+                onClick={refrescarAgenda}
+                className="font-semibold underline underline-offset-2 hover:text-rose-900"
+              >
+                Reintentar
+              </button>
+            </div>
+          )}
           {porTerapeuta ? (
             <AgendaPorTerapeuta
               teamMembers={teamMembers}
