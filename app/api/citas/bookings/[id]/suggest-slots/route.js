@@ -2,11 +2,11 @@ import { Op } from "sequelize";
 import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
 import { findBookingOverlap, ocupaHuecoWhere } from "../../../../../../lib/citas/booking.js";
-import { buildCandidates, chooseSlots } from "../../../../../../lib/citas/suggestSlots.js";
+import { buildCandidates, chooseSlots, suggestFakeEnabled } from "../../../../../../lib/citas/suggestSlots.js";
 import { cargarAusencias } from "../../../../../../lib/citas/ausencias.js";
 import { bloqueosQueChocan } from "../../../../../../lib/citas/choqueConBloqueos.js";
 import { duracionDeContacto } from "../../../../../../lib/citas/slots.js";
-import { getTenantIaKey, getTenantIaModel } from "../../../../../../lib/ai/proveedorIa.js";
+import { modoDeIa } from "../../../../../../lib/ai/modoDeIa.js";
 import { resolveCurrentTeamMemberId } from "../../../../../../lib/team/currentTeamMember.js";
 import { cargarFestivos } from "../../../../../../lib/citas/festivos.js";
 import { vetoAi } from "../../../../../../lib/ai/aiAccess.js";
@@ -36,9 +36,6 @@ export const POST = withTenant(async (request, { params }, ctx) => {
         return forbidden("Solo puedes pedir horarios para tus propias citas");
       }
     }
-
-    const veto = await vetoAi(ctx, request, "sugerir horarios de cita con IA");
-    if (veto) return veto;
 
     const eventType = await EventType.findByPk(booking.eventTypeId);
     if (!eventType) return error("La cita no tiene un tipo válido", 422);
@@ -124,14 +121,20 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       const p = await Patient.findByPk(booking.patientId, { attributes: ["firstName", "lastName"] });
       if (p) patientName = `${p.firstName} ${p.lastName}`.trim();
     }
-    const apiKey = getTenantIaKey(ctx);
-    const model = getTenantIaModel(ctx);
+    // Simulado en las cuatro demos o por entorno; `vetoAi` solo si de verdad se
+    // va a llamar a la IA (`lib/ai/modoDeIa.js`, 14/09/2026). Si dice que no,
+    // su 403/429 se devuelve tal cual.
+    const ia = modoDeIa(ctx, { simuladoPorEntorno: suggestFakeEnabled() });
+    if (ia.gastaIa) {
+      const veto = await vetoAi(ctx, request, "sugerir horarios de cita con IA");
+      if (veto) return veto;
+    }
     let chosen;
     try {
       chosen = await chooseSlots({
         candidates,
         context: { serviceName: eventType.name, duration: duracion, patientName, preferences, scope },
-        apiKey, model, forceFake: ctx.slug === "demo",
+        apiKey: ia.apiKey, model: ia.model, forceFake: ia.simulado,
       });
     } catch (e) {
       // Un fallo de la IA ya lo recoge `chooseSlots` con su `avisoIA`

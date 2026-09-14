@@ -78,7 +78,10 @@ campos. Resumen:
   enseña los huecos del centro enteros; asignado, solo los de esa
   persona (`lib/citas/horarioProfesional.js`). En una consulta externa
   es además **quién la ve**, junto con los admin
-  (`lib/clients/consultaExterna.js`).
+  (`lib/clients/consultaExterna.js`). El **Salamandrobot** aplica la misma
+  regla (`filtroDeVisibilidad`) al buscar fichas por las palabras de la
+  pregunta, y solo busca si la persona tiene Clientes
+  (`lib/assistant/turno.js`, 14/09/2026).
 - `customFields` JSONB libre por tenant.
 
 ## Endpoints

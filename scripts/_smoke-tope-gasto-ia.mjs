@@ -650,12 +650,14 @@ describe("el cableado", () => {
 
   it("el cambio de euros es uno solo, y el bot enseña la frase del 403/429", () => {
     assert.ok(!leer("modules/config/tarjetas/ConsumoIA.jsx").includes("USD_POR_EUR ="));
+    // Desde el 14/09/2026 (T8) el bot no devuelve el 403/429 del veto: contesta
+    // sin IA con la frase en `avisoIA` (`lib/assistant/turno.js`; lo que
+    // DEVUELVE lo prueba `_smoke-salamandrobot-turno.mjs`, también con el 429
+    // del tope). Aquí, el cableado: la ruta lo saca y la pantalla lo pinta.
+    const ruta = leer("app/api/assistant/route.js");
+    assert.match(ruta, /avisoIA: turno\.avisoIA \?\?/, "la ruta no devuelve la frase del veto");
     const bot = leer("components/assistant/Salamandrobot.jsx");
-    const rama = bot.indexOf("r.status === 429");
-    assert.ok(rama >= 0, "el bot no distingue el 429");
-    // Dentro de esa rama (hasta su `return;`), la frase del servidor va al mensaje.
-    const cuerpo = bot.slice(rama, bot.indexOf("return;", rama));
-    assert.match(cuerpo, /aviso: j\.error/, "el bot no enseña la frase del servidor");
+    assert.match(bot, /aviso: j\.data\.avisoIA/, "el bot no enseña la frase del servidor");
   });
 
   it("la campana lleva a Configuración → Conexiones", async () => {

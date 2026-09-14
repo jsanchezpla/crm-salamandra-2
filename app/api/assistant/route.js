@@ -1,11 +1,8 @@
-import { Op } from "sequelize";
 import { withTenant } from "../../../lib/tenant/withTenant.js";
 import { ok, error, serverError } from "../../../lib/utils/apiResponse.js";
-import { findRelevant } from "../../../lib/assistant/knowledge.js";
 import { answerQuestion } from "../../../lib/assistant/answer.js";
+import { prepararTurno } from "../../../lib/assistant/turno.js";
 import { vetoAi } from "../../../lib/ai/aiAccess.js";
-import { getTenantIaKey, getTenantIaModel } from "../../../lib/ai/proveedorIa.js";
-import { filtroPorAtributos } from "../../../lib/utils/busquedaDb.js";
 
 const MAX_MSGS = 12;
 
@@ -17,57 +14,27 @@ function sanitizeMessages(raw) {
     .map((m) => ({ role: m.role, content: m.content.slice(0, 2000) }));
 }
 
-async function searchClients(tenantModels, query) {
-  const { Client } = tenantModels;
-  if (!Client) return [];
-  const words = String(query)
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .split(/\W+/)
-    .filter((w) => w.length >= 3 && !["como", "donde", "cuando", "para", "que", "los", "las", "una", "cliente", "clientes", "busca", "buscar"].includes(w));
-  if (!words.length) return [];
-  try {
-    // La pregunta ya venía sin tildes; el NOMBRE de la base sí las lleva, así
-    // que «munoz» no encontraba a los Muñoz (10/09/2026). `filtroPorAtributos`
-    // normaliza los dos lados. Sigue siendo un O entre palabras: aquí no se
-    // busca un nombre, se pescan las palabras sueltas de una pregunta.
-    const porPalabra = (await Promise.all(words.map((w) => filtroPorAtributos(Client, w, ["name"])))).filter(Boolean);
-    if (!porPalabra.length) return [];
-    const rows = await Client.findAll({
-      where: { [Op.or]: porPalabra },
-      attributes: ["id", "name"],
-      limit: 6,
-    });
-    return rows.map((r) => ({ id: r.id, name: r.name }));
-  } catch {
-    return [];
-  }
-}
-
-// POST /api/assistant — Salamandrobot. Disponible en cualquier tenant (ayuda
-// transversal, sin gate de módulo). Requiere sesión (withTenant).
+// POST /api/assistant — Salamandrobot. Sin moduleKey: lo ve quien tenga sesión
+// (withTenant). Lo que toca datos o gasta IA se decide en `prepararTurno`
+// (`lib/assistant/turno.js`, 14/09/2026): fichas solo con Clientes y sin
+// consultas externas ajenas, simulado en las cuatro demos, y `vetoAi` solo si
+// se va a gastar IA —si dice que no, se contesta sin IA con su frase en
+// `avisoIA`, no con el 403/429—.
 export const POST = withTenant(async (request, _rc, ctx) => {
   try {
     let body;
     try { body = await request.json(); } catch { return error("Body inválido"); }
     const messages = sanitizeMessages(body?.messages);
     if (!messages.length) return error("Sin mensajes");
-    const query = [...messages].reverse().find((m) => m.role === "user")?.content || "";
 
-    const veto = await vetoAi(ctx, request, "el asistente Salamandrobot");
-    if (veto) return veto;
-
-    const relevant = findRelevant(query);
-    const clients = await searchClients(ctx.tenantModels, query);
-    const apiKey = getTenantIaKey(ctx);
-    const model = getTenantIaModel(ctx);
+    const turno = await prepararTurno({ ctx, request, messages }, { vetoAi });
+    const { relevant, clients } = turno;
 
     let result;
     try {
       result = await answerQuestion({
-        messages, relevant, clients, apiKey, model, companyName: ctx.tenant?.name,
-        forceFake: ctx.slug === "demo",
+        messages, relevant, clients, apiKey: turno.apiKey, model: turno.model, companyName: ctx.tenant?.name,
+        forceFake: turno.simulado,
       });
     } catch (e) {
       // Un fallo de la IA ya lo recoge `answerQuestion` y contesta sin IA con
@@ -88,7 +55,8 @@ export const POST = withTenant(async (request, _rc, ctx) => {
       ...relevant.slice(0, 3).map((r) => ({ label: r.title, href: r.path })),
     ];
 
-    return ok({ answer: result.answer, model: result.model, links, avisoIA: result.avisoIA ?? null });
+    // Un solo aviso: el del veto (sin IA a propósito) o el del fallo de la IA.
+    return ok({ answer: result.answer, model: result.model, links, avisoIA: turno.avisoIA ?? result.avisoIA ?? null });
   } catch (err) {
     return serverError(err);
   }

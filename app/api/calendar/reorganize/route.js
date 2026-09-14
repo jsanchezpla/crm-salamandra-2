@@ -1,8 +1,8 @@
 import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
-import { reorganizeWeek } from "../../../../lib/calendar/reorganizeWeek.js";
-import { getTenantIaKey, getTenantIaModel } from "../../../../lib/ai/proveedorIa.js";
+import { reorganizeWeek, reorgFakeEnabled } from "../../../../lib/calendar/reorganizeWeek.js";
+import { modoDeIa } from "../../../../lib/ai/modoDeIa.js";
 import { vetoAi } from "../../../../lib/ai/aiAccess.js";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -24,8 +24,6 @@ function dayLabel(iso) {
 export const POST = withTenant(async (request, _rc, ctx) => {
   try {
     if (!ctx.hasModule("calendar")) return forbidden("Módulo calendario no activo");
-    const veto = await vetoAi(ctx, request, "reorganizar la semana con IA");
-    if (veto) return veto;
     const { CalendarTask, TeamMember } = ctx.tenantModels;
 
     let body = {};
@@ -70,11 +68,17 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     // La IA solo mueve tareas de UN SOLO día (mantiene la hora); las multi-día se dejan como están.
     const movable = tasks.filter((t) => !t.endDate || t.endDate === t.startDate);
 
-    const apiKey = getTenantIaKey(ctx);
-    const model = getTenantIaModel(ctx);
+    // Simulado en las cuatro demos o por entorno; `vetoAi` solo si de verdad se
+    // va a llamar a la IA —con clave y con algo que mover— (`lib/ai/modoDeIa.js`,
+    // 14/09/2026). Si dice que no, su 403/429 se devuelve tal cual.
+    const ia = modoDeIa(ctx, { simuladoPorEntorno: reorgFakeEnabled() });
+    if (ia.gastaIa && movable.length > 0) {
+      const veto = await vetoAi(ctx, request, "reorganizar la semana con IA");
+      if (veto) return veto;
+    }
     let result;
     try {
-      result = await reorganizeWeek({ tasks: movable, weekDates, apiKey, model, preferences, forceFake: ctx.slug === "demo" });
+      result = await reorganizeWeek({ tasks: movable, weekDates, apiKey: ia.apiKey, model: ia.model, preferences, forceFake: ia.simulado });
     } catch (e) {
       // Un fallo de la IA ya lo recoge `reorganizeWeek` con su `avisoIA`
       // (13/09/2026); lo que llega aquí es otra cosa —un fallo nuestro—, y
