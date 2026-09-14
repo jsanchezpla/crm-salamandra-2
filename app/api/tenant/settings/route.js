@@ -9,6 +9,7 @@ import { encryptSecret, decryptSecret, isEncryptionConfigured } from "../../../.
 import { isAllowedAnthropicModel, DEFAULT_ANTHROPIC_MODEL } from "../../../../lib/ai/anthropicModel.js";
 import { isAllowedOpenAIModel, DEFAULT_OPENAI_MODEL } from "../../../../lib/ai/openaiModel.js";
 import { esProveedorIa, proveedorIaDe } from "../../../../lib/ai/proveedores.js";
+import { leerTope, resumenDelTope, topeParaGuardar } from "../../../../lib/ai/topeDeGasto.js";
 import { getTenantStripeConfig } from "../../../../lib/payments/stripeConfig.js";
 import { getTenantCloudflareConfig } from "../../../../lib/analytics/cloudflareConfig.js";
 import { getTenantGocardlessConfig } from "../../../../lib/banco/gocardlessConfig.js";
@@ -258,6 +259,9 @@ function diffConfiguracion(antes, despues, nombreAntes, nombreDespues) {
   );
   anota("centro.sedes", antes?.centro?.sedes, despues?.centro?.sedes, resumenSedes);
   anota("aiAccess", antes?.aiAccess, despues?.aiAccess);
+  // El tope mensual de gasto de IA (14/09/2026) va RESUMIDO («60,00 € al mes»),
+  // no en CAMPOS_ABIERTOS_AUDIT: ahí saldría el objeto crudo en el recibo.
+  anota("iaTopeMensual", iAntes.iaTopeMensual, iDespues.iaTopeMensual, resumenDelTope);
   // Los productos de diagnóstico: cambiar las horas o el precio de caída de
   // un producto cambia lo que se le cobra a la siguiente familia.
   anota("clinica.diagnosticos", antes?.clinica?.diagnosticos, despues?.clinica?.diagnosticos, resumenDeProductos);
@@ -475,6 +479,8 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
       // Con qué IA se redacta (12/09/2026): «anthropic» o «openai». Cada
       // proveedor lleva su clave y su modelo; este dice cuál de los dos manda.
       proveedorIa: proveedorIaDe(integ),
+      // Tope mensual de gasto de IA (14/09/2026): `{ importe, moneda }` o null.
+      iaTope: leerTope(integ),
       anthropic: {
         ...ks(integ.anthropicApiKey),
         model: isAllowedAnthropicModel(integ.anthropicModel) ? integ.anthropicModel : DEFAULT_ANTHROPIC_MODEL,
@@ -718,6 +724,17 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
     settings.integrations.openaiModel = body.openaiModel;
   }
   if (esProveedorIa(body.aiProvider)) settings.integrations.aiProvider = body.aiProvider;
+  // Tope mensual de gasto de IA (14/09/2026, `lib/ai/topeDeGasto.js`). No es un
+  // secreto. `undefined` = no se toca; `null` o importe vacío = se quita. Lo
+  // demás se valida (1–5.000, € o $) y un valor malo se contesta con la frase.
+  // El `invalidateTenantCache` de abajo hace que mande al momento, también en
+  // el portal público.
+  if (body.iaTopeMensual !== undefined) {
+    const { valor, problema } = topeParaGuardar(body.iaTopeMensual);
+    if (problema) throw new ValidationError(problema);
+    if (valor) settings.integrations.iaTopeMensual = valor;
+    else delete settings.integrations.iaTopeMensual;
+  }
   applyPlain(settings.integrations, "resendReplyTo", body.resendReplyTo);
 
   // Cuentas de Resend (25/08/2026): una clave por dominio verificado. Van
@@ -1109,6 +1126,7 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
     },
     integrations: {
       proveedorIa: proveedorIaDe(settings.integrations),
+      iaTope: leerTope(settings.integrations),
       anthropic: {
         ...keyStatus(settings.integrations.anthropicApiKey),
         model: isAllowedAnthropicModel(settings.integrations.anthropicModel) ? settings.integrations.anthropicModel : DEFAULT_ANTHROPIC_MODEL,

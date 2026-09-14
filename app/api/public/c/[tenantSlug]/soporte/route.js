@@ -22,6 +22,8 @@ import {
 import { getTenantIaKey, getTenantIaModel } from "@/lib/ai/proveedorIa.js";
 import { ticketAiClassify } from "@/lib/support/ai.js";
 import { avisoSinIa, esErrorDeIa } from "@/lib/ai/errorLegible.js";
+import { marcarAccion } from "@/lib/ai/usoDeIA.js";
+import { topeFueraDeVetoAi } from "@/lib/ai/frenoDeGasto.js";
 
 /**
  * Portal público de soporte del tenant.
@@ -204,11 +206,20 @@ export const POST = withPublicTenant(
       //    Si la IA falla (13/09/2026), el visitante no ve nada, pero el motivo
       //    va en la campana del ticket nuevo; y si es la cuenta del centro, el
       //    aviso `ai_cuenta` ya ha salido del cliente central.
+      //    Tope mensual de gasto (14/09/2026, `lib/ai/frenoDeGasto.js`): esta
+      //    es la única IA que no pasa por `vetoAi`, así que lo mira aquí. Quien
+      //    abre un ticket nunca es admin: al 100 % no se clasifica, el ticket se
+      //    crea igual y la campana `ticket_new` dice por qué. El contexto de
+      //    uso ya lo abre `withPublicTenant`; aquí solo se apunta la acción.
       let sinClasificar = null;
       if (settings.autoClassify) {
         try {
           const apiKey = getTenantIaKey(ctx);
-          if (apiKey) {
+          // `null` si puede clasificar; si no, la frase del tope. Nunca lanza.
+          const frenada = apiKey ? await topeFueraDeVetoAi(ctx, "clasificar un ticket del portal") : null;
+          if (frenada) sinClasificar = frenada;
+          if (apiKey && !frenada) {
+            marcarAccion("clasificar un ticket del portal");
             const categories = await tenantModels.TicketCategory.findAll({ where: { active: true }, raw: true });
             const sugerencia = await ticketAiClassify({
               ticket: ticket.toJSON(),

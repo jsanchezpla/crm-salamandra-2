@@ -60,6 +60,13 @@ export default function Salamandrobot({ alAbrir }) {
         body: JSON.stringify({ messages: payload }),
       });
       const j = await r.json().catch(() => null);
+      // Candado de la IA (403) o tope de gasto del mes (429, 14/09/2026): la
+      // frase del servidor dice qué pasa y hasta cuándo. Con el «Inténtalo de
+      // nuevo en un momento» de abajo se insiste, que es lo que pasó el 10/09.
+      if ((r.status === 403 || r.status === 429) && j?.error) {
+        setMessages((m) => [...m, { role: "assistant", content: "Ahora no puedo usar la IA para responderte.", links: [], aviso: j.error }]);
+        return;
+      }
       if (!r.ok || !j?.ok) throw new Error(j?.error || "No pude responder ahora mismo.");
       // `aviso` (13/09/2026): la IA no ha respondido y esto sale de la ayuda
       // del CRM; se dice debajo, en ámbar. No viaja al servidor: el payload de

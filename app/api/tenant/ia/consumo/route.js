@@ -1,7 +1,9 @@
+import { Op } from "sequelize";
 import { withTenant } from "@/lib/tenant/withTenant.js";
 import { ok, forbidden, serverError } from "@/lib/utils/apiResponse.js";
 import { getMasterModels } from "@/lib/db/masterDb.js";
 import { getTenantIaModel, getTenantProveedorIa } from "@/lib/ai/proveedorIa.js";
+import { estadoDelTope, leerTope } from "@/lib/ai/topeDeGasto.js";
 
 /**
  * GET /api/tenant/ia/consumo — cuánto lleva gastado este tenant en IA
@@ -13,7 +15,8 @@ import { getTenantIaModel, getTenantProveedorIa } from "@/lib/ai/proveedorIa.js"
  * llenarse el día que se desplegó, así que el primer mes va incompleto y la
  * pantalla lo dice.
  *
- * Respuesta: { proveedor, modelo, desdeCuando, mes: Tramo, anterior: Tramo }
+ * Respuesta: { proveedor, modelo, desdeCuando, mes: Tramo, anterior: Tramo,
+ *             tope, personasSinAdmin }
  *   (`proveedor` y `modelo` son los que redactan HOY, `lib/ai/proveedorIa.js`;
  *   las filas del mes pueden ser de los dos si se cambió a mitad)
  *   Tramo = { desde, hasta, total: { llamadas, reutilizadas, fallidas, costeUsd,
@@ -28,6 +31,14 @@ import { getTenantIaModel, getTenantProveedorIa } from "@/lib/ai/proveedorIa.js"
  * con solo fallos suma al total pero no entra en `porAccion`: saldría «0 · 0,00 $».
  * Necesita la columna `error` (`scripts/migrate-ai-uso.js`, antes del despliegue);
  * si falta (42703), contesta como antes, sin fallidas, y lo dice en los logs.
+ *
+ * Desde el 14/09/2026 lleva también el TOPE mensual de gasto
+ * (`lib/ai/topeDeGasto.js`): `tope` es `estadoDelTope` sobre el total del mes
+ * —el mismo número que frena en `vetoAi`, con la misma frontera de mes— o
+ * `null` sin tope; `personasSinAdmin` es a cuántas personas frenaría al 100 %
+ * (solo el número, o `null` si no se pudo contar). La suma del freno no está
+ * redondeada y esta sí (4 decimales): en la frontera pueden diferir en menos
+ * de 0,0001 $, y se acepta.
  */
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
@@ -139,11 +150,30 @@ export const GET = withTenant(async (request, rc, ctx) => {
       console.warn("[ia:consumo] master.ai_uso sin la columna error: falta lanzar scripts/migrate-ai-uso.js; se enseña sin las fallidas");
       [mes, anterior] = await tramos(false);
     }
-    return ok({ proveedor: getTenantProveedorIa(ctx), modelo: getTenantIaModel(ctx), desdeCuando: primera?.desde ?? null, mes, anterior });
+    // El tope (14/09/2026, ver cabecera).
+    const guardado = leerTope(ctx.tenant.settings?.integrations);
+    const tope = guardado ? estadoDelTope({ gastadoUsd: mes.total.costeUsd, tope: guardado }) : null;
+    let personasSinAdmin = null;
+    try {
+      const { User } = getMasterModels();
+      personasSinAdmin = await User.count({ where: { tenantId, role: { [Op.notIn]: ["admin", "superadmin"] } } });
+    } catch (err) {
+      // Sin el número la tarjeta lo dice en genérico; no se esconde el consumo.
+      console.warn("[ia:consumo] no se pudo contar quién no es admin:", err?.message);
+    }
+    return ok({
+      proveedor: getTenantProveedorIa(ctx),
+      modelo: getTenantIaModel(ctx),
+      desdeCuando: primera?.desde ?? null,
+      mes,
+      anterior,
+      tope,
+      personasSinAdmin,
+    });
   } catch (err) {
     // Sin la tabla migrada (42P01) la pantalla no debe caerse: se contesta vacío.
     if (codigoPg(err) === "42P01") {
-      return ok({ proveedor: getTenantProveedorIa(ctx), modelo: getTenantIaModel(ctx), desdeCuando: null, mes: null, anterior: null, sinTabla: true });
+      return ok({ proveedor: getTenantProveedorIa(ctx), modelo: getTenantIaModel(ctx), desdeCuando: null, mes: null, anterior: null, tope: null, personasSinAdmin: null, sinTabla: true });
     }
     return serverError(err);
   }

@@ -661,6 +661,18 @@ describe("cambioConfiguracionTemplate: qué cuenta y cómo lo cuenta", () => {
     assert.ok(tpl.text.includes("Nombre del negocio: Antiguo → Nuevo"));
   });
 
+  it("el tope mensual de gasto de IA llega resumido y se cuenta con su nombre (14/09/2026)", () => {
+    const tpl = cambioConfiguracionTemplate({
+      tenantName: "T",
+      before: { iaTopeMensual: "(sin tope)" },
+      after: { iaTopeMensual: "60,00 € al mes" },
+      cuando: CUANDO,
+    });
+    assert.ok(tpl.text.includes("Tope mensual de gasto de IA: (sin tope) → 60,00 € al mes"), tpl.text);
+    assert.ok(!tpl.text.includes("iaTopeMensual"));
+    assert.ok(!tpl.html.includes("iaTopeMensual"));
+  });
+
   it("un valor que antes no existía se cuenta como (vacío)", () => {
     const tpl = cambioConfiguracionTemplate({ tenantName: "T", after: { name: "X" }, cuando: CUANDO });
     assert.ok(tpl.text.includes("Nombre del negocio: (vacío) → X"));

@@ -10,15 +10,15 @@
 | **Reina** | — |
 | **Pantallas** | `app/(dashboard)/configuracion/page.jsx` → `/configuracion` (una página con **seis zonas en pestañas** desde el 23/08/2026: Empresa, Conexiones, Agenda, Reserva online, Portal del cliente y Módulos; la abierta viaja en `?zona=`). La página es de SERVIDOR y resuelve ahí los módulos del tenant, que el componente es `"use client"` y no puede preguntarlos · el back-office la complementa desde `app/admin/page.jsx` (ficha de Custodia, `/admin`): nosotros también podemos poner las claves |
 | **Endpoints** | `app/api/tenant/settings/route.js` (GET/PATCH, 1) · `app/api/ai-permisos/**` (2: `route.js`, `[id]/route.js`, el candado de IA) · `app/api/admin/configuraciones/route.js` (1, back-office: pone credenciales sin leerlas nunca) · la pantalla reutiliza además `app/api/billing/settings`, `app/api/outreach/settings`, `app/api/outreach/business-lines/**` y `app/api/clinica/derivaciones` · la pestaña **Tu cuenta** usa `app/api/auth/password` (cambiarse la contraseña, 24/08/2026) y `app/api/auth/correo` (ponerse el correo de la cuenta, 26/08/2026) · públicos: ninguno |
-| **Lógica** | `lib/configuracion/pestanas.js` (**el reparto en zonas y qué módulo hace útil cada tarjeta**) · `lib/tenant/normalizarCentro.js` (28/08/2026: qué se guarda en `settings.centro` —recorta, tira las sedes vacías y descarta lo que no es texto—; `LIMITES`, `normalizarCentro`, `normalizarSede`, `centroVacio`) · `lib/configuracion/avisoCambio.js` (recibo por correo de cada cambio, enviado con la cuenta de Salamandra) · `lib/crypto/secretBox.js` (AES-256-GCM, prefijo `enc:v1:`) · resolvers que LEEN lo que aquí se guarda: `lib/ai/anthropicKey.js`, `lib/ai/anthropicModel.js` (`ANTHROPIC_MODELS`, Haiku por defecto desde el 11/09/2026; `parametrosDeRazonamiento`) · `lib/ai/usoDeIA.js` + `lib/ai/precios.js` (contabilidad de cada llamada en `master.ai_uso`, y desde el 14/09/2026 también de las que FALLAN: `registrarFallo`, con la causa de `causaDelFallo`/`CAUSAS_DE_FALLO` de `lib/ai/errorLegible.js`; ver «El rastro de las llamadas que fallan») · cuando la IA falla: `lib/ai/errorLegible.js` (la frase de cada fallo, si es de la CUENTA y `avisoSinIa` para los sustitutos sin IA), `lib/ai/avisoDeCuentaIa.js` (la campana `ai_cuenta` a los admins y `datosDelContexto`, lo que `withTenant`/`withPublicTenant` meten en el contexto) y `lib/ai/trasFalloDeIa.js` (13/09/2026: por donde pasan los cuatro clientes de IA antes de relanzar un fallo; ver «Cuando la cuenta de Anthropic se queda sin saldo») · `lib/ai/cacheDeRespuestas.js`, `lib/ai/openaiKey.js`, `lib/ai/aiAccess.js` (`vetoAi`, candado `settings.aiAccess`), `lib/outreach/resendConfig.js`, `lib/payments/stripeConfig.js`, `lib/analytics/cloudflareConfig.js`, `lib/whatsapp/whatsappConfig.js`, `lib/citas/videollamada.js` (`settings.citas.meetModo`), `lib/citas/coloresBloqueo.js` · back-office: `lib/provisioning/credencialesCliente.js` (solo escribir), `lib/provisioning/contactoCliente.js` (`settings.contacto`) · plantilla del recibo: `lib/email/templates/configuracion/cambioAplicado.js` |
-| **UI** | `modules/config/ConfigModule.jsx` (el armazón: pestañas, aviso de solo-lectura y la sección fiscal) + `modules/config/tarjetas/` (un fichero por pestaña: `Empresa`, `Conexiones`, `Agenda`, `Reservas`, `Portal`, `Modulos`, `Cuenta`, más `DatosCentro.jsx` —la tarjeta «Datos del centro», 28/08/2026— y `ui.jsx` con `BotonZona`, `Tarjeta` —atenúa y explica—, `Section`, `Field`; partido el 27/08/2026) · no hay `components/config/`; usa `components/ui/Select.jsx` y `components/ui/HelpTooltip.jsx` |
+| **Lógica** | `lib/configuracion/pestanas.js` (**el reparto en zonas y qué módulo hace útil cada tarjeta**) · `lib/tenant/normalizarCentro.js` (28/08/2026: qué se guarda en `settings.centro` —recorta, tira las sedes vacías y descarta lo que no es texto—; `LIMITES`, `normalizarCentro`, `normalizarSede`, `centroVacio`) · `lib/configuracion/avisoCambio.js` (recibo por correo de cada cambio, enviado con la cuenta de Salamandra) · `lib/crypto/secretBox.js` (AES-256-GCM, prefijo `enc:v1:`) · resolvers que LEEN lo que aquí se guarda: `lib/ai/anthropicKey.js`, `lib/ai/anthropicModel.js` (`ANTHROPIC_MODELS`, Haiku por defecto desde el 11/09/2026; `parametrosDeRazonamiento`) · `lib/ai/usoDeIA.js` + `lib/ai/precios.js` (contabilidad de cada llamada en `master.ai_uso`, y desde el 14/09/2026 también de las que FALLAN: `registrarFallo`, con la causa de `causaDelFallo`/`CAUSAS_DE_FALLO` de `lib/ai/errorLegible.js`; ver «El rastro de las llamadas que fallan») · cuando la IA falla: `lib/ai/errorLegible.js` (la frase de cada fallo, si es de la CUENTA y `avisoSinIa` para los sustitutos sin IA), `lib/ai/avisoDeCuentaIa.js` (la campana `ai_cuenta` a los admins y `datosDelContexto`, lo que `withTenant`/`withPublicTenant` meten en el contexto) y `lib/ai/trasFalloDeIa.js` (13/09/2026: por donde pasan los cuatro clientes de IA antes de relanzar un fallo; ver «Cuando la cuenta de Anthropic se queda sin saldo») · el tope mensual de gasto (14/09/2026; ver «Tope mensual de gasto de IA»): `lib/ai/topeDeGasto.js` (reglas PURAS —qué se guarda, aviso al 80 %, freno al 100 %, frases—; la importa también la tarjeta) y `lib/ai/frenoDeGasto.js` (servidor: la suma del mes con caché de 60 s, `comprobarTopeDeGasto`, la campana `ia_tope` y `topeFueraDeVetoAi` para el portal de Soporte) · `lib/ai/cacheDeRespuestas.js`, `lib/ai/openaiKey.js`, `lib/ai/aiAccess.js` (`vetoAi`: tope de gasto y candado `settings.aiAccess`), `lib/outreach/resendConfig.js`, `lib/payments/stripeConfig.js`, `lib/analytics/cloudflareConfig.js`, `lib/whatsapp/whatsappConfig.js`, `lib/citas/videollamada.js` (`settings.citas.meetModo`), `lib/citas/coloresBloqueo.js` · back-office: `lib/provisioning/credencialesCliente.js` (solo escribir), `lib/provisioning/contactoCliente.js` (`settings.contacto`) · plantilla del recibo: `lib/email/templates/configuracion/cambioAplicado.js` |
+| **UI** | `modules/config/ConfigModule.jsx` (el armazón: pestañas, aviso de solo-lectura y la sección fiscal) + `modules/config/tarjetas/` (un fichero por pestaña: `Empresa`, `Conexiones`, `Agenda`, `Reservas`, `Portal`, `Modulos`, `Cuenta`, más `DatosCentro.jsx` —la tarjeta «Datos del centro», 28/08/2026—, `ConsumoIA.jsx` + `TopeIA.jsx` —el consumo del mes y el tope de gasto, 14/09/2026— y `ui.jsx` con `BotonZona`, `Tarjeta` —atenúa y explica—, `Section`, `Field`; partido el 27/08/2026) · no hay `components/config/`; usa `components/ui/Select.jsx` y `components/ui/HelpTooltip.jsx` |
 | **Modelos** | `models/master/Tenant.model.js` — todo va en `master.tenants.settings` (JSONB: `brand`, `integrations`, `aiAccess`, `citas`, `clientes`, `centro`, `contacto`), sin migración · `models/tenant/AiPermission.model.js` (`ai_permissions`: solicitudes y concesiones del candado de IA) · `models/master/AuditLog.model.js` (`master.audit_logs`) recibe cada cambio, sin el valor de los secretos |
-| **Interruptores y parámetros** | ninguno que lea el código (no hay fila en `tenant_modules`). Lo que esta pantalla escribe vive en `master.tenants.settings`, no en `featureFlags`: `integrations.*` (Anthropic, OpenAI, Google Places, Resend, Stripe, WhatsApp, Cloudflare; los secretos cifrados; en claro `aiProvider` —con qué IA se redacta, 12/09/2026—, `anthropicModel` y `openaiModel`), `aiAccess` (`libre` / `restringido`), `citas.*` (`meetModo`, `recordatoriosCitas`, `agendaCompartida`, `avisosWhatsapp`, `portalBloqueoImpago`, `cancelacionBloqueada`, `reservaOnlineCerrada`, `formularioObligatorio`, `contratoObligatorio`, `soloConPago`, `identidadObligatoria`, `formularioUrl`, `portalUrl`, `reservaUrl`, `colorBloqueos`), `clientes.categoriasExternas`, `centro` (los datos que imprime el informe clínico), `brand`, `name` |
+| **Interruptores y parámetros** | ninguno que lea el código (no hay fila en `tenant_modules`). Lo que esta pantalla escribe vive en `master.tenants.settings`, no en `featureFlags`: `integrations.*` (Anthropic, OpenAI, Google Places, Resend, Stripe, WhatsApp, Cloudflare; los secretos cifrados; en claro `aiProvider` —con qué IA se redacta, 12/09/2026—, `anthropicModel`, `openaiModel` e `iaTopeMensual` —`{ importe, moneda }`, el tope mensual de gasto, 14/09/2026—), `aiAccess` (`libre` / `restringido`), `citas.*` (`meetModo`, `recordatoriosCitas`, `agendaCompartida`, `avisosWhatsapp`, `portalBloqueoImpago`, `cancelacionBloqueada`, `reservaOnlineCerrada`, `formularioObligatorio`, `contratoObligatorio`, `soloConPago`, `identidadObligatoria`, `formularioUrl`, `portalUrl`, `reservaUrl`, `colorBloqueos`), `clientes.categoriasExternas`, `centro` (los datos que imprime el informe clínico), `brand`, `name` |
 | **Pantallas propias** | ninguna (`app/(dashboard)/configuracion/page.jsx` no tiene mapa `UI_OVERRIDES`) |
 | **Scripts** | no hay activación: no es módulo · `_hechos/encrypt-tenant-secrets.js` (cifra en reposo claves guardadas antes en claro; idempotente) · `migrate-ai-permissions.js` (crea `ai_permissions` en todos los schemas) · `configure-stripe-tenant.js` (claves de Stripe leídas de variables de entorno, nunca de argumentos) · `migrate-ai-uso.js` (master, ONE_OFF: crea `master.ai_uso` y desde el 14/09/2026 le añade `error`/`error_http`; ANTES del despliegue, por stdin) · solo lectura: `inspect-tenant-modules.js <slug>` |
-| **Pruebas** | `scripts/_smoke-config-pestanas.mjs` (`node:test`, 23/08/2026, ligera, en `npm test`): el reparto en zonas, que ninguna tarjeta se cae ni se duplica, y que el aviso «necesita el módulo X» solo sale cuando falta de verdad · `scripts/_smoke-datos-centro.mjs` (`node:test`, 28/08/2026, ligera, en `npm test`): lo que se guarda en `settings.centro` —que la forma no cambia nunca, que lo que no es texto no entra, que las sedes vacías se tiran y cuándo se BORRA la clave— · `_smoke-backoffice-ciclo.mjs` (base de datos; el camino del back-office: la clave se guarda cifrada, no se devuelve jamás, a una demo no se le pone) · `scripts/_smoke-plantillas-resto-layout.mjs` (`node:test`, 21/08/2026, ligera, en `npm test`) fija el recibo de cambio de configuración (`configuracion/cambioAplicado`): que el asunto avisa distinto según haya tocado o no una credencial, que traduce las tres acciones (puesta / cambiada / borrada) y que **NUNCA lleva el valor de una credencial**, solo qué pasó con ella · `scripts/_smoke-ia-respuesta.mjs` (`node:test`, ligera, en `npm test`): la frase de cada fallo de IA, qué es fallo de la cuenta, los títulos de la campana por cuenta, que el mismo error no avisa dos veces y el cableado (los dos envoltorios meten el gancho, los cuatro clientes pasan por `trasFalloDeIa` y ninguna ruta llama a `avisarAdminsDelFalloIa`) · `scripts/_smoke-ia-aviso-central.mjs` (`node:test`, 13/09/2026, ligera con marca, en `npm test`; sustituye `fetch`): el error que sube de Whisper, Anthropic y OpenAI, cuántos avisos salen, la cadena hasta la fila `ai_cuenta`, el `avisoIA` de los sustitutos sin IA, `ticketAiClassify` y que `withPublicTenant` responde igual con el contexto abierto · `scripts/_smoke-ia-fallos.mjs` (`node:test`, 14/09/2026, ligera con marca, en `npm test`; sustituye `fetch` y el destino de las filas con `destinoDeUsoParaPruebas`): la causa de cada fallo con las clases reales del SDK (y con su forma minificada del build de producción) y los errores de OpenAI y Whisper, la forma de la fila fallida (coste 0, sin mensaje), una sola fila por llamada pasando por los cuatro clientes, que lo que no sale no deja fila y que la fila buena no lleva `error` · nada cubre `/api/tenant/settings` ni `/api/ai-permisos` directamente; `_smoke-retencion-viva-o-muerta.mjs` solo usa `secretBox` para sembrar |
-| **Decisiones** | `../decisions/2026-07-28-repaso-de-seguridad.md` (guard de la demo en escrituras a master, auditoría con resumen) · `../decisions/2026-08-13-ciclo-de-vida-de-un-cliente.md` (`credencialesCliente.js`: nosotros también ponemos las claves, y solo escribimos) |
-| **En este doc** | «Las seis zonas (2026-08-23)» · «Datos del centro (2026-08-28)» · «Secciones» · «Dónde se guardan las claves (y por qué son seguras)» · «API — `/api/tenant/settings`» · «Ficheros» · «Permisos de IA del equipo (2026-07-27)» · «WhatsApp (Meta Cloud API) — 2026-07-27» · «Enlace de videollamada de las citas — 2026-07-27» |
+| **Pruebas** | `scripts/_smoke-config-pestanas.mjs` (`node:test`, 23/08/2026, ligera, en `npm test`): el reparto en zonas, que ninguna tarjeta se cae ni se duplica, y que el aviso «necesita el módulo X» solo sale cuando falta de verdad · `scripts/_smoke-datos-centro.mjs` (`node:test`, 28/08/2026, ligera, en `npm test`): lo que se guarda en `settings.centro` —que la forma no cambia nunca, que lo que no es texto no entra, que las sedes vacías se tiran y cuándo se BORRA la clave— · `_smoke-backoffice-ciclo.mjs` (base de datos; el camino del back-office: la clave se guarda cifrada, no se devuelve jamás, a una demo no se le pone) · `scripts/_smoke-plantillas-resto-layout.mjs` (`node:test`, 21/08/2026, ligera, en `npm test`) fija el recibo de cambio de configuración (`configuracion/cambioAplicado`): que el asunto avisa distinto según haya tocado o no una credencial, que traduce las tres acciones (puesta / cambiada / borrada) y que **NUNCA lleva el valor de una credencial**, solo qué pasó con ella · `scripts/_smoke-ia-respuesta.mjs` (`node:test`, ligera, en `npm test`): la frase de cada fallo de IA, qué es fallo de la cuenta, los títulos de la campana por cuenta, que el mismo error no avisa dos veces y el cableado (los dos envoltorios meten el gancho, los cuatro clientes pasan por `trasFalloDeIa` y ninguna ruta llama a `avisarAdminsDelFalloIa`) · `scripts/_smoke-ia-aviso-central.mjs` (`node:test`, 13/09/2026, ligera con marca, en `npm test`; sustituye `fetch`): el error que sube de Whisper, Anthropic y OpenAI, cuántos avisos salen, la cadena hasta la fila `ai_cuenta`, el `avisoIA` de los sustitutos sin IA, `ticketAiClassify` y que `withPublicTenant` responde igual con el contexto abierto · `scripts/_smoke-ia-fallos.mjs` (`node:test`, 14/09/2026, ligera con marca, en `npm test`; sustituye `fetch` y el destino de las filas con `destinoDeUsoParaPruebas`): la causa de cada fallo con las clases reales del SDK (y con su forma minificada del build de producción) y los errores de OpenAI y Whisper, la forma de la fila fallida (coste 0, sin mensaje), una sola fila por llamada pasando por los cuatro clientes, que lo que no sale no deja fila y que la fila buena no lleva `error` · `scripts/_smoke-tope-gasto-ia.mjs` (`node:test`, 14/09/2026, ligera con marca, en `npm test`; master sustituido en memoria y una `DATABASE_URL` muerta): el tope que se guarda y cómo se lee, el 80 %/100 % en enteros (la frontera de 52,80 de 66), a quién se frena, las frases, la suma del mes con su caché y su cambio de mes, que ante un fallo o una consulta colgada deja pasar, la campana una vez por admin/tramo/mes/importe (y que colgada no retiene la llamada ni se reintenta en cada una), lo que `topeFueraDeVetoAi` devuelve al portal, `vetoAi` de verdad (429 + `motivo` + `ai.tope_frenada` a quien no es admin, el admin pasa, sin tope nada cambia, antes del candado, responde a tiempo con la base colgada) y el cableado como texto (orden en `vetoAi`, la llamada del portal condicionada por el tope, la frase del 403/429 en el bot, imports sin servidor de `topeDeGasto.js` y `TopeIA.jsx`) · nada cubre `/api/tenant/settings` ni `/api/ai-permisos` directamente; `_smoke-retencion-viva-o-muerta.mjs` solo usa `secretBox` para sembrar |
+| **Decisiones** | `../decisions/2026-07-28-repaso-de-seguridad.md` (guard de la demo en escrituras a master, auditoría con resumen) · `../decisions/2026-08-13-ciclo-de-vida-de-un-cliente.md` (`credencialesCliente.js`: nosotros también ponemos las claves, y solo escribimos) · `../decisions/2026-09-14-el-tope-de-gasto-de-ia.md` (tope mensual de gasto de IA: aviso al 80 %, freno al 100 % a quien no es admin) |
+| **En este doc** | «Las seis zonas (2026-08-23)» · «Datos del centro (2026-08-28)» · «Secciones» · «Dónde se guardan las claves (y por qué son seguras)» · «API — `/api/tenant/settings`» · «Ficheros» · «Tope mensual de gasto de IA (2026-09-14)» · «Permisos de IA del equipo (2026-07-27)» · «WhatsApp (Meta Cloud API) — 2026-07-27» · «Enlace de videollamada de las citas — 2026-07-27» |
 
 Ruta: `/configuracion` · API: `/api/tenant/settings` · UI: `modules/config/ConfigModule.jsx`
 
@@ -236,7 +236,7 @@ Places, 07/2026); hoy:
 
 | Tarjeta | Clave | La usa | Plataforma |
 | ------- | ----- | ------ | ---------- |
-| **Con qué IA se redacta** (12/09/2026) | `aiProvider` (`anthropic` por defecto / `openai`, en claro) | Decide cuál de las dos siguientes escribe TODO lo que redacta la IA. Debajo, el consumo estimado del mes (`ConsumoIA.jsx`). Avisa en ámbar si el proveedor elegido no tiene clave | — |
+| **Con qué IA se redacta** (12/09/2026) | `aiProvider` (`anthropic` por defecto / `openai`, en claro) | Decide cuál de las dos siguientes escribe TODO lo que redacta la IA. Debajo, el consumo estimado del mes y el tope mensual de gasto (`ConsumoIA.jsx` + `TopeIA.jsx`, 14/09/2026). Avisa en ámbar si el proveedor elegido no tiene clave | — |
 | **Anthropic (Claude)** | `anthropicApiKey` (+ selector `anthropicModel`) | Con Claude elegido: Outreach (`/analizar`), sesiones e informes clínicos, Proyectos, Soporte, Citas, Calendario, actas, Mailing, asistente | console.anthropic.com |
 | **OpenAI (Whisper y ChatGPT)** | `openaiApiKey` (+ selector `openaiModel`, 12/09/2026) | SIEMPRE la transcripción de audio de sesiones clínicas (voz → texto) con Whisper; y con ChatGPT elegido, todo lo de la fila de arriba (`lib/ai/openai.js`) | platform.openai.com |
 | **WhatsApp (Meta Cloud API)** | `whatsappToken` (+ `whatsappPhoneNumberId`, en claro) | Avisos de cita por WhatsApp (`lib/whatsapp/whatsappConfig.js`); ver más abajo | developers.facebook.com |
@@ -620,6 +620,79 @@ Detalle en `lib/crypto/secretBox.js`. Migración para cifrar claves antiguas en
 claro: `scripts/_hechos/encrypt-tenant-secrets.js` (idempotente). Sin la env var, se
 guardan en claro (aviso por stderr) — hay que configurarla en el `.env`.
 
+## Tope mensual de gasto de IA (2026-09-14)
+
+Nace del 10/09/2026: la cuenta de Anthropic de Aumenta se quedó sin saldo a
+media tarde, con doce personas usando la IA, y nada avisó ANTES (el aviso
+`ai_cuenta` salta cuando el proveedor ya ha rechazado la llamada). Decisión
+entera: `docs/decisions/2026-09-14-el-tope-de-gasto-de-ia.md`.
+
+- **Qué se guarda y quién.** `settings.integrations.iaTopeMensual = { importe,
+  moneda }`, en claro y sin migración: importe de 1 a 5.000 con 2 decimales, en
+  € (por defecto) o $ (`topeParaGuardar`, `lib/ai/topeDeGasto.js`; cualquier
+  otra clave se descarta). Lo fija solo admin/superadmin en Conexiones →
+  «Con qué IA se redacta», debajo del consumo (`TopeIA.jsx`), por el PATCH de
+  siempre: rol fresco, guard de la demo, auditoría RESUMIDA («60,00 € al mes»,
+  `resumenDelTope`), recibo por correo («Tope mensual de gasto de IA») e
+  `invalidateTenantCache`, así que manda al momento también en el portal
+  público. `null` o importe vacío lo quita. El GET y el PATCH lo devuelven como
+  `integrations.iaTope`; `GET /api/tenant/ia/consumo` añade `tope`
+  (`estadoDelTope`) y `personasSinAdmin` (solo el número).
+- **Qué se suma.** Todo el `coste_usd` de `master.ai_uso` del centro en el mes
+  de Madrid (Claude, ChatGPT y Whisper juntos), con la misma frontera que el
+  consumo (`SQL_GASTO_DEL_MES`, `lib/ai/frenoDeGasto.js`). No filtra `error IS
+  NULL`: las fallidas van a coste 0 y así el freno no depende de esa columna.
+  La suma se guarda 60 s por centro en el proceso (lo que se escapa son
+  céntimos); un fallo no se guarda. El euro se convierte con `USD_POR_EUR = 1.1`
+  (`lib/ai/precios.js`, el mismo de la tarjeta de consumo). Se compara en
+  micro-dólares ENTEROS: 52,80 / 66 da 0.7999999999999999 en coma flotante.
+- **Dónde frena: `vetoAi`, en este orden** — `marcarAccion` → tope → puerta de
+  los admins → candado. Sin tope no hay consulta ni cambia nada. Al **80 %**,
+  campana `ia_tope` a los admins. Al **100 %**, quien no es admin recibe **429
+  `{ motivo: "tope_ia" }`** con la frase «Este mes el centro ha llegado al tope
+  de gasto de IA que ha fijado dirección. La IA vuelve el 1 de …» (sin cifras y
+  sin la palabra «saldo»), queda la auditoría `ai.tope_frenada` (`after: {
+  accion }`, frase en `lib/actividad/etiquetas.js`) y la campana del 100 %. **El
+  admin nunca se frena**, pero su uso también dispara las campanas. El tope va
+  antes del candado para no consumir un permiso de un solo uso ni crear una
+  solicitud inútil. El 429 lo devuelve `vetoAi` y no un cliente central: allí se
+  tomaría por el «límite de uso» del proveedor y avisaría como fallo de cuenta.
+- **La campana.** Una por admin (admin y superadmin), tramo (80/100), mes e
+  importe: `entityId = idDeterminista("ia_tope:tenant:mes:tramo:topeUsd")`, así
+  que subir el tope rearma el aviso y el índice único `notifications_dedupe_uniq`
+  frena las carreras; delante, un Set del proceso y un `findOne`. Un intento que
+  falla o sigue en marcha no se repite hasta pasados 60 s. `entityType
+  "IaTope"` enlaza a `/configuracion?zona=conexiones` (`lib/notifications/alerts.js`).
+- **Nunca apaga la IA por un fallo suyo.** Si la consulta falla o tarda más de
+  500 ms, deja pasar (fail-open, como la contabilidad): el tope protege el
+  gasto, no es un permiso. La campana tampoco espera más de 500 ms (si tarda,
+  sigue por detrás). `comprobarTopeDeGasto` y `avisarTramoDelTope` nunca
+  lanzan.
+- **No es el saldo.** Con clave propia no hay forma de leerlo: es la suma
+  ESTIMADA de lo que pasa por el CRM. No ve lo gastado con la misma clave fuera
+  del CRM ni los modelos sin precio. Para un corte exacto, el límite se pone
+  también en la consola del proveedor, y la tarjeta lo dice.
+- **También frena Google Places** (`outreach/leads/buscar-nuevos` pasa por
+  `vetoAi`), aunque su gasto no está en `ai_uso`; la tarjeta lo dice. Al frenar,
+  el bot, «Proponer horarios» y «Reorganizar la semana» pierden también su
+  respuesta sin IA, como con el candado.
+- **El portal público de Soporte** es la única IA sin `vetoAi`: su clasificación
+  automática mira el tope ella misma (`topeFueraDeVetoAi`, que devuelve `null`
+  o la frase corta `FRASE_CORTA_DE_TOPE`). Quien abre un ticket no es admin, así que
+  al 100 % no se clasifica, el ticket se crea igual y la campana `ticket_new`
+  dice «Sin clasificar: el centro ha llegado al tope de gasto de IA de este mes».
+  El contexto de uso ya lo abre `withPublicTenant`; la ruta apunta la acción
+  («clasificar un ticket del portal»). No se audita: no hay usuario.
+- **El Salamandrobot** enseña la frase del servidor (403 del candado o 429 del
+  tope) en ámbar, en vez de «Inténtalo de nuevo en un momento», que invitaba a
+  insistir.
+- **Tarjeta** (`TopeIA.jsx`): sin tope, «Sin tope: la IA no se frena nunca.» con
+  importe y €/$; con tope, «{gastado} de {tope} · N %», barra gris / ámbar desde
+  el 80 % / rosa al 100 %, «Cambiar» y «Quitar tope». Si el tope nuevo ya está
+  superado, pide confirmación en línea («el equipo se quedaría sin IA en cuanto
+  guardes»). En la demo, solo lectura.
+- Prueba: `scripts/_smoke-tope-gasto-ia.mjs`.
+
 ## Permisos de IA del equipo (2026-07-27)
 
 La IA de pago (Claude, Whisper, Google Places) puede quedar bajo candado por
@@ -633,13 +706,22 @@ puede **Revocar**. El solicitante recibe la decisión por la campana.
 
 Piezas:
 - Gate: `lib/ai/aiAccess.js` → `vetoAi(ctx, request, accion)` (estilo RETURN,
-  no throw: varios handlers de IA tienen try/catch propio). Está en los **11**
-  endpoints de IA (eran 7 el 27/07): `clinica/sessions/transcribe`,
-  `clinica/reports/[id]/pulir`, `clinica/performance/config/ai`, `outreach`
-  `analizar` y `buscar-nuevos`, `tickets/[id]/ai`, `assistant`
-  (Salamandrobot), `calendar/reorganize`, `citas/bookings/[id]/suggest-slots`,
-  `projects/ai/generate` y `projects/[id]/ai/edit`. Todo uso PERMITIDO audita
-  `ai.uso` en master. Un endpoint de IA nuevo lo lleva o se salta el candado.
+  no throw: varios handlers de IA tienen try/catch propio). Está en los **21**
+  endpoints de IA (eran 7 el 27/07; la lista, `git grep "vetoAi(" -- app`, a
+  14/09/2026): `assistant` (Salamandrobot), `calendar/reorganize`,
+  `citas/bloqueos/[id]/acta/redactar`, `citas/bookings/[id]/suggest-slots`,
+  `clinica/audio/transcribir`, `clinica/diagnosticos/[id]/unir`,
+  `clinica/performance/config/ai`, `clinica/reports/[id]/desde-material`,
+  `clinica/reports/[id]/pulir`, `clinica/sessions/[id]/completar`,
+  `clinica/sessions/[id]/encargo`, `clinica/sessions/transcribe`,
+  `clinica/taller-sesiones/transcribe`, `mailing/campanas/[id]/ia`, `outreach`
+  `leads/[id]/analizar` y `leads/buscar-nuevos`, `pacientes/[id]/plan/objetivos-ia`,
+  `pacientes/[id]/plan/transcribir`, `projects/[id]/ai/edit`,
+  `projects/ai/generate` y `tickets/[id]/ai`. Todo uso PERMITIDO audita
+  `ai.uso` en master. Un endpoint de IA nuevo lo lleva o se salta el candado
+  **y el tope de gasto**: desde el 14/09/2026 `vetoAi` mira primero el tope
+  mensual (ver «Tope mensual de gasto de IA»), antes de la puerta de los admins
+  y de este candado.
 - Panel: `GET /api/ai-permisos` + `PATCH /api/ai-permisos/[id]`
   (decision: conceder-general | conceder-una-vez | denegar | revocar).
   Solo admin con rol fresco de BD; PATCH vetado en la demo.

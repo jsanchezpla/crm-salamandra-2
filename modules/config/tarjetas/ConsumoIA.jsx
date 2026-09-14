@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ANTHROPIC_MODELS } from "../../../lib/ai/anthropicModel.js";
 import { CAUSAS_DE_FALLO } from "../../../lib/ai/errorLegible.js";
 import { OPENAI_MODELS } from "../../../lib/ai/openaiModel.js";
+import { USD_POR_EUR } from "../../../lib/ai/precios.js";
+import TopeIA from "./TopeIA.jsx";
 
 /**
  * Consumo estimado de la IA, dentro de la tarjeta «Con qué IA se redacta» de
@@ -19,9 +21,12 @@ import { OPENAI_MODELS } from "../../../lib/ai/openaiModel.js";
  * Desde el 14/09/2026 dice también cuántas llamadas NO llegaron a responder
  * este mes y por qué, en ámbar: las fallidas no cuestan ni cuentan como
  * llamadas, pero son las que avisan de que la cuenta se está quedando sin saldo.
+ *
+ * Y desde el 14/09/2026 lleva debajo el TOPE mensual de gasto (`TopeIA.jsx`),
+ * que se guarda con `onGuardarTope` y vuelve a pedir el consumo al guardar. Los
+ * dólares por euro salen de `lib/ai/precios.js`, los mismos con los que frena.
  */
 
-const USD_POR_EUR = 1.1;
 /** «Claude Haiku», «GPT-5.6 Luna»… desde los catálogos, para no copiar la lista a mano. */
 function etiquetaDeModelo(modelo) {
   return [...ANTHROPIC_MODELS, ...OPENAI_MODELS].find((m) => m.id === modelo)?.label ?? modelo;
@@ -39,23 +44,28 @@ function fecha(iso) {
   return `${d}/${m}/${y}`;
 }
 
-export default function ConsumoIA() {
+export default function ConsumoIA({ readOnly = false, onGuardarTope }) {
   const [datos, setDatos] = useState(null);
   const [fallo, setFallo] = useState(null);
 
-  useEffect(() => {
-    let vivo = true;
-    fetch("/api/tenant/ia/consumo")
+  // Fuera del efecto para poder volver a pedirlo al guardar el tope.
+  const cargar = useCallback((vivo = () => true) => {
+    return fetch("/api/tenant/ia/consumo")
       .then(async (r) => {
         const j = await r.json();
         if (!r.ok) throw new Error(j.error || "No se pudo leer el consumo");
-        if (vivo) setDatos(j.data);
+        if (vivo()) setDatos(j.data);
       })
-      .catch((e) => vivo && setFallo(e.message));
+      .catch((e) => vivo() && setFallo(e.message));
+  }, []);
+
+  useEffect(() => {
+    let vivo = true;
+    cargar(() => vivo);
     return () => {
       vivo = false;
     };
-  }, []);
+  }, [cargar]);
 
   if (fallo) return null;
   if (!datos) return <p className="text-xs text-neutral-400 mt-3">Calculando el consumo…</p>;
@@ -101,6 +111,18 @@ export default function ConsumoIA() {
           ))}
         </ul>
       )}
+
+      <TopeIA
+        tope={datos.tope}
+        gastadoUsd={mes.total.costeUsd}
+        personasSinAdmin={datos.personasSinAdmin}
+        readOnly={readOnly || !onGuardarTope}
+        onGuardar={async (t) => {
+          const hecho = await onGuardarTope(t);
+          if (hecho) await cargar();
+          return hecho;
+        }}
+      />
 
       <p className="mt-3 text-[11px] text-neutral-400 leading-relaxed">
         {anterior?.total?.llamadas > 0 && <>Mes anterior: {usd(anterior.total.costeUsd)}. </>}

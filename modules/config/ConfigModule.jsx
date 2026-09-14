@@ -453,7 +453,16 @@ export default function ConfigModule({ modulos = null }) {
               isAdmin={isAdmin}
               onChange={(v) => patchTenant({ aiProvider: v }, "Proveedor de IA actualizado")}
               claves={{ anthropic: cfg.integrations?.anthropic, openai: cfg.integrations?.openai }}
-              extra={isAdmin ? <ConsumoIA /> : null}
+              extra={
+                isAdmin ? (
+                  // El tope mensual de gasto (14/09/2026) cuelga del consumo y
+                  // se guarda por el PATCH de siempre; en la demo, solo lectura.
+                  <ConsumoIA
+                    readOnly={!!cfg.readOnly}
+                    onGuardarTope={(t) => patchTenant({ iaTopeMensual: t }, t ? "Tope de IA guardado" : "Tope de IA quitado")}
+                  />
+                ) : null
+              }
             />
           )}
 

@@ -176,7 +176,13 @@ API en `app/api/public/c/[tenantSlug]/soporte*` (patrón `withPublicTenant` +
   del centro, salta además la campana `ai_cuenta` a sus admins, desde el
   cliente central: `withPublicTenant` abre el mismo contexto de petición que
   `withTenant` (ver `configuracion.md`, «Cuando la cuenta de Anthropic se
-  queda sin saldo»).
+  queda sin saldo»). **Tope mensual de gasto de IA** (14/09/2026): es la única
+  IA del CRM que no pasa por `vetoAi`, así que la ruta lo mira ella
+  (`topeFueraDeVetoAi`, `lib/ai/frenoDeGasto.js`) y apunta su acción
+  («clasificar un ticket del portal») en el contexto de uso; al 100 % no
+  clasifica, el ticket se crea igual y `ticket_new` dice «Sin clasificar: el
+  centro ha llegado al tope de gasto de IA de este mes» (ver `configuracion.md`,
+  «Tope mensual de gasto de IA»).
 - `GET/POST /soporte/t/[token]` — seguimiento y respuesta del cliente (reabre;
   aviso `ticket_reply` al asignado o a admins). Token = única llave, 404 sin
   pistas si no casa. `closed` → 409.
