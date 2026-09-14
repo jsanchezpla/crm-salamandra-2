@@ -1,6 +1,6 @@
 import { withTenant } from "../../../lib/tenant/withTenant.js";
 import { ok, error, serverError } from "../../../lib/utils/apiResponse.js";
-import { answerQuestion } from "../../../lib/assistant/answer.js";
+import { answerQuestion, FICHAS_EN_ENLACES } from "../../../lib/assistant/answer.js";
 import { prepararTurno } from "../../../lib/assistant/turno.js";
 import { vetoAi } from "../../../lib/ai/aiAccess.js";
 
@@ -51,7 +51,7 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     }
 
     const links = [
-      ...clients.slice(0, 4).map((c) => ({ label: c.name, href: `/clientes/${c.id}` })),
+      ...clients.slice(0, FICHAS_EN_ENLACES).map((c) => ({ label: c.name, href: `/clientes/${c.id}` })),
       ...relevant.slice(0, 3).map((r) => ({ label: r.title, href: r.path })),
     ];
 

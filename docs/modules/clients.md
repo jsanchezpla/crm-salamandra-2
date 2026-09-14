@@ -81,7 +81,10 @@ campos. Resumen:
   (`lib/clients/consultaExterna.js`). El **Salamandrobot** aplica la misma
   regla (`filtroDeVisibilidad`) al buscar fichas por las palabras de la
   pregunta, y solo busca si la persona tiene Clientes
-  (`lib/assistant/turno.js`, 14/09/2026).
+  (`lib/assistant/turno.js`, 14/09/2026). Las fichas que encuentra salen
+  como enlaces en la pantalla; al proveedor de IA solo le dice **cuántas**,
+  nunca nombres ni ids (`buildSystem`, `lib/assistant/answer.js`; ver
+  `configuracion.md`).
 - `customFields` JSONB libre por tenant.
 
 ## Endpoints
