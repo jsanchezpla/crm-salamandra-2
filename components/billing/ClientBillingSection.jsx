@@ -46,6 +46,7 @@ export default function ClientBillingSection({ clientId }) {
   const facturas = data?.invoices ?? [];
   const ejercicios = useMemo(() => ejerciciosDe(facturas), [facturas]);
   const visibles = useMemo(() => facturasDelEjercicio(facturas, ejercicio), [facturas, ejercicio]);
+  const otras = useMemo(() => facturasDelEjercicio(data?.pagadasPorOtros ?? [], ejercicio), [data, ejercicio]);
 
   if (hidden) return null;
 
@@ -82,46 +83,8 @@ export default function ClientBillingSection({ clientId }) {
           </div>
 
           {data.invoices && data.invoices.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[560px]">
-                <thead>
-                  <tr className="border-b border-neutral-100">
-                    <th className="text-left px-3 py-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Nº</th>
-                    <th className="text-left px-3 py-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Fecha</th>
-                    <th className="text-left px-3 py-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Estado</th>
-                    <th className="text-right px-3 py-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Total</th>
-                    <th className="text-right px-3 py-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Cobrado</th>
-                    <th className="px-3 py-2" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibles.map((inv) => (
-                    <tr key={inv.id} className="border-b border-neutral-50">
-                      <td className="px-3 py-2 font-mono text-xs text-neutral-500">{inv.number}</td>
-                      <td className="px-3 py-2 text-xs text-neutral-500">{fmtDate(inv.issueDate)}</td>
-                      <td className="px-3 py-2 text-xs text-neutral-700">{STATUS_LABELS[inv.status] ?? inv.status}</td>
-                      <td className="px-3 py-2 text-right tabular text-neutral-900">{fmtMoney(inv.total)}</td>
-                      <td className="px-3 py-2 text-right tabular text-emerald-700">{fmtMoney(inv.paidAmount)}</td>
-                      {/* Descargar desde la ficha, sin ir a Facturas a buscar a
-                          la familia por su nombre (AV-0066). Mismo icono y
-                          misma regla que la lista de Facturas. */}
-                      <td className="px-3 py-2 text-right">
-                        {sePuedeDescargar(inv) && (
-                          <a
-                            href={`/api/billing/invoices/${inv.id}/pdf`}
-                            title={`Descargar ${inv.number}`}
-                            className="inline-flex items-center text-neutral-400 hover:text-[var(--color-primary,#1B3A2D)] transition-colors"
-                          >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-                            </svg>
-                          </a>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div>
+              <TablaFacturas facturas={visibles} conPaciente={visibles.some((f) => f.patient)} />
               <div className="mt-2 text-[11.5px] text-neutral-400">
                 {visibles.length === facturas.length
                   ? `${facturas.length} ${facturas.length === 1 ? "factura" : "facturas"}`
@@ -132,9 +95,93 @@ export default function ClientBillingSection({ clientId }) {
           ) : (
             <div className="text-xs text-neutral-400 py-4">Este cliente no tiene facturas aún.</div>
           )}
+
+          {/* Las de sus hijos que paga otro —una fundación, una empresa—
+              (14/09/2026). Aparte y fuera de los totales de arriba: ese dinero
+              lo debe quien paga, no la familia. */}
+          {otras.length > 0 && (
+            <div className="mt-5">
+              <h3 className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-1">
+                Las paga otro
+              </h3>
+              <p className="text-[11.5px] text-neutral-400 mb-2">
+                Facturas de sus pacientes a nombre de otra ficha. No cuentan en los totales de arriba.
+              </p>
+              <TablaFacturas facturas={otras} conPaciente conPagador />
+            </div>
+          )}
         </>
       )}
     </section>
+  );
+}
+
+const TH = "px-3 py-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest";
+
+function nombrePaciente(p) {
+  return p ? `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim() : "—";
+}
+
+/**
+ * La tabla de facturas de la ficha. «Paciente» sale cuando alguna lo lleva
+ * (en una familia con hermanos dice de quién es cada una; en la ficha de una
+ * fundación, de qué niño) y «Paga» en las que están a nombre de otro.
+ */
+function TablaFacturas({ facturas, conPaciente = false, conPagador = false }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm min-w-[560px]">
+        <thead>
+          <tr className="border-b border-neutral-100">
+            <th className={`text-left ${TH}`}>Nº</th>
+            <th className={`text-left ${TH}`}>Fecha</th>
+            {conPaciente && <th className={`text-left ${TH}`}>Paciente</th>}
+            {conPagador && <th className={`text-left ${TH}`}>Paga</th>}
+            <th className={`text-left ${TH}`}>Estado</th>
+            <th className={`text-right ${TH}`}>Total</th>
+            <th className={`text-right ${TH}`}>Cobrado</th>
+            <th className="px-3 py-2" />
+          </tr>
+        </thead>
+        <tbody>
+          {facturas.map((inv) => (
+            <tr key={inv.id} className="border-b border-neutral-50">
+              <td className="px-3 py-2 font-mono text-xs text-neutral-500">{inv.number}</td>
+              <td className="px-3 py-2 text-xs text-neutral-500">{fmtDate(inv.issueDate)}</td>
+              {conPaciente && <td className="px-3 py-2 text-xs text-neutral-700">{nombrePaciente(inv.patient)}</td>}
+              {conPagador && (
+                <td className="px-3 py-2 text-xs text-neutral-700">
+                  {inv.client ? (
+                    <Link href={`/clientes/${inv.client.id}`} className="hover:underline">
+                      {inv.client.fiscalName || inv.client.name}
+                    </Link>
+                  ) : "—"}
+                </td>
+              )}
+              <td className="px-3 py-2 text-xs text-neutral-700">{STATUS_LABELS[inv.status] ?? inv.status}</td>
+              <td className="px-3 py-2 text-right tabular text-neutral-900">{fmtMoney(inv.total)}</td>
+              <td className="px-3 py-2 text-right tabular text-emerald-700">{fmtMoney(inv.paidAmount)}</td>
+              {/* Descargar desde la ficha, sin ir a Facturas a buscar a la
+                  familia por su nombre (AV-0066). Mismo icono y misma regla que
+                  la lista de Facturas. */}
+              <td className="px-3 py-2 text-right">
+                {sePuedeDescargar(inv) && (
+                  <a
+                    href={`/api/billing/invoices/${inv.id}/pdf`}
+                    title={`Descargar ${inv.number}`}
+                    className="inline-flex items-center text-neutral-400 hover:text-[var(--color-primary,#1B3A2D)] transition-colors"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                    </svg>
+                  </a>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

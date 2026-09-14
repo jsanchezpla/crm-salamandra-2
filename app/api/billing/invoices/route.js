@@ -13,6 +13,7 @@ import { resolveInvoicePatientId, invoicePatientInclude } from "../../../../lib/
 
 import { ATRIBUTOS_CLIENTE_FACTURA } from "../../../../lib/billing/nifCliente.js";
 import { whereFacturasDelPaciente } from "../../../../lib/billing/facturasDelPaciente.js";
+import { codigosRectificativos, whereTipoDeFactura, ordenPorNumero } from "../../../../lib/billing/tipoDeFactura.js";
 // GET /api/billing/invoices — listado paginado con filtros
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   try {
@@ -66,6 +67,19 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     }
     if (searchParams.get("employeeId")) where.employeeId = searchParams.get("employeeId");
     if (searchParams.get("series")) where.series = searchParams.get("series");
+    /*
+     * Normales o rectificativas (14/09/2026, Rodrigo): el botón de la lista.
+     * Los códigos de serie se piden aquí porque también los necesita el orden
+     * por número, que pone las rectificativas detrás. Regla y prueba en
+     * `lib/billing/tipoDeFactura.js`.
+     */
+    const codigosR = codigosRectificativos(
+      tenantModels.InvoiceSeries
+        ? await tenantModels.InvoiceSeries.findAll({ attributes: ["code", "kind"], raw: true })
+        : [],
+    );
+    const porTipo = whereTipoDeFactura({ tipo: searchParams.get("tipo"), codigos: codigosR, Op });
+    if (porTipo) (where[Op.and] ||= []).push(porTipo);
     if (searchParams.get("from") || searchParams.get("to")) {
       where.issueDate = {};
       if (searchParams.get("from")) where.issueDate[Op.gte] = searchParams.get("from");
@@ -118,12 +132,20 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
         ? { "patient.lastName": [{ model: tenantModels.Patient, as: "patient" }, "lastName"] }
         : {}),
     };
-    const order = parseSortOrder(
-      searchParams.get("sortBy"),
-      searchParams.get("sortDir"),
-      allowedSort,
-      [["issueDate", "DESC"], ["number", "DESC"]]
-    );
+    const order =
+      searchParams.get("sortBy") === "number"
+        ? ordenPorNumero({
+            dir: searchParams.get("sortDir"),
+            codigos: codigosR,
+            literal: (sql) => Invoice.sequelize.literal(sql),
+            escape: (v) => Invoice.sequelize.escape(v),
+          })
+        : parseSortOrder(
+            searchParams.get("sortBy"),
+            searchParams.get("sortDir"),
+            allowedSort,
+            [["issueDate", "DESC"], ["number", "DESC"]]
+          );
 
     const { count, rows } = await Invoice.findAndCountAll({
       where,

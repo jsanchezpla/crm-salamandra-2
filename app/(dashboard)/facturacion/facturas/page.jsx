@@ -95,6 +95,9 @@ export default function FacturasPage() {
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [agrupar, setAgrupar] = useState(false);
+  // Normales, rectificativas o todas (14/09/2026, Rodrigo). Abre en normales:
+  // mezcladas, las rectificativas tapaban la primera página al ordenar por número.
+  const [tipo, setTipo] = useState("normales");
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -352,7 +355,7 @@ export default function FacturasPage() {
     setLoading(true);
     setErrorMsg(null);
     try {
-      const params = new URLSearchParams({ page, limit, sortBy: sortKey, sortDir });
+      const params = new URLSearchParams({ page, limit, sortBy: sortKey, sortDir, tipo });
       if (filterStatus) params.set("status", filterStatus);
       if (search) params.set("q", search);
       if (desde) params.set("from", desde);
@@ -367,7 +370,7 @@ export default function FacturasPage() {
     } finally {
       setLoading(false);
     }
-  }, [filterStatus, search, desde, hasta, page, sortKey, sortDir]);
+  }, [filterStatus, search, desde, hasta, page, sortKey, sortDir, tipo]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -680,7 +683,12 @@ export default function FacturasPage() {
               cuanto pasa la fecha de vencimiento y sigue quedando dinero por cobrar.
             </HelpTooltip>
           </h1>
-          <p className="text-xs text-neutral-400 mt-1">{total} {total === 1 ? "factura" : "facturas"}</p>
+          <p className="text-xs text-neutral-400 mt-1">
+            {total}{" "}
+            {tipo === "rectificativas"
+              ? total === 1 ? "rectificativa" : "rectificativas"
+              : total === 1 ? "factura" : "facturas"}
+          </p>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
           <Link href="/facturacion" className="text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">← Volver</Link>
@@ -695,6 +703,24 @@ export default function FacturasPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2 mb-4">
+        <div role="group" aria-label="Tipo de factura" className="inline-flex rounded-lg border border-neutral-200 bg-white p-0.5">
+          {[
+            { value: "normales", label: "Facturas" },
+            { value: "rectificativas", label: "Rectificativas" },
+            { value: "todas", label: "Todas" },
+          ].map((op) => (
+            <button
+              key={op.value}
+              type="button"
+              aria-pressed={tipo === op.value}
+              onClick={() => { setTipo(op.value); setPage(1); }}
+              className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
+                tipo === op.value ? "text-white" : "text-neutral-500 hover:text-neutral-800"
+              }`}
+              style={tipo === op.value ? { background: "var(--color-primary, #1B3A2D)" } : undefined}
+            >{op.label}</button>
+          ))}
+        </div>
         <input
           value={searchInput}
           onChange={(e) => { setSearchInput(e.target.value); setPage(1); }}

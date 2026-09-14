@@ -103,7 +103,10 @@ describe("la pantalla de la ficha", () => {
 
   it("ya no recorta la lista a diez", () => {
     assert.ok(!/invoices\.slice\(0, 10\)/.test(seccion), "el slice(0, 10) sigue ahí");
-    assert.match(seccion, /\{visibles\.map\(\(inv\) => \(/);
+    // Desde el 14/09/2026 la tabla es `TablaFacturas` (la usan también «Las
+    // paga otro»): lo que se fija es que recibe `visibles` y las pinta enteras.
+    assert.match(seccion, /<TablaFacturas facturas=\{visibles\}/);
+    assert.match(seccion, /\{facturas\.map\(\(inv\) => \(/);
   });
 
   it("pide más de las 50 de fábrica", () => {
@@ -128,7 +131,9 @@ describe("la pantalla de la ficha", () => {
 
   it("el endpoint acepta el límite y se lo pasa al resumen", () => {
     assert.match(endpoint, /searchParams\.get\("limite"\)/);
-    assert.match(endpoint, /getClientBillingSummary\(\{ tenantModels, clientId: id, from, to, limite \}\)/);
+    // `hasModule` desde el 14/09/2026: con pacientes, la ficha trae también las
+    // facturas de sus hijos que paga otro (una fundación).
+    assert.match(endpoint, /getClientBillingSummary\(\{ tenantModels, clientId: id, from, to, limite, hasModule \}\)/);
   });
 
   it("el servidor ya no lleva el 50 escrito a pelo", () => {

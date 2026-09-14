@@ -240,6 +240,18 @@ if (!SOLO_CONCEPTOS) {
     if (!candidatos.length && clave.split(" ").length >= 2) {
       candidatos = deLaFamilia.filter((p) => norm(`${p.first_name} ${p.last_name}`).startsWith(`${clave} `));
     }
+    /*
+     * Cuando paga OTRO —una fundación, una empresa— el pagador no tiene hijos
+     * y buscar dentro de su «familia» no encuentra nunca a nadie (14/09/2026:
+     * así entraron sin paciente las dos de Fundación Adecco de septiembre, y
+     * por eso no salían en la ficha del niño ni en la de su familia). Solo en
+     * ese caso se busca en todo el centro, y solo por el nombre COMPLETO y con
+     * UN único paciente que lo lleve: con dos, no se adivina.
+     */
+    if (!candidatos.length && !deLaFamilia.length && clave.split(" ").length >= 2) {
+      const mismos = pacientePorNombre.get(clave) ?? [];
+      if (mismos.length === 1) candidatos = mismos;
+    }
     const total = Number(f.importe ?? 0);
     nuevas.push({
       fila: f,

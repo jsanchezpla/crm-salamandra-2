@@ -18,7 +18,7 @@ export const GET = withTenant(async (request, { params }, { tenantModels, hasMod
     const to = searchParams.get("to") ?? null;
     const limite = searchParams.get("limite");
 
-    const data = await getClientBillingSummary({ tenantModels, clientId: id, from, to, limite });
+    const data = await getClientBillingSummary({ tenantModels, clientId: id, from, to, limite, hasModule });
     return ok(data);
   } catch (err) {
     return serverError(err);
