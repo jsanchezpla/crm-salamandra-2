@@ -4,7 +4,7 @@ import { assertNotDemoPaidCall } from "../../../../../lib/demo/isDemo.js";
 import { vetoAi } from "../../../../../lib/ai/aiAccess.js";
 import { getTenantOpenAIKey } from "../../../../../lib/ai/openaiKey.js";
 import { getTenantIaKey, getTenantIaModel, sinClaveDeIa } from "../../../../../lib/ai/proveedorIa.js";
-import { mensajeDeErrorIa } from "../../../../../lib/ai/errorLegible.js";
+import { motivoDelFalloIa } from "../../../../../lib/ai/errorLegible.js";
 import { transcribirVarios, MAX_AUDIO_BYTES } from "../../../../../lib/clinica/whisper.js";
 import { MAX_AUDIOS } from "../../../../../lib/clinica/audios.js";
 import { structureTaller } from "../../../../../lib/clinica/structureTaller.js";
@@ -175,7 +175,7 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     // Si el fallo es de la CUENTA de IA del centro (sin saldo, clave caducada,
     // límite), sus administradores ya tienen la campana: desde el 13/09/2026
     // el aviso sale del cliente central (`lib/ai/trasFalloDeIa.js`), no de aquí.
-    const motivo = mensajeDeErrorIa(e, "Vuelve a intentarlo en un momento.");
+    const motivo = motivoDelFalloIa(e, "Vuelve a intentarlo en un momento.");
     // La transcripción ya está hecha y pagada: se devuelve aunque el reparto
     // falle, para que no haya que volver a subir el audio.
     return ok({

@@ -3,7 +3,7 @@ import { ok, error, forbidden, notFound, serverError } from "@/lib/utils/apiResp
 import { isDemoTenant } from "@/lib/demo/isDemo.js";
 import { vetoAi } from "@/lib/ai/aiAccess.js";
 import { getTenantIaKey, getTenantIaModel, sinClaveDeIa } from "@/lib/ai/proveedorIa.js";
-import { mensajeDeErrorIa } from "@/lib/ai/errorLegible.js";
+import { motivoDelFalloIa } from "@/lib/ai/errorLegible.js";
 import { completeConParada } from "@/lib/outreach/analysis/anthropic.js";
 import { auditar, datosPeticion } from "@/lib/utils/auditoria.js";
 import { aFormulario, apartadosPara, valoresDeSesion } from "@/lib/clinica/plantillas.js";
@@ -175,7 +175,7 @@ export const POST = withTenant(async (request, rc, ctx) => {
       // Si es la cuenta de IA del centro (sin saldo, clave, límite), la frase
       // dice ESO (11/09/2026, Aumenta); la campana a sus admins ya ha salido
       // del cliente central (13/09/2026).
-      return error(mensajeDeErrorIa(e, "La IA no ha podido escribirlo. Inténtalo de nuevo."), 502);
+      return error(motivoDelFalloIa(e, "La IA no ha podido escribirlo. Inténtalo de nuevo."), 502);
     }
 
     /*

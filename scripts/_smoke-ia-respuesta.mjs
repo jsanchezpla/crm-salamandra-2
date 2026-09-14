@@ -213,6 +213,21 @@ describe("motivoDelFalloIa: la frase fuera de Proyectos (13/09/2026)", () => {
     assert.equal(motivoDelFalloIa(new Error("boom"), "Tu texto sigue aquí."), "Tu texto sigue aquí.");
     assert.equal(motivoDelFalloIa(new Error("boom")), "La IA no ha podido responder. Vuelve a intentarlo.");
   });
+
+  it("fuera de Proyectos ninguna ruta usa mensajeDeErrorIa (14/09/2026: el corte le hablaba del proyecto a una terapeuta)", () => {
+    const raiz = new URL("../app/api/", import.meta.url);
+    const conFraseDeProyectos = [];
+    const recorrer = (dir, ruta) => {
+      for (const d of readdirSync(dir, { withFileTypes: true })) {
+        if (d.isDirectory()) recorrer(new URL(d.name + "/", dir), `${ruta}${d.name}/`);
+        else if (d.name === "route.js" && !ruta.startsWith("projects/") && /mensajeDeErrorIa\(/.test(readFileSync(new URL(d.name, dir), "utf8"))) {
+          conFraseDeProyectos.push(`app/api/${ruta}route.js`);
+        }
+      }
+    };
+    recorrer(raiz, "");
+    assert.deepEqual(conFraseDeProyectos, [], "usa motivoDelFalloIa: mensajeDeErrorIa dice «describe el proyecto con menos detalle»");
+  });
 });
 
 /* ── el cableado: lo único que no se puede probar sin base (13/09/2026) ─── */

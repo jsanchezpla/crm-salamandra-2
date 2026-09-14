@@ -3,7 +3,7 @@ import { ok, error, forbidden, notFound, serverError } from "../../../../../../l
 import { assertNotDemoPaidCall } from "../../../../../../lib/demo/isDemo.js";
 import { vetoAi } from "../../../../../../lib/ai/aiAccess.js";
 import { getTenantIaKey, getTenantIaModel, sinClaveDeIa } from "../../../../../../lib/ai/proveedorIa.js";
-import { mensajeDeErrorIa } from "../../../../../../lib/ai/errorLegible.js";
+import { motivoDelFalloIa } from "../../../../../../lib/ai/errorLegible.js";
 import { logClinicaAudit } from "../../../../../../lib/clinica/audit.js";
 import { apartadosPara } from "../../../../../../lib/clinica/plantillas.js";
 import { materialParaLaIA, MAX_NOTAS, MAX_TRANSCRIPCION } from "../../../../../../lib/clinica/registroCompleto.js";
@@ -169,7 +169,7 @@ export const POST = withTenant(async (request, rc, ctx) => {
       // del cliente central (13/09/2026).
       // El material sigue en pantalla: se puede volver a intentar sin perder
       // nada, que es lo que hay que decir en vez de «ha fallado».
-      return error(mensajeDeErrorIa(e, "La IA no ha podido repartir esto por los apartados del informe. Vuelve a intentarlo: tu texto sigue aquí."), 502);
+      return error(motivoDelFalloIa(e, "La IA no ha podido repartir esto por los apartados del informe. Vuelve a intentarlo: tu texto sigue aquí."), 502);
     }
 
     // Se audita QUÉ se propuso, nunca su texto: el contenido de un informe

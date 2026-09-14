@@ -4,7 +4,7 @@ import { textosDeObjetivos } from "../../../../../../lib/clinica/objetivosDelPla
 import { getTenantIaKey, getTenantIaModel } from "../../../../../../lib/ai/proveedorIa.js";
 import { demoForcesFakeAi } from "../../../../../../lib/demo/isDemo.js";
 import { vetoAi } from "../../../../../../lib/ai/aiAccess.js";
-import { esErrorDeIa, mensajeDeErrorIa } from "../../../../../../lib/ai/errorLegible.js";
+import { esErrorDeIa, motivoDelFalloIa } from "../../../../../../lib/ai/errorLegible.js";
 import { complete } from "../../../../../../lib/outreach/analysis/anthropic.js";
 import { perfilDelCentro } from "../../../../../../lib/clinica/perfilDelCentro.js";
 import {
@@ -95,7 +95,7 @@ export const POST = withTenant(async (request, rc, ctx) => {
     if (esErrorDeIa(err)) {
       // Sin saldo, clave o límite: la campana a los admins del centro ya ha
       // salido del cliente central (13/09/2026); aquí, la frase.
-      return error(mensajeDeErrorIa(err), 502);
+      return error(motivoDelFalloIa(err), 502);
     }
     return serverError(err);
   }
