@@ -144,6 +144,9 @@ estado dejan nota `system` (interna) en el hilo con quién y cuándo.
   (resultado en `emailStatus`). Nota interna: no toca nada.
 - `POST /api/tickets/[id]/ai` — `summarize` | `draft` | `classify`. BYOK del
   tenant (`lib/ai/anthropicKey.js`); sin clave → 503. SIEMPRE a demanda.
+  Si el proveedor falla (sin saldo, clave, 5xx…), 502 con la frase legible de
+  `lib/ai/errorLegible.js`, no «Error interno» (13/09/2026); `classify` con una
+  respuesta ilegible sigue siendo «La IA no ha podido clasificar este ticket».
 - `categories`, `templates`, `settings` — CRUD/ajustes (escritura solo admin).
 - `GET /api/tickets/stats?months=N` — serie mensual, tiempos medios, % SLA,
   por categoría y por responsable.
@@ -165,6 +168,15 @@ API en `app/api/public/c/[tenantSlug]/soporte*` (patrón `withPublicTenant` +
   `autoClassify` está activo y hay clave IA, clasifica prioridad+categoría
   (best-effort, jamás bloquea). Avisos: email de confirmación al cliente con
   su enlace, campana a admins (`ticket_new`) y email a `notifyEmails`.
+  **Si la clasificación falla por la IA** (13/09/2026): el ticket queda como
+  estaba, el visitante no ve nada distinto y la campana `ticket_new` lleva
+  «Sin clasificar: <motivo>». `ticketAiClassify` (`lib/support/ai.js`) ya no
+  se traga el error: relanza los del proveedor y solo devuelve `null` con una
+  respuesta ilegible; decide quien llama. Si el fallo es de la CUENTA de IA
+  del centro, salta además la campana `ai_cuenta` a sus admins, desde el
+  cliente central: `withPublicTenant` abre el mismo contexto de petición que
+  `withTenant` (ver `configuracion.md`, «Cuando la cuenta de Anthropic se
+  queda sin saldo»).
 - `GET/POST /soporte/t/[token]` — seguimiento y respuesta del cliente (reabre;
   aviso `ticket_reply` al asignado o a admins). Token = única llave, 404 sin
   pistas si no casa. `closed` → 409.

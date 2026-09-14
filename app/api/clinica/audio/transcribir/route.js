@@ -86,7 +86,8 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     const primero = resultados[0];
     const http = HTTP_POR_CODIGO[primero.code] ?? 502;
     if (primero.code === "BAD_KEY") return error("Tu clave de OpenAI no es válida o no tiene permisos.", 400);
-    if (primero.code === "QUOTA") return error("Has alcanzado el límite o la cuota de OpenAI.", 429);
+    // El mensaje de Whisper ya es legible y distingue sin saldo de límite (13/09/2026).
+    if (primero.code === "QUOTA") return error(primero.error, 429);
     if (!HTTP_POR_CODIGO[primero.code]) console.error("[clinica:whisper]", primero.error);
     return error(
       files.length === 1 ? primero.error : `Ninguno de los ${files.length} audios se ha podido transcribir: ${primero.error}`,

@@ -5,7 +5,6 @@ import { vetoAi } from "../../../../../lib/ai/aiAccess.js";
 import { getTenantOpenAIKey } from "../../../../../lib/ai/openaiKey.js";
 import { getTenantIaKey, getTenantIaModel, sinClaveDeIa } from "../../../../../lib/ai/proveedorIa.js";
 import { mensajeDeErrorIa } from "../../../../../lib/ai/errorLegible.js";
-import { avisarAdminsDelFalloIa } from "../../../../../lib/ai/avisoDeCuentaIa.js";
 import { transcribirVarios, MAX_AUDIO_BYTES } from "../../../../../lib/clinica/whisper.js";
 import { MAX_AUDIOS } from "../../../../../lib/clinica/audios.js";
 import { structureTaller } from "../../../../../lib/clinica/structureTaller.js";
@@ -137,7 +136,8 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     if (audiosFallidos.length === resultados.length) {
       const primero = resultados[0];
       if (primero.code === "BAD_KEY") return error("Tu clave de OpenAI no es válida o no tiene permisos.", 400);
-      if (primero.code === "QUOTA") return error("Has alcanzado el límite o la cuota de OpenAI.", 429);
+      // El mensaje de Whisper ya es legible y distingue sin saldo de límite (13/09/2026).
+      if (primero.code === "QUOTA") return error(primero.error, 429);
       if (primero.code === "TOO_LARGE") return error(primero.error, 413);
       if (primero.code === "UNREACHABLE") return error(primero.error, 504);
       console.error("[clinica:whisper-taller]", primero.error);
@@ -173,9 +173,8 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     if (e.code === "NO_API_KEY") return error("El resumen con IA no está configurado (falta la clave de IA).", 503);
     console.error("[clinica:structure-taller]", e);
     // Si el fallo es de la CUENTA de IA del centro (sin saldo, clave caducada,
-    // límite), se avisa a sus administradores por la campana: quien teclea no
-    // suele ser quien paga, y repetir no lo arregla (11/09/2026, Aumenta).
-    await avisarAdminsDelFalloIa(ctx, e);
+    // límite), sus administradores ya tienen la campana: desde el 13/09/2026
+    // el aviso sale del cliente central (`lib/ai/trasFalloDeIa.js`), no de aquí.
     const motivo = mensajeDeErrorIa(e, "Vuelve a intentarlo en un momento.");
     // La transcripción ya está hecha y pagada: se devuelve aunque el reparto
     // falle, para que no haya que volver a subir el audio.

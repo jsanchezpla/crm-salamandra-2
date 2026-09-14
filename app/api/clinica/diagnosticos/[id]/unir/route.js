@@ -4,7 +4,6 @@ import { assertNotDemoPaidCall } from "../../../../../../lib/demo/isDemo.js";
 import { vetoAi } from "../../../../../../lib/ai/aiAccess.js";
 import { getTenantIaKey, getTenantIaModel, sinClaveDeIa } from "../../../../../../lib/ai/proveedorIa.js";
 import { mensajeDeErrorIa } from "../../../../../../lib/ai/errorLegible.js";
-import { avisarAdminsDelFalloIa } from "../../../../../../lib/ai/avisoDeCuentaIa.js";
 import { auditar, datosPeticion } from "../../../../../../lib/utils/auditoria.js";
 import { apartadosPara, plantillasDe } from "../../../../../../lib/clinica/plantillas.js";
 import { MAX_TRANSCRIPCION } from "../../../../../../lib/clinica/registroCompleto.js";
@@ -56,7 +55,8 @@ import { registrosDe, informeDe } from "../../../../../../lib/clinica/registrosD
  * entregado; 422 sin registros terminados (o sin nada escrito en ellos); 413
  * material más largo que `MAX_TRANSCRIPCION` o tabla de pruebas más larga que
  * `MAX_PRUEBAS_PARA_IA`; 503 sin clave de Anthropic; 502
- * si la IA falla (con la frase de `mensajeDeErrorIa` y aviso a los admins).
+ * si la IA falla (con la frase de `mensajeDeErrorIa`; el aviso a los admins
+ * sale del cliente central desde el 13/09/2026).
  */
 export const POST = withTenant(async (request, routeCtx, ctx) => {
   const { tenant, tenantModels, hasModule } = ctx;
@@ -154,9 +154,8 @@ export const POST = withTenant(async (request, routeCtx, ctx) => {
     } catch (e) {
       if (e?.code === "NO_API_KEY") return error("El informe con IA no está configurado (falta la clave de IA).", 503);
       console.error("[clinica:diagnostico-unir]", e);
-      // Si es la cuenta de IA del centro (sin saldo, clave, límite), que lo
-      // sepan sus admins y que la frase diga ESO.
-      await avisarAdminsDelFalloIa(ctx, e);
+      // Si es la cuenta de IA del centro (sin saldo, clave, límite), la frase
+      // dice ESO; la campana a sus admins ya ha salido del cliente central.
       return error(mensajeDeErrorIa(e, "La IA no ha podido unir los registros en el informe. Vuelve a intentarlo: los registros siguen ahí."), 502);
     }
 

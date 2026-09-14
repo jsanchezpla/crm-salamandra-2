@@ -103,6 +103,8 @@ export function CitaDetalleModal({
   const [suggestions, setSuggestions] = useState([]);
   const [suggestErr, setSuggestErr] = useState(null);
   const [suggestNote, setSuggestNote] = useState(null);
+  // La IA no ha respondido y los huecos salen sin ella (13/09/2026): se dice.
+  const [suggestAviso, setSuggestAviso] = useState(null);
   const [suggestSent, setSuggestSent] = useState(null); // confirmación tras enviar propuesta al centro
   const [saving, setSaving] = useState(false);
   // Buscador de paciente: acotado a la familia de la cita (lo normal) o
@@ -321,7 +323,7 @@ export function CitaDetalleModal({
   async function loadSuggestions(scope) {
     if (!openBooking) return;
     setSuggestOpen(true); setSuggestScope(scope); setSuggestLoading(true);
-    setSuggestErr(null); setSuggestions([]); setSuggestNote(null); setSuggestSent(null);
+    setSuggestErr(null); setSuggestions([]); setSuggestNote(null); setSuggestSent(null); setSuggestAviso(null);
     try {
       const r = await fetch(`/api/citas/bookings/${openBooking.id}/suggest-slots`, {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope }),
@@ -330,6 +332,7 @@ export function CitaDetalleModal({
       if (!r.ok) throw new Error(j.error || "No se pudieron proponer horarios");
       setSuggestions(j.data.suggestions || []);
       setSuggestNote(j.data.note || null);
+      setSuggestAviso(j.data.avisoIA || null);
     } catch (e) {
       setSuggestErr(e.message);
     } finally {
@@ -1287,6 +1290,9 @@ export function CitaDetalleModal({
                 </div>
                 {!viewerIsAdmin && (
                   <p className="text-[11px] text-neutral-400 mb-2">Elige un horario y se lo mandas al centro para que lo confirme.</p>
+                )}
+                {!suggestLoading && !suggestErr && !suggestSent && suggestAviso && (
+                  <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-2 py-1 mb-2">{suggestAviso}</p>
                 )}
                 {suggestLoading ? (
                   <p className="text-[12px] text-neutral-400 py-2">Buscando huecos…</p>

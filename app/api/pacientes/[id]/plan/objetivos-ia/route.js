@@ -5,7 +5,6 @@ import { getTenantIaKey, getTenantIaModel } from "../../../../../../lib/ai/prove
 import { demoForcesFakeAi } from "../../../../../../lib/demo/isDemo.js";
 import { vetoAi } from "../../../../../../lib/ai/aiAccess.js";
 import { esErrorDeIa, mensajeDeErrorIa } from "../../../../../../lib/ai/errorLegible.js";
-import { avisarAdminsDelFalloIa } from "../../../../../../lib/ai/avisoDeCuentaIa.js";
 import { complete } from "../../../../../../lib/outreach/analysis/anthropic.js";
 import { perfilDelCentro } from "../../../../../../lib/clinica/perfilDelCentro.js";
 import {
@@ -94,8 +93,8 @@ export const POST = withTenant(async (request, rc, ctx) => {
       return error("Este cliente no tiene configurada la clave de IA (Configuración → IA)", 503);
     }
     if (esErrorDeIa(err)) {
-      // Sin saldo, clave o límite: a los admins del centro, por la campana.
-      await avisarAdminsDelFalloIa(ctx, err);
+      // Sin saldo, clave o límite: la campana a los admins del centro ya ha
+      // salido del cliente central (13/09/2026); aquí, la frase.
       return error(mensajeDeErrorIa(err), 502);
     }
     return serverError(err);

@@ -6,6 +6,7 @@ import { vetoAi } from "../../../../../../lib/ai/aiAccess.js";
 import { getMasterModels } from "../../../../../../lib/db/masterDb.js";
 import { analyzeLead } from "../../../../../../lib/outreach/analysis/index.js";
 import { getTenantIaKey, getTenantIaModel } from "../../../../../../lib/ai/proveedorIa.js";
+import { esErrorDeIa, motivoDelFalloIa } from "../../../../../../lib/ai/errorLegible.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -105,7 +106,12 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       throw new ValidationError(err.message);
     }
     console.error("[outreach:analizar]", err);
-    throw new AppError("El análisis con IA ha fallado. Inténtalo de nuevo.", 502);
+    // (13/09/2026) Si es el proveedor, la frase legible de `errorLegible`
+    // (sin saldo, clave, límite…); lo demás, el texto genérico de siempre.
+    throw new AppError(
+      esErrorDeIa(err) ? motivoDelFalloIa(err) : "El análisis con IA ha fallado. Inténtalo de nuevo.",
+      502
+    );
   }
 
   const analyzedAt = new Date();

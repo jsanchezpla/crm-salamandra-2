@@ -10,6 +10,7 @@ import { getTenantIaKey, getTenantIaModel } from "../../../../../../lib/ai/prove
 import { demoForcesFakeAi } from "../../../../../../lib/demo/isDemo.js";
 import { vetoAi } from "../../../../../../lib/ai/aiAccess.js";
 import { vocabularioCliente } from "../../../../../../lib/clients/vocabulario.js";
+import { esErrorDeIa, motivoDelFalloIa } from "../../../../../../lib/ai/errorLegible.js";
 
 /**
  * POST /api/mailing/campanas/[id]/ia — redactar con IA, SIEMPRE a petición
@@ -26,6 +27,20 @@ import { vocabularioCliente } from "../../../../../../lib/clients/vocabulario.js
  * La IA rellena bloques del catálogo; nunca HTML libre (lib/mailing/ia.js).
  */
 const TONOS = new Set(["cercano", "profesional", "entusiasta"]);
+
+/**
+ * Lo que se lanza cuando la redacción falla (13/09/2026). Hasta hoy era
+ * «La IA no ha respondido: <mensaje crudo del SDK>», con URLs y nombres de
+ * modelo, y también para un fallo nuestro. Ahora: si es de la IA, 502 con la
+ * frase legible (y si es la cuenta, el aviso a dirección ya ha salido del
+ * cliente central); si no, el error tal cual, para que `handleRouteError` lo
+ * trate como lo que es y no se disfrace de IA.
+ */
+function errorDeLaIa(err) {
+  if (!esErrorDeIa(err)) return err;
+  console.error("[mailing:ia]", err?.name, err?.status, err?.message);
+  return new AppError(motivoDelFalloIa(err), 502);
+}
 
 export const POST = withTenant(async (request, rc, ctx) => {
   exigirMailing(ctx);
@@ -53,7 +68,7 @@ export const POST = withTenant(async (request, rc, ctx) => {
         : await asuntosAlternativos({ centro, asunto, bloques: normalizarBloques(campana.bloques), apiKey, model });
     } catch (err) {
       if (err?.code === "NO_API_KEY") throw new AppError("Este cliente no tiene configurada la clave de IA", 503);
-      throw new AppError(`La IA no ha respondido: ${err.message}`, 502);
+      throw errorDeLaIa(err);
     }
     if (!asuntos.length) throw new AppError("La IA no ha propuesto asuntos; prueba otra vez", 502);
     return ok({ asuntos });
@@ -79,7 +94,7 @@ export const POST = withTenant(async (request, rc, ctx) => {
         });
   } catch (err) {
     if (err?.code === "NO_API_KEY") throw new AppError("Este cliente no tiene configurada la clave de IA", 503);
-    throw new AppError(`La IA no ha respondido: ${err.message}`, 502);
+    throw errorDeLaIa(err);
   }
   if (!propuesta) throw new AppError("La IA ha devuelto algo que no se entiende; prueba a reformular la instrucción", 502);
 

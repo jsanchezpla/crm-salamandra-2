@@ -6,6 +6,7 @@ import { vetoAi } from "../../../../../../lib/ai/aiAccess.js";
 import { logClinicaAudit } from "../../../../../../lib/clinica/audit.js";
 import { pulirInforme, fakePulirInforme } from "../../../../../../lib/clinica/pulirInforme.js";
 import { perfilDelCentro } from "../../../../../../lib/clinica/perfilDelCentro.js";
+import { esErrorDeIa, motivoDelFalloIa } from "../../../../../../lib/ai/errorLegible.js";
 
 /**
  * POST /api/clinica/reports/[id]/pulir — la redacción asistida del informe.
@@ -95,6 +96,12 @@ export const POST = withTenant(async (request, rc, ctx) => {
     // proveedor, no de quien pulsó el botón, y el mensaje dice exactamente qué
     // se le ha descartado para que no se quede pensando que no hizo nada.
     if (err?.code === "IA_INVENTA" || err?.code === "IA_ILEGIBLE") return error(err.message, 502);
+    // El proveedor ha fallado (13/09/2026): 502 con el motivo, no «Error
+    // interno». Si es la cuenta, el aviso a dirección ya ha salido.
+    if (esErrorDeIa(err)) {
+      console.error("[clinica:pulir]", err?.name, err?.status, err?.message);
+      return error(motivoDelFalloIa(err, "La IA no ha podido redactar el informe. Vuelve a intentarlo: tu texto sigue aquí."), 502);
+    }
     return serverError(err);
   }
 });

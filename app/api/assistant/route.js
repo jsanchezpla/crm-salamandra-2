@@ -69,11 +69,18 @@ export const POST = withTenant(async (request, _rc, ctx) => {
         messages, relevant, clients, apiKey, model, companyName: ctx.tenant?.name,
         forceFake: ctx.slug === "demo",
       });
-    } catch {
-      // La IA falló (clave inválida, timeout, 503…): no rompemos el chat.
+    } catch (e) {
+      // Un fallo de la IA ya lo recoge `answerQuestion` y contesta sin IA con
+      // su `avisoIA` (13/09/2026). Lo que llega aquí es otra cosa: no rompemos
+      // el chat, pero tampoco se hace pasar por una respuesta normal.
+      console.error("[assistant]", e?.name, e?.message);
       const fallback = relevant?.[0]?.help ||
         "Puedo orientarte por los módulos del CRM y buscar clientes, facturas o pacientes. ¿Qué necesitas?";
-      result = { answer: fallback, model: "sin-ia" };
+      result = {
+        answer: fallback,
+        model: "sin-ia",
+        avisoIA: "La IA no ha podido responder ahora. Te contesto con la ayuda del CRM.",
+      };
     }
 
     const links = [
@@ -81,7 +88,7 @@ export const POST = withTenant(async (request, _rc, ctx) => {
       ...relevant.slice(0, 3).map((r) => ({ label: r.title, href: r.path })),
     ];
 
-    return ok({ answer: result.answer, model: result.model, links });
+    return ok({ answer: result.answer, model: result.model, links, avisoIA: result.avisoIA ?? null });
   } catch (err) {
     return serverError(err);
   }

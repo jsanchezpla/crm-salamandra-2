@@ -10,13 +10,13 @@
 | **Reina** | — |
 | **Pantallas** | `app/(dashboard)/configuracion/page.jsx` → `/configuracion` (una página con **seis zonas en pestañas** desde el 23/08/2026: Empresa, Conexiones, Agenda, Reserva online, Portal del cliente y Módulos; la abierta viaja en `?zona=`). La página es de SERVIDOR y resuelve ahí los módulos del tenant, que el componente es `"use client"` y no puede preguntarlos · el back-office la complementa desde `app/admin/page.jsx` (ficha de Custodia, `/admin`): nosotros también podemos poner las claves |
 | **Endpoints** | `app/api/tenant/settings/route.js` (GET/PATCH, 1) · `app/api/ai-permisos/**` (2: `route.js`, `[id]/route.js`, el candado de IA) · `app/api/admin/configuraciones/route.js` (1, back-office: pone credenciales sin leerlas nunca) · la pantalla reutiliza además `app/api/billing/settings`, `app/api/outreach/settings`, `app/api/outreach/business-lines/**` y `app/api/clinica/derivaciones` · la pestaña **Tu cuenta** usa `app/api/auth/password` (cambiarse la contraseña, 24/08/2026) y `app/api/auth/correo` (ponerse el correo de la cuenta, 26/08/2026) · públicos: ninguno |
-| **Lógica** | `lib/configuracion/pestanas.js` (**el reparto en zonas y qué módulo hace útil cada tarjeta**) · `lib/tenant/normalizarCentro.js` (28/08/2026: qué se guarda en `settings.centro` —recorta, tira las sedes vacías y descarta lo que no es texto—; `LIMITES`, `normalizarCentro`, `normalizarSede`, `centroVacio`) · `lib/configuracion/avisoCambio.js` (recibo por correo de cada cambio, enviado con la cuenta de Salamandra) · `lib/crypto/secretBox.js` (AES-256-GCM, prefijo `enc:v1:`) · resolvers que LEEN lo que aquí se guarda: `lib/ai/anthropicKey.js`, `lib/ai/anthropicModel.js` (`ANTHROPIC_MODELS`, Haiku por defecto desde el 11/09/2026; `parametrosDeRazonamiento`) · `lib/ai/usoDeIA.js` + `lib/ai/precios.js` (contabilidad de cada llamada en `master.ai_uso`) · `lib/ai/cacheDeRespuestas.js`, `lib/ai/openaiKey.js`, `lib/ai/aiAccess.js` (`vetoAi`, candado `settings.aiAccess`), `lib/outreach/resendConfig.js`, `lib/payments/stripeConfig.js`, `lib/analytics/cloudflareConfig.js`, `lib/whatsapp/whatsappConfig.js`, `lib/citas/videollamada.js` (`settings.citas.meetModo`), `lib/citas/coloresBloqueo.js` · back-office: `lib/provisioning/credencialesCliente.js` (solo escribir), `lib/provisioning/contactoCliente.js` (`settings.contacto`) · plantilla del recibo: `lib/email/templates/configuracion/cambioAplicado.js` |
+| **Lógica** | `lib/configuracion/pestanas.js` (**el reparto en zonas y qué módulo hace útil cada tarjeta**) · `lib/tenant/normalizarCentro.js` (28/08/2026: qué se guarda en `settings.centro` —recorta, tira las sedes vacías y descarta lo que no es texto—; `LIMITES`, `normalizarCentro`, `normalizarSede`, `centroVacio`) · `lib/configuracion/avisoCambio.js` (recibo por correo de cada cambio, enviado con la cuenta de Salamandra) · `lib/crypto/secretBox.js` (AES-256-GCM, prefijo `enc:v1:`) · resolvers que LEEN lo que aquí se guarda: `lib/ai/anthropicKey.js`, `lib/ai/anthropicModel.js` (`ANTHROPIC_MODELS`, Haiku por defecto desde el 11/09/2026; `parametrosDeRazonamiento`) · `lib/ai/usoDeIA.js` + `lib/ai/precios.js` (contabilidad de cada llamada en `master.ai_uso`) · cuando la IA falla: `lib/ai/errorLegible.js` (la frase de cada fallo, si es de la CUENTA y `avisoSinIa` para los sustitutos sin IA), `lib/ai/avisoDeCuentaIa.js` (la campana `ai_cuenta` a los admins y `datosDelContexto`, lo que `withTenant`/`withPublicTenant` meten en el contexto) y `lib/ai/trasFalloDeIa.js` (13/09/2026: por donde pasan los cuatro clientes de IA antes de relanzar un fallo; ver «Cuando la cuenta de Anthropic se queda sin saldo») · `lib/ai/cacheDeRespuestas.js`, `lib/ai/openaiKey.js`, `lib/ai/aiAccess.js` (`vetoAi`, candado `settings.aiAccess`), `lib/outreach/resendConfig.js`, `lib/payments/stripeConfig.js`, `lib/analytics/cloudflareConfig.js`, `lib/whatsapp/whatsappConfig.js`, `lib/citas/videollamada.js` (`settings.citas.meetModo`), `lib/citas/coloresBloqueo.js` · back-office: `lib/provisioning/credencialesCliente.js` (solo escribir), `lib/provisioning/contactoCliente.js` (`settings.contacto`) · plantilla del recibo: `lib/email/templates/configuracion/cambioAplicado.js` |
 | **UI** | `modules/config/ConfigModule.jsx` (el armazón: pestañas, aviso de solo-lectura y la sección fiscal) + `modules/config/tarjetas/` (un fichero por pestaña: `Empresa`, `Conexiones`, `Agenda`, `Reservas`, `Portal`, `Modulos`, `Cuenta`, más `DatosCentro.jsx` —la tarjeta «Datos del centro», 28/08/2026— y `ui.jsx` con `BotonZona`, `Tarjeta` —atenúa y explica—, `Section`, `Field`; partido el 27/08/2026) · no hay `components/config/`; usa `components/ui/Select.jsx` y `components/ui/HelpTooltip.jsx` |
 | **Modelos** | `models/master/Tenant.model.js` — todo va en `master.tenants.settings` (JSONB: `brand`, `integrations`, `aiAccess`, `citas`, `clientes`, `centro`, `contacto`), sin migración · `models/tenant/AiPermission.model.js` (`ai_permissions`: solicitudes y concesiones del candado de IA) · `models/master/AuditLog.model.js` (`master.audit_logs`) recibe cada cambio, sin el valor de los secretos |
 | **Interruptores y parámetros** | ninguno que lea el código (no hay fila en `tenant_modules`). Lo que esta pantalla escribe vive en `master.tenants.settings`, no en `featureFlags`: `integrations.*` (Anthropic, OpenAI, Google Places, Resend, Stripe, WhatsApp, Cloudflare; los secretos cifrados; en claro `aiProvider` —con qué IA se redacta, 12/09/2026—, `anthropicModel` y `openaiModel`), `aiAccess` (`libre` / `restringido`), `citas.*` (`meetModo`, `recordatoriosCitas`, `agendaCompartida`, `avisosWhatsapp`, `portalBloqueoImpago`, `cancelacionBloqueada`, `reservaOnlineCerrada`, `formularioObligatorio`, `contratoObligatorio`, `soloConPago`, `identidadObligatoria`, `formularioUrl`, `portalUrl`, `reservaUrl`, `colorBloqueos`), `clientes.categoriasExternas`, `centro` (los datos que imprime el informe clínico), `brand`, `name` |
 | **Pantallas propias** | ninguna (`app/(dashboard)/configuracion/page.jsx` no tiene mapa `UI_OVERRIDES`) |
 | **Scripts** | no hay activación: no es módulo · `_hechos/encrypt-tenant-secrets.js` (cifra en reposo claves guardadas antes en claro; idempotente) · `migrate-ai-permissions.js` (crea `ai_permissions` en todos los schemas) · `configure-stripe-tenant.js` (claves de Stripe leídas de variables de entorno, nunca de argumentos) · solo lectura: `inspect-tenant-modules.js <slug>` |
-| **Pruebas** | `scripts/_smoke-config-pestanas.mjs` (`node:test`, 23/08/2026, ligera, en `npm test`): el reparto en zonas, que ninguna tarjeta se cae ni se duplica, y que el aviso «necesita el módulo X» solo sale cuando falta de verdad · `scripts/_smoke-datos-centro.mjs` (`node:test`, 28/08/2026, ligera, en `npm test`): lo que se guarda en `settings.centro` —que la forma no cambia nunca, que lo que no es texto no entra, que las sedes vacías se tiran y cuándo se BORRA la clave— · `_smoke-backoffice-ciclo.mjs` (base de datos; el camino del back-office: la clave se guarda cifrada, no se devuelve jamás, a una demo no se le pone) · `scripts/_smoke-plantillas-resto-layout.mjs` (`node:test`, 21/08/2026, ligera, en `npm test`) fija el recibo de cambio de configuración (`configuracion/cambioAplicado`): que el asunto avisa distinto según haya tocado o no una credencial, que traduce las tres acciones (puesta / cambiada / borrada) y que **NUNCA lleva el valor de una credencial**, solo qué pasó con ella · nada cubre `/api/tenant/settings` ni `/api/ai-permisos` directamente; `_smoke-retencion-viva-o-muerta.mjs` solo usa `secretBox` para sembrar |
+| **Pruebas** | `scripts/_smoke-config-pestanas.mjs` (`node:test`, 23/08/2026, ligera, en `npm test`): el reparto en zonas, que ninguna tarjeta se cae ni se duplica, y que el aviso «necesita el módulo X» solo sale cuando falta de verdad · `scripts/_smoke-datos-centro.mjs` (`node:test`, 28/08/2026, ligera, en `npm test`): lo que se guarda en `settings.centro` —que la forma no cambia nunca, que lo que no es texto no entra, que las sedes vacías se tiran y cuándo se BORRA la clave— · `_smoke-backoffice-ciclo.mjs` (base de datos; el camino del back-office: la clave se guarda cifrada, no se devuelve jamás, a una demo no se le pone) · `scripts/_smoke-plantillas-resto-layout.mjs` (`node:test`, 21/08/2026, ligera, en `npm test`) fija el recibo de cambio de configuración (`configuracion/cambioAplicado`): que el asunto avisa distinto según haya tocado o no una credencial, que traduce las tres acciones (puesta / cambiada / borrada) y que **NUNCA lleva el valor de una credencial**, solo qué pasó con ella · `scripts/_smoke-ia-respuesta.mjs` (`node:test`, ligera, en `npm test`): la frase de cada fallo de IA, qué es fallo de la cuenta, los títulos de la campana por cuenta, que el mismo error no avisa dos veces y el cableado (los dos envoltorios meten el gancho, los cuatro clientes pasan por `trasFalloDeIa` y ninguna ruta llama a `avisarAdminsDelFalloIa`) · `scripts/_smoke-ia-aviso-central.mjs` (`node:test`, 13/09/2026, ligera con marca, en `npm test`; sustituye `fetch`): el error que sube de Whisper, Anthropic y OpenAI, cuántos avisos salen, la cadena hasta la fila `ai_cuenta`, el `avisoIA` de los sustitutos sin IA, `ticketAiClassify` y que `withPublicTenant` responde igual con el contexto abierto · nada cubre `/api/tenant/settings` ni `/api/ai-permisos` directamente; `_smoke-retencion-viva-o-muerta.mjs` solo usa `secretBox` para sembrar |
 | **Decisiones** | `../decisions/2026-07-28-repaso-de-seguridad.md` (guard de la demo en escrituras a master, auditoría con resumen) · `../decisions/2026-08-13-ciclo-de-vida-de-un-cliente.md` (`credencialesCliente.js`: nosotros también ponemos las claves, y solo escribimos) |
 | **En este doc** | «Las seis zonas (2026-08-23)» · «Datos del centro (2026-08-28)» · «Secciones» · «Dónde se guardan las claves (y por qué son seguras)» · «API — `/api/tenant/settings`» · «Ficheros» · «Permisos de IA del equipo (2026-07-27)» · «WhatsApp (Meta Cloud API) — 2026-07-27» · «Enlace de videollamada de las citas — 2026-07-27» |
 
@@ -327,14 +327,47 @@ enmascarada (p.ej. `AIza…1234`), y permite reemplazar o eliminar la clave.
 > 12 h POR CAUSA, no una por intento, con un `entityId` determinista (causa + tramo
 > de 12 h) para que el índice único `notifications_dedupe_uniq` frene dos intentos
 > simultáneos— con cualquier fallo de la CUENTA (saldo, clave, permiso
-> del modelo, límite): la llaman los endpoints clínicos que van a Claude (registro
-> de sesión, taller, completar, encargo, informe desde material, objetivos del
-> plan). Nació de la tarde del 10/09/2026 en Aumenta: 129 intentos fallidos en una
-> caja VERDE y cuatro tickets de «el CRM no va»; por eso el registro y el taller
-> devuelven además `avisoTipo: "fallo"` y la pantalla lo pinta en ámbar; también
-> con la respuesta cortada, ilegible o vacía y con el audio mudo. Ojo: los errores
-> del SDK llegan con `name: "Error"` (la clase lleva el nombre), así que
-> `errorLegible.js` los reconoce por `constructor.name` (`nombreDelError`).
+> del modelo, límite). Nació de la tarde del 10/09/2026 en Aumenta: 129 intentos
+> fallidos en una caja VERDE y cuatro tickets de «el CRM no va»; por eso el
+> registro y el taller devuelven además `avisoTipo: "fallo"` y la pantalla lo pinta
+> en ámbar; también con la respuesta cortada, ilegible o vacía y con el audio mudo.
+> Ojo: los errores del SDK llegan con `name: "Error"` (la clase lleva el nombre),
+> así que `errorLegible.js` los reconoce por `constructor.name` (`nombreDelError`).
+>
+> **Desde el 13/09/2026 el aviso sale del cliente central, no de cada ruta.**
+> Hasta ese día lo ponían 7 rutas de 20 desde su catch; el bot, los huecos, la
+> semana, soporte, Desempeño o mailing no avisaban, y Whisper no avisaba nunca.
+> Ahora los cuatro clientes que hablan con un proveedor —Anthropic de texto
+> (`lib/outreach/analysis/anthropic.js`), el del bot (`lib/assistant/anthropic.js`),
+> OpenAI (`lib/ai/openai.js`) y Whisper (`lib/clinica/whisper.js`)— pasan cada
+> fallo por `lib/ai/trasFalloDeIa.js` antes de relanzarlo, y este avisa con el
+> gancho `avisarFalloDeCuenta` que `withTenant` y `withPublicTenant` meten en el
+> contexto de `lib/ai/usoDeIA.js` con `datosDelContexto`
+> (`lib/ai/avisoDeCuentaIa.js`). Una ruta nueva no tiene que acordarse de nada:
+> **ninguna ruta llama ya a `avisarAdminsDelFalloIa`** (lo vigila una prueba), y
+> el MISMO error no avisa dos veces aunque pase por dos sitios (un `WeakSet`).
+> Los errores de Whisper llevan, además de su `code`, `status` y
+> `proveedor: "openai"` (`errorDeWhisper`), así que un fallo de la cuenta de OpenAI
+> avisa y la frase distingue **sin saldo** de **límite por minuto** de **clave
+> caducada** (el 403 tiene frase y título propios —«La clave de OpenAI no puede
+> transcribir audio»—, en pantalla y en la campana: en Whisper el modelo no lo
+> elige el centro, y lo marca `servicio: "audio"`). Los títulos de la campana **nombran la cuenta** («La cuenta de OpenAI
+> se ha quedado sin saldo», «La clave de Anthropic no funciona»): la ventana de
+> 12 h va por título, así que el fallo de una cuenta no tapa el de la otra. Donde
+> hay sustituto sin IA —el Salamandrobot contesta con la ayuda del CRM, «Proponer
+> horarios» reparte tres huecos, «Reorganizar la semana» calcula tres propuestas—
+> la respuesta lleva `avisoIA` con el motivo (`avisoSinIa` de `errorLegible.js`)
+> y la pantalla lo pinta en ámbar; sin clave no hay aviso, porque no ha fallado
+> nada. El portal público de soporte no le dice nada al visitante: el equipo lo
+> sabe por `ai_cuenta` y por «Sin clasificar: motivo» en la campana `ticket_new`.
+> Y Desempeño, pulir el informe, la IA del ticket, mailing y Captación responden
+> 502 con la frase legible, no «Error interno» ni el mensaje crudo del SDK
+> (`motivoDelFalloIa`: la de `mensajeDeErrorIa` con el corte por tiempo dicho en
+> general, sin la coletilla de Proyectos). Lo que llega al catch de «Reorganizar
+> la semana» o «Proponer horarios» sin ser de la IA (un fallo nuestro) no se
+> disfraza de IA: su aviso no la nombra. Una
+> llamada a la IA fuera de una petición (un script, un temporizador) no tiene
+> gancho y no avisa; hoy no hay ninguna.
 
 ### 3. Descripción de empresa (alimenta Captación)
 

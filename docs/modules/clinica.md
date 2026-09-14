@@ -219,6 +219,23 @@ demos hay 39 sesiones en `draft` que sí se dieron.
 
 - Transcripción: `lib/clinica/whisper.js` (API de OpenAI, clave del tenant). Estructura:
   `lib/clinica/structureSession.js` (Claude, reutiliza el proveedor de Outreach).
+- **Cuando la IA falla (13/09/2026).** Los errores de Whisper llevan su `code`
+  (`BAD_KEY`, `QUOTA`, `UNREACHABLE`, `ERROR`…, lo que leen las rutas) y además
+  `status` y `proveedor: "openai"` (`errorDeWhisper`, lo que leen
+  `lib/ai/errorLegible.js` y el aviso), y su mensaje ya es la frase legible:
+  sin saldo con dónde recargar, límite por minuto, clave caducada, y el 403 con
+  frase propia (el modelo `whisper-1` no lo elige el centro). Un fallo de la
+  CUENTA de OpenAI avisa a dirección (campana `ai_cuenta`) desde el propio
+  cliente, pasando por `lib/ai/trasFalloDeIa.js`, igual que Claude: las rutas
+  clínicas ya no llaman a `avisarAdminsDelFalloIa`. Las transcripciones
+  responden la cuota con esa frase (429), y `performance/config/ai`
+  (Desempeño) y `reports/[id]/pulir` devuelven 502 con el motivo legible en
+  vez de «Error interno». En el dictado del Plan
+  (`pacientes/[id]/plan/transcribir`, sin tocar su código) la clave y la cuota
+  salen ya con la frase legible (sin saldo ≠ límite por minuto), en su 502 de
+  siempre; los demás fallos de Whisper (un 400, un 5xx) siguen dando «Error
+  interno». Detalle en `configuracion.md`, «Cuando la cuenta de Anthropic se
+  queda sin saldo».
 - Serializers: `lib/clinica/serialize.js` (fila Sequelize → forma de la UI).
 - Migración **generalizada** `scripts/migrate-clinica-module.js` (lee `master.tenants`,
   ya no aumenta-only); la corre `enable-module.js` como parte del bloque `clinica`

@@ -4,6 +4,7 @@ import { getTenantIaKey, getTenantIaModel } from "../../../../../../lib/ai/prove
 import { demoForcesFakeAi } from "../../../../../../lib/demo/isDemo.js";
 import { vetoAi } from "../../../../../../lib/ai/aiAccess.js";
 import { complete } from "../../../../../../lib/outreach/analysis/anthropic.js";
+import { esErrorDeIa, motivoDelFalloIa } from "../../../../../../lib/ai/errorLegible.js";
 import {
   ALLOWED_ICONS,
   DEFAULT_ICON,
@@ -170,6 +171,12 @@ export const POST = withTenant(async (request, _rc, ctx) => {
   } catch (err) {
     if (err?.code === "NO_API_KEY") {
       return error("Este cliente no tiene configurada la clave de IA (Configuración → IA)", 503);
+    }
+    // El proveedor ha fallado (13/09/2026): 502 con el motivo, no «Error
+    // interno». Si es la cuenta, el aviso a dirección ya ha salido.
+    if (esErrorDeIa(err)) {
+      console.error("[clinica:desempeno-ia]", err?.name, err?.status, err?.message);
+      return error(motivoDelFalloIa(err), 502);
     }
     return serverError(err);
   }

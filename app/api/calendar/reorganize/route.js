@@ -75,8 +75,12 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     let result;
     try {
       result = await reorganizeWeek({ tasks: movable, weekDates, apiKey, model, preferences, forceFake: ctx.slug === "demo" });
-    } catch {
-      result = { model: "sin-ia", proposals: [] };
+    } catch (e) {
+      // Un fallo de la IA ya lo recoge `reorganizeWeek` con su `avisoIA`
+      // (13/09/2026); lo que llega aquí es otra cosa —un fallo nuestro—, y
+      // tampoco se calla. Sin culpar a la IA: no ha sido ella.
+      console.error("[calendar:reorganize]", e?.name, e?.message);
+      result = { model: "sin-ia", proposals: [], avisoIA: "No se han podido calcular propuestas; inténtalo de nuevo." };
     }
 
     // Enriquecer cada propuesta con título + día actual + profesional + etiquetas legibles.
@@ -111,6 +115,7 @@ export const POST = withTenant(async (request, _rc, ctx) => {
       weekStart,
       weekEnd,
       taskCount: movable.length,
+      avisoIA: result.avisoIA ?? null,
     });
   } catch (err) {
     return serverError(err);

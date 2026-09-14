@@ -9,6 +9,7 @@ import { materialParaLaIA, MAX_NOTAS } from "../../../../../../../lib/clinica/re
 import { apartadosConPlantillas, plantillasDe } from "../../../../../../../lib/clinica/plantillas.js";
 import { DOC_ACTA, bloquesDelActa, puedeTenerActa } from "../../../../../../../lib/reuniones/acta.js";
 import { redactarActa } from "../../../../../../../lib/reuniones/redactarActa.js";
+import { motivoDelFalloIa } from "../../../../../../../lib/ai/errorLegible.js";
 
 /**
  * POST /api/citas/bloqueos/[id]/acta/redactar — recibe el material de la
@@ -136,7 +137,8 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       audioDurationSec = t.durationSec;
     } catch (e) {
       if (e.code === "BAD_KEY") return error("Tu clave de OpenAI no es válida o no tiene permisos.", 400);
-      if (e.code === "QUOTA") return error("Has alcanzado el límite o la cuota de OpenAI.", 429);
+      // El mensaje de Whisper ya es legible y distingue sin saldo de límite (13/09/2026).
+      if (e.code === "QUOTA") return error(e.message, 429);
       if (e.code === "TOO_LARGE") return error(e.message, 413);
       if (e.code === "UNREACHABLE") return error(e.message, 504);
       console.error("[reuniones:whisper]", e);
@@ -182,6 +184,11 @@ export const POST = withTenant(async (request, { params }, ctx) => {
   } catch (e) {
     if (e.code === "NO_API_KEY") return error("La redacción con IA no está configurada (falta la clave de IA).", 503);
     console.error("[reuniones:acta]", e);
+    // (13/09/2026) El MOTIVO va dentro del aviso y `avisoTipo: "fallo"` dice
+    // que no se pinta como un éxito, como en `sessions/transcribe` (AV-0122).
+    // Si es la cuenta de IA, el aviso a dirección ya ha salido del cliente
+    // central. Ninguna pantalla consume aún este endpoint: es contrato.
+    const motivo = motivoDelFalloIa(e, "Vuelve a intentarlo en un momento.");
     // La transcripción ya está hecha y pagada: se devuelve aunque el reparto
     // falle, para no tener que volver a subir el audio de la reunión.
     return ok({
@@ -191,8 +198,9 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       bloques: bloquesDelActa(apartados),
       audioDurationSec,
       avisoIA: file
-        ? "El audio se ha transcrito, pero el reparto por apartados ha fallado. Tienes la transcripción abajo para escribir el acta a mano o volver a intentarlo."
-        : "El reparto por apartados ha fallado. Tus notas siguen aquí: vuelve a intentarlo o escribe el acta a mano.",
+        ? `El audio se ha transcrito, pero el reparto por apartados ha fallado. ${motivo} Tienes la transcripción abajo para escribir el acta a mano.`
+        : `El reparto por apartados ha fallado. ${motivo} Tus notas siguen aquí para escribir el acta a mano.`,
+      avisoTipo: "fallo",
     });
   }
 });

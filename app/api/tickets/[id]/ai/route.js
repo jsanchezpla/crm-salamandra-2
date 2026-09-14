@@ -5,6 +5,7 @@ import { UUID_RE } from "@/lib/support/context.js";
 import { getTenantIaKey, getTenantIaModel } from "@/lib/ai/proveedorIa.js";
 import { demoForcesFakeAi } from "@/lib/demo/isDemo.js";
 import { vetoAi } from "@/lib/ai/aiAccess.js";
+import { esErrorDeIa, motivoDelFalloIa } from "@/lib/ai/errorLegible.js";
 import {
   ticketAiSummary,
   ticketAiDraft,
@@ -87,6 +88,12 @@ export const POST = withTenant(async (request, { params }, ctx) => {
   } catch (err) {
     if (err?.code === "NO_API_KEY") {
       return error("Este cliente no tiene configurada la clave de IA (Configuración → IA)", 503);
+    }
+    // El proveedor ha fallado (13/09/2026): 502 con el motivo, no «Error
+    // interno». Si es la cuenta, el aviso a dirección ya ha salido.
+    if (esErrorDeIa(err)) {
+      console.error("[tickets:ai]", err?.name, err?.status, err?.message);
+      return error(motivoDelFalloIa(err), 502);
     }
     return serverError(err);
   }

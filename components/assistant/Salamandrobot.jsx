@@ -61,7 +61,10 @@ export default function Salamandrobot({ alAbrir }) {
       });
       const j = await r.json().catch(() => null);
       if (!r.ok || !j?.ok) throw new Error(j?.error || "No pude responder ahora mismo.");
-      setMessages((m) => [...m, { role: "assistant", content: j.data.answer, links: j.data.links || [] }]);
+      // `aviso` (13/09/2026): la IA no ha respondido y esto sale de la ayuda
+      // del CRM; se dice debajo, en ámbar. No viaja al servidor: el payload de
+      // arriba solo lleva `role` y `content`.
+      setMessages((m) => [...m, { role: "assistant", content: j.data.answer, links: j.data.links || [], aviso: j.data.avisoIA || null }]);
     } catch (e) {
       setMessages((m) => [...m, { role: "assistant", content: "Ups, no he podido responder ahora mismo. Inténtalo de nuevo en un momento.", links: [] }]);
     } finally {
@@ -128,6 +131,9 @@ export default function Salamandrobot({ alAbrir }) {
                       <div className={`text-[13px] leading-relaxed rounded-2xl px-3 py-2 ${m.role === "user" ? "text-white rounded-br-sm" : "bg-white border border-neutral-200 text-neutral-800 rounded-bl-sm"}`} style={m.role === "user" ? { backgroundColor: "var(--color-primary, #1B3A2D)" } : undefined}>
                         {m.content}
                       </div>
+                      {m.aviso && (
+                        <p className="mt-1 text-[11px] leading-snug text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1">{m.aviso}</p>
+                      )}
                       {m.links?.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 mt-1.5">
                           {m.links.map((l, k) => (

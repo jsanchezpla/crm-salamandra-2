@@ -4,7 +4,6 @@ import { isDemoTenant } from "@/lib/demo/isDemo.js";
 import { vetoAi } from "@/lib/ai/aiAccess.js";
 import { getTenantIaKey, getTenantIaModel, sinClaveDeIa } from "@/lib/ai/proveedorIa.js";
 import { mensajeDeErrorIa } from "@/lib/ai/errorLegible.js";
-import { avisarAdminsDelFalloIa } from "@/lib/ai/avisoDeCuentaIa.js";
 import { structureSession } from "@/lib/clinica/structureSession.js";
 import { apartadosPara, aFormulario, valoresDeSesion } from "@/lib/clinica/plantillas.js";
 import { perfilDelCentro } from "../../../../../../lib/clinica/perfilDelCentro.js";
@@ -150,9 +149,9 @@ export const POST = withTenant(async (request, rc, ctx) => {
     } catch (e) {
       if (e.code === "NO_API_KEY") return error("El resumen con IA no está configurado (falta la clave de IA).", 503);
       console.error("[clinica:completar]", e);
-      // Si es la cuenta de IA del centro (sin saldo, clave, límite), que lo
-      // sepan sus admins y que la frase diga ESO (11/09/2026, Aumenta).
-      await avisarAdminsDelFalloIa(ctx, e);
+      // Si es la cuenta de IA del centro (sin saldo, clave, límite), la frase
+      // dice ESO (11/09/2026, Aumenta); la campana a sus admins ya ha salido
+      // del cliente central (13/09/2026).
       return error(mensajeDeErrorIa(e, "La IA no ha podido repartir el texto de esta sesión. Inténtalo de nuevo."), 502);
     }
 

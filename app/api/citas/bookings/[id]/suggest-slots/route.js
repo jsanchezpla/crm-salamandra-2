@@ -133,11 +133,15 @@ export const POST = withTenant(async (request, { params }, ctx) => {
         context: { serviceName: eventType.name, duration: duracion, patientName, preferences, scope },
         apiKey, model, forceFake: ctx.slug === "demo",
       });
-    } catch {
-      chosen = { model: "sin-ia", suggestions: [] };
+    } catch (e) {
+      // Un fallo de la IA ya lo recoge `chooseSlots` con su `avisoIA`
+      // (13/09/2026); lo que llega aquí es otra cosa —un fallo nuestro—, y
+      // tampoco se calla. Sin culpar a la IA: no ha sido ella.
+      console.error("[citas:suggest-slots]", e?.name, e?.message);
+      chosen = { model: "sin-ia", suggestions: [], avisoIA: "No se han podido elegir los huecos; estos son huecos libres elegidos sin ayuda." };
     }
     if (!chosen.suggestions?.length) {
-      chosen = { model: chosen.model || "sin-ia", suggestions: candidates.slice(0, 3).map((c) => ({ slotId: c.slotId, reason: `Hueco libre: ${c.label}.` })) };
+      chosen = { ...chosen, model: chosen.model || "sin-ia", suggestions: candidates.slice(0, 3).map((c) => ({ slotId: c.slotId, reason: `Hueco libre: ${c.label}.` })) };
     }
 
     // 3) Mapear + RE-VALIDAR cada propuesta (tercera red: por si entró otra cita).
@@ -164,7 +168,7 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       await pushValid(c, `Hueco libre: ${c.label}.`);
     }
 
-    return ok({ suggestions: suggestions.slice(0, 3), model: chosen.model, scope });
+    return ok({ suggestions: suggestions.slice(0, 3), model: chosen.model, scope, avisoIA: chosen.avisoIA ?? null });
   } catch (err) {
     return serverError(err);
   }

@@ -28,12 +28,14 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { register } from "node:module";
+import { readFileSync, readdirSync } from "node:fs";
 
 register(new URL("./_abrir-lib-hooks.mjs", import.meta.url));
 const { esErrorDeIa, mensajeDeErrorIa, esFalloDeSaldo, esFalloDeCuenta } = await import(
   "../lib/ai/errorLegible.js"
 );
-const { avisoDeCuenta, avisarAdminsDelFalloIa, idDelAviso } = await import("../lib/ai/avisoDeCuentaIa.js");
+const { avisoSinIa, cuentaDelError, motivoDelFalloIa } = await import("../lib/ai/errorLegible.js");
+const { avisoDeCuenta, avisarAdminsDelFalloIa, idDelAviso, datosDelContexto } = await import("../lib/ai/avisoDeCuentaIa.js");
 const { extraerJson } = await import("../lib/projects/ai/parsePlan.js");
 const { respuestaConLatido } = await import("../lib/ai/respuestaConLatido.js");
 
@@ -143,6 +145,113 @@ describe("sin saldo (esFalloDeSaldo / esFalloDeCuenta)", () => {
     assert.equal(esFalloDeCuenta(new Error("boom")), false);
     assert.equal(esFalloDeCuenta(null), false);
   });
+
+  it("los códigos de Whisper cuentan si son de OpenAI; los mismos códigos de Google Places, no (13/09/2026)", () => {
+    assert.equal(esFalloDeCuenta({ code: "BAD_KEY", proveedor: "openai" }), true);
+    assert.equal(esFalloDeCuenta({ code: "QUOTA", proveedor: "openai" }), true);
+    assert.equal(esFalloDeCuenta({ code: "QUOTA" }), false);
+    assert.equal(esFalloDeCuenta({ code: "BAD_KEY" }), false);
+  });
+
+  it("el insufficient_quota de OpenAI se reconoce aunque solo venga en el cuerpo guardado", () => {
+    assert.equal(esFalloDeSaldo({ status: 429, error: { error: { code: "insufficient_quota" } } }), true);
+    assert.equal(esFalloDeSaldo({ status: 429, error: { error: { code: "rate_limit_exceeded" } } }), false);
+  });
+});
+
+describe("cuentaDelError y avisoSinIa (13/09/2026)", () => {
+  it("la cuenta sale del proveedor marcado; sin marca, Anthropic", () => {
+    assert.equal(cuentaDelError({ proveedor: "openai" }), "OpenAI");
+    assert.equal(cuentaDelError(errorSdk("AuthenticationError", 401)), "Anthropic");
+    assert.equal(cuentaDelError(null), "Anthropic");
+  });
+
+  it("el 401 y el 403 nombran la clave que toca", () => {
+    assert.match(mensajeDeErrorIa(errorSdk("AuthenticationError", 401)), /La clave de Anthropic de este cliente no es válida o ha caducado/);
+    assert.match(mensajeDeErrorIa(Object.assign(errorSdk("X", 403), { proveedor: "openai" })), /La clave de OpenAI no tiene permiso/);
+  });
+
+  it("dice el motivo y lo que se ofrece en su lugar, sin repetirse", () => {
+    const msg = avisoSinIa(errorSinSaldo(), "Mientras tanto…");
+    assert.match(msg, /sin saldo/);
+    assert.ok(msg.endsWith("Mientras tanto…"));
+    assert.doesNotMatch(msg, /La IA no ha respondido\. La IA/);
+  });
+
+  it("el timeout tiene su frase corta, sin la del proyecto", () => {
+    const msg = avisoSinIa(errorSdk("APIConnectionTimeoutError"), "Van sin IA.");
+    assert.match(msg, /tardado demasiado/);
+    assert.doesNotMatch(msg, /proyecto/);
+    assert.equal(avisoSinIa(Object.assign(new Error("x"), { name: "AbortError" })), "La IA ha tardado demasiado y se ha cortado.");
+  });
+
+  it("un error que no reconoce dice que la IA no ha podido responder", () => {
+    assert.equal(avisoSinIa(new TypeError("x"), "Sin IA."), "La IA no ha podido responder. Sin IA.");
+  });
+
+  it("el 403 de Whisper (servicio audio) habla del permiso para transcribir, no del modelo elegido", () => {
+    const whisper = { status: 403, proveedor: "openai", servicio: "audio", code: "BAD_KEY" };
+    assert.match(mensajeDeErrorIa(whisper), /no tiene permiso para transcribir audio/);
+    assert.doesNotMatch(mensajeDeErrorIa(whisper), /modelo elegido/);
+    // El 403 del chat sigue con la suya.
+    assert.match(mensajeDeErrorIa({ status: 403, proveedor: "openai" }), /modelo elegido/);
+  });
+});
+
+describe("motivoDelFalloIa: la frase fuera de Proyectos (13/09/2026)", () => {
+  it("el corte por tiempo no habla del proyecto, y dice que se reintente", () => {
+    for (const err of [errorSdk("APIConnectionTimeoutError"), Object.assign(new Error("x"), { name: "AbortError" })]) {
+      const msg = motivoDelFalloIa(err);
+      assert.equal(msg, "La IA ha tardado demasiado y se ha cortado. Vuelve a intentarlo.");
+      assert.doesNotMatch(msg, /proyecto/);
+    }
+  });
+
+  it("todo lo demás es la frase de mensajeDeErrorIa, con su porDefecto", () => {
+    assert.equal(motivoDelFalloIa(errorSinSaldo()), mensajeDeErrorIa(errorSinSaldo()));
+    assert.equal(motivoDelFalloIa(errorSdk("AuthenticationError", 401)), mensajeDeErrorIa(errorSdk("AuthenticationError", 401)));
+    assert.equal(motivoDelFalloIa(new Error("boom"), "Tu texto sigue aquí."), "Tu texto sigue aquí.");
+    assert.equal(motivoDelFalloIa(new Error("boom")), "La IA no ha podido responder. Vuelve a intentarlo.");
+  });
+});
+
+/* ── el cableado: lo único que no se puede probar sin base (13/09/2026) ─── */
+
+describe("el aviso sale del cliente central (texto: ¿sigue el gancho donde estaba?)", () => {
+  const leer = (ruta) => readFileSync(new URL(ruta, import.meta.url), "utf8");
+
+  it("withTenant y withPublicTenant abren el contexto con datosDelContexto", () => {
+    for (const ruta of ["../lib/tenant/withTenant.js", "../lib/tenant/publicTenantContext.js"]) {
+      assert.match(leer(ruta), /conContextoDeUso\(\s*datosDelContexto\(/, `${ruta} ya no mete el gancho del aviso en el contexto`);
+    }
+  });
+
+  it("los cuatro clientes que hablan con un proveedor pasan por trasFalloDeIa", () => {
+    for (const ruta of [
+      "../lib/outreach/analysis/anthropic.js",
+      "../lib/assistant/anthropic.js",
+      "../lib/ai/openai.js",
+      "../lib/clinica/whisper.js",
+    ]) {
+      assert.match(leer(ruta), /await trasFalloDeIa\(/, `${ruta} ya no avisa del fallo`);
+    }
+  });
+
+  it("ninguna ruta vuelve a llamar a avisarAdminsDelFalloIa por su cuenta", () => {
+    const raiz = new URL("../app/api/", import.meta.url);
+    const conLlamada = [];
+    const recorrer = (dir) => {
+      for (const d of readdirSync(dir, { withFileTypes: true })) {
+        const url = new URL(d.name + (d.isDirectory() ? "/" : ""), dir);
+        if (d.isDirectory()) recorrer(url);
+        else if (d.name === "route.js" && /avisarAdminsDelFalloIa\(/.test(readFileSync(url, "utf8"))) {
+          conLlamada.push(url.pathname);
+        }
+      }
+    };
+    recorrer(raiz);
+    assert.deepEqual(conLlamada, []);
+  });
 });
 
 describe("avisarAdminsDelFalloIa", () => {
@@ -181,7 +290,7 @@ describe("avisarAdminsDelFalloIa", () => {
   });
 
   it("no repite: al admin avisado hace poco no se le vuelve a avisar (129 intentos ≠ 129 campanas)", async () => {
-    const { ctx, creadas, buscarAdmins } = entorno({ recientes: [{ userId: "a1", title: "La IA se ha quedado sin saldo" }] });
+    const { ctx, creadas, buscarAdmins } = entorno({ recientes: [{ userId: "a1", title: "La cuenta de Anthropic se ha quedado sin saldo" }] });
     const n = await avisarAdminsDelFalloIa(ctx, errorSinSaldo(), { buscarAdmins });
     assert.equal(n, 1);
     assert.deepEqual(creadas.map((c) => c.userId), ["a2"]);
@@ -189,7 +298,10 @@ describe("avisarAdminsDelFalloIa", () => {
 
   it("pero una causa NUEVA sí entra: un 429 de hace un rato no tapa el sin saldo", async () => {
     const { ctx, creadas, buscarAdmins } = entorno({
-      recientes: [{ userId: "a1", title: "La IA ha llegado a su límite de uso" }, { userId: "a2", title: "La IA ha llegado a su límite de uso" }],
+      recientes: [
+        { userId: "a1", title: "La cuenta de Anthropic ha llegado a su límite de uso" },
+        { userId: "a2", title: "La cuenta de Anthropic ha llegado a su límite de uso" },
+      ],
     });
     assert.equal(await avisarAdminsDelFalloIa(ctx, errorSinSaldo(), { buscarAdmins }), 2);
     assert.ok(creadas.every((c) => /sin saldo/i.test(c.title)));
@@ -207,7 +319,46 @@ describe("avisarAdminsDelFalloIa", () => {
     assert.equal(n1 + n2, 2);
     assert.equal(creadas.length, 2);
     assert.deepEqual(creadas.map((c) => c.userId).sort(), ["a1", "a2"]);
-    assert.ok(creadas.every((c) => c.entityId === idDelAviso("t1", "La IA se ha quedado sin saldo", ahora)));
+    assert.ok(creadas.every((c) => c.entityId === idDelAviso("t1", "La cuenta de Anthropic se ha quedado sin saldo", ahora)));
+  });
+
+  it("las dos cuentas son dos avisos: el sin saldo de Anthropic no tapa el de OpenAI (13/09/2026)", async () => {
+    const { ctx, creadas, buscarAdmins } = entorno({
+      recientes: [
+        { userId: "a1", title: "La cuenta de Anthropic se ha quedado sin saldo" },
+        { userId: "a2", title: "La cuenta de Anthropic se ha quedado sin saldo" },
+      ],
+    });
+    const deOpenAI = Object.assign(new Error("x"), {
+      status: 429,
+      proveedor: "openai",
+      error: { error: { code: "insufficient_quota", message: "You exceeded your current quota" } },
+    });
+    assert.equal(await avisarAdminsDelFalloIa(ctx, deOpenAI, { buscarAdmins }), 2);
+    assert.ok(creadas.every((c) => /OpenAI.*sin saldo/.test(c.title)));
+  });
+
+  it("el MISMO error no avisa dos veces aunque pase por dos sitios (13/09/2026)", async () => {
+    const { ctx, creadas, buscarAdmins } = entorno();
+    const err = errorSinSaldo();
+    assert.equal(await avisarAdminsDelFalloIa(ctx, err, { buscarAdmins }), 2);
+    assert.equal(await avisarAdminsDelFalloIa(ctx, err, { buscarAdmins }), 0);
+    assert.equal(creadas.length, 2);
+  });
+
+  it("datosDelContexto: de quién es la petición y un gancho que avisa de verdad", async () => {
+    const { ctx, creadas, buscarAdmins } = entorno();
+    const datos = datosDelContexto(ctx, { userId: "u1" }, { buscarAdmins });
+    assert.equal(datos.tenantId, "t1");
+    assert.equal(datos.userId, "u1");
+    assert.equal(datos.impersonadorId, null);
+    assert.equal(typeof datos.avisarFalloDeCuenta, "function");
+    assert.equal(await datos.avisarFalloDeCuenta(errorSdk("AuthenticationError", 401)), 2);
+    assert.equal(creadas.length, 2);
+    assert.equal(creadas[0].type, "ai_cuenta");
+    assert.match(creadas[0].title, /La clave de Anthropic no funciona/);
+    // Sin contexto de tenant (ninguno real llega así, pero no puede romper).
+    assert.equal(datosDelContexto(null).tenantId, null);
   });
 
   it("un fallo que no es de la cuenta (saturación, timeout, bug nuestro) no molesta a nadie", async () => {
@@ -234,6 +385,22 @@ describe("avisarAdminsDelFalloIa", () => {
     assert.match(avisoDeCuenta(errorSdk("PermissionDeniedError", 403)).title, /permiso/i);
     assert.match(avisoDeCuenta(errorSdk("RateLimitError", 429)).title, /límite/i);
     assert.equal(avisoDeCuenta(errorSdk("InternalServerError", 500)), null);
+    // Y todos nombran la cuenta (13/09/2026).
+    for (const e of [errorSinSaldo(), errorSdk("AuthenticationError", 401), errorSdk("PermissionDeniedError", 403), errorSdk("RateLimitError", 429)]) {
+      assert.match(avisoDeCuenta(e).title, /Anthropic/);
+    }
+    const deOpenAI = Object.assign(errorSdk("OpenAIAPIError", 401), { proveedor: "openai" });
+    assert.match(avisoDeCuenta(deOpenAI).title, /La clave de OpenAI/);
+    assert.match(avisoDeCuenta(deOpenAI).body, /La clave de OpenAI de este cliente no es válida/);
+    // Un error de Whisper sin `status`, solo con su código: también se titula.
+    assert.match(avisoDeCuenta({ code: "QUOTA", proveedor: "openai" }).title, /La cuenta de OpenAI ha llegado a su límite/);
+    // El 403 de Whisper y el del chat son dos causas: dos títulos, para que uno
+    // no tape 12 h al otro, y el texto de Whisper no manda al modelo elegido.
+    const audio403 = avisoDeCuenta({ status: 403, proveedor: "openai", servicio: "audio", code: "BAD_KEY" });
+    const chat403 = avisoDeCuenta({ status: 403, proveedor: "openai" });
+    assert.equal(audio403.title, "La clave de OpenAI no puede transcribir audio");
+    assert.equal(chat403.title, "La clave de OpenAI no tiene permiso");
+    assert.doesNotMatch(audio403.body, /modelo elegido/);
   });
 });
 

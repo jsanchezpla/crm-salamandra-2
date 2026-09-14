@@ -479,6 +479,8 @@ export default function CalendarioPage() {
         proposals: j.data.proposals || [],
         model: j.data.model,
         taskCount: j.data.taskCount ?? 0,
+        // La IA no ha respondido y las propuestas salen sin ella (13/09/2026).
+        avisoIA: j.data.avisoIA ?? null,
         weekStart: monday,
         weekEvents: tj?.data || [],
         err: null,
@@ -1210,9 +1212,12 @@ export default function CalendarioPage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-[15px] font-semibold text-neutral-900">🦎 Reorganizar la semana</span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">{modelBadge}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${reorg.avisoIA ? "bg-amber-50 text-amber-800 border-amber-100" : "bg-emerald-50 text-emerald-700 border-emerald-100"}`}>{modelBadge}</span>
                   </div>
                   <div className="text-[12px] text-neutral-400 mt-0.5">3 propuestas para repartir las tareas de esta semana. Elige la que prefieras.</div>
+                  {reorg.avisoIA && (
+                    <div className="text-[12px] text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-2 py-1 mt-1.5">{reorg.avisoIA}</div>
+                  )}
                   {reorg.applyError && <div className="text-[12px] text-rose-600 mt-1.5">{reorg.applyError}</div>}
                 </div>
                 <button onClick={closeReorg} disabled={reorgApplying} className="text-neutral-400 hover:text-neutral-700 p-1 -m-1 text-lg leading-none disabled:opacity-40" aria-label="Cerrar">✕</button>

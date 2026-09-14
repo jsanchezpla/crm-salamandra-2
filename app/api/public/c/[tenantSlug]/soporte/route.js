@@ -21,6 +21,7 @@ import {
 } from "@/lib/support/ticketStorage.js";
 import { getTenantIaKey, getTenantIaModel } from "@/lib/ai/proveedorIa.js";
 import { ticketAiClassify } from "@/lib/support/ai.js";
+import { avisoSinIa, esErrorDeIa } from "@/lib/ai/errorLegible.js";
 
 /**
  * Portal público de soporte del tenant.
@@ -200,6 +201,10 @@ export const POST = withPublicTenant(
 
       // 9. Clasificación automática SOLO si el tenant la activó (opt-in) y hay
       //    clave BYOK. Best-effort con presupuesto corto: jamás bloquea el alta.
+      //    Si la IA falla (13/09/2026), el visitante no ve nada, pero el motivo
+      //    va en la campana del ticket nuevo; y si es la cuenta del centro, el
+      //    aviso `ai_cuenta` ya ha salido del cliente central.
+      let sinClasificar = null;
       if (settings.autoClassify) {
         try {
           const apiKey = getTenantIaKey(ctx);
@@ -223,8 +228,12 @@ export const POST = withPublicTenant(
               if (Object.keys(cambios).length) await ticket.update(cambios);
             }
           }
-        } catch {
-          /* la IA nunca rompe el alta */
+        } catch (e) {
+          // La IA nunca rompe el alta.
+          console.warn("[soporte:portal] clasificación automática fallida:", e?.name, e?.status);
+          // `avisoSinIa` y no `mensajeDeErrorIa`: sin «vuelve a intentarlo» (el
+          // alta ya está hecha) y sin la frase de Proyectos en un corte por tiempo.
+          sinClasificar = esErrorDeIa(e) ? avisoSinIa(e) : null;
         }
       }
 
@@ -236,7 +245,7 @@ export const POST = withPublicTenant(
         ctx,
         type: "ticket_new",
         title: "Nuevo ticket del portal",
-        body: `${ticketRef(ticket.number)} · ${ticket.title}`,
+        body: `${ticketRef(ticket.number)} · ${ticket.title}${sinClasificar ? ` · Sin clasificar: ${sinClasificar}` : ""}`,
         ticketId: ticket.id,
       }).catch(() => {});
       const avisos = Array.isArray(settings.notifyEmails) ? settings.notifyEmails : [];
