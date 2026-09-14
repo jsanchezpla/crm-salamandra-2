@@ -156,3 +156,35 @@ auditoría no se modifica»). Hay que decidir:
   «cancelar» de los correos ya enviados.
 
 Mientras no se decida, el arreglo impide que crezcan, no que existan.
+
+## Decidido (14/09/2026, Jorge): reescribir en sitio, no borrar
+
+Con los números de arriba delante, Jorge eligió **reescribir**. Los tokens
+**no se rotan**.
+
+- **`scripts/limpiar-auditoria-citas.js`**, en seco por defecto y `--confirm`
+  para escribir. Lee las filas `entity = 'Booking'` y pasa cada una por
+  `limpiarFilaDeCita` (`lib/citas/limpiarAuditoriaDeCita.js`), que usa las
+  MISMAS funciones de `resumenDeCita.js` que las rutas: una fila limpiada queda
+  igual que una escrita hoy.
+  - Alta y cancelación: el lado con la fila entera pasa a `resumenDeCita` más
+    las claves propias de la línea (`source`, `reembolso`, `asistentes`…).
+  - Edición: `fijosDeCita` + `cambiosDeCita` en los dos lados; de lo privado,
+    solo el nombre en `cambiadosSinValor`.
+  - Huella de borrado: forma de `huellaDeCita`, sin `cliente`. Como la vieja
+    no guardaba `clientId`/`patientId`, se toman de OTRA fila de auditoría de la
+    misma cita si la hay (solo FK); si no, null (el mismo caso límite de arriba).
+  - Solo cambian `before` y `after`: ni `created_at`, ni `user_id`, ni el
+    número de filas. Una transacción; lo que no lleva nada privado no se toca
+    (idempotente). Imprime solo recuentos por cliente y acción, antes y después.
+  - Deja una fila `citas.auditoria_limpiada` (en `salamandra_solutions`) con
+    los recuentos.
+- Prueba ligera `scripts/_smoke-auditoria-citas-limpieza.mjs`: cada forma
+  medida en producción sale idéntica a lo que escribe hoy la ruta, sin valores
+  privados, y una segunda pasada no toca nada.
+- **Excepción apuntada en CLAUDE.md** (Seguridad → Auditoría): los logs no se
+  modifican salvo `podar-audit-logs.js` y esta limpieza puntual.
+- **Copia previa**: antes del `--confirm` en producción se volcó
+  `master.audit_logs` a `/root/backups/antes-de-limpiar-auditoria-citas-*.sql`
+  en el VPS. **Esa copia conserva lo que se quita**: se guarda lo justo para
+  deshacer un error y se borra después.
