@@ -126,6 +126,12 @@ describe("trocear: secciones y tareas, tal como las pinta el tablero", () => {
     assert.deepEqual(s.tareas[0].quienes, []);
   });
 
+  it("una tarea de Aumenta y Laura Úbeda sale en los dos grupos, no solo en el de Aumenta", () => {
+    assert.deepEqual(destinatarios("`aumenta`, `laura_ubeda`"), ["aumenta", "laura_ubeda"]);
+    // `nutri_laura` es otra Laura: no casa dentro de `laura_ubeda`.
+    assert.deepEqual(destinatarios("laura_ubeda"), ["laura_ubeda"]);
+  });
+
   it("«demo» no casa dentro de «demo_clinica» ni «producto (demostración)» le cuelga la tarea a demo", () => {
     assert.deepEqual(destinatarios("demo_clinica"), ["demo_clinica"]);
     assert.deepEqual(destinatarios("producto (demostración)"), ["producto"]);
@@ -171,6 +177,7 @@ describe("trocear: secciones y tareas, tal como las pinta el tablero", () => {
       "spain_enzymes",
       "somos",
       "gm_alvar_alonso",
+      "laura_ubeda",
       "demo_clinica",
       "healim",
     ]) {
