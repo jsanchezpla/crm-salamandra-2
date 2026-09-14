@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ANTHROPIC_MODELS } from "../../../lib/ai/anthropicModel.js";
+import { CAUSAS_DE_FALLO } from "../../../lib/ai/errorLegible.js";
 import { OPENAI_MODELS } from "../../../lib/ai/openaiModel.js";
 
 /**
@@ -14,6 +15,10 @@ import { OPENAI_MODELS } from "../../../lib/ai/openaiModel.js";
  * ve cuánto lleva el mes, en qué se va y cuántas llamadas se han ahorrado por
  * repetidas. Es una estimación con precios públicos; la cifra oficial está en
  * la consola del proveedor, y se dice.
+ *
+ * Desde el 14/09/2026 dice también cuántas llamadas NO llegaron a responder
+ * este mes y por qué, en ámbar: las fallidas no cuestan ni cuentan como
+ * llamadas, pero son las que avisan de que la cuenta se está quedando sin saldo.
  */
 
 const USD_POR_EUR = 1.1;
@@ -59,6 +64,8 @@ export default function ConsumoIA() {
   const { mes, anterior, desdeCuando, modelo } = datos;
   const top = mes.porAccion.slice(0, 4);
   const reutilizadas = mes.total.reutilizadas;
+  const fallidas = mes.total.fallidas ?? 0;
+  const causaPrincipal = mes.fallos?.[0] ? (CAUSAS_DE_FALLO[mes.fallos[0].causa] ?? CAUSAS_DE_FALLO.desconocido) : null;
 
   return (
     <div className="mt-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
@@ -71,6 +78,12 @@ export default function ConsumoIA() {
         </div>
         <div className="text-xs text-neutral-500 text-right">
           <div>{mes.total.llamadas.toLocaleString("es-ES")} llamadas · redacta {etiquetaDeModelo(modelo)}</div>
+          {fallidas > 0 && (
+            <div className="text-amber-700">
+              {fallidas.toLocaleString("es-ES")} {fallidas === 1 ? "no llegó a responder" : "no llegaron a responder"}
+              {causaPrincipal ? ` · ${mes.fallos.length > 1 ? "sobre todo: " : ""}${causaPrincipal}` : ""}
+            </div>
+          )}
           {reutilizadas > 0 && <div>{reutilizadas.toLocaleString("es-ES")} {reutilizadas === 1 ? "devuelta" : "devueltas"} sin coste por repetidas</div>}
           {mes.total.minutosAudio > 0 && <div>{mes.total.minutosAudio.toLocaleString("es-ES")} min de audio transcritos</div>}
         </div>

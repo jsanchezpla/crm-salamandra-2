@@ -4,8 +4,11 @@ import { DataTypes } from "sequelize";
  * master.ai_uso — una fila por llamada de pago a la IA (11/09/2026).
  *
  * Quién la escribe: `lib/ai/usoDeIA.js`, desde el cliente central de Anthropic
- * y desde Whisper. Quién la lee: Configuración → IA (consumo estimado del mes)
- * y quien quiera saber en qué se va el saldo de un cliente.
+ * y desde Whisper; desde el 14/09/2026 también las llamadas que FALLAN
+ * (`registrarFallo`, a coste 0 y con la causa en `error`). Quién la lee:
+ * Configuración → IA (consumo estimado del mes) y quien quiera saber en qué se
+ * va el saldo de un cliente. Quien sume gasto o llamadas que respondieron,
+ * filtra `error IS NULL`.
  *
  * Va en master y no en el schema del tenant por lo mismo que `audit_logs`: es
  * contabilidad transversal, se consulta por tenant desde el panel de
@@ -40,6 +43,15 @@ export function defineAiUso(sequelize) {
       /** `stop_reason` de Anthropic: end_turn, max_tokens… */
       parada: { type: DataTypes.STRING(40), allowNull: true },
       cacheado: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+      /**
+       * Por qué FALLÓ (14/09/2026), en una palabra de `CAUSAS_DE_FALLO`
+       * (lib/ai/errorLegible.js): saldo, clave, permiso, modelo, limite,
+       * peticion, tiempo, red, ilegible, proveedor, desconocido. NULL = respondió.
+       * Nunca el mensaje del proveedor. Sin default: una fila buena no la manda.
+       */
+      error: { type: DataTypes.STRING(40), allowNull: true },
+      /** Estado HTTP del fallo, si lo hubo (400, 401, 429, 529…). Columna `error_http`. */
+      errorHttp: { type: DataTypes.SMALLINT, allowNull: true },
     },
     {
       tableName: "ai_uso",

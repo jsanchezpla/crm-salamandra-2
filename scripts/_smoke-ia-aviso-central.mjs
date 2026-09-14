@@ -22,6 +22,11 @@
  * del shell de quien la lanza, una prueba «ligera» escribiría una fila en su
  * base local. Así falla al conectar, lo avisa por consola (`[ai:uso]`, es
  * esperado) y no escribe nada en ningún sitio.
+ *
+ * (14/09/2026) Desde que las llamadas que FALLAN también dejan fila
+ * (`registrarFallo`, desde `trasFalloDeIa`), las filas van además a un destino
+ * en memoria (`destinoDeUsoParaPruebas`): aquí ni se intenta conectar. Lo que
+ * se apunta en esas filas se prueba en `_smoke-ia-fallos.mjs`.
  */
 
 import { describe, it } from "node:test";
@@ -34,7 +39,8 @@ for (const k of ["CITAS_FAKE_AI", "ASSISTANT_FAKE_AI", "OUTREACH_FAKE_AI", "CALE
 process.env.DATABASE_URL = "postgres://nadie:nada@127.0.0.1:1/ninguna";
 
 register(new URL("./_abrir-lib-hooks.mjs", import.meta.url));
-const { conContextoDeUso, contextoDeUso } = await import("../lib/ai/usoDeIA.js");
+const { conContextoDeUso, contextoDeUso, destinoDeUsoParaPruebas } = await import("../lib/ai/usoDeIA.js");
+destinoDeUsoParaPruebas(async () => {});
 const { esFalloDeSaldo } = await import("../lib/ai/errorLegible.js");
 const { datosDelContexto } = await import("../lib/ai/avisoDeCuentaIa.js");
 const { trasFalloDeIa } = await import("../lib/ai/trasFalloDeIa.js");

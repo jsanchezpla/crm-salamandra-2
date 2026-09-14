@@ -236,6 +236,13 @@ demos hay 39 sesiones en `draft` que sí se dieron.
   siempre; los demás fallos de Whisper (un 400, un 5xx) siguen dando «Error
   interno». Detalle en `configuracion.md`, «Cuando la cuenta de Anthropic se
   queda sin saldo».
+- **Y deja rastro (14/09/2026).** Cada transcripción que falla ya camino de
+  OpenAI deja su fila en `master.ai_uso` a coste 0 con la causa (`saldo`,
+  `clave`, `tiempo`, `red`, `ilegible`…; en `transcribirVarios`, una por audio
+  que falla), y la que sale bien lleva ya `ms`. Para distinguir el tiempo de la
+  red y el JSON roto, el error lleva el original en `cause`; `code` y `message`
+  no cambian. Sin clave, sin audio o con más de 25 MB no hay fila. Detalle en
+  `configuracion.md`, «El rastro de las llamadas que fallan».
 - Serializers: `lib/clinica/serialize.js` (fila Sequelize → forma de la UI).
 - Migración **generalizada** `scripts/migrate-clinica-module.js` (lee `master.tenants`,
   ya no aumenta-only); la corre `enable-module.js` como parte del bloque `clinica`

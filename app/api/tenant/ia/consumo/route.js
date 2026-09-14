@@ -16,26 +16,61 @@ import { getTenantIaModel, getTenantProveedorIa } from "@/lib/ai/proveedorIa.js"
  * Respuesta: { proveedor, modelo, desdeCuando, mes: Tramo, anterior: Tramo }
  *   (`proveedor` y `modelo` son los que redactan HOY, `lib/ai/proveedorIa.js`;
  *   las filas del mes pueden ser de los dos si se cambió a mitad)
- *   Tramo = { desde, hasta, total: { llamadas, reutilizadas, costeUsd,
- *             minutosAudio, tokensEntrada, tokensSalida }, porAccion: [...] }
+ *   Tramo = { desde, hasta, total: { llamadas, reutilizadas, fallidas, costeUsd,
+ *             minutosAudio, tokensEntrada, tokensSalida }, porAccion: [...],
+ *             fallos: [{ causa, llamadas, ultima }] }
+ *
+ * Desde el 14/09/2026 `master.ai_uso` guarda también las llamadas que FALLAN
+ * (`registrarFallo`, `lib/ai/usoDeIA.js`), a coste 0 y con la causa en
+ * `error`. `llamadas` y `reutilizadas` son solo las que respondieron
+ * (`error IS NULL`); las fallidas se cuentan aparte (`total.fallidas`, y por
+ * causa en `fallos`, con `causa` una clave de `CAUSAS_DE_FALLO`). Una acción
+ * con solo fallos suma al total pero no entra en `porAccion`: saldría «0 · 0,00 $».
+ * Necesita la columna `error` (`scripts/migrate-ai-uso.js`, antes del despliegue);
+ * si falta (42703), contesta como antes, sin fallidas, y lo dice en los logs.
  */
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
-const SQL_TRAMO = `
+// El mes `:mesesAtras` (0 = el que corre), en hora de Madrid.
+const DEL_MES = `
+    AND created_at >= (date_trunc('month', (now() AT TIME ZONE 'Europe/Madrid') - (:mesesAtras || ' months')::interval) AT TIME ZONE 'Europe/Madrid')
+    AND created_at <  (date_trunc('month', (now() AT TIME ZONE 'Europe/Madrid') - (:mesesAtras || ' months')::interval + interval '1 month') AT TIME ZONE 'Europe/Madrid')
+`;
+
+/*
+ * `conError = false` es la tabla de antes del 14/09/2026, sin la columna: si se
+ * despliega sin haber lanzado la migración, la tarjeta no se esconde (el
+ * componente calla un 500): enseña el consumo de siempre, sin las fallidas.
+ */
+const sqlTramo = (conError) => {
+  const error = conError ? "error" : "NULL::text";
+  return `
   SELECT proveedor, accion,
-         count(*)::int AS llamadas,
-         count(*) FILTER (WHERE cacheado)::int AS reutilizadas,
+         count(*) FILTER (WHERE ${error} IS NULL)::int AS llamadas,
+         count(*) FILTER (WHERE ${error} IS NULL AND cacheado)::int AS reutilizadas,
+         count(*) FILTER (WHERE ${error} IS NOT NULL)::int AS fallidas,
          coalesce(sum(coste_usd), 0)::float AS coste_usd,
          coalesce(sum(segundos_audio), 0)::int AS segundos_audio,
          coalesce(sum(input_tokens + cache_write_tokens + cache_read_tokens), 0)::bigint AS tokens_entrada,
          coalesce(sum(output_tokens), 0)::bigint AS tokens_salida
   FROM master.ai_uso
   WHERE tenant_id = :tenantId
-    AND created_at >= (date_trunc('month', (now() AT TIME ZONE 'Europe/Madrid') - (:mesesAtras || ' months')::interval) AT TIME ZONE 'Europe/Madrid')
-    AND created_at <  (date_trunc('month', (now() AT TIME ZONE 'Europe/Madrid') - (:mesesAtras || ' months')::interval + interval '1 month') AT TIME ZONE 'Europe/Madrid')
+  ${DEL_MES}
   GROUP BY 1, 2
   ORDER BY coste_usd DESC, llamadas DESC
+`;
+};
+
+// Por qué fallaron las que fallaron (14/09/2026): la causa, cuántas y la última.
+const SQL_FALLOS = `
+  SELECT error AS causa, count(*)::int AS llamadas,
+         to_char(max(created_at) AT TIME ZONE 'Europe/Madrid', 'YYYY-MM-DD HH24:MI') AS ultima
+  FROM master.ai_uso
+  WHERE tenant_id = :tenantId AND error IS NOT NULL
+  ${DEL_MES}
+  GROUP BY 1
+  ORDER BY 2 DESC, 3 DESC
 `;
 
 const SQL_LIMITES = `
@@ -43,18 +78,25 @@ const SQL_LIMITES = `
          to_char(date_trunc('month', (now() AT TIME ZONE 'Europe/Madrid') - (:mesesAtras || ' months')::interval + interval '1 month') - interval '1 day', 'YYYY-MM-DD') AS hasta
 `;
 
-async function tramo(sequelize, tenantId, mesesAtras) {
+async function tramo(sequelize, tenantId, mesesAtras, conError = true) {
   const [[limites]] = await sequelize.query(SQL_LIMITES, { replacements: { mesesAtras: String(mesesAtras) } });
-  const [filas] = await sequelize.query(SQL_TRAMO, { replacements: { tenantId, mesesAtras: String(mesesAtras) } });
-  const total = { llamadas: 0, reutilizadas: 0, costeUsd: 0, minutosAudio: 0, tokensEntrada: 0, tokensSalida: 0 };
+  const replacements = { tenantId, mesesAtras: String(mesesAtras) };
+  const [[filas], [filasFallos]] = await Promise.all([
+    sequelize.query(sqlTramo(conError), { replacements }),
+    conError ? sequelize.query(SQL_FALLOS, { replacements }) : [[]],
+  ]);
+  const total = { llamadas: 0, reutilizadas: 0, fallidas: 0, costeUsd: 0, minutosAudio: 0, tokensEntrada: 0, tokensSalida: 0 };
   const porAccion = [];
   for (const f of filas) {
     total.llamadas += f.llamadas;
     total.reutilizadas += f.reutilizadas;
+    total.fallidas += f.fallidas;
     total.costeUsd += Number(f.coste_usd);
     total.minutosAudio += f.segundos_audio / 60;
     total.tokensEntrada += Number(f.tokens_entrada);
     total.tokensSalida += Number(f.tokens_salida);
+    // Solo fallos: cuenta en el total, no en «en qué se va» (14/09/2026).
+    if (f.llamadas === 0) continue;
     porAccion.push({
       proveedor: f.proveedor,
       // Sin etiqueta, lo único que distingue a Whisper es que trae audio:
@@ -62,14 +104,18 @@ async function tramo(sequelize, tenantId, mesesAtras) {
       accion: f.accion ?? (f.segundos_audio > 0 ? "transcribir audio" : "otros usos"),
       llamadas: f.llamadas,
       reutilizadas: f.reutilizadas,
+      fallidas: f.fallidas,
       costeUsd: Math.round(Number(f.coste_usd) * 10000) / 10000,
       minutosAudio: Math.round((f.segundos_audio / 60) * 10) / 10,
     });
   }
   total.costeUsd = Math.round(total.costeUsd * 10000) / 10000;
   total.minutosAudio = Math.round(total.minutosAudio * 10) / 10;
-  return { desde: limites.desde, hasta: limites.hasta, total, porAccion };
+  const fallos = filasFallos.map((f) => ({ causa: f.causa, llamadas: f.llamadas, ultima: f.ultima }));
+  return { desde: limites.desde, hasta: limites.hasta, total, porAccion, fallos };
 }
+
+const codigoPg = (err) => err?.original?.code ?? err?.parent?.code;
 
 export const GET = withTenant(async (request, rc, ctx) => {
   try {
@@ -83,11 +129,20 @@ export const GET = withTenant(async (request, rc, ctx) => {
       `SELECT to_char(min(created_at) AT TIME ZONE 'Europe/Madrid', 'YYYY-MM-DD') AS desde FROM master.ai_uso WHERE tenant_id = :tenantId`,
       { replacements: { tenantId } }
     );
-    const [mes, anterior] = await Promise.all([tramo(sequelize, tenantId, 0), tramo(sequelize, tenantId, 1)]);
+    const tramos = (conError) => Promise.all([tramo(sequelize, tenantId, 0, conError), tramo(sequelize, tenantId, 1, conError)]);
+    let mes, anterior;
+    try {
+      [mes, anterior] = await tramos(true);
+    } catch (err) {
+      // 42703: falta la columna `error` (desplegado sin `scripts/migrate-ai-uso.js`).
+      if (codigoPg(err) !== "42703") throw err;
+      console.warn("[ia:consumo] master.ai_uso sin la columna error: falta lanzar scripts/migrate-ai-uso.js; se enseña sin las fallidas");
+      [mes, anterior] = await tramos(false);
+    }
     return ok({ proveedor: getTenantProveedorIa(ctx), modelo: getTenantIaModel(ctx), desdeCuando: primera?.desde ?? null, mes, anterior });
   } catch (err) {
     // Sin la tabla migrada (42P01) la pantalla no debe caerse: se contesta vacío.
-    if (err?.original?.code === "42P01" || err?.parent?.code === "42P01") {
+    if (codigoPg(err) === "42P01") {
       return ok({ proveedor: getTenantProveedorIa(ctx), modelo: getTenantIaModel(ctx), desdeCuando: null, mes: null, anterior: null, sinTabla: true });
     }
     return serverError(err);
