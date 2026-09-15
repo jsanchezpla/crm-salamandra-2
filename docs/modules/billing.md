@@ -1835,6 +1835,13 @@ nunca confiando en que el frontend respete el rol.
   de cliente: stats (Facturado, Cobrado, Pendiente, Margen) + listado de las
   10 últimas facturas del cliente. Si el módulo billing no está activo, el
   endpoint devuelve `403` y la sección no se renderiza (silenciosa).
+- Pestaña gemela **Cobros** (15/09/2026, Rodrigo):
+  `components/billing/ClientPaymentsSection.jsx` + `GET /api/clients/[id]/payments`.
+  Lo que PAGÓ (fecha, mes, paciente, forma de pago, estado, factura), con los
+  cobros suyos por los dos caminos (`payments.client_id` o el de su factura),
+  filtro por año y tope de 1.000. Mismo gate que Facturación. En Aumenta los
+  cobros solo existen desde el 28/08/2026: lo anterior de Organízate llegó
+  como facturas, no como cobros.
 - En el alta/edición de factura, si el cliente seleccionado no tiene
   `fiscalName` o `taxId`, aparece una banda ámbar con enlace a la ficha del
   cliente. Permite guardar como borrador, pero no emitir.

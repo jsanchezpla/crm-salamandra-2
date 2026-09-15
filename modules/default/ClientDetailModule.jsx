@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import ClientBillingSection from "../../components/billing/ClientBillingSection.jsx";
+import ClientPaymentsSection from "../../components/billing/ClientPaymentsSection.jsx";
 import ClientModulesSection from "../../components/clients/ClientModulesSection.jsx";
 import ClientContactMethodsSection from "../../components/clients/ClientContactMethodsSection.jsx";
 import ClientFiscalSection from "../../components/clients/ClientFiscalSection.jsx";
@@ -112,6 +113,9 @@ function pestanasDe(textos) {
     // se le presta al paciente.
     { key: "pautas", label: "Pautas" },
     { key: "facturacion", label: "Facturación" },
+    // Lo que ha PAGADO (15/09/2026, Rodrigo): gemela de Facturación, que es lo
+    // que se le emitió. Sin `billing` la sección no pinta y la pestaña se va.
+    { key: "cobros", label: "Cobros" },
   ];
 }
 
@@ -1084,6 +1088,10 @@ export default function ClientDetailModule({
 
         <PanelPestana clave="facturacion" activo={tab === "facturacion"} onEstado={marcarPanel}>
           <ClientBillingSection clientId={id} />
+        </PanelPestana>
+
+        <PanelPestana clave="cobros" activo={tab === "cobros"} onEstado={marcarPanel}>
+          <ClientPaymentsSection clientId={id} />
         </PanelPestana>
       </div>
     </div>
