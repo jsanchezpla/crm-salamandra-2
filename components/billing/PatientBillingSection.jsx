@@ -100,7 +100,9 @@ export default function PatientBillingSection({ patientId, clientId }) {
      * con paciente tiene factura detrás— y un fallo aquí no puede dejar la
      * sección sin facturas: se traga y se queda la lista vacía.
      */
-    fetch(`/api/billing/payments?patientId=${patientId}&limit=100&sortBy=paidAt&sortDir=desc`, { cache: "no-store" })
+    // Con los de la familia sin hijo concreto (15/09/2026, AV-0129): como las
+    // facturas de arriba, y marcados igual.
+    fetch(`/api/billing/payments?patientId=${patientId}&conLasDeLaFamilia=1&limit=100&sortBy=paidAt&sortDir=desc`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (alive && d?.ok) setPagos(d.data.payments || []); })
       .catch(() => {});
@@ -120,6 +122,7 @@ export default function PatientBillingSection({ patientId, clientId }) {
     const suyos = pagos.filter((p) => p.status === "completed");
     return { n: suyos.length, total: suyos.reduce((t, p) => t + Number(p.amount || 0), 0) };
   }, [pagos]);
+  const pagosDeLaFamilia = useMemo(() => pagos.filter(esDeLaFamilia).length, [pagos]);
 
   // Pagadores frecuentes del paciente (calculados de sus facturas): permiten
   // crear una factura para un pagador recurrente con un clic, sin re-teclearlo.
@@ -309,6 +312,14 @@ export default function PatientBillingSection({ patientId, clientId }) {
             </span>
           )}
         </div>
+        {pagosDeLaFamilia > 0 && (
+          <p className="text-[11px] text-neutral-500 mb-2">
+            {pagosDeLaFamilia === 1
+              ? "Uno de estos pagos es de la familia y no dice de qué hijo es"
+              : `${pagosDeLaFamilia} de estos pagos son de la familia y no dicen de qué hijo son`}
+            : salen en la ficha de cada hermano.
+          </p>
+        )}
         {pagos.length === 0 ? (
           <p className="text-[11px] text-neutral-400">Sin pagos registrados a nombre de este paciente.</p>
         ) : (
@@ -317,6 +328,14 @@ export default function PatientBillingSection({ patientId, clientId }) {
               <li key={p.id} className="py-2 flex items-center gap-3 text-xs">
                 <span className="text-neutral-400 shrink-0 tabular-nums">{fmt(p.paidAt)}</span>
                 <span className="text-neutral-500 shrink-0">{METODO[p.method] || p.method || "—"}</span>
+                {esDeLaFamilia(p) && (
+                  <span
+                    className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 shrink-0"
+                    title="Cobro de la familia que no dice de qué hijo es (por ejemplo, de una cuota sin paciente). Sale en la ficha de cada hermano."
+                  >
+                    de la familia
+                  </span>
+                )}
                 {/* De qué mes es. Es lo que convierte una lista de importes en
                     una respuesta a «¿ha pagado septiembre?». */}
                 {p.periodMonth && (

@@ -9,6 +9,7 @@ import { urlPanelStripe } from "../../../../lib/billing/cobroDesdeStripe.js";
 import { whereDeBusquedaCobros, joinsSinColumnas } from "../../../../lib/billing/busquedaCobros.js";
 import { billingHasPatients } from "../../../../lib/billing/patientLink.js";
 import { dondeEstaElCobroDe } from "../../../../lib/billing/cobroDeCuota.js";
+import { whereFacturasDelPaciente } from "../../../../lib/billing/facturasDelPaciente.js";
 import { decidirCobroDelPendiente, pendienteQueCasa } from "../../../../lib/billing/cobroParcial.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -34,7 +35,23 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
      * factura detrás: allí no aparecía ni uno.
      */
     const pacienteFiltro = searchParams.get("patientId");
-    if (pacienteFiltro && UUID_RE.test(pacienteFiltro)) where.patientId = pacienteFiltro;
+    if (pacienteFiltro && UUID_RE.test(pacienteFiltro)) {
+      /*
+       * `conLasDeLaFamilia=1` (15/09/2026, AV-0129 de Aumenta): además de los
+       * suyos, los cobros de su familia que no dicen de qué hijo son —los de una
+       * cuota sin paciente—, con la MISMA regla que las facturas
+       * (`lib/billing/facturasDelPaciente.js`). Rosa buscaba los pagos de un niño
+       * en su ficha y no salía ninguno: los de septiembre eran de la familia.
+       * La familia se saca del paciente, nunca del que pregunta.
+       */
+      let familia = null;
+      if (searchParams.get("conLasDeLaFamilia") === "1" && tenantModels.Patient) {
+        const p = await tenantModels.Patient.findByPk(pacienteFiltro, { attributes: ["id", "clientId"] });
+        familia = p?.clientId ?? null;
+      }
+      // En `Op.and` y no suelto: la búsqueda de abajo también usa `Op.or`.
+      where[Op.and] = [whereFacturasDelPaciente({ patientId: pacienteFiltro, clientId: familia, conLasDeLaFamilia: Boolean(familia), Op })];
+    }
     // Búsqueda en el SERVIDOR (31/08/2026): el filtro del navegador solo veía
     // los 100 cargados. La regla, en lib/billing/busquedaCobros.js.
     // El paciente del cobro solo se une donde hay tabla de pacientes (Aumenta):
