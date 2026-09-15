@@ -444,6 +444,38 @@ Su herramienta es **`scripts/buzon-triaje.mjs`**, y conviene saber tres cosas:
   que harían y salen. `responder` le manda un mensaje a una persona de carne y
   hueso que no se puede desenviar.
 
+## Escribirle nosotros a una persona (15/09/2026)
+
+Rodrigo: «quiero poder escribir a cada empleado de cada tenant desde el buzón
+sin necesidad de que me hayan abierto un ticket». En `/admin/buzon`, el botón
+**«Escribir a una persona»** abre `components/admin/EscribirAUnaPersona.jsx`:
+cliente y persona en dos desplegables con buscador, asunto, mensaje y hasta 3
+capturas, igual que el formulario de Ayuda.
+
+- **Es un aviso más**, no otra tabla: `POST /api/admin/buzon/escribir`
+  (multipart; el `GET` da los clientes y, con `?tenantId`, sus personas) crea
+  la fila con `crearAvisoDeSalamandra` y `usuario_*` = el DESTINATARIO. Se marca
+  en `contexto.origen = "salamandra"` (con `contexto.firmante`), no en una
+  columna, para no abrir la ventana de `faltaLaTabla` en `/ayuda`;
+  `limpiarContexto` no deja que el navegador del cliente escriba `origen`.
+  `serializarAviso` lo saca como `deSalamandra` + `firmante`, y las dos
+  pantallas firman el primer texto como nuestro.
+- **Nace «contestado y sin ver»**: `respondido_at` puesto y `visto_cliente_at`
+  vacío, así que le salen el «Nueva respuesta», el punto del menú y la portada;
+  `avisarEnSuCrm` le toca la campana con «Salamandra te ha escrito». No sale
+  correo. `cliente_escribio_at` vacío: lo nuestro no enciende nuestra campana;
+  si contesta, sí.
+- **A quién**: `lib/buzon/destinatarios.js` — clientes activos sin demos ni
+  `salamandra_solutions`; personas = `master.users` del cliente sin las de solo
+  back-office, con el nombre de su ficha de equipo (LECTURA best-effort de su
+  schema). El POST comprueba que la persona es de ese cliente.
+- **Lo ve su equipo**, como todo lo de Ayuda desde el 02/09/2026 (AV-0015); el
+  «Nueva respuesta» y la campana, solo la persona.
+- Desde la terminal: `TRIAJE_ACCION=escribir` en `scripts/buzon-triaje.mjs`
+  (`TRIAJE_CLIENTE`, `TRIAJE_PARA` = usuario, correo o nombre, `TRIAJE_ASUNTO`,
+  `TRIAJE_TEXTO`, `TRIAJE_AUTOR`; ensayo sin `TRIAJE_CONFIRMAR=1`).
+- Auditoría `buzon.aviso_escrito`, con la referencia y el cliente, sin texto.
+
 ## Lo que NO hace
 
 - No borra desde ninguna pantalla. Lo que caduca se lo lleva `podar-buzon.js`,

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { anchoPanel } from "@/components/admin/anchoPanel.js";
+import EscribirAUnaPersona from "@/components/admin/EscribirAUnaPersona.jsx";
 
 import { EVENTO_PENDIENTES } from "../../../lib/buzon/buzon.js";
 
@@ -234,6 +235,7 @@ export default function BuzonPage() {
   const [tab, setTab] = useState("activos");
   const [q, setQ] = useState("");
   const [abierto, setAbierto] = useState(null);
+  const [escribiendo, setEscribiendo] = useState(false);
 
   const cargar = useCallback(async () => {
     try {
@@ -312,6 +314,16 @@ export default function BuzonPage() {
         pantalla; lo que se marque como <b>nota</b>, no.
       </p>
 
+      {/* Escribirle nosotros a cualquiera, sin que haya abierto nada (15/09/2026). */}
+      <button
+        onClick={() => setEscribiendo(true)}
+        disabled={datos.soloLectura}
+        className="mt-5 text-[13px] px-4 py-2 rounded cursor-pointer font-medium text-white disabled:opacity-40"
+        style={{ background: "var(--ok)" }}
+      >
+        Escribir a una persona →
+      </button>
+
       {datos.soloLectura && (
         <div
           className="mt-5 text-[12px] rounded px-3 py-2.5"
@@ -381,6 +393,7 @@ export default function BuzonPage() {
                           {a.ref}
                         </span>
                         {a.bloquea && <Chip nivel="amber">Le bloquea</Chip>}
+                        {a.deSalamandra && <Chip nivel="green">Le escribimos</Chip>}
                         {/* Antes esto era `!a.leidoAt`, o sea «no lo hemos
                             abierto NUNCA», y por eso un cliente podía insistir
                             tres veces en un hilo ya visto sin que la fila se
@@ -396,6 +409,7 @@ export default function BuzonPage() {
                         {a.asunto}
                       </div>
                       <div className="text-[11px] mt-0.5" style={{ color: "var(--tenue)" }}>
+                        {a.deSalamandra ? `${a.firmante} → ` : ""}
                         {a.usuarioNombre || a.usuarioEmail || "—"} · {fechaHora(a.createdAt)}
                         {a.asignadoA && ` · ${a.asignadoA}`}
                       </div>
@@ -417,6 +431,17 @@ export default function BuzonPage() {
           prioridades={datos.prioridades}
           onCerrar={() => {
             setAbierto(null);
+            cargar();
+          }}
+        />
+      )}
+
+      {escribiendo && (
+        <EscribirAUnaPersona
+          onCerrar={() => setEscribiendo(false)}
+          onEnviado={(id) => {
+            setEscribiendo(false);
+            setAbierto(id);
             cargar();
           }}
         />
@@ -648,7 +673,7 @@ function Detalle({ avisoId, asignables, estados, prioridades, onCerrar }) {
                 style={{ background: "var(--panel-alto)", color: "var(--dim)" }}
               >
                 <div>
-                  <b>Quién</b>: {aviso.usuarioNombre || "—"} · {aviso.usuarioEmail || "sin correo"} ·{" "}
+                  <b>{aviso.deSalamandra ? `Se lo escribió ${aviso.firmante} a` : "Quién"}</b>: {aviso.usuarioNombre || "—"} · {aviso.usuarioEmail || "sin correo"} ·{" "}
                   {aviso.usuarioRol || "—"}
                 </div>
                 {/* El churro del user-agent NO se pinta (Jorge, 13/08/2026): son
@@ -666,7 +691,7 @@ function Detalle({ avisoId, asignables, estados, prioridades, onCerrar }) {
 
               <div>
                 <div className="text-[11px] mb-1" style={{ color: "var(--tenue)" }}>
-                  {aviso.usuarioNombre || "El cliente"} · {fechaHora(aviso.createdAt)}
+                  {aviso.deSalamandra ? aviso.firmante : aviso.usuarioNombre || "El cliente"} · {fechaHora(aviso.createdAt)}
                 </div>
                 <p className="text-[13px] whitespace-pre-wrap leading-relaxed" style={{ color: "var(--text)" }}>
                   {aviso.cuerpo}

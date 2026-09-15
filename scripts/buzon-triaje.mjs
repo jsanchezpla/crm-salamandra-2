@@ -254,5 +254,86 @@ if (ACCION === "responder") {
   await salir(0);
 }
 
-console.error(`No sé qué es «${ACCION}». Usa listar, marcar o responder.`);
+/*
+ * `escribir` (15/09/2026): lo mismo que el botón «Escribir a una persona» del
+ * panel, desde la terminal. Abre un aviso NUESTRO para una persona que no ha
+ * escrito nada.
+ *   TRIAJE_CLIENTE  slug del cliente (`aumenta`)
+ *   TRIAJE_PARA     su usuario de entrada, su correo o su nombre de equipo
+ *   TRIAJE_ASUNTO   el asunto
+ *   TRIAJE_TEXTO    el mensaje
+ *   TRIAJE_AUTOR    quién firma; por defecto «Salamandra»
+ */
+if (ACCION === "escribir") {
+  const { validarAvisoDeSalamandra } = await desde("lib/buzon/buzon.js");
+  const { crearAvisoDeSalamandra } = await desde("lib/buzon/buzonStore.js");
+  const { personasDelCliente } = await desde("lib/buzon/destinatarios.js");
+  const { Tenant } = getMasterModels();
+
+  const slug = (process.env.TRIAJE_CLIENTE || "").trim();
+  const para = (process.env.TRIAJE_PARA || "").trim().toLowerCase();
+  const tenant = slug ? await Tenant.findOne({ where: { slug, status: "active" } }) : null;
+  if (!tenant) {
+    console.error(`No hay ningún cliente activo «${slug}».`);
+    await salir(1);
+  }
+  const personas = await personasDelCliente(tenant);
+  const candidatas = personas.filter((p) =>
+    [p.usuario, p.correo, p.nombre].some((v) => v && v.toLowerCase() === para)
+  );
+  if (candidatas.length !== 1) {
+    console.error(`«${para}» casa con ${candidatas.length} personas de ${slug}. Estas son las que hay:`);
+    for (const p of personas) console.error(`  ${p.nombre ?? "—"} · ${p.usuario} · ${p.rol}`);
+    await salir(1);
+  }
+  const persona = candidatas[0];
+  const autor = process.env.TRIAJE_AUTOR || "Salamandra";
+
+  const v = validarAvisoDeSalamandra({
+    tenantId: tenant.id,
+    usuarioId: persona.id,
+    asunto: process.env.TRIAJE_ASUNTO,
+    cuerpo: process.env.TRIAJE_TEXTO,
+  });
+  if (!v.ok) {
+    console.error(v.error);
+    await salir(1);
+  }
+
+  if (!CONFIRMAR) {
+    console.log(`[ensayo] Para ${persona.nombre ?? persona.usuario} (${tenant.name}), firmado por ${autor}`);
+    console.log(`Asunto: ${v.limpio.asunto}`);
+    console.log("──────────────────────────────────────");
+    console.log(v.limpio.cuerpo);
+    console.log("──────────────────────────────────────");
+    console.log("ESTO LO VA A LEER UNA PERSONA Y NO SE PUEDE DESENVIAR.");
+    console.log("Para mandarlo: TRIAJE_CONFIRMAR=1");
+    await salir(0);
+  }
+
+  const aviso = await crearAvisoDeSalamandra({
+    tenant,
+    destinatario: { id: persona.id, email: persona.usuario, nombre: persona.nombre, rol: persona.rol },
+    limpio: v.limpio,
+    firmante: autor,
+  });
+  const nosotros = await Tenant.findOne({ where: { slug: "salamandra_solutions" }, attributes: ["id"] });
+  await auditar({
+    tenantId: nosotros?.id ?? null,
+    userId: null,
+    action: "buzon.aviso_escrito",
+    entity: "BuzonAviso",
+    entityId: aviso.id,
+    before: null,
+    after: { ref: referencia(aviso.numero), tenantSlug: tenant.slug, via: "terminal" },
+    ip: null,
+  });
+  const avisado = await avisarEnSuCrm({ aviso, titulo: "Salamandra te ha escrito" });
+
+  console.log(`✓ ${referencia(aviso.numero)} escrito a ${persona.nombre ?? persona.usuario} (${tenant.slug})`);
+  console.log(avisado?.ok ? "✓ campana encendida en su CRM" : `· sin campana (${avisado?.motivo ?? "desconocido"})`);
+  await salir(0);
+}
+
+console.error(`No sé qué es «${ACCION}». Usa listar, marcar, responder o escribir.`);
 await salir(2);

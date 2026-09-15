@@ -53,6 +53,7 @@ import {
   referencia,
   estadoTrasMensaje,
   validarCambio,
+  validarAvisoDeSalamandra,
   serializarMensaje,
   serializarAdjunto,
   serializarAviso,
@@ -701,6 +702,9 @@ describe("serializarAviso: al cliente le llega EXACTAMENTE esto, ni un campo má
       asunto: "No carga la lista",
       cuerpo: "Al entrar en Clientes la lista se queda en blanco.",
       bloquea: true,
+      // 15/09/2026: si lo abrimos nosotros, y quién lo firma. Este lo abrió el cliente.
+      deSalamandra: false,
+      firmante: null,
       estado: "enviado",
       estadoLabel: "Enviado al registro",
       estadoNivel: "blue",
@@ -866,5 +870,37 @@ describe("serializarAviso: al cliente le llega EXACTAMENTE esto, ni un campo má
     assert.deepEqual(pelado.mensajes, []);
     assert.deepEqual(pelado.adjuntos, []);
     assert.equal(pelado.ref, "AV-0008");
+  });
+});
+
+describe("los avisos que abrimos nosotros (15/09/2026)", () => {
+  const T = "11111111-1111-4111-8111-111111111111";
+  const U = "22222222-2222-4222-8222-222222222222";
+
+  it("se marca por contexto.origen, y lo firma quien lo escribió; el del cliente no", () => {
+    const nuestro = serializarAviso(
+      { ...avisoCompleto(), contexto: { origen: "salamandra", firmante: "rodrigo" } },
+      { para: "cliente" }
+    );
+    assert.equal(nuestro.deSalamandra, true);
+    assert.equal(nuestro.firmante, "rodrigo");
+    const suyo = serializarAviso(avisoCompleto(), { para: "cliente" });
+    assert.equal(suyo.deSalamandra, false);
+    assert.equal(suyo.firmante, null);
+  });
+
+  it("sin firmante guardado, firma «Salamandra»", () => {
+    const a = serializarAviso({ ...avisoCompleto(), contexto: { origen: "salamandra" } }, { para: "salamandra" });
+    assert.equal(a.firmante, "Salamandra");
+  });
+
+  it("valida cliente, persona, asunto y mensaje, con frase para cada uno", () => {
+    const bien = { tenantId: T, usuarioId: U, asunto: "Guía", cuerpo: "Hola" };
+    assert.equal(validarAvisoDeSalamandra(bien).ok, true);
+    assert.deepEqual(validarAvisoDeSalamandra({ ...bien, asunto: "  Guía  " }).limpio, bien);
+    assert.match(validarAvisoDeSalamandra({ ...bien, tenantId: "aumenta" }).error, /cliente/);
+    assert.match(validarAvisoDeSalamandra({ ...bien, usuarioId: "" }).error, /persona/);
+    assert.match(validarAvisoDeSalamandra({ ...bien, asunto: "a" }).error, /asunto/);
+    assert.match(validarAvisoDeSalamandra({ ...bien, cuerpo: "   " }).error, /vacío/);
   });
 });

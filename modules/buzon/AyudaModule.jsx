@@ -518,7 +518,9 @@ export default function AyudaModule({ esDemo = false }) {
                           {a.ref} · {fecha(a.createdAt)}
                           {/* Desde el 02/09/2026 se ven los de todo el equipo:
                               cada fila dice de quién es cuando no es tuya. */}
-                          {a.esMio === false && ` · de ${a.usuarioNombre || "un compañero"}`}
+                          {a.deSalamandra
+                            ? ` · de Salamandra${a.esMio === false ? ` para ${a.usuarioNombre || "un compañero"}` : ""}`
+                            : a.esMio === false && ` · de ${a.usuarioNombre || "un compañero"}`}
                           {a.mensajes.length > 0 && ` · ${a.mensajes.length} respuesta${a.mensajes.length > 1 ? "s" : ""}`}
                         </div>
                       </div>
@@ -844,9 +846,21 @@ function Detalle({ avisoId, onVisto, onCerrar }) {
 
               <div>
                 <div className="text-[11px] text-gray-400 mb-1">
-                  {aviso.esMio === false ? aviso.usuarioNombre || "Un compañero" : "Tú"} · {fechaHora(aviso.createdAt)}
+                  {/* Un aviso que abrimos nosotros (15/09/2026) empieza con NUESTRO texto. */}
+                  {aviso.deSalamandra
+                    ? `${aviso.firmante || "Salamandra"} · Salamandra`
+                    : aviso.esMio === false
+                      ? aviso.usuarioNombre || "Un compañero"
+                      : "Tú"}{" "}
+                  · {fechaHora(aviso.createdAt)}
                 </div>
-                <p className="text-[13px] text-gray-800 whitespace-pre-wrap leading-relaxed">{aviso.cuerpo}</p>
+                <p
+                  className={`text-[13px] text-gray-800 whitespace-pre-wrap leading-relaxed ${
+                    aviso.deSalamandra ? "bg-gray-100 rounded-lg px-3 py-2" : ""
+                  }`}
+                >
+                  {aviso.cuerpo}
+                </p>
                 {/* Las del alta: las que NO cuelgan de ningún mensaje. */}
                 <Capturas lista={(aviso.adjuntos ?? []).filter((a) => !a.mensajeId)} onVer={setViendo} />
               </div>
