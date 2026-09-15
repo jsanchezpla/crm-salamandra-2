@@ -64,9 +64,12 @@ describe("morosidad no recalcula el mes: lee los pendientes", () => {
     assert.ok(consulta.includes("periodMonth"), "los pendientes hay que pedirlos del MES que se mira");
     // Y el esperado se arma con lo cobrado + lo pendiente, para que la resta de
     // `loQueFaltaDelMes` devuelva exactamente el pendiente.
-    const esperado = morosidad.slice(morosidad.indexOf("const esperadoDelMes"));
-    assert.ok(esperado.includes("pendienteDelMes"), "el esperado tiene que salir del pendiente");
-    assert.ok(esperado.includes("cobradoDelMes"), "y sumarle lo que ya entró");
+    // Desde el 15/09/2026 se cuenta por paciente, con `cobrado` y `pendiente`.
+    const i = morosidad.indexOf("const esperado =");
+    assert.ok(i >= 0, "no encuentro el esperado del mes");
+    const esperado = morosidad.slice(i, morosidad.indexOf("\n", i));
+    assert.ok(esperado.includes("pendiente"), "el esperado tiene que salir del pendiente");
+    assert.ok(esperado.includes("cobrado + pendiente"), "y sumarle lo que ya entró");
   });
 
   it("la generación SÍ sigue pasando las citas en todas sus llamadas", () => {

@@ -10,6 +10,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  cobroDelPaciente,
+  cuotasDelPaciente,
+  pagadoresDelPaciente,
   etiquetaDeMoroso,
   filtrarMorosos,
   repartirMorosos,
@@ -77,11 +80,55 @@ test("sin texto no se filtra nada", () => {
   assert.equal(filtrarMorosos(lista, "   ").length, 2);
 });
 
-test("el resumen cuenta lo que hay en cada bloque, en singular y en plural", () => {
-  const r = resumenDeMorosidad({ conCuota: [CON_CUOTA], sinCuota: [SIN_CUOTA, CON_CUOTA_MESES], alDia: 274, familias: 959 });
-  assert.equal(r.conCuota, "1 familia debe este mes");
-  assert.equal(r.sinCuota, "2 familias con paciente activo y sin cuota escrita");
-  assert.equal(r.alDia, "274 al día · 959 familias con paciente activo");
+test("el resumen cuenta pacientes, en singular y en plural", () => {
+  const r = resumenDeMorosidad({ conCuota: [CON_CUOTA], sinCuota: [SIN_CUOTA, CON_CUOTA_MESES], alDia: 274, pacientes: 1049 });
+  assert.equal(r.conCuota, "1 paciente debe este mes");
+  assert.equal(r.sinCuota, "2 pacientes activos sin cuota escrita");
+  assert.equal(r.alDia, "274 al día · 1049 pacientes activos");
+});
+
+test("el buscador encuentra al paciente por el nombre de su familia", () => {
+  const nino = { patientId: "p1", name: "Lucas Pérez", familia: "Marta Gómez", tieneCuota: true };
+  assert.equal(filtrarMorosos([nino], "gomez").length, 1);
+  assert.equal(filtrarMorosos([nino], "lucas").length, 1);
+});
+
+// ── Por paciente (15/09/2026, Rodrigo) ──────────────────────────────────────
+const LUCAS = { id: "p1", clientId: "f1" };
+const ANA = { id: "p2", clientId: "f1" };
+
+test("la cuota con paciente es solo suya; la de la familia, de todos sus hijos", () => {
+  const cuotas = [
+    { id: "c1", clientId: "f1", patientId: "p1" },
+    { id: "c2", clientId: "f1", patientId: null },
+    { id: "c3", clientId: "f2", patientId: null },
+  ];
+  assert.deepEqual(cuotasDelPaciente(LUCAS, cuotas).map((c) => c.id), ["c1", "c2"]);
+  assert.deepEqual(cuotasDelPaciente(ANA, cuotas).map((c) => c.id), ["c2"]);
+});
+
+test("pagar la de un hermano no deja al otro al día", () => {
+  // El fallo que se pidió arreglar: la familia salía al día con un solo cobro.
+  const pagadores = pagadoresDelPaciente(ANA, []);
+  const cobroDeLucas = { clientId: "f1", patientId: "p1" };
+  assert.equal(cobroDelPaciente(LUCAS, cobroDeLucas, pagadoresDelPaciente(LUCAS, [])), true);
+  assert.equal(cobroDelPaciente(ANA, cobroDeLucas, pagadores), false);
+});
+
+test("un cobro de la familia sin paciente cuenta para los dos hermanos", () => {
+  const cobro = { clientId: "f1", patientId: null };
+  assert.equal(cobroDelPaciente(LUCAS, cobro, pagadoresDelPaciente(LUCAS, [])), true);
+  assert.equal(cobroDelPaciente(ANA, cobro, pagadoresDelPaciente(ANA, [])), true);
+  assert.equal(cobroDelPaciente(LUCAS, { clientId: "f9", patientId: null }, pagadoresDelPaciente(LUCAS, [])), false);
+});
+
+test("quien paga la cuota del niño cuenta como pagador suyo", () => {
+  // La fundación que paga la cuota de Lucas: su cobro sin paciente es de Lucas.
+  const cuotas = [{ clientId: "f1", payerClientId: "fundacion", patientId: "p1" }];
+  const pagadores = pagadoresDelPaciente(LUCAS, cuotas);
+  assert.deepEqual([...pagadores].sort(), ["f1", "fundacion"]);
+  assert.equal(cobroDelPaciente(LUCAS, { clientId: "fundacion", patientId: null }, pagadores), true);
+  assert.equal(cobroDelPaciente(ANA, { clientId: "fundacion", patientId: null }, pagadoresDelPaciente(ANA, [])), false);
 });
 
 test("aguanta que no le pasen nada", () => {

@@ -945,7 +945,7 @@ export default function CobrosPage() {
       conCuota: debenConCuota,
       sinCuota: debenSinCuota,
       alDia: morosidad?.alDia ?? 0,
-      familias: morosidad?.familias ?? 0,
+      pacientes: morosidad?.pacientes ?? 0,
     }),
     [debenConCuota, debenSinCuota, morosidad]
   );
@@ -1305,7 +1305,7 @@ export default function CobrosPage() {
                     {textoMorosidad.conCuota}
                   </div>
                   <ul className="divide-y divide-neutral-50 max-h-64 overflow-y-auto">
-                    {debenConCuota.map((m) => <FilaMoroso key={m.clientId} m={m} />)}
+                    {debenConCuota.map((m) => <FilaMoroso key={m.patientId} m={m} />)}
                   </ul>
                 </>
               )}
@@ -1324,7 +1324,7 @@ export default function CobrosPage() {
                     </div>
                   </div>
                   <ul className="divide-y divide-neutral-50 max-h-64 overflow-y-auto">
-                    {debenSinCuota.map((m) => <FilaMoroso key={m.clientId} m={m} />)}
+                    {debenSinCuota.map((m) => <FilaMoroso key={m.patientId} m={m} />)}
                   </ul>
                 </>
               )}
@@ -2166,11 +2166,12 @@ export default function CobrosPage() {
 }
 
 /**
- * Una familia de la lista de morosidad (09/09/2026).
+ * Un paciente de la lista de morosidad (09/09/2026; por paciente desde el
+ * 15/09/2026).
  *
- * Lo mismo para las dos poblaciones: quien lo mira quiere el nombre, cómo
- * llamarle y cuánto (o, si no se sabe, por qué no se sabe). Lo que cambia es la
- * etiqueta, y esa la decide `etiquetaDeMoroso`, con su prueba.
+ * Lo mismo para las dos poblaciones: quien lo mira quiere el nombre, a qué
+ * familia llamar y cuánto (o, si no se sabe, por qué no se sabe). Lo que cambia
+ * es la etiqueta, y esa la decide `etiquetaDeMoroso`, con su prueba.
  */
 function FilaMoroso({ m }) {
   const etiqueta = etiquetaDeMoroso(m);
@@ -2183,9 +2184,16 @@ function FilaMoroso({ m }) {
   }[etiqueta.tono];
   return (
     <li className="px-4 py-2.5 flex items-center gap-3 flex-wrap">
-      <Link href={`/clientes/${m.clientId}`} className="text-xs text-[var(--color-primary,#1B3A2D)] hover:underline min-w-0 flex-1 truncate">
-        {m.name}
-      </Link>
+      <div className="min-w-0 flex-1 flex items-baseline gap-2">
+        <Link href={`/pacientes/${m.patientId}`} className="text-xs text-[var(--color-primary,#1B3A2D)] hover:underline truncate">
+          {m.name}
+        </Link>
+        {m.familia && (
+          <Link href={`/clientes/${m.clientId}`} className="text-[11px] text-neutral-400 hover:underline truncate">
+            {m.familia}
+          </Link>
+        )}
+      </div>
       {/* De qué es lo que debe, que es la otra mitad de lo que pedía Rosa. Solo
           cuando hay cuota: sin ella no hay concepto que enseñar. */}
       {m.conceptos?.length > 0 && (
@@ -2194,6 +2202,13 @@ function FilaMoroso({ m }) {
         </span>
       )}
       <span className="text-[11px] text-neutral-500">{m.phone || m.email || "sin contacto"}</span>
+      {/* Un cobro o una cuota de la familia sin hijo concreto cuenta para
+          todos sus hermanos: la misma deuda sale en varias filas. */}
+      {m.compartido && (
+        <span className="text-[10px] text-neutral-400" title="Hay cobros de la familia sin paciente concreto: cuentan para todos sus hermanos">
+          compartido con hermanos
+        </span>
+      )}
       <span className={`text-[11px] px-2 py-0.5 rounded-full ${color}`}>{etiqueta.texto}</span>
     </li>
   );
