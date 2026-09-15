@@ -25,6 +25,7 @@ import { fmtMoney, fmtDate } from "../_components/Kpi.jsx";
 import { cuotaDeBaja, bajaTrasMeses, mesesDeTramo, mesVigente, hoyVigente, mesLegible } from "../../../../lib/billing/cuotas.js";
 import { ivaPorDefecto } from "../../../../lib/billing/ivaPorDefecto.js";
 import { cuotaCasaCon, rotuloPacienteDeCuota } from "../../../../lib/billing/cuotaPacientes.js";
+import { admiteBajaDePaciente } from "../../../../lib/billing/bajaDePaciente.js";
 import { coincidePorNombre } from "../../../../lib/utils/busqueda.js";
 
 const inputCls =
@@ -104,6 +105,8 @@ export default function CuotasPage() {
   const [showAlta, setShowAlta] = useState(false);
   const [editando, setEditando] = useState(null); // cuota que se edita
   const [showGenerar, setShowGenerar] = useState(false);
+  // La cuota de familia a la que se le da de baja a UN paciente (AV-0145).
+  const [bajaPaciente, setBajaPaciente] = useState(null);
 
   // Preguntar dentro del CRM y no con el diálogo del navegador (12/08/2026,
   // Rodrigo): Chrome deja silenciar los `confirm`, y silenciado devuelve
@@ -297,6 +300,13 @@ export default function CuotasPage() {
   const totalMes = visibles.filter((c) => c.active).reduce((s, c) => s + importeDe(c), 0);
 
   async function darDeBaja(cuota) {
+    // Una cuota de toda la familia con varios pacientes pregunta primero A
+    // QUIÉN (15/09/2026, AV-0145: quitar a la madre daba de baja también al hijo).
+    if (admiteBajaDePaciente(cuota)) { setBajaPaciente(cuota); return; }
+    await darDeBajaEntera(cuota);
+  }
+
+  async function darDeBajaEntera(cuota) {
     const fecha = window.prompt(
       `Fecha de baja de la cuota de ${cuota.client?.name ?? "esta familia"}.\n\nEl mes de la baja se cobra prorrateado hasta ese día.`,
       hoyIso()
@@ -709,8 +719,168 @@ export default function CuotasPage() {
         <DrawerGenerar onClose={() => setShowGenerar(false)} onDone={() => cargar()} />
       )}
 
+      {bajaPaciente && (
+        <DrawerBajaPaciente
+          cuota={bajaPaciente}
+          porId={porId}
+          onClose={() => setBajaPaciente(null)}
+          onFamiliaEntera={() => { const c = bajaPaciente; setBajaPaciente(null); darDeBajaEntera(c); }}
+          onDone={(msg) => { setBajaPaciente(null); setOkMsg(msg); cargar(); }}
+        />
+      )}
+
       {dialogo}
     </div>
+  );
+}
+
+/* ── Dar de baja a UN paciente de la cuota de la familia (15/09/2026, AV-0145) ─
+ *
+ * Isabel: la madre venía hasta junio, el hijo sigue, y la cuota salía como una
+ * sola fila «toda la familia» que solo se podía dar de baja entera. Aquí se
+ * elige quién se va, qué terapia era la suya y de quién es lo que queda; la
+ * regla (qué se parte y cuándo nace una cuota aparte) está en
+ * `lib/billing/bajaDePaciente.js`.
+ */
+function DrawerBajaPaciente({ cuota, porId, onClose, onFamiliaEntera, onDone }) {
+  const familia = Array.isArray(cuota.familiaPacientes) ? cuota.familiaPacientes : [];
+  const lineas = Array.isArray(cuota.conceptIds) ? cuota.conceptIds.map(String) : [];
+  const pactado = cuota.amount !== null && cuota.amount !== undefined && cuota.amount !== "";
+  const nombre = (p) => [p.firstName, p.lastName].filter(Boolean).join(" ") || "Sin nombre";
+
+  const [quien, setQuien] = useState("");
+  const [quitar, setQuitar] = useState([]);
+  const [queda, setQueda] = useState("");
+  const [fecha, setFecha] = useState(hoyIso());
+  const [importeQueda, setImporteQueda] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Con dos pacientes, lo que queda es del otro: se propone y se puede cambiar.
+  function elegir(id) {
+    setQuien(id);
+    const otros = familia.filter((p) => String(p.id) !== id);
+    setQueda(otros.length === 1 ? String(otros[0].id) : "");
+  }
+
+  async function guardar() {
+    setError(null);
+    setGuardando(true);
+    try {
+      const r = await fetch(`/api/billing/cuotas/${cuota.id}/baja-paciente`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ patientId: quien, quitar, quedaPatientId: queda || null, fecha, importeQueda: pactado ? importeQueda : undefined }),
+      });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || "No se pudo dar de baja");
+      const p = familia.find((x) => String(x.id) === quien);
+      const aparte = j.data?.separada
+        ? ` Su parte hasta el ${fmtDate(j.data.separada.endDate)} queda en una cuota a su nombre, en Bajas.`
+        : "";
+      onDone(`${p ? nombre(p) : "El paciente"} ya no está en la cuota de la familia.${aparte}${colaDelLote(j.data?.cobros)}`);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  const listo = quien && quitar.length > 0 && quitar.length < lineas.length && fecha && (!pactado || importeQueda !== "");
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/40 z-40" onClick={() => !guardando && onClose()} />
+      <aside className="fixed top-14 lg:top-0 right-0 bottom-0 w-full sm:w-[520px] bg-white z-50 shadow-pop overflow-y-auto ink-scroll slide-right">
+        <div className="px-6 pt-6 pb-4 border-b border-neutral-100 flex items-start justify-between gap-3">
+          <div>
+            <div className="eyebrow">Dar de baja</div>
+            <h2 className="font-display text-xl text-neutral-900 mt-1">¿A quién se da de baja?</h2>
+            <p className="text-[11px] text-neutral-400 mt-1">
+              Cuota de {cuota.client?.fiscalName || cuota.client?.name || "la familia"}. Quien siga viniendo mantiene su cuota.
+            </p>
+          </div>
+          <button onClick={onClose} disabled={guardando} className="text-neutral-400 hover:text-neutral-700 text-xl leading-none">×</button>
+        </div>
+
+        <div className="px-6 py-5 space-y-5 text-sm">
+          <div className="space-y-1.5">
+            {familia.map((p) => (
+              <label key={p.id} className="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="quien" checked={quien === String(p.id)} onChange={() => elegir(String(p.id))} />
+                <span className="text-neutral-800">{nombre(p)}</span>
+              </label>
+            ))}
+            <button onClick={onFamiliaEntera} disabled={guardando} className="text-xs text-amber-700 hover:text-amber-900 underline mt-1">
+              Dar de baja a toda la familia
+            </button>
+          </div>
+
+          {quien && (
+            <>
+              <div>
+                <div className="text-[11px] uppercase tracking-wide text-neutral-400 mb-1.5">¿Qué terapia era la suya?</div>
+                {lineas.map((id, i) => (
+                  <label key={`${id}-${i}`} className="flex items-center gap-2 cursor-pointer py-0.5">
+                    <input
+                      type="checkbox"
+                      checked={quitar.includes(i)}
+                      onChange={() => setQuitar((q) => (q.includes(i) ? q.filter((x) => x !== i) : [...q, i]))}
+                    />
+                    <span className="text-neutral-700">{porId.get(id)?.name ?? "Concepto que ya no existe"}</span>
+                    {!pactado && porId.get(id) && (
+                      <span className="text-xs text-neutral-400 tabular">{fmtMoney(Number(porId.get(id).unitPrice || 0))}</span>
+                    )}
+                  </label>
+                ))}
+                {quitar.length > 0 && quitar.length === lineas.length && (
+                  <p className="text-xs text-rose-600 mt-1">Si se quitan todas no queda nadie: da de baja a toda la familia.</p>
+                )}
+              </div>
+
+              <label className="block">
+                <span className="text-[11px] uppercase tracking-wide text-neutral-400">Lo que queda es de</span>
+                <select value={queda} onChange={(e) => setQueda(e.target.value)} className={`${inputCls} mt-1`}>
+                  <option value="">Toda la familia</option>
+                  {familia.filter((p) => String(p.id) !== quien).map((p) => (
+                    <option key={p.id} value={String(p.id)}>{nombre(p)}</option>
+                  ))}
+                </select>
+              </label>
+
+              {pactado && (
+                <label className="block">
+                  <span className="text-[11px] uppercase tracking-wide text-neutral-400">
+                    Importe pactado de {fmtMoney(Number(cuota.amount))}: ¿cuánto paga lo que queda?
+                  </span>
+                  <input type="number" min="0" step="0.01" value={importeQueda} onChange={(e) => setImporteQueda(e.target.value)} className={`${inputCls} mt-1`} />
+                </label>
+              )}
+
+              <label className="block">
+                <span className="text-[11px] uppercase tracking-wide text-neutral-400">Fecha de baja</span>
+                <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className={`${inputCls} mt-1`} />
+                <span className="block text-[11px] text-neutral-400 mt-1">
+                  Lo que ya se cobró no se toca. Si la baja cae en este mes o más adelante, su parte se cobra prorrateada hasta ese día.
+                </span>
+              </label>
+            </>
+          )}
+
+          {error && <div className="px-3 py-2 bg-red-50 border border-red-100 rounded-lg text-xs text-red-600">{error}</div>}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button onClick={onClose} disabled={guardando} className="px-4 py-2 rounded-lg text-xs font-semibold text-neutral-600 hover:bg-neutral-50">Volver</button>
+            <button
+              onClick={guardar}
+              disabled={!listo || guardando}
+              className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white disabled:opacity-40"
+              style={{ background: "var(--color-primary, #1B3A2D)" }}
+            >{guardando ? "Guardando..." : "Dar de baja"}</button>
+          </div>
+        </div>
+      </aside>
+    </>
   );
 }
 

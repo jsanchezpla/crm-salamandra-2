@@ -1401,6 +1401,28 @@ Configuración → Conceptos y cuotas, además, la fila de alta pasa a dos filas
 cuatro columnas: con siete campos en un renglón los rótulos se quedaban en «Im»
 y «me».
 
+## Dar de baja a un paciente de la cuota de la familia (15/09/2026)
+
+AV-0145 de Aumenta: la madre venía a psicología hasta junio y el hijo sigue, y
+su cuota era UNA fila «toda la familia» cuyo único «Dar de baja» apagaba a los
+dos. Ahora «Dar de baja» en una cuota sin paciente, de una familia con más de
+uno y con más de una línea (`admiteBajaDePaciente`), abre un cajón: **a quién**
+(o «toda la familia», que es la baja de siempre), **qué terapia era la suya**
+(por posición: dos hermanos con la misma terapia llevan `[X, X]`), **de quién
+es lo que queda** y la fecha. `POST /api/billing/cuotas/[id]/baja-paciente`
+aplica `planBajaDePaciente` (`lib/billing/bajaDePaciente.js`, prueba
+`_smoke-baja-de-paciente.mjs`):
+
+- La cuota de siempre se queda con las líneas que siguen y con el paciente que
+  queda (el prorrateo pasa a contar SUS citas). Se escribe directo, sin
+  `limpiarCuota`, que quitaría la línea repetida.
+- Lo suyo sale a una cuota nueva a su nombre (con su fecha de baja) **solo si
+  queda algo por cobrarle**: desde el mes en curso y saltando los meses que la
+  familia ya tiene cobrados. Una baja de junio solo quita la línea.
+- Con importe pactado se pregunta cuánto paga lo que queda; la diferencia va a
+  la cuota aparte.
+- Después, `sincronizarCobrosDelTramo` de las dos, como al editar.
+
 ## Una factura por paciente, y partir la de la familia (06/09/2026)
 
 Rodrigo: «es importante que se pueda editar una factura por si se le ha
