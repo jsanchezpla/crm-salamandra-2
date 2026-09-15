@@ -43,17 +43,18 @@ const con =
   (k) =>
     modulos.includes(k);
 
-describe("los tres estados son los de la columna, y no más", () => {
+describe("los estados son los de la columna, y no más", () => {
   it("son exactamente los del ENUM de clients.status", () => {
-    // Si aquí apareciera un cuarto, la consulta reventaría: `status` es un ENUM
-    // de PostgreSQL y no acepta valores de fuera.
-    assert.deepEqual(ESTADOS_FICHA, ["active", "prospect", "inactive"]);
+    // Si aquí apareciera uno nuevo, la consulta reventaría: `status` es un ENUM
+    // de PostgreSQL y no acepta valores de fuera. «En pausa» (15/09/2026) lo
+    // añade migrate-clients-estado-pausa.js.
+    assert.deepEqual(ESTADOS_FICHA, ["active", "paused", "prospect", "inactive"]);
   });
 
   it("el selector los da en orden y con rótulo", () => {
     assert.deepEqual(
       estadosDeFicha().map((e) => e.label),
-      ["Activo", "No vino", "Baja"]
+      ["Activo", "En pausa", "No vino", "Baja"]
     );
   });
 

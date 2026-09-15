@@ -27,7 +27,7 @@ import { useCallback, useEffect, useState } from "react";
 import SpecialtyPicker from "../clinica/SpecialtyPicker.jsx";
 import { PARENTESCOS, PARENTESCO_ES_EL_CLIENTE, partirNombre } from "../../lib/clients/formularioAlta.js";
 
-const STATUS_LABEL = { active: "Activo", paused: "En pausa", discharged: "Alta" };
+const STATUS_LABEL = { active: "Activo", paused: "En pausa", discharged: "Baja" };
 
 // Sin contrato: desde el sprint 2026-07 (punto 1.1) el contrato es de la
 // FAMILIA y se sube en la sección "Contrato" de esta misma ficha, no por

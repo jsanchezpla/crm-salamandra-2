@@ -497,7 +497,39 @@ cliente», así que el estado va ahí. Los rótulos, en `lib/clients/estados.js`
 | --- | --- | --- |
 | **Activo** | `active` | Viene, o se cuenta con que venga |
 | **No vino** | `prospect` | Llamó o dejó sus datos y nunca llegó a empezar |
+| **En pausa** | `paused` | Vino el curso pasado y en este todavía no (15/09/2026) |
 | **Baja** | `inactive` | Vino y ya no viene |
+
+### Activo / En pausa / Baja por actividad (15/09/2026, Rodrigo)
+
+Morosidad enseñaba 690 familias «sin cuota» que debían dinero y casi todas
+llevaban tiempo sin venir. Nada se borra: paciente y familia tienen tres
+estados que se calculan por lo que ha pasado con ellos, con los cursos
+empezando el 1 de septiembre (`lib/clients/estadoPorActividad.js`, prueba
+`_smoke-estado-por-actividad.mjs`):
+
+- **Activo**: cita no cancelada o sesión desde septiembre (o futura), o cuota
+  vigente. Cobros y facturas NO hacen activo a nadie: la factura de agosto se
+  emite en septiembre.
+- **En pausa**: lo último (cita, sesión, cobro o factura) fue el curso pasado.
+- **Baja**: nada desde antes. En el paciente es `discharged`, que desde ese
+  día se rotula «Baja» (antes «Alta»).
+
+Lo pone a todo un centro `scripts/estados-por-actividad.js <slug>` (ensayo por
+defecto; `--confirm` deja antes un JSON con el estado anterior y `--deshacer`
+lo devuelve). La familia toma el estado más vivo de sus pacientes y lo suyo; lo
+que va a su nombre sin paciente cuenta para el paciente solo si es hijo único;
+«No vino» solo cambia si le toca Activo. Aplicado en `aumenta` el 15/09/2026.
+
+**Morosidad** solo cuenta pacientes activos de familias que no estén de Baja ni
+En pausa (`entraEnMorosidad`, `lib/billing/morosidad.js`). Sus facturas y
+cobros siguen en la ficha y en los buscadores.
+
+**Vuelven solos a Activo** (paciente y familia, desde En pausa o Baja) al pagar
+un cobro (completado) o al entrar en una cuota viva: hooks de `Payment` y
+`Cuota` en `lib/clients/reactivarPorActividad.js`, enganchados en
+`lib/db/tenantDb.js` para que ningún camino se los salte. Una cita nueva NO
+reactiva sola (no se pidió).
 
 ⚠️ **No es el mismo campo que el chip que se veía hasta ese día.** Aquel leía el
 embudo comercial (`customFields.seStatus`), y el embudo **no lo ha usado nadie

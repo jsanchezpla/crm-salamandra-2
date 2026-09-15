@@ -115,7 +115,7 @@ export default function PacientesPage() {
   const kpis = [
     { label: "Pacientes activos", value: resumen.active, sub: `${resumen.total} en seguimiento` },
     { label: "En pausa", value: resumen.paused, sub: "Revisar continuidad" },
-    { label: "Altas", value: resumen.discharged, sub: "Este periodo" },
+    { label: "Bajas", value: resumen.discharged, sub: "Sin nada desde hace más de un curso" },
     { label: "Sesiones registradas", value: patients.reduce((s, p) => s + (p.sessionsCount ?? 0), 0), sub: "En esta página" },
   ];
 
@@ -195,7 +195,7 @@ export default function PacientesPage() {
             { value: "all", label: "Todos los estados" },
             { value: "active", label: "Activo" },
             { value: "paused", label: "En pausa" },
-            { value: "discharged", label: "Alta" },
+            { value: "discharged", label: "Baja" },
           ]}
           className="text-xs border border-neutral-200 rounded-lg px-3 py-2 bg-white hover:border-neutral-300 cursor-pointer"
         />

@@ -352,6 +352,9 @@ export const MODULES = {
     // el paciente ES el cliente, y es lo que decide si al firmar el contrato
     // hace falta además el consentimiento de su tutor legal.
     "migrate-client-birthdate",
+    // «En pausa» en clients.status (15/09/2026): Activo / En pausa / Baja por
+    // actividad, ver lib/clients/estadoPorActividad.js.
+    "migrate-clients-estado-pausa",
     "migrate-interactions-notes-team",
     "migrate-documents-transversal",
     // El archivo central (documents) se crea para cualquier tenant con clients;

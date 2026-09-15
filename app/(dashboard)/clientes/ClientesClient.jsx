@@ -1153,7 +1153,7 @@ function CampoAlta({ tipo, valor, opciones, placeholder, onChange }) {
  * El estado se marca en gris solo cuando ya no está en activo (dado de alta o
  * en pausa): pintar de color a los 1.100 que sí lo están no dice nada.
  */
-const ESTADO_PACIENTE = { active: "Activo", paused: "En pausa", discharged: "Alta" };
+const ESTADO_PACIENTE = { active: "Activo", paused: "En pausa", discharged: "Baja" };
 
 function ColumnaPacientes({ pacientes }) {
   const lista = Array.isArray(pacientes) ? pacientes : [];

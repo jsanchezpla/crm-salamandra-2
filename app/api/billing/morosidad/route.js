@@ -3,7 +3,7 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { mesesSeguidosSinPagar, loQueFaltaDelMes } from "../../../../lib/billing/mesesSinPagar.js";
 import { mesVigente, debeElMes } from "../../../../lib/billing/cuotas.js";
-import { cuotasDelPaciente, cobroDelPaciente, pagadoresDelPaciente } from "../../../../lib/billing/morosidad.js";
+import { cuotasDelPaciente, cobroDelPaciente, pagadoresDelPaciente, entraEnMorosidad } from "../../../../lib/billing/morosidad.js";
 
 /**
  * GET /api/billing/morosidad?mes=AAAA-MM — quién no ha pagado el mes
@@ -64,11 +64,21 @@ export const GET = withTenant(async (request, _rc, ctx) => {
       return ok({ mes, morosos: [], alDia: 0, aplicable: true, futuro: true });
     }
 
-    const activos = await Patient.findAll({
+    const pacientesActivos = await Patient.findAll({
       where: { status: "active", clientId: { [Op.ne]: null } },
-      attributes: ["id", "clientId", "firstName", "lastName"],
+      attributes: ["id", "clientId", "firstName", "lastName", "status"],
       raw: true,
     });
+    // Fuera quien es de una familia de Baja o En pausa (15/09/2026): la regla,
+    // con su porqué, en `entraEnMorosidad` (lib/billing/morosidad.js).
+    const estadoDeFamilia = new Map(
+      (await Client.findAll({
+        where: { id: { [Op.in]: [...new Set(pacientesActivos.map((p) => String(p.clientId)))] } },
+        attributes: ["id", "status"],
+        raw: true,
+      })).map((c) => [String(c.id), c])
+    );
+    const activos = pacientesActivos.filter((p) => entraEnMorosidad(p, estadoDeFamilia.get(String(p.clientId))));
     const hermanos = new Map();
     for (const p of activos) hermanos.set(String(p.clientId), (hermanos.get(String(p.clientId)) ?? 0) + 1);
 

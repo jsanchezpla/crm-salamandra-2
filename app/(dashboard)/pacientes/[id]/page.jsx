@@ -1485,7 +1485,7 @@ export default function PacienteFichaPage() {
               <input className={inputCls} placeholder="Centro escolar" value={editForm.educationCenter} onChange={(e) => setEditForm({ ...editForm, educationCenter: e.target.value })} />
               <div className="grid grid-cols-2 gap-3">
                 <input className={inputCls} placeholder="Frecuencia" value={editForm.attendanceFrequency} onChange={(e) => setEditForm({ ...editForm, attendanceFrequency: e.target.value })} />
-                <Select value={editForm.status} onChange={(v) => setEditForm({ ...editForm, status: v })} options={[{ value: "active", label: "Activo" }, { value: "paused", label: "En pausa" }, { value: "discharged", label: "Alta" }]} className={inputCls} />
+                <Select value={editForm.status} onChange={(v) => setEditForm({ ...editForm, status: v })} options={[{ value: "active", label: "Activo" }, { value: "paused", label: "En pausa" }, { value: "discharged", label: "Baja" }]} className={inputCls} />
               </div>
               <textarea className={inputCls} rows={3} placeholder="Motivo de derivación" value={editForm.referralReason} onChange={(e) => setEditForm({ ...editForm, referralReason: e.target.value })} />
               <input className={inputCls} placeholder="Objetivos (separados por comas)" value={editForm.objectives} onChange={(e) => setEditForm({ ...editForm, objectives: e.target.value })} />

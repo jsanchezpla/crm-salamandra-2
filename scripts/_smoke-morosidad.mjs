@@ -10,6 +10,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  entraEnMorosidad,
   cobroDelPaciente,
   cuotasDelPaciente,
   pagadoresDelPaciente,
@@ -22,6 +23,17 @@ import {
 const CON_CUOTA = { clientId: "1", name: "Familia Álvarez", tieneCuota: true, debe: 60, conceptos: ["Logopedia"] };
 const CON_CUOTA_MESES = { clientId: "2", name: "Familia Bueno", tieneCuota: true, mesesSeguidos: 3, conceptos: ["Psicología"] };
 const SIN_CUOTA = { clientId: "3", name: "Familia Cuesta", tieneCuota: false, mesesSeguidos: 2, conceptos: [] };
+
+test("de Baja o En pausa no se sale en Morosidad (15/09/2026)", () => {
+  assert.equal(entraEnMorosidad({ status: "active" }, { status: "active" }), true);
+  assert.equal(entraEnMorosidad({ status: "active" }, null), true);
+  assert.equal(entraEnMorosidad({ status: "discharged" }, { status: "active" }), false);
+  assert.equal(entraEnMorosidad({ status: "paused" }, { status: "active" }), false);
+  assert.equal(entraEnMorosidad({ status: "active" }, { status: "inactive" }), false);
+  assert.equal(entraEnMorosidad({ status: "active" }, { status: "paused" }), false);
+  // «No vino» con un paciente activo sigue saliendo: esa ficha no la toca la regla.
+  assert.equal(entraEnMorosidad({ status: "active" }, { status: "prospect" }), true);
+});
 
 test("reparte por si la familia tiene cuota escrita", () => {
   const { conCuota, sinCuota } = repartirMorosos([CON_CUOTA, SIN_CUOTA, CON_CUOTA_MESES]);

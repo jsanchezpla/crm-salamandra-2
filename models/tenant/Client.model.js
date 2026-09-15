@@ -118,7 +118,8 @@ export function defineClient(sequelize) {
         defaultValue: {},
       },
       status: {
-        type: DataTypes.ENUM("active", "inactive", "prospect"),
+        // 'paused' (En pausa) desde el 15/09/2026: migrate-clients-estado-pausa.js.
+        type: DataTypes.ENUM("active", "inactive", "prospect", "paused"),
         allowNull: false,
         defaultValue: "active",
       },
