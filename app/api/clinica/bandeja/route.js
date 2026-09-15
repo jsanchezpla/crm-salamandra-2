@@ -8,6 +8,8 @@ import { REPORT_TYPE_LABEL } from "../../../../lib/clinica/serialize.js";
 import { categoryLabel, statusLabel, priorityLabel, INCIDENCIA_STATUS } from "../../../../lib/clinica/incidencias.js";
 import { whereIncidenciasDe } from "../../../../lib/clinica/incidenciasDe.js";
 import { ventanaDeLaSemana, citasSinRegistro } from "../../../../lib/clinica/loMio.js";
+import { pendientesPorProfesional, DIAS_PACIENTE_QUE_VIENE } from "../../../../lib/clinica/pendientesClinicos.js";
+import { CLAVE_ENTREVISTA } from "../../../../lib/clinica/entrevistaInicial.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function gate(ctx) {
@@ -74,8 +76,8 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     // Con las claves nuevas vacías: si faltan, la pantalla lee `undefined`.
     return ok({
       therapist: null, reports: [], incidencias: [], citasToday: [],
-      registros: { sinEmpezar: [], aMedias: [] }, equipo: null, coordina,
-      counts: { reports: 0, reportsOverdue: 0, incidencias: 0, citasToday: 0, registrosSinEmpezar: 0, registrosAMedias: 0 },
+      registros: { sinEmpezar: [], aMedias: [] }, planes: [], entrevistas: [], equipo: null, coordina,
+      counts: { planes: 0, entrevistas: 0, reports: 0, reportsOverdue: 0, incidencias: 0, citasToday: 0, registrosSinEmpezar: 0, registrosAMedias: 0 },
     });
   }
 
@@ -206,6 +208,59 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     return { citas: citas.map((c) => c.toJSON()), sesiones: sesiones.map((x) => x.toJSON()) };
   }
 
+  /*
+   * ── PLANES A COMPLETAR Y ENTREVISTAS SIN REGISTRAR (15/09/2026, AV-0078) ──
+   *
+   * De los pacientes a los que la profesional ha dado cita en los últimos 30
+   * días (la regla y el porqué, en `lib/clinica/pendientesClinicos.js`). Del
+   * plan se leen los tres campos solo para saber si están vacíos: su contenido
+   * no sale de aquí.
+   */
+  async function pendientesClinicosDe(idsTerapeutas) {
+    const { InterventionPlan } = M;
+    const desde = new Date(Date.now() - DIAS_PACIENTE_QUE_VIENE * 24 * 60 * 60 * 1000);
+    const citas = await Booking.findAll({
+      where: {
+        teamMemberId: { [Op.in]: idsTerapeutas },
+        patientId: { [Op.ne]: null },
+        status: { [Op.in]: ["confirmed", "completed"] },
+        scheduledAt: { [Op.gte]: desde, [Op.lte]: new Date() },
+      },
+      attributes: ["patientId", "teamMemberId", "scheduledAt"],
+      raw: true,
+      limit: 20000,
+    });
+    const pacientes = [...new Set(citas.map((c) => String(c.patientId)))];
+    if (!pacientes.length) return new Map();
+    const [planes, altas, entrevistas] = await Promise.all([
+      InterventionPlan
+        ? InterventionPlan.findAll({
+            where: { patientId: { [Op.in]: pacientes } },
+            attributes: ["patientId", "diagnosis", "consultationReasons", "objectives"],
+            raw: true,
+          })
+        : [],
+      // La fecha de ALTA y no la primera cita: la agenda importada empieza en
+      // agosto y todos parecerían nuevos (ver lib/clinica/pendientesClinicos.js).
+      Patient.findAll({
+        where: { id: { [Op.in]: pacientes } },
+        attributes: ["id", "enrollmentDate", "createdAt"],
+        raw: true,
+      }),
+      ClinicSession.findAll({
+        where: { patientId: { [Op.in]: pacientes }, contentSections: { [Op.contains]: { plantilla: CLAVE_ENTREVISTA } } },
+        attributes: ["patientId"],
+        raw: true,
+      }),
+    ]);
+    return pendientesPorProfesional({
+      citas,
+      planes,
+      altaDelPaciente: new Map(altas.map((p) => [String(p.id), p.enrollmentDate ?? p.createdAt])),
+      conEntrevista: new Set(entrevistas.map((e) => String(e.patientId))),
+    });
+  }
+
   const { citas: citasSemana, sesiones: sesionesSemana } = await registrosDe([therapistId]);
   const pendientes = citasSinRegistro(citasSemana, sesionesSemana, { ahora: new Date() });
   const filaDeRegistro = ({ cita, sesion }) => ({
@@ -220,6 +275,19 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     sinEmpezar: pendientes.sinEmpezar.map(filaDeRegistro),
     aMedias: pendientes.aMedias.map(filaDeRegistro),
   };
+
+  const mios = (await pendientesClinicosDe([therapistId])).get(String(therapistId)) ?? { planes: [], entrevistas: [] };
+  const idsPac = [...new Set([...mios.planes, ...mios.entrevistas].map((x) => x.patientId))];
+  const nombres = new Map(
+    idsPac.length
+      ? (await Patient.findAll({ where: { id: { [Op.in]: idsPac } }, attributes: ["id", "firstName", "lastName"] }))
+          .map((p) => [String(p.id), patientName(p)])
+      : []
+  );
+  const planes = mios.planes
+    .map((x) => ({ ...x, patientName: nombres.get(x.patientId) ?? null }))
+    .sort((a, b) => String(a.patientName ?? "").localeCompare(String(b.patientName ?? ""), "es"));
+  const entrevistas = mios.entrevistas.map((x) => ({ ...x, patientName: nombres.get(x.patientId) ?? null }));
 
   /*
    * ── LA TABLA DEL EQUIPO, para quien coordina ─────────────────────────
@@ -252,6 +320,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
      * coordinadora un número distinto del que ve la compañera no sirve para dar
      * feedback, sirve para discutir.
      */
+    const clinicos = ids.length ? await pendientesClinicosDe(ids) : new Map();
     const porIncidencias = new Map();
     for (const id of ids) {
       const suyo = await whereIncidenciasDe(M, id, { soloPendientes: true });
@@ -270,6 +339,8 @@ export const GET = withTenant(async (request, _rc, ctx) => {
           registrosAMedias: r.aMedias.length,
           reports: porInformes.get(String(t.id)) ?? 0,
           incidencias: porIncidencias.get(String(t.id)) ?? 0,
+          planes: clinicos.get(String(t.id))?.planes.length ?? 0,
+          entrevistas: clinicos.get(String(t.id))?.entrevistas.length ?? 0,
         },
       };
     });
@@ -291,9 +362,13 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     incidencias,
     citasToday,
     registros,
+    planes,
+    entrevistas,
     equipo,
     coordina,
     counts: {
+      planes: planes.length,
+      entrevistas: entrevistas.length,
       reports: reports.length,
       reportsOverdue,
       incidencias: incidencias.length,

@@ -60,6 +60,9 @@ export default function BandejaPage() {
   const sinEmpezar = data?.registros?.sinEmpezar ?? [];
   const aMedias = data?.registros?.aMedias ?? [];
   const equipo = data?.equipo ?? null;
+  // Planes a completar y entrevistas sin registrar (15/09/2026, AV-0078).
+  const planes = data?.planes ?? [];
+  const entrevistas = data?.entrevistas ?? [];
   /*
    * El enlace para escribir el registro de ESA cita: lleva la cita, la fecha y
    * la profesional, que es lo que hace que se escriba en su sesión y no en una
@@ -83,7 +86,7 @@ export default function BandejaPage() {
           <div className="eyebrow">Equipo · Bandeja de trabajo</div>
           <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mt-1">{loading ? "…" : `Bandeja de ${data?.therapist?.name ?? "—"}`}</h1>
           <p className="text-xs text-neutral-400 mt-1">
-            Lo tuyo de esta semana: registros sin escribir, informes, incidencias y citas de hoy.
+            Lo tuyo pendiente: registros sin escribir, planes a completar, entrevistas iniciales, informes, incidencias y citas de hoy.
           </p>
         </div>
         {data?.coordina && (
@@ -146,12 +149,14 @@ export default function BandejaPage() {
             <span className="text-[10px] text-neutral-400">{equipo.length}</span>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[560px]">
+            <table className="w-full text-sm min-w-[720px]">
               <thead>
                 <tr className="border-b border-neutral-100 text-left text-[11px] uppercase tracking-wide text-neutral-400">
                   <th className="px-4 py-2.5 font-medium">Profesional</th>
                   <th className="px-4 py-2.5 font-medium text-right">Registros</th>
                   <th className="px-4 py-2.5 font-medium text-right">A medias</th>
+                  <th className="px-4 py-2.5 font-medium text-right">Planes</th>
+                  <th className="px-4 py-2.5 font-medium text-right">Entrevistas</th>
                   <th className="px-4 py-2.5 font-medium text-right">Informes</th>
                   <th className="px-4 py-2.5 font-medium text-right">Incidencias</th>
                 </tr>
@@ -172,6 +177,12 @@ export default function BandejaPage() {
                     <td className={`px-4 py-2.5 text-right tabular ${m.counts.registrosAMedias ? "text-neutral-700" : "text-neutral-300"}`}>
                       {m.counts.registrosAMedias}
                     </td>
+                    <td className={`px-4 py-2.5 text-right tabular ${m.counts.planes ? "text-neutral-700" : "text-neutral-300"}`}>
+                      {m.counts.planes ?? 0}
+                    </td>
+                    <td className={`px-4 py-2.5 text-right tabular ${m.counts.entrevistas ? "text-neutral-700" : "text-neutral-300"}`}>
+                      {m.counts.entrevistas ?? 0}
+                    </td>
                     <td className={`px-4 py-2.5 text-right tabular ${m.counts.reports ? "text-neutral-700" : "text-neutral-300"}`}>
                       {m.counts.reports}
                     </td>
@@ -184,7 +195,7 @@ export default function BandejaPage() {
             </table>
           </div>
           <p className="px-4 lg:px-5 py-2.5 text-[10px] text-neutral-400 border-t border-neutral-100">
-            Los registros son de las citas de los últimos 7 días que ya han pasado. Pincha un nombre para ver su bandeja.
+            Los registros son de las citas de los últimos 7 días que ya han pasado. Planes y entrevistas, de los pacientes con cita en los últimos 30 días (entrevistas: solo los dados de alta en ese tiempo). Pincha un nombre para ver su bandeja.
           </p>
         </div>
       )}
@@ -232,6 +243,45 @@ export default function BandejaPage() {
               </ul>
             </Section>
           )}
+
+          {/* Entrevistas iniciales sin registrar y planes a completar
+              (15/09/2026, AV-0078): de los pacientes a los que ha dado cita en
+              los últimos 30 días. La regla, en lib/clinica/pendientesClinicos.js. */}
+          {entrevistas.length > 0 && (
+            <Section title="Entrevistas iniciales sin registrar" count={entrevistas.length} empty="">
+              <ul className="divide-y divide-neutral-100">
+                {entrevistas.map((e) => (
+                  <li key={e.patientId} className="px-4 lg:px-5 py-3 flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm text-[var(--ink-900)] font-medium truncate">{e.patientName ?? "—"}</div>
+                      <div className="text-[11px] text-neutral-400">Paciente nuevo · alta el {fmt(e.alta)}</div>
+                    </div>
+                    <Link href={`/pacientes/${e.patientId}`} className="shrink-0 text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline">
+                      Abrir ficha
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          )}
+
+          <Section title="Planes de intervención a completar" count={planes.length} empty="Todos tus pacientes tienen el plan completo. 🎉">
+            <ul className="divide-y divide-neutral-100">
+              {planes.map((p) => (
+                <li key={p.patientId} className="px-4 lg:px-5 py-3 flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm text-[var(--ink-900)] font-medium truncate">{p.patientName ?? "—"}</div>
+                    <div className="text-[11px] text-neutral-400">
+                      {p.falta.includes("plan") ? "Sin plan de intervención" : `Le falta: ${p.falta.join(", ")}`}
+                    </div>
+                  </div>
+                  <Link href={`/pacientes/${p.patientId}`} className="shrink-0 text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline">
+                    {p.falta.includes("plan") ? "Hacerlo" : "Completarlo"}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Section>
 
           {/* Informes pendientes */}
           <Section title="Informes pendientes" count={reports.length} empty="Sin informes pendientes. 🎉">

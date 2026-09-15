@@ -234,6 +234,8 @@ function AccesosDelDia() {
   const resumen = c
     ? [
         registros ? `${registros} ${registros === 1 ? "registro" : "registros"} sin terminar esta semana` : "Registros de la semana al día",
+        c.planes ? `${c.planes} ${c.planes === 1 ? "plan" : "planes"} a completar` : null,
+        c.entrevistas ? `${c.entrevistas} ${c.entrevistas === 1 ? "entrevista" : "entrevistas"} sin registrar` : null,
         c.reports ? `${c.reports} ${c.reports === 1 ? "informe pendiente" : "informes pendientes"}` : null,
         c.incidencias ? `${c.incidencias} ${c.incidencias === 1 ? "incidencia" : "incidencias"}` : null,
       ].filter(Boolean).join(" · ")
