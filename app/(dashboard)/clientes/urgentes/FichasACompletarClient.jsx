@@ -127,7 +127,10 @@ function Carpeta({ carpeta, abierta, onToggle, onRevisar, onNoVino, conEstado, m
                   <td className="px-4 py-2 text-neutral-500 whitespace-nowrap">{fmt(f.dato)}</td>
                   <td className="px-4 py-2 text-right whitespace-nowrap">
                     {/*
-                      «No vino» aquí y no solo en la ficha (26/08/2026, Lau).
+                      Desde el 15/09/2026 marca «Baja»: «No vino» dejó de
+                      existir (Rodrigo: son bajas de larga duración).
+
+                      Nació como «No vino» aquí y no solo en la ficha (26/08/2026, Lau).
                       Eran 90 fichas mudas sin una sola cita: abrir noventa
                       fichas para tocar un desplegable no lo hace nadie, y por
                       eso la petición había llegado como «bórralas».
@@ -144,10 +147,10 @@ function Carpeta({ carpeta, abierta, onToggle, onRevisar, onNoVino, conEstado, m
                       <button
                         onClick={() => onNoVino(carpeta, f)}
                         disabled={marcando === `${carpeta.key}|${f.id}`}
-                        title="Llamó o dejó sus datos pero nunca llegó a empezar. La ficha se queda entera; solo deja de reclamar lo que le falta."
+                        title="Ya no viene, o nunca llegó a empezar. La ficha se queda entera; solo deja de reclamar lo que le falta."
                         className="mr-3 text-[11px] text-amber-700 hover:text-amber-900 underline disabled:opacity-40"
                       >
-                        No vino
+                        Baja
                       </button>
                     )}
                     <button
@@ -254,7 +257,7 @@ export default function FichasACompletarClient({ conEstado = false }) {
       const r = await fetch(`/api/clients/${clientId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ estado: "prospect" }),
+        body: JSON.stringify({ estado: "inactive" }),
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok || !j.ok) throw new Error(j.error || `No se pudo marcar (HTTP ${r.status})`);
@@ -310,11 +313,11 @@ export default function FichasACompletarClient({ conEstado = false }) {
             onChange={(e) => setIncluirBajas(e.target.checked)}
             className="w-3.5 h-3.5 rounded border-neutral-300 accent-[var(--color-primary,#1B3A2D)]"
           />
-          Incluir bajas y «No vino»
+          Incluir bajas
           <HelpTooltip title="Fichas que no reclaman" placement="bottom">
-            Las fichas de quien ya no viene —«Baja»— y las de quien nunca llegó a empezar
-            —«No vino»— no salen: sus huecos ya no hay que rellenarlos, y estaban enterrando
-            lo que sí hay que mirar esta semana.
+            Las fichas de quien ya no viene o nunca llegó a empezar —«Baja»— no salen: sus
+            huecos ya no hay que rellenarlos, y estaban enterrando lo que sí hay que mirar esta
+            semana.
             {" "}
             <strong className="text-white">Con una excepción</strong>: quien está de baja pero
             tiene citas reservadas sí aparece, marcado como «Archivada». Ahí el problema no es el

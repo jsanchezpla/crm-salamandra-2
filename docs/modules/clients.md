@@ -496,9 +496,9 @@ cliente», así que el estado va ahí. Los rótulos, en `lib/clients/estados.js`
 | En pantalla | Columna | Qué significa |
 | --- | --- | --- |
 | **Activo** | `active` | Viene, o se cuenta con que venga |
-| **No vino** | `prospect` | Llamó o dejó sus datos y nunca llegó a empezar |
+| ~~No vino~~ | `prospect` | **Quitado el 15/09/2026** (Rodrigo: «son bajas de larga duración»). Ya no se ofrece; una ficha que lo tenga se lee y se filtra como Baja. En Aumenta no quedaba ninguna |
 | **En pausa** | `paused` | Vino el curso pasado y en este todavía no (15/09/2026) |
-| **Baja** | `inactive` | Vino y ya no viene |
+| **Baja** | `inactive` | Ya no viene, o nunca llegó a empezar |
 
 ### Activo / En pausa / Baja por actividad (15/09/2026, Rodrigo)
 
@@ -518,18 +518,19 @@ empezando el 1 de septiembre (`lib/clients/estadoPorActividad.js`, prueba
 Lo pone a todo un centro `scripts/estados-por-actividad.js <slug>` (ensayo por
 defecto; `--confirm` deja antes un JSON con el estado anterior y `--deshacer`
 lo devuelve). La familia toma el estado más vivo de sus pacientes y lo suyo; lo
-que va a su nombre sin paciente cuenta para el paciente solo si es hijo único;
-«No vino» solo cambia si le toca Activo. Aplicado en `aumenta` el 15/09/2026.
+que va a su nombre sin paciente cuenta para el paciente solo si es hijo único.
+Aplicado en `aumenta` el 15/09/2026. No lanzarlo sobre un centro con tienda
+(allí `prospect` es «compró una vez»).
 
 **Morosidad** solo cuenta pacientes activos de familias que no estén de Baja ni
 En pausa (`entraEnMorosidad`, `lib/billing/morosidad.js`). Sus facturas y
 cobros siguen en la ficha y en los buscadores.
 
 **Vuelven solos a Activo** (paciente y familia, desde En pausa o Baja) al pagar
-un cobro (completado) o al entrar en una cuota viva: hooks de `Payment` y
-`Cuota` en `lib/clients/reactivarPorActividad.js`, enganchados en
-`lib/db/tenantDb.js` para que ningún camino se los salte. Una cita nueva NO
-reactiva sola (no se pidió).
+un cobro (completado), al entrar en una cuota viva o al CREARSE una cita no
+cancelada (una o una serie; editar una cita vieja no cuenta): hooks de
+`Payment`, `Cuota` y `Booking` en `lib/clients/reactivarPorActividad.js`,
+enganchados en `lib/db/tenantDb.js` para que ningún camino se los salte.
 
 ⚠️ **No es el mismo campo que el chip que se veía hasta ese día.** Aquel leía el
 embudo comercial (`customFields.seStatus`), y el embudo **no lo ha usado nadie

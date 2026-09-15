@@ -22,7 +22,9 @@
  *     cuál es, la misma regla que Morosidad).
  *   · Una cuota sin paciente es de todos los hijos de la familia.
  *   · La familia toma el estado más vivo entre sus pacientes y lo suyo.
- *   · Una ficha «No vino» solo cambia si le toca Activo.
+ *   · Una ficha en `prospect` (el «No vino» que se quitó el 15/09/2026) se
+ *     trata como las demás. No lo lances sobre un centro con tienda: allí
+ *     `prospect` es «compró una vez» y la regla no aplica.
  *
  * Ensayo por defecto: cuenta cuántos cambiarían, sin nombres. `--confirm`
  * escribe en UNA transacción, y ANTES deja en `RESPALDO_DIR` (defecto /tmp) un
@@ -35,7 +37,7 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
-import { estadoPorActividad, elMasVivo, inicioDelCurso, inicioDelCursoAnterior, ACTIVO } from "../lib/clients/estadoPorActividad.js";
+import { estadoPorActividad, elMasVivo, inicioDelCurso, inicioDelCursoAnterior } from "../lib/clients/estadoPorActividad.js";
 import { auditar } from "../lib/utils/auditoria.js";
 
 const args = process.argv.slice(2);
@@ -168,8 +170,6 @@ async function main() {
     const propio = estadoPorActividad({ ultimaCita: f.cita, ultimoDinero: f.dinero, cuotaVigente: f.cuota }, { baja: "inactive", hoy });
     const deHijos = (hijosDe.get(String(f.id)) ?? []).map((e) => (e === "discharged" ? "inactive" : e));
     const nuevo = elMasVivo([propio, ...deHijos], "inactive");
-    // «No vino» solo se toca si le toca Activo: esa ficha nunca empezó.
-    if (f.status === "prospect" && nuevo !== ACTIVO) continue;
     if (nuevo !== f.status) cambiosFam.push({ id: f.id, de: f.status, a: nuevo });
   }
 

@@ -1,4 +1,4 @@
-import { esEstadoDeFicha } from "../../../lib/clients/estados.js";
+import { esEstadoDeFicha, valoresDelFiltroDeEstado } from "../../../lib/clients/estados.js";
 import { withTenant } from "../../../lib/tenant/withTenant.js";
 import { auditar, datosPeticion, resumen } from "../../../lib/utils/auditoria.js";
 import { ok, created, forbidden, error } from "../../../lib/utils/apiResponse.js";
@@ -79,7 +79,10 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   // PostgreSQL y un valor de fuera revienta la consulta en vez de no devolver
   // nada. Un valor desconocido se ignora, que es como se comportan los demás
   // filtros de esta pantalla.
-  if (esEstadoDeFicha(estado)) where.status = String(estado).trim();
+  if (esEstadoDeFicha(estado)) {
+    const valores = valoresDelFiltroDeEstado(estado);
+    where.status = valores.length === 1 ? valores[0] : { [Op.in]: valores };
+  }
   if (country) enCustomFields.country = country;
   if (categoria) enCustomFields.categoria = categoria;
   if (Object.keys(enCustomFields).length) {

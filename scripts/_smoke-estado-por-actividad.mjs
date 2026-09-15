@@ -46,7 +46,7 @@ test("la familia toma el estado más vivo", () => {
   assert.equal(elMasVivo([], "inactive"), "inactive");
 });
 
-test("«No vino» no se reactiva solo", () => {
+test("el `prospect` de la tienda no se reactiva solo", () => {
   assert.ok(!ESTADOS_QUE_SE_REACTIVAN.clients.includes("prospect"));
   assert.deepEqual(ESTADOS_QUE_SE_REACTIVAN.patients, ["paused", "discharged"]);
 });

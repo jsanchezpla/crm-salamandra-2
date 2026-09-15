@@ -35,6 +35,7 @@ import {
   etiquetaDeEstado,
   tonoDeEstado,
   usaEstadoDeFicha,
+  valoresDelFiltroDeEstado,
 } from "../lib/clients/estados.js";
 
 /** `hasModule` de mentira, como el que reciben las pantallas. */
@@ -48,13 +49,14 @@ describe("los estados son los de la columna, y no más", () => {
     // Si aquí apareciera uno nuevo, la consulta reventaría: `status` es un ENUM
     // de PostgreSQL y no acepta valores de fuera. «En pausa» (15/09/2026) lo
     // añade migrate-clients-estado-pausa.js.
-    assert.deepEqual(ESTADOS_FICHA, ["active", "paused", "prospect", "inactive"]);
+    // «No vino» (`prospect`) dejó de ofrecerse el mismo día: se lee como Baja.
+    assert.deepEqual(ESTADOS_FICHA, ["active", "paused", "inactive"]);
   });
 
   it("el selector los da en orden y con rótulo", () => {
     assert.deepEqual(
       estadosDeFicha().map((e) => e.label),
-      ["Activo", "En pausa", "No vino", "Baja"]
+      ["Activo", "En pausa", "Baja"]
     );
   });
 
@@ -92,15 +94,28 @@ describe("esEstadoDeFicha — el valor llega por el cuerpo del PUT", () => {
   });
 
   it("los espacios de sobra no cuelan un valor bueno como malo", () => {
-    assert.equal(esEstadoDeFicha("  prospect  "), true);
+    assert.equal(esEstadoDeFicha("  inactive  "), true);
+  });
+
+  it("«No vino» ya no se puede elegir (15/09/2026)", () => {
+    assert.equal(esEstadoDeFicha(NO_VINO), false);
   });
 });
 
 describe("etiquetaDeEstado", () => {
   it("dice lo que se lee en el chip", () => {
     assert.equal(etiquetaDeEstado(ACTIVO), "Activo");
-    assert.equal(etiquetaDeEstado(NO_VINO), "No vino");
     assert.equal(etiquetaDeEstado(BAJA), "Baja");
+  });
+
+  it("una ficha que quedó en «No vino» se lee como Baja", () => {
+    assert.equal(etiquetaDeEstado(NO_VINO), "Baja");
+    assert.deepEqual(tonoDeEstado(NO_VINO), tonoDeEstado(BAJA));
+  });
+
+  it("y sale en la pestaña de Baja", () => {
+    assert.deepEqual(valoresDelFiltroDeEstado(BAJA), ["inactive", "prospect"]);
+    assert.deepEqual(valoresDelFiltroDeEstado(ACTIVO), ["active"]);
   });
 
   it("un valor desconocido se dice tal cual, no se traga", () => {
@@ -122,6 +137,7 @@ describe("dejaDeReclamar — «Fichas a completar» no persigue a quien no viene
   it("«No vino» y «Baja» dejan de reclamar", () => {
     assert.equal(dejaDeReclamar(NO_VINO), true);
     assert.equal(dejaDeReclamar(BAJA), true);
+    assert.equal(dejaDeReclamar("paused"), true);
   });
 
   it("«Activo» sigue reclamando, que es de lo que va la pantalla", () => {
