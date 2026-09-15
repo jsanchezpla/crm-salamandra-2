@@ -507,7 +507,9 @@ Resuelto (Buzón) con Resuelto; las Activas son un punto previo.»
   `registro.mjs`/`tablero-doc.js`—, llama al publicar `backlog` o `resuelto` a
   `sincronizarConRegistro` (`lib/buzon/sincronizarConRegistro.js`; reglas puras
   en `cambiosPorElRegistro`): un aviso «En el registro» cuya tarea ya no está en
-  el backlog (ni por ficha ni por `AV-####`) pasa a `cerrado`; sin ficha, solo
+  el backlog pasa a `cerrado` (manda la ficha; la cita `AV-####` en el backlog
+  solo lo retiene si la ficha no está en ningún documento, porque una tarea de
+  seguimiento puede citar un aviso ya cerrado); sin ficha, solo
   si Resuelto cita su referencia. Un `cerrado` cuya ficha vuelve al backlog (y
   no está en Resuelto) vuelve a `enviado`. Lo Activo no se toca. Best-effort
   (no deshace la publicación); auditoría `buzon.sincronizado_con_registro`.

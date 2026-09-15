@@ -57,6 +57,14 @@ describe("cambiosPorElRegistro", () => {
     assert.deepEqual(cambiosPorElRegistro([aviso({ registroFicha: "zzzz99" })], { backlog: texto, resuelto: RESUELTO }), []);
   });
 
+  it("una tarea de seguimiento que cita AV-0042 no mantiene abierto el 42 si su tarea ya está en Resuelto", () => {
+    const { texto, id } = conTarea(BACKLOG, "Buzón - Fallo: no carga");
+    const r = cerrarTarea(texto, RESUELTO, { id, comoSeArreglo: "Arreglado.", fecha: HOY });
+    const { texto: conSeguimiento } = conTarea(r.backlog, "Lo que queda de AV-0042");
+    const cambios = cambiosPorElRegistro([aviso({ registroFicha: id })], { backlog: conSeguimiento, resuelto: r.resuelto });
+    assert.deepEqual(cambios.map((c) => c.a), ["cerrado"]);
+  });
+
   it("sin ficha (anterior al botón): solo si Resuelto cita la referencia, y AV-0042 no es AV-00421", () => {
     const resueltoCon = RESUELTO.replace("Hecho.", "Hecho (AV-0042).");
     assert.equal(cambiosPorElRegistro([aviso()], { backlog: BACKLOG, resuelto: resueltoCon })[0].a, "cerrado");
