@@ -73,11 +73,18 @@ export const GET = withTenant(async (request, _rc, ctx) => {
 
     const pacientes = await Patient.findAll({
       where: { status: "active", clientId: { [Op.ne]: null } },
-      attributes: ["id", "clientId"],
+      attributes: ["id", "clientId", "firstName", "lastName"],
     });
     const porCliente = new Map();
+    // Los nombres de sus pacientes, para que el buscador encuentre a la familia
+    // por el niño (AV-0136, Rosa, 15/09/2026): la familia no siempre se
+    // apellida como él. Solo viajan a la pantalla de facturación, que ya los ve.
+    const pacientesDe = new Map();
     for (const p of pacientes) {
-      porCliente.set(String(p.clientId), (porCliente.get(String(p.clientId)) ?? 0) + 1);
+      const cid = String(p.clientId);
+      porCliente.set(cid, (porCliente.get(cid) ?? 0) + 1);
+      const nombre = [p.firstName, p.lastName].filter(Boolean).join(" ");
+      if (nombre) pacientesDe.set(cid, [...(pacientesDe.get(cid) ?? []), nombre]);
     }
     // ── LA VIGENCIA DE LAS CUOTAS MANDA (01/09/2026, Rodrigo) ──────────────
     // Una familia con cuotas asignadas debe el mes M solo si alguna lo cubre:
@@ -233,6 +240,13 @@ export const GET = withTenant(async (request, _rc, ctx) => {
       return [...vistos];
     };
 
+    // Los importes por los que se le puede buscar (AV-0136): lo que sigue
+    // pendiente del mes y lo que vale cada cuota que paga.
+    const importesDe = (cid) => {
+      const v = [pendienteDelMes.get(cid), ...(cuotasPorCliente.get(cid) ?? []).map((f) => f.amount)];
+      return [...new Set(v.map(Number).filter((n) => Number.isFinite(n) && n > 0))];
+    };
+
     const morosos = [];
     let alDia = 0;
     for (const cid of ids) {
@@ -256,6 +270,8 @@ export const GET = withTenant(async (request, _rc, ctx) => {
           pacientesActivos: porCliente.get(cid) ?? 0,
           tieneCuota: familiasConCuota.has(cid) || cuotasPorCliente.has(cid),
           conceptos: conceptosDe(cid),
+          pacientes: pacientesDe.get(cid) ?? [],
+          importes: importesDe(cid),
           mesesSeguidos: 0,
           debe: falta.debe,
           pagado: falta.pagado,
@@ -288,6 +304,8 @@ export const GET = withTenant(async (request, _rc, ctx) => {
         pacientesActivos: porCliente.get(cid) ?? 0,
         tieneCuota: familiasConCuota.has(cid) || cuotasPorCliente.has(cid),
         conceptos: conceptosDe(cid),
+        pacientes: pacientesDe.get(cid) ?? [],
+        importes: importesDe(cid),
         mesesSeguidos: seguidos,
         ultimoCobro: ultimo.get(cid) ?? null,
       });

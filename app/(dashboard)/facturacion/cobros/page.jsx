@@ -1224,7 +1224,7 @@ export default function CobrosPage() {
         <input
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
-          placeholder="Buscar por paciente, cliente, nº factura, método, notas..."
+          placeholder="Buscar por paciente, cliente, importe, nº factura, método, notas..."
           className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition w-full sm:w-72"
         />
         <Select value={filterMethod} onChange={(v) => setFilterMethod(v)}
