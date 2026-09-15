@@ -3,7 +3,7 @@
 // y qué citas pueden apuntarse como su recuperación.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { esRecuperable, rotuloFalta, citasQuePuedenRecuperar } from "../lib/citas/recuperacionFalta.js";
+import { esRecuperable, rotuloFalta, citasQuePuedenRecuperar, desdeParaRecuperar, DIAS_ANTES_RECUPERACION } from "../lib/citas/recuperacionFalta.js";
 
 test("recuperable = falta justificada; lo demás, no", () => {
   assert.equal(esRecuperable({ status: "no_show", noShowJustified: true }), true);
@@ -18,7 +18,7 @@ test("el rótulo lleva la palabra del centro delante", () => {
   assert.equal(rotuloFalta({ status: "completed" }), null);
 });
 
-test("recuperan: otras citas vivas del mismo cliente, posteriores, en orden", () => {
+test("recuperan: otras citas vivas del mismo cliente, posteriores o de la semana antes, por cercanía", () => {
   const falta = { id: "f", clientId: "c1", scheduledAt: "2026-09-10T10:00:00Z", status: "no_show", noShowJustified: true };
   const candidatas = citasQuePuedenRecuperar(
     [
@@ -27,9 +27,15 @@ test("recuperan: otras citas vivas del mismo cliente, posteriores, en orden", ()
       { id: "b", clientId: "c1", status: "pending", scheduledAt: "2026-09-17T10:00:00Z" },
       { id: "c", clientId: "c2", status: "confirmed", scheduledAt: "2026-09-18T10:00:00Z" }, // otro cliente
       { id: "d", clientId: "c1", status: "cancelled", scheduledAt: "2026-09-19T10:00:00Z" }, // cancelada
-      { id: "e", clientId: "c1", status: "confirmed", scheduledAt: "2026-09-03T10:00:00Z" }, // anterior
+      { id: "e", clientId: "c1", status: "confirmed", scheduledAt: "2026-09-02T10:00:00Z" }, // 8 días antes: fuera
+      { id: "g", clientId: "c1", status: "confirmed", scheduledAt: "2026-09-09T10:00:00Z" }, // el día antes (AV-0139)
     ],
     falta
   );
-  assert.deepEqual(candidatas.map((c) => c.id), ["b", "a"]);
+  assert.deepEqual(candidatas.map((c) => c.id), ["g", "b", "a"]);
+});
+
+test("AV-0139: se piden citas desde una semana antes de la falta", () => {
+  assert.equal(DIAS_ANTES_RECUPERACION, 7);
+  assert.equal(desdeParaRecuperar({ scheduledAt: "2026-09-30T11:45:00Z" }), "2026-09-23T11:45:00.000Z");
 });

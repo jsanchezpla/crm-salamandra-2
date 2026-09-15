@@ -27,7 +27,7 @@ import { TRAMO_ENTREVISTA } from "../../../lib/citas/altaDesdeDiagnostico.js";
 import { REPORT_TYPE_LABEL } from "../../../lib/clinica/serialize.js";
 import { citaNoSeDio } from "../../../lib/clinica/borradorDeCita.js";
 import { fichaDeLaCita } from "../../../lib/citas/fichaDeLaCita.js";
-import { esRecuperable, rotuloFalta, citasQuePuedenRecuperar } from "../../../lib/citas/recuperacionFalta.js";
+import { esRecuperable, rotuloFalta, citasQuePuedenRecuperar, desdeParaRecuperar } from "../../../lib/citas/recuperacionFalta.js";
 import { esPresunta, estadoEfectivo } from "../../../lib/citas/asistencia.js";
 import { cuerpoDelResultado, resultadoPorClave } from "../../../lib/citas/resultadoCita.js";
 import { tiposParaCambiar } from "../../../lib/citas/cambioDeTipo.js";
@@ -204,7 +204,13 @@ export function CitaDetalleModal({
         .catch(() => {});
     } else if (openBooking.clientId) {
       setRecuperadora(null);
-      fetch(`/api/citas/bookings?clientId=${openBooking.clientId}&limit=100`, { cache: "no-store" })
+      // Desde unos días antes de la falta y en orden ascendente (AV-0139): en
+      // DESC llegaban las 100 citas más lejanas de la serie y en una familia
+      // con 130 el desplegable empezaba en noviembre.
+      fetch(
+        `/api/citas/bookings?clientId=${openBooking.clientId}&from=${encodeURIComponent(desdeParaRecuperar(openBooking))}&orden=asc&limit=100`,
+        { cache: "no-store" }
+      )
         .then((r) => r.json())
         .then((j) => { if (vivo) setCandidatas(citasQuePuedenRecuperar(j.data?.bookings ?? [], openBooking)); })
         .catch(() => {});
@@ -1472,7 +1478,7 @@ export function CitaDetalleModal({
                   <span className="text-neutral-400">Buscando citas que puedan recuperarla…</span>
                 ) : candidatas.length === 0 ? (
                   <span className="text-neutral-500">
-                    Pendiente de recuperar: este cliente no tiene citas posteriores. Crea la cita
+                    Pendiente de recuperar: este cliente no tiene citas cercanas ni posteriores. Crea la cita
                     de recuperación y enlázala desde aquí.
                   </span>
                 ) : (

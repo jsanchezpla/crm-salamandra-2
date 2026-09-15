@@ -178,7 +178,10 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
     // ?future=true = "próximas citas": orden ASCENDENTE (la más cercana primero),
     // para que un limit pequeño devuelva las SIGUIENTES, no las más lejanas.
     // El resto (listado, lista de espera) mantiene DESC (lo más reciente arriba).
-    const sortDir = searchParams.get("future") === "true" ? "ASC" : "DESC";
+    // ?orden=asc pide lo mismo sin recortar a «desde ahora»: lo usa la falta
+    // recuperable con ?from, para recibir las citas CERCANAS a la falta y no las
+    // 100 más lejanas de la serie (15/09/2026, AV-0139).
+    const sortDir = searchParams.get("future") === "true" || searchParams.get("orden") === "asc" ? "ASC" : "DESC";
     const { count, rows } = await Booking.findAndCountAll({
       where,
       include,
