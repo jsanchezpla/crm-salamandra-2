@@ -170,7 +170,10 @@ export default function ResumenCaja({ cajaId }) {
                     entró o salió a mano y lo que queda al cerrar el día
                     (10/09/2026, Aumenta). La tarjeta y el banco no pasan por
                     el cajón, así que van detrás. */}
-                <th className="text-right font-medium px-3 py-2">Entradas y salidas</th>
+                {/* Separadas y no el neto (15/09/2026, AV-0131): «−957,19» se
+                    leía como una salida que nadie había apuntado. */}
+                <th className="text-right font-medium px-3 py-2">Entradas</th>
+                <th className="text-right font-medium px-3 py-2">Salidas</th>
                 <th className="text-right font-medium px-3 py-2">Queda en caja</th>
                 <th className="text-right font-medium px-3 py-2">Tarjeta</th>
                 <th className="text-right font-medium px-3 py-2">Banco</th>
@@ -178,9 +181,9 @@ export default function ResumenCaja({ cajaId }) {
               </tr>
             </thead>
             <tbody>
-              {cargando && <tr><td colSpan={7} className="px-3 py-6 text-center text-neutral-400">Cargando…</td></tr>}
+              {cargando && <tr><td colSpan={8} className="px-3 py-6 text-center text-neutral-400">Cargando…</td></tr>}
               {!cargando && dias.length === 0 && (
-                <tr><td colSpan={7} className="px-3 py-8 text-center text-neutral-400">
+                <tr><td colSpan={8} className="px-3 py-8 text-center text-neutral-400">
                   Ningún cobro en estas fechas.
                 </td></tr>
               )}
@@ -192,7 +195,8 @@ export default function ResumenCaja({ cajaId }) {
                 const numDevoluciones = cobros.filter((c) => c.devolucion).length;
                 const numCobros = cobros.length - numDevoluciones;
                 const abierto = verTodos || unSoloDia || abiertos.has(d.fecha);
-                const desplegable = cobros.length > 0 || d.pendientes?.cobros > 0;
+                const apuntes = d.apuntes ?? [];
+                const desplegable = cobros.length > 0 || apuntes.length > 0 || d.pendientes?.cobros > 0;
                 return (
                   <Fragment key={d.fecha}>
                     <tr
@@ -225,12 +229,11 @@ export default function ResumenCaja({ cajaId }) {
                         )}
                       </td>
                       <td className="px-3 py-2 text-right tabular text-neutral-600">{d.efectivo.importe ? fmtMoney(d.efectivo.importe) : "—"}</td>
-                      <td className="px-3 py-2 text-right tabular text-neutral-500">
-                        {d.movimientos.entradas === 0 && d.movimientos.salidas === 0
-                          ? "—"
-                          : <span className={d.movimientos.neto < 0 ? "text-rose-600" : "text-emerald-700"}>
-                              {d.movimientos.neto > 0 ? "+" : ""}{fmtMoney(d.movimientos.neto)}
-                            </span>}
+                      <td className="px-3 py-2 text-right tabular text-emerald-700">
+                        {d.movimientos.entradas ? `+${fmtMoney(d.movimientos.entradas)}` : <span className="text-neutral-500">—</span>}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular text-rose-600">
+                        {d.movimientos.salidas ? `−${fmtMoney(d.movimientos.salidas)}` : <span className="text-neutral-500">—</span>}
                       </td>
                       {/* Lo que queda en el cajón al cerrar ese día: el saldo
                           del día anterior más lo que se cobró en efectivo y lo
@@ -260,7 +263,7 @@ export default function ResumenCaja({ cajaId }) {
                         a cobro y en orden de hora. */}
                     {abierto && desplegable && (
                       <tr className="bg-neutral-50/70">
-                        <td colSpan={7} className="px-3 pb-3 pt-1">
+                        <td colSpan={8} className="px-3 pb-3 pt-1">
                           {cobros.length > 0 && (
                             <table className="w-full text-[12px]">
                               <thead className="text-neutral-400">
@@ -322,6 +325,32 @@ export default function ResumenCaja({ cajaId }) {
                               </tbody>
                             </table>
                           )}
+                          {/* Las entradas y salidas del cajón, una a una: lo que
+                              suman las dos columnas de la fila (15/09/2026, AV-0131). */}
+                          {apuntes.length > 0 && (
+                            <table className={`w-full text-[12px] ${cobros.length > 0 ? "mt-2" : ""}`}>
+                              <thead className="text-neutral-400">
+                                <tr>
+                                  <th className="text-left font-medium px-2 py-1 w-16">Caja</th>
+                                  <th className="text-left font-medium px-2 py-1">Concepto</th>
+                                  <th className="text-right font-medium px-2 py-1">Importe</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {apuntes.map((mv) => (
+                                  <tr key={mv.id} className="border-t border-neutral-200/70">
+                                    <td className={`px-2 py-1.5 font-medium ${mv.direction === "out" ? "text-rose-600" : "text-emerald-700"}`}>
+                                      {mv.direction === "out" ? "Salida" : "Entrada"}
+                                    </td>
+                                    <td className="px-2 py-1.5 text-neutral-700">{mv.concept}</td>
+                                    <td className={`px-2 py-1.5 text-right tabular font-medium ${mv.direction === "out" ? "text-rose-600" : "text-emerald-700"}`}>
+                                      {mv.direction === "out" ? "−" : "+"}{fmtMoney(mv.amount)}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
                           {/* Los pendientes de ese día no están en la lista porque no
                               suman: se dicen para que nadie los eche en falta. */}
                           {d.pendientes?.cobros > 0 && (
@@ -345,7 +374,8 @@ export default function ResumenCaja({ cajaId }) {
                 <tr className="border-t-2 border-neutral-200 bg-neutral-50 font-semibold text-neutral-800">
                   <td className="px-3 py-2">Total</td>
                   <td className="px-3 py-2 text-right tabular">{fmtMoney(datos.total.efectivo.importe)}</td>
-                  <td className="px-3 py-2 text-right tabular">{fmtMoney(datos.total.movimientos.neto)}</td>
+                  <td className="px-3 py-2 text-right tabular">{fmtMoney(datos.total.movimientos.entradas)}</td>
+                  <td className="px-3 py-2 text-right tabular">{fmtMoney(datos.total.movimientos.salidas)}</td>
                   {/* Aquí no se suma la columna: lo que queda en el cajón es el
                       saldo del último día, no la suma de los saldos. */}
                   <td className="px-3 py-2 text-right tabular">{fmtMoney(datos.enCajaAlFinal)}</td>
@@ -364,7 +394,7 @@ export default function ResumenCaja({ cajaId }) {
       {datos && (
         <p className="text-[11.5px] text-neutral-400">
           «Queda en caja» es solo efectivo: lo que quedó el día anterior, más lo cobrado en efectivo, más
-          las entradas y menos las salidas apuntadas en «Entradas y salidas». Es el mismo número que propone
+          las entradas y menos las salidas apuntadas en la pestaña «Entradas y salidas». Es el mismo número que propone
           «Cerrar caja» ese día, y en los días que se arquearon manda lo que se contó.{" "}
           {datos.saldoInicial
             ? `Se parte de los ${fmtMoney(datos.saldoInicial.importe)} contados al cerrar el ${fmtDate(datos.saldoInicial.fecha)}.`

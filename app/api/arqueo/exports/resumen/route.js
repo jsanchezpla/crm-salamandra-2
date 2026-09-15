@@ -12,7 +12,7 @@ import { construirResumenCaja, rangoDelResumen } from "../../../../../lib/billin
  * ficheros no se podrían cruzar:
  *
  *   · «Resumen por día» — una fila por día, igual que la tabla de la pantalla:
- *     efectivo, tarjeta, banco, total y el neto de los apuntes de caja. Es lo
+ *     efectivo, tarjeta, banco, total y las entradas y salidas de caja. Es lo
  *     que se pega en la contabilidad del mes.
  *   · «Cobros» — una fila por cobro, con su día, hora, quién pagó y cómo. Es lo
  *     que se usa para cuadrar el cajón cuando el total del día no sale.
@@ -56,7 +56,9 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, tenant, hasM
     const columns = [
       { header: "Día", key: "dia", width: 14 },
       { header: "Efectivo", key: "efectivo", width: 14, numFmt: MONEY_FMT },
-      { header: "Entradas y salidas", key: "caja", width: 18, numFmt: MONEY_FMT },
+      // Separadas y no el neto, como en pantalla (15/09/2026, AV-0131).
+      { header: "Entradas de caja", key: "entradas", width: 16, numFmt: MONEY_FMT },
+      { header: "Salidas de caja", key: "salidas", width: 16, numFmt: MONEY_FMT },
       // Lo que queda en el cajón al cerrar ese día, como en pantalla
       // (10/09/2026): el saldo se arrastra, así que no es la suma de la columna.
       { header: "Queda en caja", key: "queda", width: 16, numFmt: MONEY_FMT },
@@ -68,7 +70,8 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, tenant, hasM
     const rows = conAlgo.map((d) => ({
       dia: fmtDateEs(d.fecha),
       efectivo: d.efectivo.importe,
-      caja: d.movimientos.neto,
+      entradas: d.movimientos.entradas,
+      salidas: d.movimientos.salidas,
       queda: d.efectivoDelDia?.queda ?? 0,
       tarjeta: d.tarjeta.importe,
       banco: d.banco.importe,
@@ -79,7 +82,8 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, tenant, hasM
     rows.push({
       dia: "TOTAL",
       efectivo: data.total.efectivo.importe,
-      caja: data.total.movimientos.neto,
+      entradas: data.total.movimientos.entradas,
+      salidas: data.total.movimientos.salidas,
       // Aquí no se suma: lo que queda es el saldo del último día.
       queda: data.enCajaAlFinal,
       tarjeta: data.total.tarjeta.importe,
@@ -121,6 +125,24 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, tenant, hasM
             { header: "Importe", key: "importe", width: 14, numFmt: MONEY_FMT },
           ],
           rows: cobros,
+        },
+        {
+          // Cada apunte del cajón, suelto: lo que suman las dos columnas del resumen.
+          name: "Entradas y salidas",
+          columns: [
+            { header: "Día", key: "dia", width: 14 },
+            { header: "Tipo", key: "tipo", width: 10 },
+            { header: "Concepto", key: "concepto", width: 40 },
+            { header: "Importe", key: "importe", width: 14, numFmt: MONEY_FMT },
+          ],
+          rows: conAlgo.flatMap((d) =>
+            (d.apuntes ?? []).map((mv) => ({
+              dia: fmtDateEs(d.fecha),
+              tipo: mv.direction === "out" ? "Salida" : "Entrada",
+              concepto: mv.concept,
+              importe: mv.direction === "out" ? -mv.amount : mv.amount,
+            }))
+          ),
         },
       ],
       filters: [

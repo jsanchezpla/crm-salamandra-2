@@ -109,7 +109,11 @@ describe("la pantalla del cierre", () => {
 describe("el resumen por día enseña el mismo saldo", () => {
   it("con su columna, pegada al efectivo", () => {
     const cabecera = resumen.slice(resumen.indexOf("<thead"), resumen.indexOf("</thead>"));
-    assert.match(cabecera, /Entradas y salidas/);
+    // Entradas y salidas en dos columnas, nunca el neto (15/09/2026, AV-0131):
+    // «−957,19» se leía como una salida que nadie había apuntado.
+    assert.match(cabecera, />Entradas</);
+    assert.match(cabecera, />Salidas</);
+    assert.doesNotMatch(resumen, /movimientos\.neto/);
     assert.match(cabecera, /Queda en caja/);
     // El orden importa: el cajón se lee de izquierda a derecha, y la tarjeta y
     // el banco no pasan por él.

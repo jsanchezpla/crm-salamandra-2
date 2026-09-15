@@ -75,10 +75,11 @@ a una, con la sesión de admin de Aumenta y con Organízate abierto al lado:
 Tres cosas que pidió el mostrador, todas sobre el resumen por día de
 `/facturacion/arqueo`:
 
-- **Exportar a Excel el periodo elegido.** Dos hojas, porque son dos preguntas
-  distintas sobre el mismo dato y en dos ficheros no se podrían cruzar:
-  «Resumen por día» —lo que se pega en la contabilidad del mes— y «Cobros»
-  —lo que se usa para cuadrar el cajón cuando el total del día no sale—. Las
+- **Exportar a Excel el periodo elegido.** Tres hojas, porque son preguntas
+  distintas sobre el mismo dato y en ficheros sueltos no se podrían cruzar:
+  «Resumen por día» —lo que se pega en la contabilidad del mes—, «Cobros»
+  —lo que se usa para cuadrar el cajón cuando el total del día no sale— y
+  «Entradas y salidas» (cada apunte del cajón, desde el 15/09/2026). Las
   cifras salen de `lib/billing/resumenCaja.js`, la MISMA función de la que come
   la pantalla: un Excel que no cuadre con lo que se ve es peor que no tenerlo.
 - **Vista lateral del cobro.** Pulsar un pago abre `CobroDrawer` con sus datos y
@@ -1532,6 +1533,11 @@ la casilla de «motivo» — texto libre que dentro de seis meses no dice nada.
   día, un recibo domiciliado y una transferencia son «lo que entró por banco».
   Un cobro PENDIENTE no suma —se enseña aparte—, y un método que no cae en
   ninguna cesta se declara en `metodosSinCesta` en vez de perderse.
+  **Entradas y salidas van en DOS columnas, nunca el neto** (15/09/2026, AV-0131
+  de Aumenta: el 01/09 salían «−957,19» y se leía como una salida que nadie había
+  apuntado, cuando eran 900 y 150 fuera y 92,81 dentro). Cada día trae `apuntes`
+  y al desplegarlo se ven uno a uno; el Excel lleva también las dos columnas y
+  una hoja «Entradas y salidas» con cada apunte.
 
 Las tres cosas viven en la misma pantalla (`/facturacion/arqueo`) con pestañas
 —Cierres · Entradas y salidas · Resumen por día—: se miran seguidas, cuadrando
