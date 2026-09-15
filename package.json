@@ -148,6 +148,7 @@
     "resend": "^4.0.0",
     "sequelize": "^6.37.8",
     "stripe": "^22.3.2",
+    "unpdf": "^1.8.1",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {

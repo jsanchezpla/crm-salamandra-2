@@ -23,7 +23,7 @@ import {
   puedeEditarObjetivo,
   MAX_TEXTO_OBJETIVO,
 } from "@/lib/clinica/objetivosDelPlan.js";
-import { normalizarMotivos, ponerMotivo, MAX_TEXTO_MOTIVO } from "@/lib/clinica/motivosDelPlan.js";
+import { normalizarMotivos, ponerMotivo, motivoDe, MAX_TEXTO_MOTIVO } from "@/lib/clinica/motivosDelPlan.js";
 import { esAdmin as esDireccion } from "@/lib/auth/permisos.js";
 
 const inputCls =
@@ -690,6 +690,64 @@ export default function InterventionPlanSection({ patientId, canEdit = true }) {
     }
   }
 
+  /**
+   * Trae de los informes PDF subidos el motivo de cada terapia (15/09/2026,
+   * AV-0103). Como el de la entrevista: no guarda, y solo toca lo que en
+   * pantalla siga vacío, aunque esté a medio escribir sin guardar.
+   */
+  async function traerDeLosInformes() {
+    setTrayendo(true);
+    setErr(null);
+    setAviso(null);
+    try {
+      const r = await fetch(`/api/pacientes/${patientId}/plan/desde-informes`, { cache: "no-store" });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j.error || "No se han podido leer los informes");
+      const d = j.data;
+      if (!d.hayInformes) {
+        setAviso("Este paciente no tiene informes en PDF subidos en Documentos, así que no hay de dónde traerlo.");
+        return;
+      }
+      const nombreDe = (id) =>
+        terapeutas.find((t) => t.id === id)?.nombre ?? equipo.find((m) => m.id === id)?.displayName ?? "su terapeuta";
+      // Solo lo que siga vacío; se vuelve a mirar al aplicar por si se ha
+      // escrito algo mientras se leían los PDF.
+      const motivos = (d.motivos ?? []).filter((m) => !motivoDe(form.consultationReasonsByTherapist, m.terapeutaId));
+      const general = d.general && !form.consultationReasons.trim() ? d.general : null;
+      const diagnostico = d.diagnostico && !form.diagnosis.trim() ? d.diagnostico : null;
+      setForm((f) => {
+        const nuevo = { ...f };
+        for (const m of motivos) {
+          if (motivoDe(nuevo.consultationReasonsByTherapist, m.terapeutaId)) continue;
+          nuevo.consultationReasonsByTherapist = ponerMotivo(nuevo.consultationReasonsByTherapist, m.terapeutaId, m.texto);
+        }
+        if (general && !f.consultationReasons.trim()) nuevo.consultationReasons = general.texto;
+        if (diagnostico && !f.diagnosis.trim()) nuevo.diagnosis = diagnostico.texto;
+        return nuevo;
+      });
+      const traido = [
+        ...motivos.map((m) => `el motivo de ${nombreDe(m.terapeutaId)} de «${m.fileName}»`),
+        general ? `el motivo general de «${general.fileName}»` : null,
+        diagnostico ? `el diagnóstico, tal cual lo escribe «${diagnostico.fileName}»` : null,
+      ].filter(Boolean);
+      const c = d.cuenta ?? {};
+      const aMano = [
+        c.sinTexto ? `${c.sinTexto} sin texto (escaneado${c.sinTexto > 1 ? "s" : ""})` : null,
+        c.cifrados ? `${c.cifrados} con contraseña` : null,
+      ].filter(Boolean);
+      const nota = aMano.length ? ` No se ha podido leer: ${aMano.join(" y ")}; esos hay que mirarlos a mano.` : "";
+      setAviso(
+        traido.length
+          ? `Traído ${traido.join(", ")}. Revísalo y pulsa «Guardar plan».${nota}`
+          : `Leídos ${c.leidos ?? 0} informes y no hay nada que traer: o no traen «Motivo de consulta» o lo de su terapia ya está escrito.${nota}`,
+      );
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setTrayendo(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       {err && <div className="text-xs text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{err}</div>}
@@ -712,7 +770,7 @@ export default function InterventionPlanSection({ patientId, canEdit = true }) {
             diagnóstico por el camino.
         */}
         {canEdit && (
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={traerDeLaEntrevista}
@@ -721,8 +779,18 @@ export default function InterventionPlanSection({ patientId, canEdit = true }) {
             >
               {trayendo ? "Buscando…" : "Traer de la entrevista inicial"}
             </button>
+            {/* De los informes PDF subidos (15/09/2026, AV-0103): el apartado
+                «Motivo de consulta» copiado tal cual, a la terapia del informe. */}
+            <button
+              type="button"
+              onClick={traerDeLosInformes}
+              disabled={trayendo}
+              className="text-[11px] px-2.5 py-1.5 rounded-lg border border-neutral-200 text-neutral-600 hover:border-neutral-400 disabled:opacity-50"
+            >
+              {trayendo ? "Buscando…" : "Traer de los informes subidos"}
+            </button>
             <span className="text-[10px] text-neutral-400">
-              Rellena el motivo de consulta y la información previa con lo que ya escribisteis. No pisa lo que tengas puesto.
+              Rellena con lo que ya escribisteis, copiado tal cual. No pisa lo que tengas puesto.
             </span>
           </div>
         )}

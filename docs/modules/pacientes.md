@@ -422,7 +422,18 @@ Pestañas (`TABS` en `app/(dashboard)/pacientes/[id]/page.jsx`):
    del cliente; aquí solo se consulta y enlaza) y **facturación**
    (`PatientBillingSection`).
 2. **Plan**: plan de intervención (`InterventionPlanSection`, `PUT
-   /api/pacientes/[id]/plan`, auditado).
+   /api/pacientes/[id]/plan`, auditado). Dos botones rellenan sin IA y sin
+   guardar solo lo que esté vacío: «Traer de la entrevista inicial»
+   (`plan/desde-entrevista`, `lib/clinica/planDesdeEntrevista.js`) y, desde el
+   15/09/2026 (AV-0103), «Traer de los informes subidos»
+   (`plan/desde-informes`, `lib/clinica/planDesdeInformes.js` +
+   `lib/documents/textoDePdf.js` con `unpdf`): lee los 12 PDF más recientes
+   con «informe» en el nombre, copia literal el apartado «Motivo de consulta»
+   hasta el siguiente encabezado y lo pone en el motivo de la terapeuta de esa
+   terapia (del nombre del fichero o del arranque del motivo; sin terapeuta de
+   esa terapia, al general). El diagnóstico solo si el informe trae un
+   apartado con ese nombre. Sin OCR: escaneados y con contraseña se cuentan y
+   se avisa.
 3. **Sesiones**: lista. Click en una sesión abre un drawer con el registro en
    3 partes (preparación + adjuntos, informe, devolución de la familia).
    Respeta la regla #13 (`top-14 lg:top-0`). **Sin las entrevistas iniciales**
