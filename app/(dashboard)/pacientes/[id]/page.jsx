@@ -676,7 +676,12 @@ export default function PacienteFichaPage() {
   const [nuevaCoordinacion, setNuevaCoordinacion] = useState(false);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [activeTab, setActiveTab] = useState("resumen");
+  // `?pestana=plan` abre esa pestaña (15/09/2026, AV-0078): la Bandeja manda
+  // aquí a completar el plan, y aterrizar en «Resumen» obligaba a buscarlo.
+  const [activeTab, setActiveTab] = useState(() => {
+    const pedida = query.get("pestana");
+    return TABS.some((t) => t.key === pedida) ? pedida : "resumen";
+  });
   const [openSession, setOpenSession] = useState(null);
   const [busy, setBusy] = useState(false);
 

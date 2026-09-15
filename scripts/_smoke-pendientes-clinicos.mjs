@@ -52,3 +52,11 @@ test("la entrevista se pide solo a pacientes NUEVOS por su fecha de alta, y no s
   });
   assert.deepEqual(r.get("t1").entrevistas.map((e) => e.patientId), ["nuevo"]);
 });
+
+test("«Hacerlo» abre la ficha en la pestaña Plan", async () => {
+  const { readFileSync } = await import("node:fs");
+  const bandeja = readFileSync(new URL("../app/(dashboard)/equipo/bandeja/page.jsx", import.meta.url), "utf8");
+  const ficha = readFileSync(new URL("../app/(dashboard)/pacientes/[id]/page.jsx", import.meta.url), "utf8");
+  assert.match(bandeja, /\/pacientes\/\$\{p\.patientId\}\?pestana=plan/);
+  assert.match(ficha, /query\.get\("pestana"\)/);
+});

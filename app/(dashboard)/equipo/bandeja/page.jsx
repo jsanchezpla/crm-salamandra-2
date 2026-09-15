@@ -275,7 +275,7 @@ export default function BandejaPage() {
                       {p.falta.includes("plan") ? "Sin plan de intervención" : `Le falta: ${p.falta.join(", ")}`}
                     </div>
                   </div>
-                  <Link href={`/pacientes/${p.patientId}`} className="shrink-0 text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline">
+                  <Link href={`/pacientes/${p.patientId}?pestana=plan`} className="shrink-0 text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline">
                     {p.falta.includes("plan") ? "Hacerlo" : "Completarlo"}
                   </Link>
                 </li>
