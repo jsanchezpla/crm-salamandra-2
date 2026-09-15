@@ -33,9 +33,16 @@ const NIVEL = {
 // Dos estados (`lib/buzon/buzon.js`, Rodrigo 02/09/2026): nuevo → enviado al
 // Registro, y ahí se acaba el Buzón: lo enviado cuenta como cerrado aquí y
 // sigue vivo en el tablero. «Enviado» lo pone el botón, no la mano.
+//
+// «Mensajes» (Rodrigo, 15/09/2026): lo que le escribimos NOSOTROS a alguien y
+// todavía no ha contestado. No es trabajo, así que no va en Activos; cuando la
+// persona contesta, pasa sola a Activos. «Resuelto» es lo que se mandó directo
+// a Resuelto (o se cerró allí) desde aquí.
 const PESTANAS = [
   { key: "activos", label: "Activos" },
+  { key: "mensajes", label: "Mensajes" },
   { key: "enviado", label: "En el Registro" },
+  { key: "cerrado", label: "Resuelto" },
   { key: "todos", label: "Todos" },
 ];
 
@@ -338,12 +345,7 @@ export default function BuzonPage() {
 
       <div className="mt-8 flex items-center gap-1.5 flex-wrap">
         {PESTANAS.map((p) => {
-          const n =
-            p.key === "todos"
-              ? Object.entries(datos.recuento ?? {})
-                  .filter(([k]) => k !== "activos")
-                  .reduce((suma, [, v]) => suma + (Number(v) || 0), 0)
-              : (datos.recuento?.[p.key] ?? 0);
+          const n = Number(datos.recuento?.[p.key]) || 0;
           const activa = tab === p.key;
           return (
             <button
@@ -394,6 +396,7 @@ export default function BuzonPage() {
                         </span>
                         {a.bloquea && <Chip nivel="amber">Le bloquea</Chip>}
                         {a.deSalamandra && <Chip nivel="green">Le escribimos</Chip>}
+                        {a.esperaSuRespuesta && <Chip nivel="grey">Sin contestar</Chip>}
                         {/* Antes esto era `!a.leidoAt`, o sea «no lo hemos
                             abierto NUNCA», y por eso un cliente podía insistir
                             tres veces en un hilo ya visto sin que la fila se
@@ -442,7 +445,9 @@ export default function BuzonPage() {
           onEnviado={(id) => {
             setEscribiendo(false);
             setAbierto(id);
-            cargar();
+            // Donde va a vivir hasta que conteste. Cambiar la pestaña ya recarga.
+            if (tab === "mensajes") cargar();
+            else setTab("mensajes");
           }}
         />
       )}
@@ -458,6 +463,9 @@ function Detalle({ avisoId, asignables, estados, prioridades, onCerrar }) {
   const [fallo, setFallo] = useState(null);
   const [viendo, setViendo] = useState(null);
   const [alRegistro, setAlRegistro] = useState(false);
+  const [aResuelto, setAResuelto] = useState(false);
+  const [cerrando, setCerrando] = useState(false);
+  const [notaResuelto, setNotaResuelto] = useState("");
 
   const cargar = useCallback(async () => {
     try {
@@ -525,6 +533,34 @@ function Detalle({ avisoId, asignables, estados, prioridades, onCerrar }) {
     }
   }
 
+  /**
+   * «Enviar a Resuelto» (15/09/2026): sin tarea, la escribe ya cerrada en
+   * Resuelto; con tarea en el backlog, la cierra. La nota es opcional: sin
+   * ella el servidor pone una por defecto.
+   */
+  async function enviarAResuelto() {
+    if (aResuelto) return;
+    setAResuelto(true);
+    try {
+      const res = await fetch(`/api/admin/buzon/${avisoId}/resuelto`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nota: notaResuelto }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "No se pudo enviar a Resuelto");
+      setAviso(json.data.aviso);
+      setCerrando(false);
+      setNotaResuelto("");
+      const avisos = Array.isArray(json.data.avisos) ? json.data.avisos : [];
+      setFallo(avisos.length ? avisos.join(" · ") : null);
+    } catch (e) {
+      setFallo(e.message);
+    } finally {
+      setAResuelto(false);
+    }
+  }
+
   async function responder(e) {
     e.preventDefault();
     if (enviando || !texto.trim()) return;
@@ -588,11 +624,13 @@ function Detalle({ avisoId, asignables, estados, prioridades, onCerrar }) {
                     // «Enviado al registro» no es una etiqueta: si el aviso aún no
                     // tiene su tarea, pulsarlo la apunta de verdad.
                     onClick={() =>
-                      e.key === "enviado" && !aviso.registroFicha
-                        ? enviarAlRegistro()
-                        : cambiar("estado", e.key)
+                      e.key === "cerrado"
+                        ? aviso.estado !== "cerrado" && setCerrando(true)
+                        : e.key === "enviado" && !aviso.registroFicha
+                          ? enviarAlRegistro()
+                          : cambiar("estado", e.key)
                     }
-                    disabled={alRegistro}
+                    disabled={alRegistro || aResuelto}
                     className="text-[11px] px-2 py-1 rounded cursor-pointer disabled:opacity-50"
                     style={{
                       background: aviso.estado === e.key ? "var(--ok)" : "transparent",
@@ -605,33 +643,103 @@ function Detalle({ avisoId, asignables, estados, prioridades, onCerrar }) {
                 ))}
               </div>
 
-              {aviso.registroFicha || aviso.estado === "enviado" ? (
+              {aviso.estado === "cerrado" ? (
                 <div
                   className="rounded px-3 py-2 text-[11px]"
                   style={{ background: "var(--panel-alto)", color: "var(--dim)" }}
                 >
-                  <b>En el Registro</b>
-                  {aviso.registroEnviadoAt
-                    ? ` desde el ${fechaHora(aviso.registroEnviadoAt)}`
-                    : " (sin ficha enlazada: es anterior al botón)"}
+                  <b>En Resuelto</b>
+                  {aviso.registroEnviadoAt ? ` desde el ${fechaHora(aviso.registroEnviadoAt)}` : ""}
                   {aviso.registroFicha ? ` · ficha ${aviso.registroFicha}` : ""} ·{" "}
                   <a href="/admin/tablero" className="underline">
                     abrir el Registro
                   </a>
                 </div>
+              ) : aviso.registroFicha || aviso.estado === "enviado" ? (
+                <div
+                  className="rounded px-3 py-2 text-[11px] flex items-center justify-between gap-3 flex-wrap"
+                  style={{ background: "var(--panel-alto)", color: "var(--dim)" }}
+                >
+                  <span>
+                    <b>En el Registro</b>
+                    {aviso.registroEnviadoAt
+                      ? ` desde el ${fechaHora(aviso.registroEnviadoAt)}`
+                      : " (sin ficha enlazada: es anterior al botón)"}
+                    {aviso.registroFicha ? ` · ficha ${aviso.registroFicha}` : ""} ·{" "}
+                    <a href="/admin/tablero" className="underline">
+                      abrir el Registro
+                    </a>
+                  </span>
+                  {!cerrando && (
+                    <button
+                      onClick={() => setCerrando(true)}
+                      className="text-[11px] px-2 py-1 rounded cursor-pointer"
+                      style={{ border: "1px solid var(--line)", color: "var(--dim)" }}
+                    >
+                      Cerrar en Resuelto
+                    </button>
+                  )}
+                </div>
               ) : (
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 flex-wrap">
                   <button
                     onClick={enviarAlRegistro}
-                    disabled={alRegistro}
+                    disabled={alRegistro || aResuelto}
                     className="text-[12px] px-3 py-1.5 rounded cursor-pointer font-medium disabled:opacity-50"
                     style={{ background: "var(--ok)", color: "#fff" }}
                   >
                     {alRegistro ? "Apuntando…" : "Enviar al registro →"}
                   </button>
-                  <span className="text-[11px]" style={{ color: "var(--tenue)" }}>
-                    Apunta la tarea en «Sin comprobar» del backlog, con lo que cuenta el cliente.
+                  {!cerrando && (
+                    <button
+                      onClick={() => setCerrando(true)}
+                      disabled={alRegistro || aResuelto}
+                      className="text-[12px] px-3 py-1.5 rounded cursor-pointer disabled:opacity-50"
+                      style={{ border: "1px solid var(--ok)", color: "var(--ok)" }}
+                    >
+                      Enviar a Resuelto
+                    </button>
+                  )}
+                  <span className="text-[11px] w-full" style={{ color: "var(--tenue)" }}>
+                    Registro: tarea en «Sin comprobar» del backlog. Resuelto: queda escrito como hecho, sin tarea.
                   </span>
+                </div>
+              )}
+
+              {cerrando && aviso.estado !== "cerrado" && (
+                <div className="rounded px-3 py-2.5 space-y-2" style={{ border: "1px solid var(--line)" }}>
+                  <div className="text-[11px]" style={{ color: "var(--dim)" }}>
+                    {aviso.registroFicha
+                      ? "Cierra su tarea del backlog y la pasa a Resuelto."
+                      : "Lo apunta en Resuelto con fecha de hoy, con el hilo y las capturas."}{" "}
+                    Qué se hizo (opcional):
+                  </div>
+                  <input
+                    value={notaResuelto}
+                    onChange={(e) => setNotaResuelto(e.target.value)}
+                    maxLength={2000}
+                    placeholder="Ej.: se le explicó cómo hacerlo"
+                    className="w-full rounded px-3 py-1.5 text-[12px] outline-none"
+                    style={{ background: "var(--bg)", border: "1px solid var(--line)", color: "var(--text)" }}
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={enviarAResuelto}
+                      disabled={aResuelto}
+                      className="text-[12px] px-3 py-1.5 rounded cursor-pointer font-medium text-white disabled:opacity-50"
+                      style={{ background: "var(--ok)" }}
+                    >
+                      {aResuelto ? "Apuntando…" : "Enviar a Resuelto →"}
+                    </button>
+                    <button
+                      onClick={() => setCerrando(false)}
+                      disabled={aResuelto}
+                      className="text-[12px] px-2 py-1.5 cursor-pointer"
+                      style={{ color: "var(--tenue)" }}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
                 </div>
               )}
 

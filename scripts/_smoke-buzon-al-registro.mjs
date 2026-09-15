@@ -202,10 +202,10 @@ describe("yaEstaEnElRegistro", () => {
 });
 
 describe("los dos estados del Buzón (02/09/2026)", () => {
-  it("nuevo → enviado, y los tres nombres viejos se leen como hoy", () => {
+  it("nuevo → enviado (o cerrado, 15/09/2026), y los tres nombres viejos se leen como hoy", () => {
     assert.deepEqual(
       ESTADOS.map((e) => e.key),
-      ["nuevo", "enviado"]
+      ["nuevo", "enviado", "cerrado"]
     );
     assert.deepEqual(ESTADOS_ANTIGUOS, { en_curso: "enviado", esperando: "nuevo", resuelto: "enviado" });
     assert.equal(estadoActual("en_curso"), "enviado");
@@ -218,6 +218,8 @@ describe("los dos estados del Buzón (02/09/2026)", () => {
     assert.equal(validarCambio({ estado: "en_curso" }).ok, false);
     assert.equal(validarCambio({ estado: "esperando" }).ok, false);
     assert.equal(validarCambio({ estado: "resuelto" }).ok, false);
+    // «cerrado» existe, pero lo pone su botón, que escribe en Resuelto.
+    assert.equal(validarCambio({ estado: "cerrado" }).ok, false);
     assert.equal(validarCambio({ estado: "enviado" }).ok, true);
     assert.equal(validarCambio({ estado: "nuevo" }).ok, true);
   });

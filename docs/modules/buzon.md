@@ -476,6 +476,27 @@ capturas, igual que el formulario de Ayuda.
   `TRIAJE_TEXTO`, `TRIAJE_AUTOR`; ensayo sin `TRIAJE_CONFIRMAR=1`).
 - Auditoría `buzon.aviso_escrito`, con la referencia y el cliente, sin texto.
 
+## Pestaña «Mensajes» y «Enviar a Resuelto» (15/09/2026, Rodrigo)
+
+- **Mensajes**: lo que le escribimos nosotros (`contexto.origen = "salamandra"`),
+  en `nuevo` y sin `cliente_escribio_at`, NO cuenta como Activo. Vive en su
+  pestaña hasta que la persona contesta; entonces pasa a Activos solo. Regla
+  en `esperaSuRespuesta` (`lib/buzon/buzon.js`) y su gemela SQL
+  `whereMensajeSinRespuesta` (`buzonStore.js`). Al escribir a alguien, la
+  bandeja salta a esa pestaña.
+- **Estado `cerrado`** («Resuelto»; no `resuelto`, que es un nombre viejo que se
+  lee como enviado). Lo pone solo `POST /api/admin/buzon/[id]/resuelto`
+  (el PATCH lo rechaza), con `{ nota }` opcional:
+  - sin tarea → entrada nueva en el documento `resuelto` bajo la fecha de hoy
+    (`apuntarEnResuelto` en `lib/tablero/editor.js`, cuerpo de
+    `entradaDeResuelto` en `alRegistro.js`), con ficha y capturas;
+  - con tarea en el backlog → la cierra como el tablero (`cerrarTarea`,
+    primero Resuelto y después backlog);
+  - con ficha que ya no está en el backlog → solo marca el aviso.
+  Sin nota, `notaDeCierre` pone una por defecto. Si el cliente vuelve a
+  escribir, el aviso sube a Activos como uno enviado. Auditoría
+  `buzon.enviado_a_resuelto`. Prueba: `_smoke-buzon-mensajes-resuelto.mjs`.
+
 ## Lo que NO hace
 
 - No borra desde ninguna pantalla. Lo que caduca se lo lleva `podar-buzon.js`,

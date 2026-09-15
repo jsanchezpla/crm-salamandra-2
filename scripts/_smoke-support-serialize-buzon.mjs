@@ -463,6 +463,7 @@ describe("el vocabulario cerrado del Buzón, fijado como dato", () => {
     assert.deepEqual(ESTADOS, [
       { key: "nuevo", label: "Activo", nivel: "amber" },
       { key: "enviado", label: "Enviado al registro", nivel: "blue" },
+      { key: "cerrado", label: "Resuelto", nivel: "green" },
     ]);
     assert.deepEqual(
       PRIORIDADES.map((p) => p.key),
