@@ -854,6 +854,24 @@ export default function ClientDetailModule({
                     </div>
                   </div>
                 )}
+                {/*
+                  El motivo que se escribió en el bloque de cada PACIENTE del
+                  alta (15/09/2026, AV-0135 de Aumenta). Se guardaba en el
+                  paciente y solo se leía entrando en su ficha, así que recepción
+                  daba de alta, abría la familia y creía que se había perdido.
+                */}
+                {(client.pacientes ?? [])
+                  .filter((p) => p.motivo)
+                  .map((p) => (
+                    <div key={p.id}>
+                      <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                        Motivo de consulta · {p.nombre}
+                      </div>
+                      <div className="text-[13px] text-gray-700 whitespace-pre-wrap leading-relaxed">
+                        {p.motivo}
+                      </div>
+                    </div>
+                  ))}
                 {client.customFields?.info_adicional && (
                   <div>
                     <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">

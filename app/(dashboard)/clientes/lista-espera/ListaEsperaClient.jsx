@@ -235,13 +235,32 @@ export default function ListaEsperaClient() {
                 {i + 1}
               </span>
               <div className="min-w-0 flex-1">
-                <div className="text-sm text-neutral-800">{e.name}</div>
+                {/* Primero a quién se atiende y después quién llama (AV-0135):
+                    la entrada guarda el nombre de la ficha, que es el tutor. */}
+                {e.pacientes?.length > 0 ? (
+                  <div className="text-sm text-neutral-800">
+                    {e.pacientes.map((p) => p.nombre).join(", ")}
+                    <span className="text-neutral-500"> · {e.name}</span>
+                  </div>
+                ) : (
+                  <div className="text-sm text-neutral-800">{e.name}</div>
+                )}
                 <div className="text-[11px] text-neutral-500 flex flex-wrap gap-x-3">
                   {e.phone && <span>{e.phone}</span>}
                   {e.email && <span className="break-all">{e.email}</span>}
                   <span>En la lista desde {fmtDate(e.createdAt)} · {diasEsperando(e.createdAt)}</span>
                 </div>
                 {e.notes && <div className="text-[11px] text-neutral-600 mt-0.5">{e.notes}</div>}
+                {e.pacientes
+                  ?.filter((p) => p.motivo)
+                  .map((p) => (
+                    <div key={p.id} className="text-[11px] text-neutral-600 mt-0.5 whitespace-pre-wrap">
+                      <span className="text-neutral-400">
+                        Motivo{e.pacientes.length > 1 ? ` (${p.nombre})` : ""}:
+                      </span>{" "}
+                      {p.motivo}
+                    </div>
+                  ))}
 
                 {/* Quién lleva a la familia. En una cola de admisión esta es LA
                     pregunta: se entra sin terapeuta y se sale con uno, así que

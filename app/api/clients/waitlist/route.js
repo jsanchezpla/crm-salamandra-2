@@ -4,6 +4,7 @@ import { ok, created, error, forbidden, serverError } from "../../../../lib/util
 import { auditar, datosPeticion } from "../../../../lib/utils/auditoria.js";
 import { MODULE_KEYS } from "../../../../lib/tenant/moduleKeys.js";
 import { terapeutaValido, entrarEnListaEspera, entradaDeCliente } from "../../../../lib/clients/listaEspera.js";
+import { pacientesPorFamilia } from "../../../../lib/clients/pacientesDeLaFamilia.js";
 
 /**
  * /api/clients/waitlist — LISTA DE ESPERA DE ADMISIÓN (sprint Aumenta 2026-07,
@@ -82,12 +83,23 @@ export const GET = withTenant(async (request, _rc, ctx) => {
       }
     }
 
+    // A quién se espera atender (15/09/2026, AV-0135 de Aumenta): la entrada
+    // copia el nombre de la FICHA, que es el tutor, y en la cola no se sabía de
+    // qué niño era ni por qué venía. Solo para las enlazadas a una ficha.
+    const pacientes = await pacientesPorFamilia({
+      clientIds: rows.map((r) => r.clientId),
+      Patient: ctx.tenantModels.Patient,
+      hasModule: ctx.hasModule,
+      conMotivo: true,
+    });
+
     return ok({
       entries: rows.map((r) => {
         const j = r.toJSON();
         return {
           id: j.id,
           name: j.name,
+          pacientes: j.clientId ? (pacientes.get(String(j.clientId)) ?? []) : [],
           phone: j.phone,
           email: j.email,
           specialty: j.specialty,

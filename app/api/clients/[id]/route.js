@@ -81,7 +81,7 @@ export const GET = withTenant(async (request, { params }, ctx) => {
       // También aquí los pacientes: por esta rama pasa nutri_laura entera, y
       // el selector de fichas los necesita para pintar la elegida.
       json.pacientes =
-        (await pacientesPorFamilia({ clientIds: [client.id], Patient: tenantModels.Patient, hasModule })).get(
+        (await pacientesPorFamilia({ clientIds: [client.id], Patient: tenantModels.Patient, hasModule, conMotivo: true })).get(
           String(client.id)
         ) ?? [];
       return ok(json);
@@ -113,6 +113,8 @@ export const GET = withTenant(async (request, { params }, ctx) => {
     clientIds: [client.id],
     Patient: tenantModels.Patient,
     hasModule,
+    // El motivo de cada paciente (AV-0135): la ficha lo enseña junto al de la familia.
+    conMotivo: true,
   });
   return ok({
     ...client.toJSON(),
