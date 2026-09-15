@@ -11,6 +11,8 @@ import { bloquesDelInforme, tablaDePruebasParaLaIA } from "../../../../../../lib
 import { CLAVE_PRUEBAS, MAX_PRUEBAS_PARA_IA, normalizarPruebas } from "../../../../../../lib/clinica/pruebasDiagnosticas.js";
 import { structureInforme } from "../../../../../../lib/clinica/structureInforme.js";
 import { perfilDelCentro } from "../../../../../../lib/clinica/perfilDelCentro.js";
+import { planParaElInforme } from "../../../../../../lib/clinica/motivosDelPlan.js";
+import { SPECIALTY_LABEL } from "../../../../../../lib/clinica/specialties.js";
 
 /**
  * POST /api/clinica/reports/[id]/desde-material — el informe DICTADO
@@ -144,6 +146,29 @@ export const POST = withTenant(async (request, rc, ctx) => {
     }
     const pruebasQueViajan = tablaDePruebas ? normalizarPruebas(cs[CLAVE_PRUEBAS]).length : 0;
 
+    // El plan del paciente: motivo general y, por terapia, su motivo y sus
+    // objetivos (15/09/2026, AV-0143). En la beca no viaja: tiene sus tres
+    // apartados fijos y su propio motivo.
+    let delPlan = "";
+    const { InterventionPlan, PatientTherapist } = ctx.tenantModels;
+    if (InterventionPlan && informe.reportType !== "beca") {
+      const [plan, terapeutas] = await Promise.all([
+        InterventionPlan.findOne({
+          where: { patientId: informe.patientId },
+          attributes: ["consultationReasons", "consultationReasonsByTherapist", "objectives"],
+        }),
+        PatientTherapist
+          ? PatientTherapist.findAll({ where: { patientId: informe.patientId }, attributes: ["teamMemberId", "specialty"] })
+          : [],
+      ]);
+      delPlan = planParaElInforme({
+        plan: plan?.toJSON() ?? null,
+        terapeutas: terapeutas.map((t) => t.toJSON()),
+        autorId: informe.therapistId ?? null,
+        rotulos: SPECIALTY_LABEL,
+      });
+    }
+
     let salida;
     const t0 = Date.now();
     try {
@@ -155,6 +180,7 @@ export const POST = withTenant(async (request, rc, ctx) => {
         apartados,
         escrito,
         pruebas: cs[CLAVE_PRUEBAS],
+        delPlan,
         paciente: informe.patient,
         tipo: informe.reportType,
         apiKey: iaKey,
