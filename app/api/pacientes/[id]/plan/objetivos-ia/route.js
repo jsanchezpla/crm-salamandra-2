@@ -6,6 +6,8 @@ import { demoForcesFakeAi } from "../../../../../../lib/demo/isDemo.js";
 import { vetoAi } from "../../../../../../lib/ai/aiAccess.js";
 import { esErrorDeIa, motivoDelFalloIa } from "../../../../../../lib/ai/errorLegible.js";
 import { complete } from "../../../../../../lib/outreach/analysis/anthropic.js";
+import { motivoDe } from "../../../../../../lib/clinica/motivosDelPlan.js";
+import { resolveCurrentTeamMemberId } from "../../../../../../lib/team/currentTeamMember.js";
 import { perfilDelCentro } from "../../../../../../lib/clinica/perfilDelCentro.js";
 import {
   MAX_IDEAS,
@@ -79,6 +81,8 @@ export const POST = withTenant(async (request, rc, ctx) => {
       plan,
       paciente: paciente.toJSON(),
       centro: perfilDelCentro(ctx.tenant),
+      // El motivo de SU terapia, si lo tiene escrito (15/09/2026, AV-0143).
+      motivoDeSuTerapia: motivoDe(plan.consultationReasonsByTherapist, await resolveCurrentTeamMemberId(request, ctx.tenantModels)),
     });
     // `systemCacheado` es el núcleo clínico, el mismo que usan el registro y el
     // informe: viaja aparte para que Anthropic lo cachee (09/09/2026).

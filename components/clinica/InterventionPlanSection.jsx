@@ -23,6 +23,7 @@ import {
   puedeEditarObjetivo,
   MAX_TEXTO_OBJETIVO,
 } from "@/lib/clinica/objetivosDelPlan.js";
+import { normalizarMotivos, ponerMotivo, MAX_TEXTO_MOTIVO } from "@/lib/clinica/motivosDelPlan.js";
 import { esAdmin as esDireccion } from "@/lib/auth/permisos.js";
 
 const inputCls =
@@ -255,6 +256,59 @@ function ObjetivosPorTerapeuta({ objetivos, onChange, terapeutas, equipo, yo, ca
 }
 
 /**
+ * Motivo de consulta POR TERAPIA (15/09/2026, AV-0143 de Aumenta, Blanca: «tal
+ * y como habéis hecho en los objetivos, sería bueno tenerlo igual en el motivo
+ * de consulta»). Una caja por terapeuta del paciente —quien escribe, primero—
+ * y también las de quien ya no está pero dejó el suyo. Cada una escribe el
+ * suyo; el de otra se lee (dirección puede todos), con la misma regla que
+ * corregir un objetivo. El motivo general de arriba no se toca.
+ */
+function MotivosPorTerapeuta({ motivos, onChange, terapeutas, equipo, yo, canEdit, esAdmin = false }) {
+  const escritos = normalizarMotivos(motivos);
+  const ids = [...new Set([...terapeutas.map((t) => t.id), ...escritos.map((m) => m.terapeutaId)])];
+  if (!ids.length) return null;
+  const nombreDe = (id) =>
+    terapeutas.find((t) => t.id === id)?.nombre ?? equipo.find((m) => m.id === id)?.displayName ?? "Terapeuta que ya no está";
+  const grupos = ids
+    .map((id) => ({ id, nombre: nombreDe(id), especialidad: terapeutas.find((t) => t.id === id)?.especialidad ?? null, esYo: id === yo }))
+    .sort((a, b) => (a.esYo === b.esYo ? a.nombre.localeCompare(b.nombre, "es") : a.esYo ? -1 : 1));
+  const valorDe = (id) => (Array.isArray(motivos) ? motivos : []).find((m) => m?.terapeutaId === id)?.texto ?? "";
+  return (
+    <div>
+      <label className="text-[10px] uppercase tracking-wider text-neutral-400">Motivo de consulta por terapia</label>
+      <div className="mt-1 grid md:grid-cols-2 gap-3">
+        {grupos.map((g) => {
+          const puede = canEdit && puedeEditarObjetivo({ terapeutaId: g.id }, { yo, esAdmin });
+          return (
+            <div key={g.id} className="rounded-lg border border-neutral-100 bg-neutral-50/50 p-2.5">
+              <div className="text-[11px] font-medium text-neutral-700 mb-1.5">
+                {g.nombre}
+                {g.especialidad && <span className="text-neutral-400 font-normal"> · {rotuloEspecialidad(g.especialidad)}</span>}
+                {g.esYo && <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700">tú</span>}
+              </div>
+              {puede ? (
+                <textarea
+                  rows={2}
+                  maxLength={MAX_TEXTO_MOTIVO}
+                  value={valorDe(g.id)}
+                  onChange={(e) => onChange(ponerMotivo(motivos, g.id, e.target.value))}
+                  placeholder={g.esYo ? "Por qué acude a tu terapia" : `Por qué acude a la terapia de ${g.nombre}`}
+                  className={inputCls}
+                />
+              ) : (
+                <div className={`text-[11px] whitespace-pre-wrap ${valorDe(g.id) ? "text-neutral-600" : "text-neutral-300"}`}>
+                  {valorDe(g.id) || "Sin escribir"}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/**
  * Objetivos con IA (02/09/2026, Aumenta por el buzón AV-0019, Laura): la
  * terapeuta escribe las ideas clave, Claude redacta objetivos de intervención
  * adaptados al paciente y ella marca cuáles entran en el plan. No se guarda
@@ -310,6 +364,7 @@ function ObjetivosConIa({ patientId, plan, onAnadir }) {
           plan: {
             diagnosis: plan.diagnosis,
             consultationReasons: plan.consultationReasons,
+            consultationReasonsByTherapist: normalizarMotivos(plan.consultationReasonsByTherapist),
             previousInfo: plan.previousInfo,
             objectives: plan.objectives,
           },
@@ -508,7 +563,7 @@ export default function InterventionPlanSection({ patientId, canEdit = true }) {
   const [guardando, setGuardando] = useState(false);
   const [aviso, setAviso] = useState(null);
   const [form, setForm] = useState({
-    diagnosis: "", consultationReasons: "", previousInfo: "",
+    diagnosis: "", consultationReasons: "", consultationReasonsByTherapist: [], previousInfo: "",
     objectives: [], activityTypes: [], methodologies: [],
     objectivesReportsPerTrimester: 0, sessionRecordsPerTrimester: 0,
   });
@@ -555,6 +610,7 @@ export default function InterventionPlanSection({ patientId, canEdit = true }) {
           setForm({
             diagnosis: p.diagnosis ?? "",
             consultationReasons: p.consultationReasons ?? "",
+            consultationReasonsByTherapist: normalizarMotivos(p.consultationReasonsByTherapist),
             previousInfo: p.previousInfo ?? "",
             objectives: normalizarObjetivos(p.objectives ?? []),
             activityTypes: p.activityTypes ?? [],
@@ -677,11 +733,21 @@ export default function InterventionPlanSection({ patientId, canEdit = true }) {
               className={`mt-1 ${inputCls}`} placeholder="Diagnóstico o hipótesis de trabajo" />
           </div>
           <div>
-            <label className="text-[10px] uppercase tracking-wider text-neutral-400">Motivo de consulta</label>
+            <label className="text-[10px] uppercase tracking-wider text-neutral-400">Motivo de consulta general</label>
             <textarea rows={2} value={form.consultationReasons} onChange={set("consultationReasons")} disabled={!canEdit}
               className={`mt-1 ${inputCls}`} placeholder="Por qué acude a consulta" />
           </div>
         </div>
+
+        <MotivosPorTerapeuta
+          motivos={form.consultationReasonsByTherapist}
+          onChange={(v) => setForm((f) => ({ ...f, consultationReasonsByTherapist: v }))}
+          terapeutas={terapeutas}
+          equipo={equipo}
+          yo={yo}
+          canEdit={canEdit}
+          esAdmin={esDireccion(rol)}
+        />
 
         <div>
           <label className="text-[10px] uppercase tracking-wider text-neutral-400">Información previa</label>

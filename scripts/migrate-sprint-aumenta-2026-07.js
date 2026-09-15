@@ -206,6 +206,9 @@ async function migrateInterventionPlans(s, schema, uuidDefault) {
     log(`✓ ${schema}.intervention_plans: tabla creada`);
   }
   await ensureIndex(s, schema, "intervention_plans_patient_unique", "intervention_plans", "(patient_id)", { unique: true });
+  // Motivo de consulta por terapeuta (15/09/2026, AV-0143). Nullable y sin
+  // DEFAULT: no escribe en ninguna fila existente.
+  await s.query(`ALTER TABLE "${schema}"."intervention_plans" ADD COLUMN IF NOT EXISTS consultation_reasons_by_therapist JSONB`);
 }
 
 async function migrateContractSignatures(s, schema, uuidDefault) {

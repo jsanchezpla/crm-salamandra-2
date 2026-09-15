@@ -35,6 +35,12 @@ export function defineInterventionPlan(sequelize) {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      // Un motivo por terapeuta, `[{ terapeutaId, texto }]` (15/09/2026, AV-0143).
+      // Sin valor por defecto a propósito: la columna se añade sin escribir filas.
+      consultationReasonsByTherapist: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+      },
       previousInfo: {
         type: DataTypes.TEXT,
         allowNull: true,

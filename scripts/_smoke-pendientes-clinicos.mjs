@@ -19,6 +19,12 @@ test("dice qué le falta, y un objetivo en blanco no cuenta", () => {
   assert.deepEqual(loQueFaltaAlPlan({ diagnosis: "a", consultationReasons: "b", objectives: ["legado"] }), []);
 });
 
+test("un motivo de una sola terapia ya cuenta como motivo (AV-0143)", () => {
+  const plan = { diagnosis: "a", consultationReasons: "", objectives: ["c"],
+    consultationReasonsByTherapist: [{ terapeutaId: "11111111-1111-4111-8111-111111111111", texto: "lectura" }] };
+  assert.deepEqual(loQueFaltaAlPlan(plan), []);
+});
+
 test("reparte por la profesional de la cita, sin repetir paciente, y a las dos si son dos", () => {
   const r = pendientesPorProfesional({
     citas: [

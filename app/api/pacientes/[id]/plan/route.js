@@ -1,6 +1,7 @@
 import { Op } from "sequelize";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { normalizarObjetivos } from "../../../../../lib/clinica/objetivosDelPlan.js";
+import { normalizarMotivos } from "../../../../../lib/clinica/motivosDelPlan.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { auditar, datosPeticion, resumen } from "../../../../../lib/utils/auditoria.js";
 import { resolveCurrentTeamMemberId } from "../../../../../lib/team/currentTeamMember.js";
@@ -131,6 +132,8 @@ export const PUT = withTenant(async (request, rc, ctx) => {
       patientId: id,
       diagnosis: texto(body.diagnosis, 2000),
       consultationReasons: texto(body.consultationReasons, 4000),
+      // Uno por terapeuta (15/09/2026, AV-0143); el de arriba queda como general.
+      consultationReasonsByTherapist: normalizarMotivos(body.consultationReasonsByTherapist),
       previousInfo: texto(body.previousInfo, 4000),
       // Cada objetivo con su terapeuta (07/09/2026, AV-0061): acepta los
       // textos de siempre y los objetos nuevos; ver lib/clinica/objetivosDelPlan.js.

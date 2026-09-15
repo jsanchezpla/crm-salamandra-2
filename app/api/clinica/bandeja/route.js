@@ -246,7 +246,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
       InterventionPlan
         ? InterventionPlan.findAll({
             where: { patientId: { [Op.in]: pacientes } },
-            attributes: ["patientId", "diagnosis", "consultationReasons", "objectives"],
+            attributes: ["patientId", "diagnosis", "consultationReasons", "consultationReasonsByTherapist", "objectives"],
             raw: true,
           })
         : [],
