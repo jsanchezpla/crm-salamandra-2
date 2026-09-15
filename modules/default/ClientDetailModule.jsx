@@ -450,6 +450,51 @@ export default function ClientDetailModule({
     }
   }
 
+  /*
+   * Pasar la ficha a la lista de espera de admisión, o sacarla (15/09/2026,
+   * AV-0133 de Aumenta): hasta hoy solo se podía al crearla, y quien se olvidó
+   * de marcar la casilla no tenía vuelta atrás.
+   */
+  const [cambiandoLista, setCambiandoLista] = useState(false);
+  const conListaEspera = Array.isArray(modulos) && modulos.includes("clients_avanzado");
+
+  async function pasarAListaEspera() {
+    setCambiandoLista(true);
+    try {
+      const res = await fetch("/api/clients/waitlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId: id }),
+      });
+      const data = await res.json();
+      if (!data.ok) return alert(data.error || "No se pudo pasar a la lista de espera");
+      setClient((prev) => ({
+        ...prev,
+        listaEspera: { id: data.data.id, posicion: data.data.position, desde: data.data.desde ?? new Date().toISOString() },
+      }));
+    } finally {
+      setCambiandoLista(false);
+    }
+  }
+
+  async function sacarDeListaEspera() {
+    if (!client?.listaEspera?.id) return;
+    if (!confirm("¿Sacar esta ficha de la lista de espera? Quedará en «Salieron» de la lista.")) return;
+    setCambiandoLista(true);
+    try {
+      const res = await fetch(`/api/clients/waitlist/${client.listaEspera.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "removed" }),
+      });
+      const data = await res.json();
+      if (!data.ok) return alert(data.error || "No se pudo sacar de la lista de espera");
+      setClient((prev) => ({ ...prev, listaEspera: null }));
+    } finally {
+      setCambiandoLista(false);
+    }
+  }
+
   async function toggleArchivada() {
     const archivar = client.status !== "inactive";
     setArchivando(true);
@@ -560,6 +605,16 @@ export default function ClientDetailModule({
               En lista de espera desde el {fechaLarga(client.listaEspera.desde)}
               {client.listaEspera.posicion != null && ` · nº ${client.listaEspera.posicion}`}
             </Link>
+          )}
+          {conListaEspera && (
+            <button
+              type="button"
+              onClick={client.listaEspera ? sacarDeListaEspera : pasarAListaEspera}
+              disabled={cambiandoLista}
+              className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border border-amber-300 text-amber-800 hover:bg-amber-50 disabled:opacity-50 transition-colors"
+            >
+              {client.listaEspera ? "Sacar de la lista de espera" : "Pasar a lista de espera"}
+            </button>
           )}
         </div>
         {client.customFields?.company && (

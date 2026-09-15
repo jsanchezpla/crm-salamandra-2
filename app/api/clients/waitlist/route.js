@@ -3,7 +3,7 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { auditar, datosPeticion } from "../../../../lib/utils/auditoria.js";
 import { MODULE_KEYS } from "../../../../lib/tenant/moduleKeys.js";
-import { terapeutaValido } from "../../../../lib/clients/listaEspera.js";
+import { terapeutaValido, entrarEnListaEspera, entradaDeCliente } from "../../../../lib/clients/listaEspera.js";
 
 /**
  * /api/clients/waitlist — LISTA DE ESPERA DE ADMISIÓN (sprint Aumenta 2026-07,
@@ -122,6 +122,35 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     } catch {
       return error("Body inválido", 400);
     }
+    /*
+     * Una ficha que YA EXISTE entra en la cola (15/09/2026, AV-0133 de Aumenta:
+     * «solo salta la opción de lista de espera al crearlos, pero no al editar»).
+     * Misma función que el alta (`entrarEnListaEspera`), para que la entrada
+     * quede enlazada a la ficha: escribir el nombre a mano en la lista la dejaba
+     * suelta y «convertir» creaba una ficha duplicada.
+     */
+    if (body?.clientId !== undefined) {
+      const clientId = String(body.clientId ?? "");
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clientId)) {
+        return error("clientId inválido", 422);
+      }
+      const { Client } = ctx.tenantModels;
+      const cliente = Client ? await Client.findByPk(clientId, { attributes: ["id", "name", "email", "phone"] }) : null;
+      if (!cliente) return error("Ficha no encontrada", 404);
+      if (await entradaDeCliente(WaitlistEntry, clientId)) return error("Esta ficha ya está en la lista de espera", 409);
+
+      const entrada = await entrarEnListaEspera({ WaitlistEntry, client: cliente, notes: limpio(body?.notes, 2000) });
+      await auditar({
+        tenantId: ctx.tenant.id,
+        ...datosPeticion(request),
+        action: "client.waitlist.added",
+        entity: "WaitlistEntry",
+        entityId: entrada.id,
+        after: { posicion: entrada.position, clientId, desde: "ficha" },
+      });
+      return created({ id: entrada.id, position: entrada.position, desde: entrada.createdAt });
+    }
+
     const name = limpio(body?.name);
     if (!name) return error("El nombre es obligatorio", 422);
 
