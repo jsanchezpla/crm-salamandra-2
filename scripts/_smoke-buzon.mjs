@@ -139,7 +139,7 @@ process.stdout.write("\n▶ El estado dice si está en el Registro, no de quién
 comprobar("contestar nosotros no mueve un nuevo", estadoTrasMensaje("nuevo", "salamandra") === "nuevo");
 comprobar("contestar nosotros no saca nada del Registro", estadoTrasMensaje("enviado", "salamandra") === "enviado");
 comprobar("añadir datos a uno nuevo no lo mueve", estadoTrasMensaje("nuevo", "cliente") === "nuevo");
-comprobar("escribir él sobre uno enviado lo deja enviado (la campana ya avisa)", estadoTrasMensaje("enviado", "cliente") === "enviado");
+comprobar("escribir él sobre uno enviado lo pasa a Activo (15/09/2026)", estadoTrasMensaje("enviado", "cliente") === "activo");
 comprobar("un estado que no existe vuelve al principio", estadoTrasMensaje("archivado", "cliente") === "nuevo");
 comprobar(
   "los tres nombres viejos se leen con el de hoy",

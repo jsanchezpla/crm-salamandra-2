@@ -7,8 +7,10 @@
  * versión, mismo historial, mismos frenos (si alguien publica a la vez, la
  * versión pisada rebota y se vuelve a intentar).
  *
- * Se niega a apuntar dos veces: si el aviso ya tiene ficha, o si el `backlog`
- * ya cita su `AV-####` (las tareas que /mailbox escribió a mano), contesta 409.
+ * Se niega a apuntar dos veces: si el aviso ya está «enviado», o si el
+ * `backlog` ya cita su `AV-####` (las tareas que /mailbox escribió a mano),
+ * contesta 409. Desde un aviso «Activo» (15/09/2026) que ya tuvo tarea: si
+ * sigue abierta vuelve a ella sin escribir nada; si se cerró, apunta otra.
  *
  * Orden a propósito: PRIMERO se publica la versión y DESPUÉS se marca el
  * aviso. Si la publicación falla, el aviso se queda como estaba y el botón se
@@ -25,7 +27,7 @@ import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { ok, error, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
 import { auditar, datosPeticion } from "../../../../../../lib/utils/auditoria.js";
 import { getMasterModels } from "../../../../../../lib/db/masterDb.js";
-import { serializarAviso, referencia } from "../../../../../../lib/buzon/buzon.js";
+import { serializarAviso, referencia, estadoActual } from "../../../../../../lib/buzon/buzon.js";
 import {
   leerParaSalamandra,
   marcarEnviadoAlRegistro,
@@ -40,7 +42,7 @@ import {
   publicarVersion,
   ultimaVersion,
 } from "../../../../../../lib/tablero/documentos.js";
-import { crearTarea } from "../../../../../../lib/tablero/editor.js";
+import { crearTarea, localizar } from "../../../../../../lib/tablero/editor.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -67,8 +69,8 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     const aviso = await leerParaSalamandra(id, { marcarLeido: false });
     if (!aviso) return notFound("Ese aviso no existe");
     const ref = referencia(aviso.numero);
-    if (aviso.registroFicha) {
-      return error(`${ref} ya está en el Registro (ficha ${aviso.registroFicha}).`, 409);
+    if (estadoActual(aviso.estado) === "enviado") {
+      return error(`${ref} ya está en el Registro${aviso.registroFicha ? ` (ficha ${aviso.registroFicha})` : ""}.`, 409);
     }
 
     const models = getMasterModels();
@@ -79,7 +81,28 @@ export const POST = withTenant(async (request, { params }, ctx) => {
         503
       );
     }
-    if (yaEstaEnElRegistro(actual.contenido, aviso.numero)) {
+
+    // Un aviso que ya tuvo tarea (vuelve de «Activo», 15/09/2026). Si su tarea
+    // sigue abierta en el backlog, no se apunta otra: el aviso vuelve a ella.
+    // Si ya se cerró, se apunta una nueva y la vieja queda en el contexto.
+    const fichaAnterior = aviso.registroFicha ?? null;
+    if (fichaAnterior && localizar(actual.contenido, { id: fichaAnterior })) {
+      const antes = { estado: aviso.estado };
+      await marcarEnviadoAlRegistro(aviso, { ficha: fichaAnterior });
+      const { userId, ip } = datosPeticion(request);
+      await auditar({
+        tenantId: ctx.tenant.id,
+        userId,
+        action: "buzon.enviado_al_registro",
+        entity: "BuzonAviso",
+        entityId: aviso.id,
+        before: antes,
+        after: { estado: "enviado", ref, tenantSlug: aviso.tenantSlug, ficha: fichaAnterior, camino: "tarea-abierta" },
+        ip,
+      });
+      return ok({ ficha: fichaAnterior, camino: "tarea-abierta", avisos: [], aviso: serializarAviso(aviso, { para: "salamandra" }) });
+    }
+    if (!fichaAnterior && yaEstaEnElRegistro(actual.contenido, aviso.numero)) {
       return error(
         `En el Registro ya hay una tarea que cita ${ref}: no se apunta dos veces. Si es otra cosa, apúntala desde /admin/tablero.`,
         409
@@ -104,6 +127,12 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     const capturas = await copiarCapturasAlRegistro({ aviso, ficha, documento: "backlog", subidoPor: por });
 
     const antes = { estado: aviso.estado };
+    if (fichaAnterior) {
+      const contexto = aviso.contexto ?? {};
+      await aviso.update({
+        contexto: { ...contexto, fichasAnteriores: [...(contexto.fichasAnteriores ?? []), fichaAnterior] },
+      });
+    }
     await marcarEnviadoAlRegistro(aviso, { ficha });
 
     const { userId, ip } = datosPeticion(request);

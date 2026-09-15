@@ -513,12 +513,17 @@ Resuelto (Buzón) con Resuelto; las Activas son un punto previo.»
   si Resuelto cita su referencia. Un `cerrado` cuya ficha vuelve al backlog (y
   no está en Resuelto) vuelve a `enviado`. Lo Activo no se toca. Best-effort
   (no deshace la publicación); auditoría `buzon.sincronizado_con_registro`.
-- **Si vuelve a escribir, lo Resuelto se reabre.** `estadoTrasMensaje("cerrado",
-  "cliente")` da `nuevo`, y `anadirMensaje` guarda la ficha vieja en
-  `contexto.fichasAnteriores` y suelta `registro_ficha`, para que los dos
-  botones lo traten como uno nuevo. Nuestro mensaje no lo reabre. Un aviso «En
-  el registro» con la tarea abierta se queda allí (sale además en Activos
-  mientras nos espera, como desde el 09/09).
+- **Pestañas Nuevo y Activo (15/09/2026 tarde).** La vieja «Activos» se llama
+  **Nuevo** (clave `nuevo`: lo que nunca se ha mandado a ningún sitio, sin los
+  mensajes nuestros) y ya no suma lo enviado en lo que el cliente escribió.
+  **Activo** es un estado propio, `activo`: el cliente ha vuelto a escribir en
+  uno que estaba En el registro o en Resuelto (`estadoTrasMensaje`; nuestro
+  mensaje no lo mueve). Conserva la ficha, y la sincronización no lo toca. De
+  Activo se sale con los dos botones: «Enviar al registro» vuelve a su tarea
+  si sigue en el backlog (sin escribir nada) o apunta otra y guarda la vieja
+  en `contexto.fichasAnteriores`; «Enviar a Resuelto» cierra su tarea si sigue
+  abierta o solo marca el aviso si ya estaba cerrada. `activos` en la query se
+  lee como `nuevo`.
 - El 15/09/2026 se pasaron a Resuelto los 146 avisos que quedaban «En el
   registro»: ninguno tenía la tarea abierta en el backlog.
 - Prueba: `scripts/_smoke-buzon-sincronizar-registro.mjs`.

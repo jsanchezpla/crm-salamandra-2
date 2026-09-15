@@ -461,7 +461,8 @@ describe("el vocabulario cerrado del Buzón, fijado como dato", () => {
       ["error", "duda", "mejora"]
     );
     assert.deepEqual(ESTADOS, [
-      { key: "nuevo", label: "Activo", nivel: "amber" },
+      { key: "nuevo", label: "Nuevo", nivel: "amber" },
+      { key: "activo", label: "Activo", nivel: "violet" },
       { key: "enviado", label: "Enviado al registro", nivel: "blue" },
       { key: "cerrado", label: "Resuelto", nivel: "green" },
     ]);
@@ -589,7 +590,7 @@ describe("estadoTrasMensaje: el estado dice si está en el Registro, la tabla EN
   // nuevo o un if torcido se vea.
   it("las celdas: un mensaje, de quien sea, no mueve nada; lo viejo sale traducido", () => {
     const tabla = {};
-    for (const estado of ["nuevo", "enviado", "cerrado", "en_curso", "esperando", "resuelto"]) {
+    for (const estado of ["nuevo", "activo", "enviado", "cerrado", "en_curso", "esperando", "resuelto"]) {
       tabla[estado] = {
         salamandra: estadoTrasMensaje(estado, "salamandra"),
         cliente: estadoTrasMensaje(estado, "cliente"),
@@ -597,20 +598,21 @@ describe("estadoTrasMensaje: el estado dice si está en el Registro, la tabla EN
     }
     assert.deepEqual(tabla, {
       nuevo: { salamandra: "nuevo", cliente: "nuevo" },
-      enviado: { salamandra: "enviado", cliente: "enviado" },
-      // Lo Resuelto se reabre si escribe él (Rodrigo, 15/09/2026).
-      cerrado: { salamandra: "cerrado", cliente: "nuevo" },
+      activo: { salamandra: "activo", cliente: "activo" },
+      // Lo ya mandado pasa a Activo si escribe él (Rodrigo, 15/09/2026).
+      enviado: { salamandra: "enviado", cliente: "activo" },
+      cerrado: { salamandra: "cerrado", cliente: "activo" },
       // Los viejos salen ya traducidos: nada vuelve a escribir `en_curso` ni
       // `resuelto` (el Buzón acaba en el Registro; Rodrigo, 02/09/2026).
-      en_curso: { salamandra: "enviado", cliente: "enviado" },
+      en_curso: { salamandra: "enviado", cliente: "activo" },
       esperando: { salamandra: "nuevo", cliente: "nuevo" },
-      resuelto: { salamandra: "enviado", cliente: "enviado" },
+      resuelto: { salamandra: "enviado", cliente: "activo" },
     });
   });
 
   it("quien no es salamandra cuenta como cliente, y un estado desconocido vuelve al principio", () => {
-    assert.equal(estadoTrasMensaje("enviado", undefined), "enviado");
-    assert.equal(estadoTrasMensaje("enviado", "portal"), "enviado");
+    assert.equal(estadoTrasMensaje("enviado", undefined), "activo");
+    assert.equal(estadoTrasMensaje("enviado", "portal"), "activo");
     assert.equal(estadoTrasMensaje("archivado", "cliente"), "nuevo");
     assert.equal(estadoTrasMensaje("archivado", "salamandra"), "nuevo");
     assert.equal(estadoActual("resuelto"), "enviado");
@@ -861,7 +863,7 @@ describe("serializarAviso: al cliente le llega EXACTAMENTE esto, ni un campo má
   it("un estado que no existe no revienta: cae a la etiqueta del primero (Nuevo, amber)", () => {
     const raro = serializarAviso({ ...avisoCompleto(), estado: "archivado" }, { para: "cliente" });
     assert.equal(raro.estado, "archivado");
-    assert.equal(raro.estadoLabel, "Activo");
+    assert.equal(raro.estadoLabel, "Nuevo");
     assert.equal(raro.estadoNivel, "amber");
   });
 

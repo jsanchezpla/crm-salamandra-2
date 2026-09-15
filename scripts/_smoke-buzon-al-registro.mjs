@@ -205,7 +205,7 @@ describe("los dos estados del Buzón (02/09/2026)", () => {
   it("nuevo → enviado (o cerrado, 15/09/2026), y los tres nombres viejos se leen como hoy", () => {
     assert.deepEqual(
       ESTADOS.map((e) => e.key),
-      ["nuevo", "enviado", "cerrado"]
+      ["nuevo", "activo", "enviado", "cerrado"]
     );
     assert.deepEqual(ESTADOS_ANTIGUOS, { en_curso: "enviado", esperando: "nuevo", resuelto: "enviado" });
     assert.equal(estadoActual("en_curso"), "enviado");
@@ -254,10 +254,10 @@ describe("los dos estados del Buzón (02/09/2026)", () => {
     }
     assert.deepEqual(tabla, {
       nuevo: { salamandra: "nuevo", cliente: "nuevo" },
-      enviado: { salamandra: "enviado", cliente: "enviado" },
-      cerrado: { salamandra: "cerrado", cliente: "nuevo" },
-      resuelto: { salamandra: "enviado", cliente: "enviado" },
-      en_curso: { salamandra: "enviado", cliente: "enviado" },
+      enviado: { salamandra: "enviado", cliente: "activo" },
+      cerrado: { salamandra: "cerrado", cliente: "activo" },
+      resuelto: { salamandra: "enviado", cliente: "activo" },
+      en_curso: { salamandra: "enviado", cliente: "activo" },
       esperando: { salamandra: "nuevo", cliente: "nuevo" },
       archivado: { salamandra: "nuevo", cliente: "nuevo" },
     });

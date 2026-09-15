@@ -93,8 +93,18 @@ describe("cambiosPorElRegistro", () => {
 });
 
 describe("si vuelven a escribir", () => {
-  it("un mensaje del cliente reabre lo Resuelto; el nuestro no", () => {
-    assert.equal(estadoTrasMensaje("cerrado", "cliente"), "nuevo");
+  it("un mensaje del cliente pasa a Activo lo que estaba en Resuelto o En el registro; el nuestro no", () => {
+    assert.equal(estadoTrasMensaje("cerrado", "cliente"), "activo");
+    assert.equal(estadoTrasMensaje("enviado", "cliente"), "activo");
     assert.equal(estadoTrasMensaje("cerrado", "salamandra"), "cerrado");
+    assert.equal(estadoTrasMensaje("nuevo", "cliente"), "nuevo");
+  });
+
+  it("lo Activo no lo mueve el Registro, tenga la ficha donde la tenga", () => {
+    const { texto, id } = conTarea(BACKLOG, "Buzón - Fallo: no carga");
+    const r = cerrarTarea(texto, RESUELTO, { id, comoSeArreglo: "Arreglado.", fecha: HOY });
+    const avisos = [aviso({ estado: "activo", registroFicha: id })];
+    assert.deepEqual(cambiosPorElRegistro(avisos, { backlog: texto, resuelto: RESUELTO }), []);
+    assert.deepEqual(cambiosPorElRegistro(avisos, { backlog: r.backlog, resuelto: r.resuelto }), []);
   });
 });

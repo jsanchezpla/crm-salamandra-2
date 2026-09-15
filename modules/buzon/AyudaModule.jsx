@@ -64,6 +64,7 @@ function leerRespuesta(res) {
 // traduce los nombres viejos, aquí no hace falta conocerlos.
 const ESTADO_COLOR = {
   nuevo: "bg-amber-50 text-amber-700 border-amber-200",
+  activo: "bg-violet-50 text-violet-700 border-violet-200", // ha vuelto a escribir, 15/09/2026
   enviado: "bg-blue-50 text-blue-700 border-blue-200",
   cerrado: "bg-emerald-50 text-emerald-700 border-emerald-200", // «Resuelto», 15/09/2026
 };

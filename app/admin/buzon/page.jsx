@@ -10,7 +10,7 @@ import { EVENTO_PENDIENTES } from "../../../lib/buzon/buzon.js";
  * Buzón — lo que nos escriben los clientes.
  *
  * ── LO QUE ESTA PANTALLA TIENE QUE CONTESTAR DE UN VISTAZO ──────────────────
- * «¿Qué me toca mirar ahora?». Por eso la pestaña por defecto es Activos y no
+ * «¿Qué me toca mirar ahora?». Por eso la pestaña por defecto es Nuevo y no
  * Todos, por eso lo que bloquea el trabajo de alguien lleva marca roja, y por
  * eso la fila enseña el CLIENTE antes que el asunto: un mismo fallo contado por
  * tres clientes distintos es otra cosa que contado por uno.
@@ -28,6 +28,7 @@ const NIVEL = {
   blue: { fondo: "#DBEAFE", texto: "#1E40AF" },
   grey: { fondo: "#F3F4F6", texto: "#4B5563" },
   green: { fondo: "#D1FAE5", texto: "#065F46" },
+  violet: { fondo: "#EDE9FE", texto: "#5B21B6" },
 };
 
 // Dos estados (`lib/buzon/buzon.js`, Rodrigo 02/09/2026): nuevo → enviado al
@@ -35,11 +36,16 @@ const NIVEL = {
 // sigue vivo en el tablero. «Enviado» lo pone el botón, no la mano.
 //
 // «Mensajes» (Rodrigo, 15/09/2026): lo que le escribimos NOSOTROS a alguien y
-// todavía no ha contestado. No es trabajo, así que no va en Activos; cuando la
-// persona contesta, pasa sola a Activos. «Resuelto» es lo que se mandó directo
+// todavía no ha contestado. No es trabajo, así que no va en Nuevo; cuando la
+// persona contesta, pasa sola a Nuevo. «Resuelto» es lo que se mandó directo
 // a Resuelto (o se cerró allí) desde aquí.
+//
+// «Activo» (Rodrigo, 15/09/2026 tarde): lo que ya estaba En el Registro o en
+// Resuelto y la persona ha vuelto a contestar. «Nuevo» es lo que nunca se ha
+// mandado a ningún sitio.
 const PESTANAS = [
-  { key: "activos", label: "Activos" },
+  { key: "nuevo", label: "Nuevo" },
+  { key: "activo", label: "Activo" },
   { key: "mensajes", label: "Mensajes" },
   { key: "enviado", label: "En el Registro" },
   { key: "cerrado", label: "Resuelto" },
@@ -239,7 +245,7 @@ function ComoTriarlo() {
 export default function BuzonPage() {
   const [datos, setDatos] = useState(null);
   const [error, setError] = useState(null);
-  const [tab, setTab] = useState("activos");
+  const [tab, setTab] = useState("nuevo");
   const [q, setQ] = useState("");
   const [abierto, setAbierto] = useState(null);
   const [escribiendo, setEscribiendo] = useState(false);
@@ -626,7 +632,7 @@ function Detalle({ avisoId, asignables, estados, prioridades, onCerrar }) {
                     onClick={() =>
                       e.key === "cerrado"
                         ? aviso.estado !== "cerrado" && setCerrando(true)
-                        : e.key === "enviado" && !aviso.registroFicha
+                        : e.key === "enviado" && aviso.estado !== "enviado" && (!aviso.registroFicha || aviso.estado === "activo")
                           ? enviarAlRegistro()
                           : cambiar("estado", e.key)
                     }
@@ -655,7 +661,7 @@ function Detalle({ avisoId, asignables, estados, prioridades, onCerrar }) {
                     abrir el Registro
                   </a>
                 </div>
-              ) : aviso.registroFicha || aviso.estado === "enviado" ? (
+              ) : aviso.estado !== "activo" && (aviso.registroFicha || aviso.estado === "enviado") ? (
                 <div
                   className="rounded px-3 py-2 text-[11px] flex items-center justify-between gap-3 flex-wrap"
                   style={{ background: "var(--panel-alto)", color: "var(--dim)" }}
@@ -701,7 +707,9 @@ function Detalle({ avisoId, asignables, estados, prioridades, onCerrar }) {
                     </button>
                   )}
                   <span className="text-[11px] w-full" style={{ color: "var(--tenue)" }}>
-                    Registro: tarea en «Sin comprobar» del backlog. Resuelto: queda escrito como hecho, sin tarea.
+                    {aviso.estado === "activo" && aviso.registroFicha
+                      ? `Ha vuelto a escribir en uno que ya tenía tarea (ficha ${aviso.registroFicha}). Registro: si esa tarea sigue abierta vuelve a ella; si no, se apunta otra. Resuelto: si sigue abierta la cierra; si no, solo lo devuelve.`
+                      : "Registro: tarea en «Sin comprobar» del backlog. Resuelto: queda escrito como hecho, sin tarea."}
                   </span>
                 </div>
               )}

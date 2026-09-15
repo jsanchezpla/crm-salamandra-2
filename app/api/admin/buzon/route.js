@@ -7,7 +7,7 @@ import { candadoBuzon } from "../../../../lib/buzon/candadoBackoffice.js";
 /**
  * GET /api/admin/buzon — lo que nos han escrito los clientes.
  *
- * Filtros por query: `estado` (o `activos` / `todos`), `tenantSlug`,
+ * Filtros por query: `estado` (`nuevo`, `activo`, `enviado`, `cerrado`, `mensajes` o `todos`; `activos` se lee como `nuevo`), `tenantSlug`,
  * `asignadoA` (o `nadie`), `q`.
  *
  * El recuento de las pestañas va SIN los filtros de pantalla, a propósito: una
@@ -20,7 +20,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
 
     const url = new URL(request.url);
     const { avisos, recuento, soloLectura } = await listarParaSalamandra({
-      estado: url.searchParams.get("estado") ?? "activos",
+      estado: url.searchParams.get("estado") ?? "nuevo",
       tenantSlug: url.searchParams.get("tenantSlug") ?? undefined,
       asignadoA: url.searchParams.get("asignadoA") ?? undefined,
       q: url.searchParams.get("q") ?? undefined,
