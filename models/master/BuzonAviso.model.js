@@ -85,8 +85,8 @@ export function defineBuzonAviso(sequelize) {
 
       // ── Lo que ponemos nosotros ───────────────────────────────────────────
       /**
-       * "nuevo" | "enviado" (desde el 02/09/2026: el Buzón acaba en el
-       * Registro). Antes hubo también "en_curso", "esperando" y "resuelto":
+       * "nuevo" | "enviado" | "respondido" (desde el 02/09/2026: el Buzón
+       * acaba en el Registro; «respondido» desde el 15/09/2026, a mano). Antes hubo también "en_curso", "esperando" y "resuelto":
        * se leen como enviado, nuevo y enviado (`estadoActual` en
        * `lib/buzon/buzon.js`) y los reescribe `scripts/migrate-buzon-estados.js`.
        */

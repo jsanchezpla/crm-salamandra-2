@@ -226,7 +226,9 @@ la poda la usa como fecha de cierre de lo anterior a ese día.
   lista). Por asunto, texto, quién lo escribió y referencia (`AV-0123`,
   `av0123` o `123` valen), por palabras y sin tildes ni mayúsculas —la misma
   regla que el resto del CRM, `coincidePorNombre` de `lib/utils/busqueda.js`—,
-  combinado con un filtro por estado (Todos / Nuevo / Enviado al registro).
+  combinado con un filtro por estado (Todos / Nuevo / Enviado al registro / Respondido). «Respondido» (15/09/2026)
+  se pone a mano cuando se le ha dado respuesta al cliente sin pasar por el
+  Registro; como el enviado, vuelve a «Activos» si el cliente escribe.
   Filtra EN EL NAVEGADOR sobre la lista que ya llega entera
   (`lib/buzon/buscarAvisos.js`, fijado en `scripts/_smoke-ayuda-buscador.mjs`):
   si pidiera al servidor una lista recortada, el recuento de respuestas sin
