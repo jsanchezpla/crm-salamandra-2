@@ -173,9 +173,11 @@ export default async function HomePage() {
   // una tarjeta por módulo.
   const hayAgenda = Boolean(agenda) || Boolean(agendaCalendario);
   const hayHoy = hayAgenda || pendiente.length > 0;
-  const hayNegocio = Boolean(finance) || vistas.length > 0 || tarjetas.length > 0;
   // «Mi trabajo» solo llega del servidor cuando las gráficas están vetadas
-  // (sin adhesión a facturación), así que nunca compite con «El negocio».
+  // (sin adhesión a facturación), y entonces MANDA sobre las tarjetas
+  // (15/09/2026, AV-0138): desde que las terapeutas ven Clientes (10/09), la
+  // tarjeta de fichas llenaba «El negocio» y les quitaba su bandeja.
+  const hayNegocio = Boolean(finance) || vistas.length > 0 || (tarjetas.length > 0 && !trabajo);
   const hayTrabajo = !hayNegocio && Boolean(trabajo);
   const hayDerecha = hayNegocio || hayTrabajo;
 
