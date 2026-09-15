@@ -123,6 +123,17 @@ test("una sesión que ya es de OTRA cita no cuenta como el registro de esta", ()
   assert.equal(r.sinEmpezar.length, 1);
 });
 
+test("el registro de una cita BORRADA casa por día con la cita que la sustituye (AV-0140)", () => {
+  // Se borró b1 y se creó b2 igual: el registro sigue apuntando a b1.
+  const sesiones = [sesion({ bookingId: "b1" })];
+  const vivas = new Set(["b2"]);
+  const r = citasSinRegistro([cita({ id: "b2" })], sesiones, { ahora: AHORA, citasQueExisten: vivas });
+  assert.equal(r.sinEmpezar.length, 0);
+  // Si b1 sigue existiendo, es de otra cita y la nueva sigue pendiente.
+  const r2 = citasSinRegistro([cita({ id: "b2" })], sesiones, { ahora: AHORA, citasQueExisten: new Set(["b1", "b2"]) });
+  assert.equal(r2.sinEmpezar.length, 1);
+});
+
 test("otro día del mismo paciente no vale", () => {
   const r = citasSinRegistro([cita()], [sesion({ sessionDate: "2026-09-05T15:00:00.000Z" })], { ahora: AHORA });
   assert.equal(r.sinEmpezar.length, 1);

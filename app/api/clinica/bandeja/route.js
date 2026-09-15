@@ -205,7 +205,17 @@ export const GET = withTenant(async (request, _rc, ctx) => {
       attributes: ["id", "patientId", "bookingId", "tallerSesionId", "therapistId", "sessionDate", "status", "updatedAt"],
       limit: 2000,
     });
-    return { citas: citas.map((c) => c.toJSON()), sesiones: sesiones.map((x) => x.toJSON()) };
+    // Qué citas enlazadas desde un registro siguen existiendo (AV-0140): un
+    // registro de una cita borrada casa por día (lib/clinica/loMio.js).
+    const enlazadas = [...new Set(sesiones.map((x) => x.bookingId).filter(Boolean))];
+    const vivas = enlazadas.length
+      ? await Booking.findAll({ where: { id: { [Op.in]: enlazadas } }, attributes: ["id"], raw: true })
+      : [];
+    return {
+      citas: citas.map((c) => c.toJSON()),
+      sesiones: sesiones.map((x) => x.toJSON()),
+      citasQueExisten: new Set(vivas.map((b) => String(b.id))),
+    };
   }
 
   /*
@@ -261,8 +271,8 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     });
   }
 
-  const { citas: citasSemana, sesiones: sesionesSemana } = await registrosDe([therapistId]);
-  const pendientes = citasSinRegistro(citasSemana, sesionesSemana, { ahora: new Date() });
+  const { citas: citasSemana, sesiones: sesionesSemana, citasQueExisten: vivasSemana } = await registrosDe([therapistId]);
+  const pendientes = citasSinRegistro(citasSemana, sesionesSemana, { ahora: new Date(), citasQueExisten: vivasSemana });
   const filaDeRegistro = ({ cita, sesion }) => ({
     bookingId: cita.id,
     patientId: cita.patientId,
@@ -304,7 +314,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
       order: [["displayName", "ASC"]],
     });
     const ids = activos.map((t) => t.id);
-    const { citas, sesiones } = ids.length ? await registrosDe(ids) : { citas: [], sesiones: [] };
+    const { citas, sesiones, citasQueExisten } = ids.length ? await registrosDe(ids) : { citas: [], sesiones: [] };
     const informes = await ClinicalReport.findAll({
       where: { therapistId: { [Op.in]: ids }, status: { [Op.ne]: "delivered" } },
       attributes: ["id", "therapistId"],
@@ -328,7 +338,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     }
     equipo = activos.map((t) => {
       const suyas = citas.filter((c) => String(c.teamMemberId) === String(t.id));
-      const r = citasSinRegistro(suyas, sesiones, { ahora: new Date() });
+      const r = citasSinRegistro(suyas, sesiones, { ahora: new Date(), citasQueExisten });
       return {
         id: t.id,
         name: t.displayName,
