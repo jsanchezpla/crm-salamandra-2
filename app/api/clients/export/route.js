@@ -2,6 +2,7 @@ import { esEstadoDeFicha } from "../../../../lib/clients/estados.js";
 import { contentDisposition } from "../../../../lib/utils/contentDisposition.js";
 import { filtroDeVisibilidad } from "../../../../lib/clients/consultaExterna.js";
 import { rotuloCategoria } from "../../../../lib/booking/categorias.js";
+import { filtroPorTipoFicha } from "../../../../lib/clients/organizaciones.js";
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
 import { filtroPorNombre } from "../../../../lib/utils/busquedaDb.js";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
@@ -47,6 +48,10 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   if (Object.keys(enCustomFields).length) {
     where.customFields = { [Op.contains]: enCustomFields };
   }
+  // Y el de «Clientes / Empresas / Universidades» (15/09/2026): bajar las
+  // universidades y recibir la cartera entera sería la misma sorpresa.
+  const porTipo = filtroPorTipoFicha(searchParams.get("tipo"));
+  if (porTipo) (where[Op.and] ||= []).push(porTipo);
 
   /*
    * Todas las palabras, cada una en cualquiera de los campos (28/08/2026). Antes

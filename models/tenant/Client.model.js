@@ -202,6 +202,39 @@ export function defineClient(sequelize) {
         type: DataTypes.STRING(80),
         allowNull: true,
       },
+      /**
+       * Empresas y universidades con ficha propia (15/09/2026, Rodrigo;
+       * AV-0153 de Aumenta). NULL = particular. Las reglas, en
+       * `lib/clients/organizaciones.js`; las columnas, en
+       * `scripts/migrate-clients-organizaciones.js`.
+       */
+      tipoFicha: {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+      },
+      // «Es alumno en prácticas» y la ficha de su universidad. NOT NULL por lo
+      // mismo que `esConsultaExterna`: el listado filtra por la marca.
+      esAlumnoPracticas: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      universidadId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      // La ficha de la empresa por la que viene (la consulta externa). Convive
+      // con `categoriaExterna`, que se sigue escribiendo con su nombre para lo
+      // que ya lo lee.
+      empresaId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      // Cuánto de lo suyo paga esa universidad o empresa: 100 todo, 0 nada.
+      pagoOrganizacionPct: {
+        type: DataTypes.DECIMAL(5, 2),
+        allowNull: true,
+      },
       assignedTeamMemberId: {
         type: DataTypes.UUID,
         allowNull: true,

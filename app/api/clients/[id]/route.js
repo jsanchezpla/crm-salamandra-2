@@ -23,6 +23,7 @@ import {
 import { normalizeGuardians } from "../../../../lib/clients/guardians.js";
 import { pacientesPorFamilia } from "../../../../lib/clients/pacientesDeLaFamilia.js";
 import { limpiarRazonSocialPorDefecto, limpiarRepartoEntreTutores } from "../../../../lib/billing/razonSocial.js";
+import { CAMPO_VINCULO, normalizarPctOrganizacion, normalizarTipoFicha } from "../../../../lib/clients/organizaciones.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -327,6 +328,36 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
   if ("categoriaExterna" in body) baseUpdate.categoriaExterna = normalizarCategoria(body.categoriaExterna);
 
   /*
+   * Empresas y universidades con ficha propia (15/09/2026, Rodrigo; AV-0153).
+   * Reglas en `lib/clients/organizaciones.js`. Todo solo si viene explícito.
+   *
+   * La universidad o la empresa elegida tiene que ser una ficha de ESE tipo y
+   * no la propia: un alumno que «es su propia universidad» se facturaría a sí
+   * mismo, y una empresa puesta como universidad saldría en el filtro que no es.
+   * Es una etiqueta, no un permiso (no decide quién ve a nadie): la puede
+   * tocar quien ya edita la ficha, igual que la categoría de aquí arriba.
+   */
+  if ("tipoFicha" in body) baseUpdate.tipoFicha = normalizarTipoFicha(body.tipoFicha);
+  if ("esAlumnoPracticas" in body) baseUpdate.esAlumnoPracticas = !!body.esAlumnoPracticas;
+  for (const [tipo, campo] of Object.entries(CAMPO_VINCULO)) {
+    if (!(campo in body)) continue;
+    const valor = body[campo] ? String(body[campo]).trim() : null;
+    if (valor) {
+      if (!UUID_RE.test(valor)) return error(`La ${tipo} no es válida`, 422);
+      if (valor === String(client.id)) return error(`Una ficha no puede ser su propia ${tipo}`, 422);
+      const org = await Client.findByPk(valor, { attributes: ["id", "tipoFicha"] });
+      if (!org) return error(`Esa ${tipo} ya no existe`, 422);
+      if (org.tipoFicha !== tipo) return error(`Esa ficha no está marcada como ${tipo}`, 422);
+    }
+    baseUpdate[campo] = valor;
+  }
+  if ("pagoOrganizacionPct" in body) {
+    const pct = normalizarPctOrganizacion(body.pagoOrganizacionPct);
+    if (pct === undefined) return error("Lo que paga la organización tiene que ser un porcentaje entre 0 y 100", 422);
+    baseUpdate.pagoOrganizacionPct = pct;
+  }
+
+  /*
    * Su profesional de referencia (10/08/2026, Rodrigo). El campo se ponía solo
    * al aceptar la solicitud en la bandeja y ya no se podía tocar; ahora se
    * cambia desde la ficha, que es donde se mira cuando alguien pregunta «¿esta
@@ -418,7 +449,11 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
     // ese id decide quién ve la ficha, así que un cambio de profesional tiene
     // que dejar rastro de a quién se le pasó.
     after: {
-      ...resumen(client, ["name", "email", "phone", "type", "status", "assignedTeamMemberId"]),
+      ...resumen(client, [
+        "name", "email", "phone", "type", "status", "assignedTeamMemberId",
+        // Quién paga lo de esta ficha también deja rastro (15/09/2026).
+        "tipoFicha", "esAlumnoPracticas", "universidadId", "empresaId", "pagoOrganizacionPct",
+      ]),
       ...(profesionalNuevo ? { pacientesConProfesional } : {}),
     },
   });

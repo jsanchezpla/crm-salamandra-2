@@ -30,6 +30,7 @@ import ClientWhatsappSection from "../../components/clients/ClientWhatsappSectio
 import ClientMailingSection from "../../components/clients/ClientMailingSection.jsx";
 import ClientBonosSection from "../../components/clients/ClientBonosSection.jsx";
 import ClientConsultaExternaSection from "../../components/clients/ClientConsultaExternaSection.jsx";
+import ClientOrganizacionSection from "../../components/clients/ClientOrganizacionSection.jsx";
 import ClientProfesionalSection from "../../components/clients/ClientProfesionalSection.jsx";
 import ClientPatientsSection from "../../components/clients/ClientPatientsSection.jsx";
 import ClientCuentaWebSection from "../../components/clients/ClientCuentaWebSection.jsx";
@@ -1027,7 +1028,11 @@ export default function ClientDetailModule({
               HISTORIA CLÍNICA se guarda aquí. Solo donde hay clínica: hasta el
               25/08/2026 salía en TODAS las fichas, así que una radio en el CRM
               de una cantante leía «su historia clínica». */}
-          {piezas.consultaExterna && <ClientConsultaExternaSection clientId={id} />}
+          {/* Empresa o universidad (15/09/2026, AV-0153): qué es la ficha, si es
+              alumno en prácticas y quién paga lo suyo. En todas las fichas;
+              donde hay consulta externa, la empresa se elige en esa tarjeta. */}
+          <ClientOrganizacionSection clientId={id} conEmpresa={!piezas.consultaExterna} />
+          {piezas.consultaExterna && <ClientConsultaExternaSection clientId={id} empresaComoFicha />}
           {/* Con quién lleva el seguimiento (10/08/2026, Rodrigo). Debajo de
               consulta externa: en una externa, quién la lleva es además quién la
               ve, y las dos cosas se leen juntas. */}

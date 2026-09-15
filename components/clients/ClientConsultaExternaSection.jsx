@@ -21,10 +21,20 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import SelectorOrganizacion from "./SelectorOrganizacion.jsx";
 
-export default function ClientConsultaExternaSection({ clientId }) {
+/*
+ * `empresaComoFicha` (15/09/2026, Rodrigo: «lo mismo de las fichas para las
+ * empresas; que funcione exactamente igual» que las universidades): la empresa
+ * se elige entre las FICHAS marcadas como empresa, y «crear nueva» da de alta
+ * su ficha, que es la que se factura. Sin la prop sigue la lista de nombres de
+ * Configuración de siempre: la ficha propia de Laura no la pasa, y su
+ * comportamiento no se cambia sin que lo pida.
+ */
+export default function ClientConsultaExternaSection({ clientId, empresaComoFicha = false }) {
   const [esAdmin, setEsAdmin] = useState(null);
   const [externa, setExterna] = useState(false);
+  const [empresaId, setEmpresaId] = useState("");
   const [categoria, setCategoria] = useState("");
   const [categorias, setCategorias] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -48,6 +58,7 @@ export default function ClientConsultaExternaSection({ clientId }) {
       setEsAdmin(rol === "admin" || rol === "superadmin");
       setExterna(!!ficha?.data?.esConsultaExterna);
       setCategoria(ficha?.data?.categoriaExterna ?? "");
+      setEmpresaId(ficha?.data?.empresaId ?? "");
       setCategorias(cfg?.data?.categoriasExternas ?? []);
     } catch {
       setEsAdmin(false);
@@ -70,6 +81,8 @@ export default function ClientConsultaExternaSection({ clientId }) {
       const j = await res.json().catch(() => null);
       if (!res.ok) throw new Error(j?.error || "No se ha podido guardar");
       setAviso(mensaje);
+      // La tarjeta «Empresa o universidad» enseña quién paga según esta empresa.
+      window.dispatchEvent(new CustomEvent("crm:ficha-organizacion", { detail: { clientId } }));
     } catch (e) {
       setError(e.message);
       cargar(); // deshace el cambio optimista de la pantalla
@@ -169,6 +182,33 @@ export default function ClientConsultaExternaSection({ clientId }) {
           </span>
         </label>
 
+        {empresaComoFicha ? (
+          <div>
+            <SelectorOrganizacion
+              tipo="empresa"
+              etiqueta="Empresa"
+              value={empresaId}
+              excluirId={clientId}
+              disabled={guardando}
+              onChange={(id, nombre) => {
+                setEmpresaId(id ?? "");
+                setCategoria(nombre ?? "");
+                // El nombre se sigue escribiendo en `categoriaExterna`: es lo que
+                // leían hasta hoy el script de marcado y quien mire la ficha vieja.
+                guardar({ empresaId: id, categoriaExterna: nombre }, id ? `Empresa: ${nombre}` : "Empresa quitada");
+              }}
+            />
+            {!empresaId && categoria && (
+              <p className="text-[11px] text-amber-700 mt-1">
+                Tenía puesta «{categoria}», que aún no tiene ficha de empresa: créala con «+ Crear una empresa
+                nueva» con ese mismo nombre y queda enlazada.
+              </p>
+            )}
+            <p className="text-[11px] text-gray-400 mt-1">
+              La empresa es una ficha más: sale en el filtro «Empresas» del listado y se le factura lo que pague.
+            </p>
+          </div>
+        ) : (
         <div>
           <label className="block text-[11px] font-medium text-gray-500 mb-1">Empresa</label>
           <div className="flex gap-2">
@@ -240,6 +280,7 @@ export default function ClientConsultaExternaSection({ clientId }) {
             las pusieras en Configuración.
           </p>
         </div>
+        )}
 
         {aviso && <p className="text-[11px] text-emerald-700">{aviso}</p>}
         {error && <p className="text-[11px] text-red-600">{error}</p>}

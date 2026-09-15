@@ -15,6 +15,7 @@ import { textosDelAlta, hayPacienteConNombre } from "../../../lib/clients/altaPo
 import { VOCABULARIO_CLIENTE } from "../../../lib/clients/vocabulario.js";
 import { CATEGORIAS, rotuloCategoria } from "../../../lib/booking/categorias.js";
 import { avisoBorradoSegunModulos } from "../../../lib/clients/avisoBorrado.js";
+import { TIPOS_FICHA } from "../../../lib/clients/organizaciones.js";
 import { esAdmin } from "../../../lib/auth/permisos.js";
 import Paginador from "@/components/ui/Paginador.jsx";
 import {
@@ -113,6 +114,9 @@ export default function ClientesClient({
   // Filtro por tipo de contratante (25/08/2026). Va al SERVIDOR, como el resto:
   // filtrar los 50 de la página daría «3 festivales» con 35 en la base.
   const [categoria, setCategoria] = useState("all");
+  // «Clientes / Empresas / Universidades» (15/09/2026, Rodrigo): ver de un golpe
+  // las fichas que son una empresa o una universidad, sin el buscador.
+  const [tipoFicha, setTipoFicha] = useState("all");
   const [search, setSearch] = useState("");
   // Ordenación por columna (04/08/2026). Va al servidor, no se ordena lo que
   // hay pintado: con 1.110 fichas y 50 por página, ordenar la página actual
@@ -168,6 +172,7 @@ export default function ClientesClient({
     // dos campos distintos y mandar el nombre equivocado filtra por otra cosa.
     if (activeStatus !== "all") params.set(usaEstado ? "estado" : "status", activeStatus);
     if (categoria !== "all") params.set("categoria", categoria);
+    if (tipoFicha !== "all") params.set("tipo", tipoFicha);
     if (search.trim()) params.set("search", search.trim());
     fetch(`/api/clients?${params}`)
       .then((r) => r.json())
@@ -179,7 +184,7 @@ export default function ClientesClient({
         }
       })
       .finally(() => setLoading(false));
-  }, [activeStatus, categoria, search, pagina, orden, dir]);
+  }, [activeStatus, categoria, tipoFicha, search, pagina, orden, dir]);
 
   /** Pulsar una cabecera ordena por ella; pulsarla otra vez le da la vuelta. */
   function ordenarPor(clave) {
@@ -191,7 +196,7 @@ export default function ClientesClient({
   // Al buscar o cambiar de estado se vuelve a la primera página: quedarse en la
   // 7 tras una búsqueda que devuelve 12 resultados deja la lista vacía sin
   // explicar por qué.
-  useEffect(() => { setPagina(1); }, [activeStatus, categoria, search]);
+  useEffect(() => { setPagina(1); }, [activeStatus, categoria, tipoFicha, search]);
 
   // Si esto falla, `modulos` se queda en null y el aviso de borrado sale
   // completo. Es lo que se quiere: avisar de más no rompe nada.
@@ -355,6 +360,7 @@ export default function ClientesClient({
       // El Excel sale con lo que se está viendo, filtro de tipo incluido: bajar
       // «festivales» y recibir los 183 sería una sorpresa cara.
       if (categoria !== "all") params.set("categoria", categoria);
+      if (tipoFicha !== "all") params.set("tipo", tipoFicha);
       if (search.trim()) params.set("search", search.trim());
       const res = await fetch(`/api/clients/export?${params}`);
       const blob = await res.blob();
@@ -558,6 +564,26 @@ export default function ClientesClient({
                 ))}
               </select>
             )}
+
+            {/*
+              Clientes / Empresas / Universidades (15/09/2026, Rodrigo). En
+              desplegable junto al buscador, como el tipo de contratante: las
+              pestañas de debajo ya son el estado, y mezclar las dos cosas en
+              la misma fila no deja claro qué filtra cada una.
+            */}
+            <select
+              value={tipoFicha}
+              onChange={(e) => setTipoFicha(e.target.value)}
+              aria-label="Filtrar por clientes, empresas o universidades"
+              className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 shadow-sm focus:outline-none focus:border-[var(--color-primary)] transition-colors shrink-0 max-w-[45%]"
+            >
+              <option value="all">Todas las fichas</option>
+              {TIPOS_FICHA.map((t) => (
+                <option key={t.key} value={t.key}>
+                  {t.key === "particular" ? vocab.plural : t.label}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Tabs */}
@@ -683,6 +709,18 @@ export default function ClientesClient({
                                 title="Ficha archivada: se conserva y se le puede seguir dando hora; solo deja de reclamar datos que faltan"
                               >
                                 Archivada
+                              </span>
+                            )}
+                            {/* Qué es la ficha, con el filtro en «Todas»: una
+                                universidad entre familias se reconoce de un vistazo. */}
+                            {(client.tipoFicha === "universidad" || client.tipoFicha === "empresa") && (
+                              <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-50 text-indigo-700">
+                                {client.tipoFicha === "universidad" ? "Universidad" : "Empresa"}
+                              </span>
+                            )}
+                            {client.esAlumnoPracticas && (
+                              <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-50 text-sky-700">
+                                En prácticas
                               </span>
                             )}
                           </div>

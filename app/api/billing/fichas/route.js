@@ -5,6 +5,7 @@ import { filtroPorNombre } from "../../../../lib/utils/busquedaDb.js";
 import { pacientesQueCasan } from "../../../../lib/clients/familiasPorPaciente.js";
 import { pacientesPorFamilia } from "../../../../lib/clients/pacientesDeLaFamilia.js";
 import { opcionesDeRazonSocial, razonSocialPorDefecto } from "../../../../lib/billing/razonSocial.js";
+import { organizacionQuePaga } from "../../../../lib/clients/organizaciones.js";
 
 /**
  * El buscador de fichas DE FACTURACIÓN (31/08/2026).
@@ -30,6 +31,9 @@ const ATRIBUTOS = [
   // tutores se leen aquí pero NO salen de aquí: `paraPantalla` los convierte
   // en la lista de nombres y quita el JSONB, que lleva DNI y teléfono.
   "guardians", "fiscalGuardianId",
+  // Quién paga lo de esta ficha (15/09/2026): la universidad o la empresa y
+  // cuánto. Cobros lo usa para apuntar cada parte a nombre de quien la paga.
+  "tipoFicha", "esAlumnoPracticas", "universidadId", "empresaId", "pagoOrganizacionPct",
 ];
 
 /**
@@ -64,7 +68,14 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       // decir «Hugo Castro — Vanesa Muñoz» a decir solo «Vanesa Muñoz» justo al
       // elegirlo (10/09/2026).
       const suyos = await pacientesPorFamilia({ clientIds: [ficha.id], Patient, hasModule });
-      return ok({ ...paraPantalla(ficha), pacientes: suyos.get(String(ficha.id)) ?? [] });
+      // Y con el NOMBRE de la organización que paga, que es lo que dice el cajón.
+      const org = organizacionQuePaga(ficha);
+      const orgFicha = org ? await Client.findByPk(org.id, { attributes: ["id", "name"] }) : null;
+      return ok({
+        ...paraPantalla(ficha),
+        pacientes: suyos.get(String(ficha.id)) ?? [],
+        organizacion: orgFicha ? { ...org, nombre: orgFicha.name } : null,
+      });
     }
 
     const search = (searchParams.get("search") ?? "").trim();

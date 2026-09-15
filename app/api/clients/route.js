@@ -24,6 +24,9 @@ import { resolveCurrentTeamMemberId } from "../../../lib/team/currentTeamMember.
 import { filtroPorNombre } from "../../../lib/utils/busquedaDb.js";
 import { pacientesQueCasan } from "../../../lib/clients/familiasPorPaciente.js";
 import { pacientesPorFamilia } from "../../../lib/clients/pacientesDeLaFamilia.js";
+import { filtroPorTipoFicha, normalizarTipoFicha } from "../../../lib/clients/organizaciones.js";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   if (!hasModule("clients")) return forbidden();
@@ -87,6 +90,17 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   if (categoria) enCustomFields.categoria = categoria;
   if (Object.keys(enCustomFields).length) {
     where.customFields = { [Op.contains]: enCustomFields };
+  }
+  // «Clientes / Empresas / Universidades» (15/09/2026, Rodrigo): ver de un
+  // vistazo las fichas que SON una empresa o una universidad, sin buscarlas.
+  const porTipo = filtroPorTipoFicha(searchParams.get("tipo"));
+  if (porTipo) (where[Op.and] ||= []).push(porTipo);
+  // Los vinculados a UNA organización (la lista de alumnos de una universidad).
+  const vinculadosA = searchParams.get("vinculadosA");
+  if (vinculadosA && UUID_RE.test(vinculadosA)) {
+    (where[Op.and] ||= []).push({
+      [Op.or]: [{ universidadId: vinculadosA }, { empresaId: vinculadosA }],
+    });
   }
 
   /*
@@ -337,6 +351,9 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, ten
   const clientPayload = {
     esConsultaExterna: esExterna,
     categoriaExterna: normalizarCategoria(body.categoriaExterna),
+    // «+ Crear universidad / empresa nueva» desde la ficha de un alumno
+    // (15/09/2026): nace ya con su tipo, para salir en su filtro.
+    tipoFicha: normalizarTipoFicha(body.tipoFicha),
     name: name.trim(),
     // En un centro de salud el cliente es una FAMILIA, no una empresa. El alta
     // manual creaba `company` siempre, mientras la lista de espera y los

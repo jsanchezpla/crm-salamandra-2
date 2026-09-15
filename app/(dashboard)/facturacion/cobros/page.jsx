@@ -20,6 +20,7 @@ import { restoDelMes, generadoDelMes, restoQueSeQuedaPendiente, cobrosDeOtroServ
 import { explicaCobro } from "../../../../lib/billing/motivoDelCobro.js";
 import { etiquetaDeMoroso, filtrarMorosos, repartirMorosos, resumenDeMorosidad } from "../../../../lib/billing/morosidad.js";
 import { exigeMetodo } from "../../../../lib/billing/caja.js";
+import { repartirConOrganizacion } from "../../../../lib/clients/organizaciones.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -79,6 +80,26 @@ export default function CobrosPage() {
   // PENDIENTE, y entonces el método no se pide —nadie ha pagado todavía—.
   const [form, setForm] = useState({ modo: "cuota", invoiceId: "", clientId: "", patientId: "", periodMonth: mesVigente(), amount: "", method: "", status: "completed", paidAt: hoyVigente(), notes: "" });
   const apuntaPendiente = form.status === "pending" && form.modo !== "cuenta";
+  /*
+   * La universidad o la empresa que paga lo de la ficha elegida, y cuánto
+   * (15/09/2026, AV-0153; `lib/clients/organizaciones.js`). Con ella, un
+   * pendiente se apunta en dos filas —una a nombre de cada uno— y un cobro ya
+   * cobrado ofrece pasarse a la ficha que ha pagado.
+   */
+  const [orgDeLaFicha, setOrgDeLaFicha] = useState(null);
+  const [repartirConOrg, setRepartirConOrg] = useState(true);
+  useEffect(() => {
+    setOrgDeLaFicha(null);
+    setRepartirConOrg(true);
+    if (!showForm || form.modo === "factura" || !form.clientId) return;
+    let vivo = true;
+    fetch(`/api/billing/fichas?id=${encodeURIComponent(form.clientId)}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (vivo) setOrgDeLaFicha(j?.data?.organizacion ?? null); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [showForm, form.modo, form.clientId]);
+  const orgReparte = Boolean(orgDeLaFicha && orgDeLaFicha.pct != null && Number(orgDeLaFicha.pct) > 0);
   // Los pacientes de la familia elegida, para poder cobrar lo de UNO. Vacío
   // cuando el centro no tiene módulo asistencial (el endpoint responde 403) o
   // cuando esa ficha no tiene pacientes: entonces el selector no se enseña.
@@ -1047,6 +1068,8 @@ export default function CobrosPage() {
           importeDelMes: mesProrrateado,
           // Y lo que falta, si falta y se quiere reclamar.
           restoPendiente: !porFactura && !apuntaPendiente && dejarResto && restoQueQueda > 0 ? restoQueQueda : null,
+          // Cada parte del pendiente a nombre de quien la paga (15/09/2026).
+          repartirConOrganizacion: !porFactura && apuntaPendiente && orgReparte && repartirConOrg,
         }),
       });
       const json = await res.json();
@@ -2013,6 +2036,53 @@ export default function CobrosPage() {
                     </p>
                   )}
                 </FormRow>
+              )}
+              {/* Quién paga lo de esta ficha (15/09/2026, AV-0153): su
+                  universidad o su empresa, entera o a medias. */}
+              {form.modo !== "factura" && form.modo !== "cuenta" && orgReparte && (
+                <div className="rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2.5 text-[12px] text-indigo-900">
+                  {apuntaPendiente ? (
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={repartirConOrg}
+                        onChange={(e) => setRepartirConOrg(e.target.checked)}
+                        className="mt-0.5 accent-indigo-600"
+                      />
+                      <span>
+                        {Number(orgDeLaFicha.pct) >= 100 ? (
+                          <>Apuntarlo a nombre de <b>{orgDeLaFicha.nombre}</b>, que paga todo lo de esta ficha.</>
+                        ) : (
+                          <>
+                            Repartirlo con <b>{orgDeLaFicha.nombre}</b> ({Number(orgDeLaFicha.pct).toLocaleString("es-ES")} %)
+                            {Number(form.amount) > 0 && (() => {
+                              const r = repartirConOrganizacion(form.amount, orgDeLaFicha.pct);
+                              return <>: <span className="tabular">{fmtMoney(r.organizacion)}</span> a su nombre y <span className="tabular">{fmtMoney(r.persona)}</span> a nombre de esta ficha</>;
+                            })()}
+                            .
+                          </>
+                        )}
+                        <span className="block text-[10px] text-indigo-700/80 mt-0.5">
+                          Cada uno salda su parte cuando pague, y «Facturar el mes» le saca a cada uno su factura.
+                        </span>
+                      </span>
+                    </label>
+                  ) : (
+                    <div className="flex items-start justify-between gap-2 flex-wrap">
+                      <span>
+                        {Number(orgDeLaFicha.pct) >= 100 ? "Lo de esta ficha lo paga" : `El ${Number(orgDeLaFicha.pct).toLocaleString("es-ES")} % de lo de esta ficha lo paga`}{" "}
+                        <b>{orgDeLaFicha.nombre}</b>. Si lo que ha entrado es su parte, cóbralo en su ficha.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setForm((f) => ({ ...f, clientId: String(orgDeLaFicha.id), patientId: "" }))}
+                        className="shrink-0 text-[11px] font-medium px-2 py-1 rounded-md bg-white border border-indigo-200 hover:border-indigo-400"
+                      >
+                        Cobrar en {orgDeLaFicha.nombre}
+                      </button>
+                    </div>
+                  )}
+                </div>
               )}
               <FormRow label={apuntaPendiente ? "Método de pago" : "Método de pago *"}>
                 <Select value={form.method} onChange={(v) => setForm((f) => ({ ...f, method: v }))}

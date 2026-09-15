@@ -338,6 +338,9 @@ export const MODULES = {
     // «Consultas externas» (07/08/2026): pacientes de acuerdos con empresas.
     // Se guardan aquí como los demás, pero sin cuenta en la web.
     "migrate-consultas-externas",
+    // Empresas y universidades con ficha propia, alumnos en prácticas y cuánto
+    // de lo suyo paga cada una (15/09/2026, AV-0153 de Aumenta).
+    "migrate-clients-organizaciones",
     "migrate-nutricionista-asignada",
     // «Ya lo he mirado y está bien»: sin esto, la pantalla de fichas a
     // completar no llega a cero nunca (03/08/2026).

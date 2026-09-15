@@ -2529,6 +2529,30 @@ respuesta (un ajuste de dinero silencioso es el que nadie revisa):
 | **Pruebas** | `scripts/_smoke-bonos.mjs` (`node:test`, ligera, en `npm test`) |
 | **Auditoría** | `bono.created`, `bono.updated`, `bono.anulado`, `bono.renovado` (prefijo `bono` → Facturación en `lib/actividad/etiquetas.js`). No hay `bono.deleted`: un bono no se borra, se anula |
 
+## Lo que paga una universidad o una empresa (15/09/2026, AV-0153)
+
+La ficha de una persona puede decir qué universidad o empresa paga lo suyo y
+cuánto (`clients.pago_organizacion_pct`; ver «Empresas y universidades con
+ficha propia» en `clients.md`). Cobros lo usa así:
+
+- **Apuntar un PENDIENTE** («+ Registrar cobro» con Estado «Pendiente»): el
+  cajón enseña «Repartirlo con UNIR (60 %): 128,52 € a su nombre y 85,68 € a
+  nombre de esta ficha» (marcado por defecto) y `POST /api/billing/payments`
+  con `repartirConOrganizacion: true` crea una fila pendiente POR PARTE, cada
+  una a nombre de quien la paga, con el paciente y el mes. Al 100 %, una sola
+  fila a nombre de la organización. Sin cuota ni bono detrás (no les afecta
+  el índice único de pendientes).
+- **Registrar lo COBRADO no parte nada**: lo que entró lo pagó alguien. El
+  cajón avisa «el X % lo paga UNIR» con un botón «Cobrar en UNIR» que cambia la
+  ficha. Cada uno salda SU fila con el mecanismo de siempre
+  (`dondeEstaElCobroDe`).
+- **Facturar el mes** no sabe nada de esto: agrupa por `clientId` y a cada uno
+  le sale su factura.
+- `/api/billing/fichas?id=` devuelve `organizacion: { id, tipo, pct, nombre }`.
+- **Aún no**: las CUOTAS mensuales no se reparten solas. Si una organización
+  paga la cuota entera, «Quién paga» de la cuota (`payer_client_id`); a medias
+  habría que tocar la generación y el índice único de pendientes por cuota y mes.
+
 ## Un buscador en el arqueo (10/09/2026)
 
 Rodrigo: «necesito un buscador en la parte de arqueo». La pestaña de Cierres

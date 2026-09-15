@@ -603,6 +603,41 @@ pregunta, y una familia puede estar en las dos. Las bajas se esconden con la
 misma regla que el resto. Si algún curso se repite la reserva, se vuelve a
 lanzar el cotejo con la lista nueva y la clave se pisa.
 
+## Empresas y universidades con ficha propia (15/09/2026, AV-0153)
+
+Rodrigo: separar de un vistazo clientes, empresas y universidades, marcar al
+alumno en prácticas con su universidad (como la consulta externa con su
+empresa), crear una nueva desde la ficha y que facturarles sea cómodo «si pagan
+parte ellas y parte el alumno o si lo pagan completo».
+
+- **Columnas** (`migrate-clients-organizaciones.js`, en `MODULES.clients`):
+  `tipo_ficha` (NULL particular | `empresa` | `universidad`),
+  `es_alumno_practicas`, `universidad_id`, `empresa_id` (sin FK dura, como el
+  pagador de las cuotas) y `pago_organizacion_pct` (100 todo, 0 nada, NULL sin
+  decir). **La migración va ANTES del deploy**: el modelo las lee en toda
+  consulta de `clients`.
+- **Reglas** en `lib/clients/organizaciones.js` (sin Sequelize: la importa la
+  ficha) con `_smoke-organizaciones.mjs`: filtro del listado, qué organización
+  paga una ficha (`organizacionQuePaga`: la universidad solo con la casilla
+  marcada) y el reparto en céntimos (`repartirConOrganizacion`).
+- **Listado**: desplegable «Todas las fichas / Clientes / Empresas /
+  Universidades» junto al buscador (`?tipo=`, también en el Excel) y
+  distintivos «Universidad», «Empresa», «En prácticas». `?vinculadosA=<id>`
+  lista quién cuelga de una organización.
+- **Ficha** (pestaña Servicio): `ClientOrganizacionSection.jsx` (qué es la
+  ficha; alumno en prácticas + universidad; «Quién paga lo suyo») y
+  `SelectorOrganizacion.jsx` (fichas de ese tipo + «Crear … nueva», que da de
+  alta la ficha ya con su tipo). En la ficha de una organización, la lista de
+  sus vinculados y de sus PACIENTES. Donde hay consulta externa la empresa se
+  elige en esa tarjeta (`empresaComoFicha`); la ficha propia de Laura sigue con
+  la lista de nombres de Configuración.
+- **PUT** valida que la organización exista, sea de ese tipo y no sea la
+  propia ficha. Es una etiqueta, no un permiso: la toca quien edita la ficha.
+- **Aumenta**: las universidades ya eran fichas (Organízate) y los alumnos son
+  sus PACIENTES: pagan por la universidad sin marcar nada.
+  `scripts/_hechos/av0153-alumnos-practicas-aumenta.js` marcó las cinco y dejó
+  los pendientes de Sofía Carvalho y Sonia Ramos. El cobro, en `billing.md`.
+
 ## Los problemas de cuotas y fichas viven en «Fichas a completar» (06/09/2026)
 
 Rodrigo, la noche del 06/09, tras atar cada cita importada de Organízate a la

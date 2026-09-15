@@ -12,6 +12,7 @@ import { dondeEstaElCobroDe } from "../../../../lib/billing/cobroDeCuota.js";
 import { whereFacturasDelPaciente } from "../../../../lib/billing/facturasDelPaciente.js";
 import { decidirCobroDelPendiente, pendienteQueCasa } from "../../../../lib/billing/cobroParcial.js";
 import { exigeMetodo } from "../../../../lib/billing/caja.js";
+import { filasDelCobroRepartido, organizacionQuePaga } from "../../../../lib/clients/organizaciones.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -406,6 +407,70 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       }
     }
 
+    /*
+     * ── CADA PARTE A NOMBRE DE QUIEN LA PAGA (15/09/2026, Rodrigo: «que sea
+     *    super cómodo facturarlas, si pagan parte ellas y parte el alumno o si
+     *    lo pagan completo las empresas o universidades») ───────────────────
+     *
+     * Solo al APUNTAR UN PENDIENTE sin factura, y solo si la pantalla lo pide
+     * (`repartirConOrganizacion`): la ficha dice qué universidad o empresa paga
+     * lo suyo y cuánto (`lib/clients/organizaciones.js`), y aquí nacen las filas
+     * pendientes que tocan —la de la organización y la de la persona—, cada una
+     * a su nombre. Así cada cual salda la suya cuando paga, Morosidad sabe quién
+     * debe qué, y «Facturar el mes» le saca a cada uno su factura sin saber nada
+     * de esto (agrupa por `clientId`). Sin cuota ni bono detrás: no hay índice
+     * único que las choque.
+     *
+     * Un cobro YA COBRADO no se parte: lo que ha entrado lo ha pagado alguien en
+     * concreto, y partirlo daría por pagada la parte del otro.
+     */
+    let repartido = null;
+    if (!payment && pendiente && !invoiceId && clientId && body.repartirConOrganizacion === true && Client) {
+      const ficha = await Client.findByPk(clientId, {
+        attributes: ["id", "name", "esAlumnoPracticas", "universidadId", "empresaId", "pagoOrganizacionPct"],
+      });
+      const org = organizacionQuePaga(ficha);
+      const orgFicha = org ? await Client.findByPk(org.id, { attributes: ["id", "name"] }) : null;
+      const filas = orgFicha ? filasDelCobroRepartido({ clientId, importe: amount, organizacion: org }) : [];
+      if (filas.some((f) => f.parte)) {
+        const creadas = [];
+        const euros = (n) => `${Number(n).toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+        const pctTxt = (n) => `${Number(n).toLocaleString("es-ES")} %`;
+        for (const f of filas) {
+          const nota = filas.length === 1
+            ? `Lo paga ${orgFicha.name} por ${ficha.name}`
+            : f.parte === "organizacion"
+              ? `Parte de ${orgFicha.name} por ${ficha.name}: ${pctTxt(org.pct)} de ${euros(amount)}`
+              : `Parte de ${ficha.name}: ${pctTxt(100 - org.pct)} de ${euros(amount)} (el resto lo paga ${orgFicha.name})`;
+          creadas.push(await Payment.create({
+            invoiceId: null,
+            clientId: f.clientId,
+            periodMonth: mes,
+            amount: f.importe,
+            paidAt,
+            method: method || null,
+            status: "pending",
+            notes: [notes, nota].filter(Boolean).join(" — "),
+            patientId: pacienteValido,
+            conceptId: conceptoValido,
+          }));
+        }
+        payment = creadas[0];
+        repartido = creadas.map((c) => ({ id: c.id, clientId: c.clientId, amount: Number(c.amount) }));
+        for (const c of creadas.slice(1)) {
+          await logBillingAudit({
+            tenantId: tenant.id,
+            ...datosPeticion(request),
+            action: "payment.created",
+            entity: "Payment",
+            entityId: c.id,
+            before: null,
+            after: resumenImporte(c),
+          });
+        }
+      }
+    }
+
     let nacioNuevo = false;
     if (!payment) {
       nacioNuevo = true;
@@ -468,7 +533,9 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     // cobrar ES su cuota, y es lo que el drawer rellenará la próxima vez.
     // Solo en cobros de cuota (sin factura), solo ids que existen en el
     // catálogo, y conservando duplicados (dos hermanos, misma cuota).
-    if (!invoiceId && payment.clientId && Client && BillingConcept && Array.isArray(conceptIds)) {
+    // (No con un pendiente repartido: la primera fila es de la organización, y
+    // la cuota de la persona no se le enseña a la ficha de la universidad.)
+    if (!invoiceId && !repartido && payment.clientId && Client && BillingConcept && Array.isArray(conceptIds)) {
       const candidatos = conceptIds.filter((x) => typeof x === "string" && UUID_RE.test(x));
       if (candidatos.length) {
         const existen = await BillingConcept.findAll({
@@ -497,6 +564,8 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       partido,
       // Lo que se ha quedado a deber, para que la pantalla lo pueda decir.
       resto: resto ? { id: resto.id, amount: Number(resto.amount) } : null,
+      // Las filas en que se partió el pendiente entre la organización y la persona.
+      repartido,
     });
   } catch (err) {
     return serverError(err);
