@@ -589,7 +589,7 @@ describe("estadoTrasMensaje: el estado dice si está en el Registro, la tabla EN
   // nuevo o un if torcido se vea.
   it("las celdas: un mensaje, de quien sea, no mueve nada; lo viejo sale traducido", () => {
     const tabla = {};
-    for (const estado of ["nuevo", "enviado", "en_curso", "esperando", "resuelto"]) {
+    for (const estado of ["nuevo", "enviado", "cerrado", "en_curso", "esperando", "resuelto"]) {
       tabla[estado] = {
         salamandra: estadoTrasMensaje(estado, "salamandra"),
         cliente: estadoTrasMensaje(estado, "cliente"),
@@ -598,6 +598,8 @@ describe("estadoTrasMensaje: el estado dice si está en el Registro, la tabla EN
     assert.deepEqual(tabla, {
       nuevo: { salamandra: "nuevo", cliente: "nuevo" },
       enviado: { salamandra: "enviado", cliente: "enviado" },
+      // Lo Resuelto se reabre si escribe él (Rodrigo, 15/09/2026).
+      cerrado: { salamandra: "cerrado", cliente: "nuevo" },
       // Los viejos salen ya traducidos: nada vuelve a escribir `en_curso` ni
       // `resuelto` (el Buzón acaba en el Registro; Rodrigo, 02/09/2026).
       en_curso: { salamandra: "enviado", cliente: "enviado" },

@@ -494,8 +494,32 @@ capturas, igual que el formulario de Ayuda.
     primero Resuelto y después backlog);
   - con ficha que ya no está en el backlog → solo marca el aviso.
   Sin nota, `notaDeCierre` pone una por defecto. Si el cliente vuelve a
-  escribir, el aviso sube a Activos como uno enviado. Auditoría
+  escribir, el aviso vuelve a `nuevo` (ver «El Buzón sigue al Registro»). Auditoría
   `buzon.enviado_a_resuelto`. Prueba: `_smoke-buzon-mensajes-resuelto.mjs`.
+
+## El Buzón sigue al Registro (15/09/2026, Rodrigo)
+
+«El objetivo es que siempre coincidan En el registro (Buzón) con Registro y
+Resuelto (Buzón) con Resuelto; las Activas son un punto previo.»
+
+- **Cerrar la tarea mueve el aviso.** `publicarVersion` (`lib/tablero/documentos.js`),
+  la única puerta del texto del Registro —tablero, los dos botones del Buzón y
+  `registro.mjs`/`tablero-doc.js`—, llama al publicar `backlog` o `resuelto` a
+  `sincronizarConRegistro` (`lib/buzon/sincronizarConRegistro.js`; reglas puras
+  en `cambiosPorElRegistro`): un aviso «En el registro» cuya tarea ya no está en
+  el backlog (ni por ficha ni por `AV-####`) pasa a `cerrado`; sin ficha, solo
+  si Resuelto cita su referencia. Un `cerrado` cuya ficha vuelve al backlog (y
+  no está en Resuelto) vuelve a `enviado`. Lo Activo no se toca. Best-effort
+  (no deshace la publicación); auditoría `buzon.sincronizado_con_registro`.
+- **Si vuelve a escribir, lo Resuelto se reabre.** `estadoTrasMensaje("cerrado",
+  "cliente")` da `nuevo`, y `anadirMensaje` guarda la ficha vieja en
+  `contexto.fichasAnteriores` y suelta `registro_ficha`, para que los dos
+  botones lo traten como uno nuevo. Nuestro mensaje no lo reabre. Un aviso «En
+  el registro» con la tarea abierta se queda allí (sale además en Activos
+  mientras nos espera, como desde el 09/09).
+- El 15/09/2026 se pasaron a Resuelto los 146 avisos que quedaban «En el
+  registro»: ninguno tenía la tarea abierta en el backlog.
+- Prueba: `scripts/_smoke-buzon-sincronizar-registro.mjs`.
 
 ## Lo que NO hace
 

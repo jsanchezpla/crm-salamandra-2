@@ -246,7 +246,7 @@ describe("los dos estados del Buzón (02/09/2026)", () => {
 
   it("un mensaje no mueve nada: el estado solo dice si está en el Registro", () => {
     const tabla = {};
-    for (const estado of ["nuevo", "enviado", "resuelto", "en_curso", "esperando", "archivado"]) {
+    for (const estado of ["nuevo", "enviado", "cerrado", "resuelto", "en_curso", "esperando", "archivado"]) {
       tabla[estado] = {
         salamandra: estadoTrasMensaje(estado, "salamandra"),
         cliente: estadoTrasMensaje(estado, "cliente"),
@@ -255,6 +255,7 @@ describe("los dos estados del Buzón (02/09/2026)", () => {
     assert.deepEqual(tabla, {
       nuevo: { salamandra: "nuevo", cliente: "nuevo" },
       enviado: { salamandra: "enviado", cliente: "enviado" },
+      cerrado: { salamandra: "cerrado", cliente: "nuevo" },
       resuelto: { salamandra: "enviado", cliente: "enviado" },
       en_curso: { salamandra: "enviado", cliente: "enviado" },
       esperando: { salamandra: "nuevo", cliente: "nuevo" },
