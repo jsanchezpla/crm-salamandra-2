@@ -1115,7 +1115,7 @@ function CampoAlta({ tipo, valor, opciones, placeholder, onChange }) {
         value={valor}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
-        className={`${cls} resize-none`}
+        className={`${cls} field-sizing-content min-h-[4.75rem] max-h-80 resize-y`}
       />
     );
   }

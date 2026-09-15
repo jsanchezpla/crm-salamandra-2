@@ -16,7 +16,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const lee = (p) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
+// Sin CRLF: en Windows git saca los ficheros con \r\n y el orden de abajo busca un \n.
+const lee = (p) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 
 test("el modal del bloqueo ofrece «Convertir en cita» (no en talleres)", () => {
   const src = lee("modules/default/citas/BloqueoModal.jsx");

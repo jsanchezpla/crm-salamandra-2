@@ -32,6 +32,14 @@ const VACIO = PACIENTE_VACIO;
 const inputCls =
   "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)] placeholder:text-gray-300";
 
+/**
+ * El texto largo crece hacia abajo mientras se escribe, en vez de esconderse
+ * tras una barra: a mitad de ficha se atiende otra cosa y al volver hay que
+ * poder leer de un vistazo lo que ya se puso. Donde el navegador no sepa
+ * `field-sizing`, se queda en sus 3 filas y se puede estirar a mano.
+ */
+export const TEXTAREA_CRECE = "field-sizing-content min-h-[4.75rem] max-h-80 resize-y";
+
 export default function PacientesDelAlta({ pacientes, onChange, nombreCliente, primero = false }) {
   const actualizar = (i, campos) =>
     onChange(pacientes.map((p, idx) => (idx === i ? { ...p, ...campos } : p)));
@@ -98,9 +106,18 @@ export default function PacientesDelAlta({ pacientes, onChange, nombreCliente, p
                     <span className="ml-1.5 text-gray-400 font-normal">· {edad} año{edad === 1 ? "" : "s"}</span>
                   )}
                 </label>
-                <input type={type} value={p[key] || ""} placeholder={placeholder}
-                  onChange={(e) => actualizar(i, { [key]: e.target.value })}
-                  className={inputCls} />
+                {/* `<input type="textarea">` no existe: el navegador pinta una
+                    caja de UNA línea y el motivo de consulta del paciente había
+                    que recorrerlo a lo ancho (AV-0134, Aumenta). */}
+                {type === "textarea" ? (
+                  <textarea rows={3} value={p[key] || ""} placeholder={placeholder}
+                    onChange={(e) => actualizar(i, { [key]: e.target.value })}
+                    className={`${inputCls} ${TEXTAREA_CRECE}`} />
+                ) : (
+                  <input type={type} value={p[key] || ""} placeholder={placeholder}
+                    onChange={(e) => actualizar(i, { [key]: e.target.value })}
+                    className={inputCls} />
+                )}
               </div>
             ))}
 
