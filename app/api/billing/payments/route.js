@@ -11,6 +11,7 @@ import { billingHasPatients } from "../../../../lib/billing/patientLink.js";
 import { dondeEstaElCobroDe } from "../../../../lib/billing/cobroDeCuota.js";
 import { whereFacturasDelPaciente } from "../../../../lib/billing/facturasDelPaciente.js";
 import { decidirCobroDelPendiente, pendienteQueCasa } from "../../../../lib/billing/cobroParcial.js";
+import { exigeMetodo } from "../../../../lib/billing/caja.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -208,7 +209,16 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
        *           (ver `lib/billing/cobroParcial.js`).
        */
       importeDelMes,
+      /*
+       * `status`  "completed" (lo de siempre) o "pending" (15/09/2026, Rodrigo:
+       *           «debo poder poner que está pendiente y no necesitar poner la
+       *           forma de pago»). Un pendiente apuntado a mano es una deuda, no
+       *           dinero: no salda pendientes, no deja resto y el método es
+       *           opcional, como el que genera la cuota.
+       */
+      status,
     } = body;
+    const pendiente = status === "pending";
 
     // COBRO SIN FACTURA (sprint Aumenta 2026-07, punto 8): en el centro se
     // cobra primero y se factura después, así que exigir factura obligaba a
@@ -218,7 +228,12 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     if (!amount || Number(amount) <= 0) return error("amount debe ser mayor que 0");
     // Registrar un cobro ES decir por dónde entró el dinero: aquí no hay
     // «sin decidir» que valga (el hueco es solo del pendiente, 10/09/2026).
-    if (!method) return error("Di por dónde ha entrado el dinero: efectivo, tarjeta, banco o domiciliación");
+    if (status != null && status !== "completed" && status !== "pending") {
+      return error("El estado de un cobro nuevo es «cobrado» o «pendiente»");
+    }
+    if (exigeMetodo(pendiente ? "pending" : "completed") && !method) {
+      return error("Di por dónde ha entrado el dinero: efectivo, tarjeta, banco o domiciliación");
+    }
     if (!paidAt) return error("paidAt es obligatorio");
 
     // Mes al que corresponde ('YYYY-MM' desde la UI → primer día del mes). Es
@@ -272,7 +287,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     // Si el cobro parcial ha partido la fila pendiente, con qué se ha quedado
     // pendiente: la pantalla lo dice al terminar.
     let partido = null;
-    if (!invoiceId && mes && clientId && suelto !== true) {
+    if (!pendiente && !invoiceId && mes && clientId && suelto !== true) {
       // El pendiente del mes puede estar a nombre del PAGADOR de la cuota y no
       // de la familia (07/09/2026): sin esto no se encontraba y se creaba un
       // cobro NUEVO encima, con el pendiente de la fundación intacto y la caja
@@ -401,8 +416,8 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
         periodMonth: mes,
         amount: Number(amount),
         paidAt,
-        method,
-        status: "completed",
+        method: method || null,
+        status: pendiente ? "pending" : "completed",
         notes: notes || null,
         patientId: pacienteValido,
         conceptId: conceptoValido,
@@ -430,7 +445,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
      */
     let resto = null;
     const restoPedido = Math.round((Number(restoPendiente) || 0) * 100) / 100;
-    if (nacioNuevo && !invoiceId && mes && clientId && restoPedido > 0 && restoPedido < 1_000_000) {
+    if (!pendiente && nacioNuevo && !invoiceId && mes && clientId && restoPedido > 0 && restoPedido < 1_000_000) {
       resto = await Payment.create({
         invoiceId: null,
         clientId: payment.clientId,

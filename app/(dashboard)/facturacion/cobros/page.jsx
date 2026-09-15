@@ -74,7 +74,10 @@ export default function CobrosPage() {
   // puesta por inercia. Lo elegido se conserva para el siguiente cobro del rato.
   // Y `modo` empieza en «cuota» (10/09/2026, Rodrigo): el centro cobra la
   // mensualidad y factura al cierre, así que la factura es la excepción.
-  const [form, setForm] = useState({ modo: "cuota", invoiceId: "", clientId: "", patientId: "", periodMonth: mesVigente(), amount: "", method: "", paidAt: hoyVigente(), notes: "" });
+  // `status` (15/09/2026, Rodrigo): se puede apuntar un cobro que aún está
+  // PENDIENTE, y entonces el método no se pide —nadie ha pagado todavía—.
+  const [form, setForm] = useState({ modo: "cuota", invoiceId: "", clientId: "", patientId: "", periodMonth: mesVigente(), amount: "", method: "", status: "completed", paidAt: hoyVigente(), notes: "" });
+  const apuntaPendiente = form.status === "pending" && form.modo !== "cuenta";
   // Los pacientes de la familia elegida, para poder cobrar lo de UNO. Vacío
   // cuando el centro no tiene módulo asistencial (el endpoint responde 403) o
   // cuando esa ficha no tiene pacientes: entonces el selector no se enseña.
@@ -958,7 +961,7 @@ export default function CobrosPage() {
       const porFactura = form.modo === "factura";
       if (porFactura && !form.invoiceId) throw new Error("Selecciona una factura");
       if (!porFactura && !form.clientId) throw new Error("Selecciona el cliente que ha pagado");
-      if (!form.method) throw new Error("Di por dónde ha entrado el dinero: efectivo, tarjeta, banco o domiciliación");
+      if (!apuntaPendiente && !form.method) throw new Error("Di por dónde ha entrado el dinero: efectivo, tarjeta, banco o domiciliación");
 
       /*
        * A CUENTA: no es un cobro, son varios —uno por mes—, así que va por su
@@ -1011,7 +1014,8 @@ export default function CobrosPage() {
           patientId: porFactura ? null : form.patientId || null,
           periodMonth: porFactura ? null : form.periodMonth,
           amount: Number(form.amount),
-          method: form.method,
+          method: form.method || null,
+          status: apuntaPendiente ? "pending" : "completed",
           paidAt: form.paidAt,
           // Con un cobro pendiente detrás, ese cobro conserva su propia nota
           // («Cuota septiembre 2026 — Psicología…»): solo viaja lo escrito a
@@ -1041,12 +1045,14 @@ export default function CobrosPage() {
            */
           importeDelMes: mesProrrateado,
           // Y lo que falta, si falta y se quiere reclamar.
-          restoPendiente: !porFactura && dejarResto && restoQueQueda > 0 ? restoQueQueda : null,
+          restoPendiente: !porFactura && !apuntaPendiente && dejarResto && restoQueQueda > 0 ? restoQueQueda : null,
         }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error");
-      setForm((f) => ({ ...f, invoiceId: "", clientId: "", patientId: "", amount: "", notes: "" }));
+      // El estado vuelve a «Cobrado»: un pendiente puesto por inercia en el
+      // siguiente cobro sería dinero que entró y no cuenta en la caja.
+      setForm((f) => ({ ...f, invoiceId: "", clientId: "", patientId: "", amount: "", notes: "", status: "completed" }));
       setLineasCuota([]);
       setCitaOrigen(null);
       setDejarResto(true);
@@ -1798,7 +1804,7 @@ export default function CobrosPage() {
                 {/* TRAEN MENOS DE LO QUE SE LES PIDIÓ (10/09/2026). Lo que falta
                     se queda pendiente de este mes, que es lo que hace que salga
                     en Cobros y en Morosidad en vez de evaporarse. */}
-                {form.modo === "cuota" && restoQueQueda > 0 && (
+                {form.modo === "cuota" && !apuntaPendiente && restoQueQueda > 0 && (
                   <label className="mt-2 flex items-start gap-2 text-[11px] text-neutral-600 cursor-pointer">
                     <input
                       type="checkbox"
@@ -1827,7 +1833,7 @@ export default function CobrosPage() {
                     de <span className="tabular">{fmtMoney(sumaPendientes)}</span>. Este cobro no lo toca.
                   </p>
                 )}
-                {form.modo === "cuota" && !cuotaDeLaCita && pendientesDelMes.length > 0 && (
+                {form.modo === "cuota" && !apuntaPendiente && !cuotaDeLaCita && pendientesDelMes.length > 0 && (
                   <div className="mt-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2">
                     <p className="text-[11px] text-neutral-500 mb-1.5">
                       {pendientesDelMes.length === 1
@@ -1988,10 +1994,26 @@ export default function CobrosPage() {
                   </p>
                 )}
               </FormRow>
-              <FormRow label="Método de pago *">
+              {form.modo !== "cuenta" && (
+                <FormRow label="Estado">
+                  <Select value={form.status} onChange={(v) => setForm((f) => ({ ...f, status: v }))}
+                    className={inputCls}
+                    options={[
+                      { value: "completed", label: "Cobrado" },
+                      { value: "pending", label: "Pendiente" },
+                    ]}
+                  />
+                  {apuntaPendiente && (
+                    <p className="text-[10px] text-neutral-400 mt-1">
+                      Queda como deuda en Cobros y en Morosidad; no cuenta en la caja. La forma de pago se pone cuando lo paguen.
+                    </p>
+                  )}
+                </FormRow>
+              )}
+              <FormRow label={apuntaPendiente ? "Método de pago" : "Método de pago *"}>
                 <Select value={form.method} onChange={(v) => setForm((f) => ({ ...f, method: v }))}
-                  className={inputCls} placeholder="¿Por dónde ha entrado?"
-                  options={METODOS_OPCIONES}
+                  className={inputCls} placeholder={apuntaPendiente ? "Sin decidir" : "¿Por dónde ha entrado?"}
+                  options={apuntaPendiente ? [SIN_DECIDIR, ...METODOS_OPCIONES] : METODOS_OPCIONES}
                 />
               </FormRow>
               <FormRow label="Fecha *">
