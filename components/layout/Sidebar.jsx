@@ -12,6 +12,7 @@ import { esFormacionAbierta, HIJOS_OCULTOS_FORMACION_ABIERTA } from "../../lib/t
 import { conHorarioPropio, HIJOS_OCULTOS_SIN_HORARIO_PROPIO } from "../../lib/citas/horarioPropio.js";
 import { puedeUsarCorreo } from "../../lib/correo/quienEscribe.js";
 import { esSlugDemo } from "../../lib/demo/demos.js";
+import { ordenarSecciones } from "../../lib/layout/ordenDelMenu.js";
 
 const navigation = [
   // Áreas reorganizadas 2026-07-27 (pedido del socio): Inicio suelto arriba y
@@ -913,7 +914,9 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
             debajo parece cortado. La sombra al borde solo sale cuando hay más
             menú por debajo (o por encima). Regla en app/globals.css. */}
         <nav className="flex-1 overflow-y-auto px-3 space-y-4 pb-4 slim-scroll menu-con-sombra">
-          {navigation.map((section) => {
+          {/* Un centro clínico abre por Salud y Citas, no por Comercial
+              (15/09/2026, AV-0132): la regla, por módulos, en lib/layout/ordenDelMenu.js. */}
+          {ordenarSecciones(navigation, (k) => enabledModules.has(k)).map((section) => {
             // Un item es visible si el tenant tiene el módulo Y el usuario puede verlo.
             // `visibleModules` permite un OR de módulos (p.ej. Equipo se muestra a
             // quien tenga `team` O `clinica`: el admin gestiona el equipo, la
