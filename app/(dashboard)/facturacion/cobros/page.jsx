@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { hoyVigente, mesVigente, reservaDeLasCuotas } from "@/lib/billing/cuotas.js";
+import { fechaAlCobrar } from "@/lib/billing/fechaAlCobrar.js";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import Link from "next/link";
 import StatusBadge from "../_components/StatusBadge.jsx";
@@ -1444,6 +1445,9 @@ export default function CobrosPage() {
                           // Vacío y no null: es lo que casa con «Sin decidir».
                           method: p.method ?? "",
                           paidAt: String(p.paidAt).slice(0, 10),
+                          // Con qué se abrió, para `fechaAlCobrar` (no viaja al guardar).
+                          estadoOriginal: p.status,
+                          fechaOriginal: String(p.paidAt).slice(0, 10),
                           periodMonth: p.periodMonth ? String(p.periodMonth).slice(0, 7) : "",
                           patientId: p.patientId ?? "",
                           refundedAt: p.refundedAt ? String(p.refundedAt).slice(0, 10) : hoyVigente(),
@@ -2080,7 +2084,13 @@ export default function CobrosPage() {
                   onChange={(e) => setEditing((p) => ({ ...p, paidAt: e.target.value }))} className={inputCls} />
               </FormRow>
               <FormRow label="Estado">
-                <Select value={editing.status} onChange={(v) => setEditing((p) => ({ ...p, status: v }))}
+                {/* Cobrar un pendiente pone la fecha de hoy (AV-0148/0149): la
+                    cuota nació el día 1 y el dinero entra hoy. */}
+                <Select value={editing.status} onChange={(v) => setEditing((p) => ({
+                  ...p,
+                  status: v,
+                  paidAt: fechaAlCobrar({ estadoOriginal: p.estadoOriginal, estadoNuevo: v, fechaOriginal: p.fechaOriginal, fechaActual: p.paidAt, hoy: hoyVigente() }),
+                }))}
                   className={inputCls}
                   options={[
                     { value: "completed", label: "Cobrado" },

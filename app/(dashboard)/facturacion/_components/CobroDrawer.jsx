@@ -22,6 +22,7 @@ import Link from "next/link";
 
 import Select from "@/components/ui/Select.jsx";
 import { useDialogo } from "@/components/ui/Dialogo.jsx";
+import { fechaAlCobrar } from "@/lib/billing/fechaAlCobrar.js";
 import { fmtMoney } from "./Kpi.jsx";
 
 const inputCls =
@@ -256,7 +257,13 @@ export default function CobroDrawer({ cobroId, resumen, onClose, onCambiado }) {
               </label>
               <label className="block">
                 <span className="text-[11px] text-neutral-500">Estado</span>
-                <Select value={form.status} onChange={(v) => setForm((f) => ({ ...f, status: v }))}
+                {/* Cobrar un pendiente pone la fecha de hoy (AV-0148/0149). El
+                    estado y la fecha con que se abrió los guarda `cobro`. */}
+                <Select value={form.status} onChange={(v) => setForm((f) => ({
+                  ...f,
+                  status: v,
+                  paidAt: fechaAlCobrar({ estadoOriginal: cobro?.status, estadoNuevo: v, fechaOriginal: diaParaInput(cobro?.paidAt), fechaActual: f.paidAt, hoy: hoyMadrid() }),
+                }))}
                   className={inputCls} options={ESTADOS} />
               </label>
               {/* Un cobro devuelto son dos apuntes: entró el día del cobro y
