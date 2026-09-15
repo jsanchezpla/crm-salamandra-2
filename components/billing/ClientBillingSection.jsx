@@ -3,12 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ejerciciosDe, facturasDelEjercicio, sePuedeDescargar } from "@/lib/billing/ejerciciosFactura.js";
+import { fmtDate } from "@/lib/utils/format.js";
 
 function fmtMoney(n) {
   return `${Number(n || 0).toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
-}
-function fmtDate(d) {
-  return d ? String(d).slice(0, 10) : "—";
 }
 
 const STATUS_LABELS = {

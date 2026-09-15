@@ -1,3 +1,4 @@
+import { fmtDateTime } from "@/lib/utils/format.js";
 import { Op } from "sequelize";
 import { filtroPorNombre } from "../../../../lib/utils/busquedaDb.js";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
@@ -493,7 +494,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     // Solapamiento (solo con citas del MISMO profesional, o sin asignar).
     const overlap = await findBookingOverlap(Booking, { scheduledAt, duration, teamMemberId });
     if (overlap) {
-      return error(`Solapa con otra cita activa el ${overlap.scheduledAt.toISOString?.() ?? overlap.scheduledAt}`, 409);
+      return error(`Solapa con otra cita activa el ${fmtDateTime(overlap.scheduledAt)}`, 409);
     }
 
     // Paciente asignado (Clínica/Pacientes). Opcional.

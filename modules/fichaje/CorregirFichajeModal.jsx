@@ -1,4 +1,5 @@
 "use client";
+import { fmtDate } from "@/lib/utils/format.js";
 
 /**
  * CorregirFichajeModal — arreglar un tramo, con el original a la vista.
@@ -105,7 +106,7 @@ export default function CorregirFichajeModal({ fichaje, onClose, onHecho }) {
         <header className="px-6 py-4 border-b border-gray-100">
           <div className="text-[11px] uppercase tracking-[0.18em] text-gray-400">Corregir jornada</div>
           <h2 className="text-lg font-semibold text-gray-900">{fichaje.nombre}</h2>
-          <p className="text-sm text-gray-500">{fichaje.fecha}</p>
+          <p className="text-sm text-gray-500">{fmtDate(fichaje.fecha)}</p>
         </header>
 
         <div className="px-6 py-5 space-y-4">

@@ -1,3 +1,4 @@
+import { fmtDateTime } from "@/lib/utils/format.js";
 import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
 import { citaSegunRol } from "../../../../../../lib/citas/dinero.js";
@@ -180,7 +181,7 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
         );
       }
       if (err?.code === "SOLAPA") {
-        const cuando = err.cuando?.toISOString?.() ?? err.cuando;
+        const cuando = fmtDateTime(err.cuando);
         return forbidden(`La cita solapa con otra activa el ${cuando}`);
       }
       throw err;

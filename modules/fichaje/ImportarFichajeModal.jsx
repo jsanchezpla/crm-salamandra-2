@@ -1,4 +1,5 @@
 "use client";
+import { fmtDate } from "@/lib/utils/format.js";
 
 /**
  * ImportarFichajeModal — subir el Excel del mes en tres pasos.
@@ -309,7 +310,7 @@ export default function ImportarFichajeModal({ periodo: periodoInicial, onClose,
                             <span className="text-gray-400">
                               {b.hoja} f{b.fila}
                             </span>{" "}
-                            · {b.nombreExcel} · {b.fecha} — {b.motivo}
+                            · {b.nombreExcel} · {fmtDate(b.fecha)} — {b.motivo}
                           </li>
                         ))}
                       </ul>
@@ -323,7 +324,7 @@ export default function ImportarFichajeModal({ periodo: periodoInicial, onClose,
                       <ul className="text-xs text-gray-600 space-y-1">
                         {preview.anotaciones.map((a, i) => (
                           <li key={i}>
-                            {a.fecha} · <strong>{a.nombreExcel}</strong> — «{a.texto}»
+                            {fmtDate(a.fecha)} · <strong>{a.nombreExcel}</strong> — «{a.texto}»
                           </li>
                         ))}
                       </ul>

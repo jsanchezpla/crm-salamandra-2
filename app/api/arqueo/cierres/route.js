@@ -1,3 +1,4 @@
+import { fmtDate } from "@/lib/utils/format.js";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, created, forbidden, error, notFound } from "../../../../lib/utils/apiResponse.js";
 import { auditar, datosPeticion, resumen } from "../../../../lib/utils/auditoria.js";
@@ -298,7 +299,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     where: { cashPointId: body.cashPointId, closeDate: body.closeDate },
   });
   if (yaCerrado) {
-    return error(`Esa caja ya se cerró el ${body.closeDate}`, 409, { id: yaCerrado.id });
+    return error(`Esa caja ya se cerró el ${fmtDate(body.closeDate)}`, 409, { id: yaCerrado.id });
   }
 
   /*

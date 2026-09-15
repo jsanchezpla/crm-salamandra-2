@@ -4,11 +4,7 @@ export function fmtMoney(n, currency = "EUR") {
 export function fmtPct(n) {
   return `${Number(n || 0).toFixed(1)}%`;
 }
-export function fmtDate(d) {
-  if (!d) return "—";
-  const date = typeof d === "string" ? d.slice(0, 10) : new Date(d).toISOString().slice(0, 10);
-  return date;
-}
+export { fmtDate } from "@/lib/utils/format.js";
 
 const VARIANTS = {
   dark:    { wrap: "bg-[var(--ink-900,#15140F)] text-white border-transparent",       label: "text-white/40", value: "text-white",       sub: "text-white/40" },

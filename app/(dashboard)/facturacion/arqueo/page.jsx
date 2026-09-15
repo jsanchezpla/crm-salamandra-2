@@ -1,4 +1,5 @@
 "use client";
+import { fmtDate } from "@/lib/utils/format.js";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { hoyVigente } from "@/lib/billing/cuotas.js";
@@ -454,7 +455,7 @@ export default function ArqueoPage() {
                   const d = Number(c.difference || 0);
                   return (
                     <tr key={c.id} className="border-t border-neutral-100">
-                      <td className="px-3 py-2">{c.closeDate}</td>
+                      <td className="px-3 py-2">{fmtDate(c.closeDate)}</td>
                       <td className="px-3 py-2 text-right text-neutral-500">{fmt(c.openingAmount)}</td>
                       <td className="px-3 py-2 text-right text-neutral-500">{fmt(c.expectedAmount)}</td>
                       <td className="px-3 py-2 text-right">{fmt(c.countedAmount)}</td>

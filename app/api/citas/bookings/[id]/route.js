@@ -1,3 +1,4 @@
+import { fmtDateTime } from "@/lib/utils/format.js";
 import { Op } from "sequelize";
 import { getMasterModels } from "../../../../../lib/db/masterDb.js";
 import { avisarCitaPorWhatsapp } from "../../../../../lib/citas/avisosWhatsapp.js";
@@ -456,7 +457,7 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
         teamMemberId: teamMemberFinal,
       });
       if (overlap) {
-        return error(`Solapa con otra cita activa el ${overlap.scheduledAt.toISOString?.() ?? overlap.scheduledAt}`, 409);
+        return error(`Solapa con otra cita activa el ${fmtDateTime(overlap.scheduledAt)}`, 409);
       }
     }
 

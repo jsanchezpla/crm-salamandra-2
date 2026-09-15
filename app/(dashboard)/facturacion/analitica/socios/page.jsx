@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import PeriodPicker, { computeRange } from "../../_components/PeriodPicker.jsx";
-import { fmtMoney } from "../../_components/Kpi.jsx";
+import { fmtMoney, fmtDate } from "../../_components/Kpi.jsx";
 import ExportButtons from "@/components/billing/ExportButtons.jsx";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
@@ -74,7 +74,7 @@ export default function PorSocioPage() {
             </HelpTooltip>
           </h1>
           <p className="text-xs text-neutral-400 mt-1">
-            Lo que ha ganado cada socio y el conjunto. {from} → {to}
+            Lo que ha ganado cada socio y el conjunto. {fmtDate(from)} → {fmtDate(to)}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

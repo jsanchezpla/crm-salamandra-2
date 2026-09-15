@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import PeriodPicker, { computeRange } from "../../_components/PeriodPicker.jsx";
-import { fmtMoney, fmtPct } from "../../_components/Kpi.jsx";
+import { fmtMoney, fmtPct, fmtDate } from "../../_components/Kpi.jsx";
 import { useSortState, SortableTh } from "../../_components/tableSort.jsx";
 import ExportButtons from "@/components/billing/ExportButtons.jsx";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
@@ -89,7 +89,7 @@ export default function AnaliticaEmpleadosPage() {
               nadie asignado no cuenta para nadie.
             </HelpTooltip>
           </h1>
-          <p className="text-xs text-neutral-400 mt-1">{from} → {to} · {rows.length} empleados</p>
+          <p className="text-xs text-neutral-400 mt-1">{fmtDate(from)} → {fmtDate(to)} · {rows.length} empleados</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Link href="/facturacion" className="text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">← Volver</Link>

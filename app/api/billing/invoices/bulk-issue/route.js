@@ -1,3 +1,4 @@
+import { fmtDate } from "@/lib/utils/format.js";
 import { Op } from "sequelize";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, serverError } from "../../../../../lib/utils/apiResponse.js";
@@ -270,7 +271,7 @@ export const POST = withTenant(async (request, _rc, { tenant, tenantModels, hasM
     const tope = await ultimaFechaSerie({ tenantModels, year: Number(fecha.slice(0, 4)) });
     if (tope && tope > fecha) {
       return error(
-        `No se puede emitir con fecha ${fecha}: la última factura de la serie es del ${tope} y la numeración debe ir en orden de fecha.`,
+        `No se puede emitir con fecha ${fmtDate(fecha)}: la última factura de la serie es del ${fmtDate(tope)} y la numeración debe ir en orden de fecha.`,
         422
       );
     }

@@ -45,7 +45,7 @@ export default function IvaPage() {
               todavía no ha terminado — no el último cerrado.
             </HelpTooltip>
           </h1>
-          <p className="text-xs text-neutral-400 mt-1">{from} → {to}</p>
+          <p className="text-xs text-neutral-400 mt-1">{fmtDate(from)} → {fmtDate(to)}</p>
         </div>
         <div className="flex items-center gap-2">
           <Link href="/facturacion" className="text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">← Volver</Link>

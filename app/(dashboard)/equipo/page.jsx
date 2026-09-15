@@ -1,4 +1,5 @@
 "use client";
+import { fmtDate } from "@/lib/utils/format.js";
 
 import { useCallback, useEffect, useState } from "react";
 import EmployeeBillingSection from "../../../components/billing/EmployeeBillingSection.jsx";
@@ -613,7 +614,7 @@ export default function EquipoPage() {
                       <DetailRow label="Titulación" value={openMember.qualification} />
                     </>
                   )}
-                  <DetailRow label="Fecha de incorporación" value={openMember.startDate} />
+                  <DetailRow label="Fecha de incorporación" value={openMember.startDate ? fmtDate(openMember.startDate) : null} />
                   {/* La muestra de color dice más que el hex, y el texto explica
                       el hueco: vacío no es un olvido, es «el del centro». */}
                   <DetailRow

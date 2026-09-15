@@ -1,4 +1,5 @@
 "use client";
+import { fmtDate } from "@/lib/utils/format.js";
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import FullCalendar from "@fullcalendar/react";
@@ -1183,7 +1184,7 @@ export default function CalendarioPage() {
             </div>
             <div className="px-5 py-4 space-y-1.5 text-[12.5px] text-neutral-600">
               <div><span className="text-neutral-400">Proyecto:</span> {projectInfo.projectName}{projectInfo.projectCode ? ` (${projectInfo.projectCode})` : ""}</div>
-              <div><span className="text-neutral-400">Fecha:</span> {projectInfo.date}</div>
+              <div><span className="text-neutral-400">Fecha:</span> {fmtDate(projectInfo.date)}</div>
               {projectInfo.columnName && <div><span className="text-neutral-400">Columna:</span> {projectInfo.columnName}</div>}
               {projectInfo.status && <div><span className="text-neutral-400">Estado:</span> {projectInfo.status === "pending" ? "Pendiente" : projectInfo.status === "completed" ? "Completado" : "No cumplido"}</div>}
               <p className="text-[11px] text-neutral-400 pt-1.5">Se gestiona desde el módulo de Proyectos. Arrástralo en el calendario para cambiar su fecha límite.</p>

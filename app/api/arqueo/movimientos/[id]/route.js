@@ -1,3 +1,4 @@
+import { fmtDate } from "@/lib/utils/format.js";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, forbidden, error, notFound } from "../../../../../lib/utils/apiResponse.js";
 import { auditar, datosPeticion, resumen } from "../../../../../lib/utils/auditoria.js";
@@ -19,7 +20,7 @@ async function frenarSiEstaCerrado(tenantModels, movimiento) {
     attributes: ["id"],
   });
   return cerrado
-    ? `El día ${movimiento.date} ya está cerrado: no se puede tocar lo que había en el cajón. Apunta el ajuste con fecha de hoy.`
+    ? `El día ${fmtDate(movimiento.date)} ya está cerrado: no se puede tocar lo que había en el cajón. Apunta el ajuste con fecha de hoy.`
     : null;
 }
 

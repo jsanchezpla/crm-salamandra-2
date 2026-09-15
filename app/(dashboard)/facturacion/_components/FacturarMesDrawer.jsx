@@ -13,7 +13,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { mesVigente } from "@/lib/billing/cuotas.js";
 import Link from "next/link";
-import { fmtMoney } from "./Kpi.jsx";
+import { fmtMoney, fmtDate } from "./Kpi.jsx";
 import VistaPreviaFacturaModal from "./VistaPreviaFacturaModal.jsx";
 
 const inputCls =
@@ -161,7 +161,7 @@ export default function FacturarMesDrawer({ open, onClose, onDone }) {
               <span className="font-semibold text-emerald-700">{resultado.emitidas} emitidas</span>
               {resultado.saltadas > 0 && <> · <span className="font-semibold text-amber-700">{resultado.saltadas} saltadas</span></>}
               {resultado.excluidas > 0 && <> · {resultado.excluidas} excluidas</>}
-              <span className="text-neutral-400"> · con fecha {resultado.issueDate}</span>
+              <span className="text-neutral-400"> · con fecha {fmtDate(resultado.issueDate)}</span>
             </div>
             <ul className="divide-y divide-neutral-50 border border-neutral-100 rounded-xl overflow-hidden">
               {resultado.resultados.map((r) => (
