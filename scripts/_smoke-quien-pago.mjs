@@ -8,7 +8,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { diasPorForma, totalPorForma, csvQuienPago } from "../lib/billing/quienPago.js";
+import { diasPorForma, filtrarPorNombre, totalPorForma, csvQuienPago } from "../lib/billing/quienPago.js";
 
 const dias = [
   {
@@ -31,6 +31,17 @@ test("cada forma se queda solo con lo suyo y cae los días vacíos", () => {
   assert.deepEqual(diasPorForma(dias, "tarjeta").map((d) => [d.fecha, d.total]), [["2026-09-14", 55.5]]);
   // Banco = transferencia + domiciliación, como la cesta de caja.js.
   assert.deepEqual(diasPorForma(dias, "banco").map((d) => [d.fecha, d.total]), [["2026-09-14", 120], ["2026-09-15", -40]]);
+});
+
+test("el buscador por nombre casa paciente o quien paga, sin tildes, y rehace días y totales", () => {
+  const banco = diasPorForma(dias, "banco");
+  assert.deepEqual(filtrarPorNombre(banco, "sanz").map((d) => [d.fecha, d.total]), [["2026-09-15", 80]]);
+  assert.deepEqual(filtrarPorNombre(banco, "GIL").map((d) => [d.fecha, d.total]), [["2026-09-14", 120], ["2026-09-15", -120]]);
+  const efectivo = diasPorForma(dias, "efectivo");
+  assert.equal(filtrarPorNombre(efectivo, "lucia").length, 1);
+  assert.equal(filtrarPorNombre(efectivo, "ana perez").length, 1);
+  assert.equal(filtrarPorNombre(efectivo, "lucia gil").length, 0);
+  assert.equal(filtrarPorNombre(efectivo, "  "), efectivo);
 });
 
 test("el total resta la devolución y no la cuenta como cobro", () => {

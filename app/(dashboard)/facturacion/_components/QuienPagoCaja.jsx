@@ -16,7 +16,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { hoyVigente, mesVigente } from "@/lib/billing/cuotas.js";
-import { FORMAS_PAGO, diasPorForma, totalPorForma, csvQuienPago } from "@/lib/billing/quienPago.js";
+import { FORMAS_PAGO, diasPorForma, filtrarPorNombre, totalPorForma, csvQuienPago } from "@/lib/billing/quienPago.js";
 import { fmtMoney } from "./Kpi.jsx";
 import CobroDrawer from "./CobroDrawer.jsx";
 
@@ -46,6 +46,7 @@ export default function QuienPagoCaja({ cajaId }) {
   const [abiertos, setAbiertos] = useState(() => new Set());
   const [verTodos, setVerTodos] = useState(false);
   const [cobroAbierto, setCobroAbierto] = useState(null);
+  const [nombre, setNombre] = useState("");
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -67,7 +68,9 @@ export default function QuienPagoCaja({ cajaId }) {
   useEffect(() => { cargar(); }, [cargar]);
   useEffect(() => { setAbiertos(new Set()); }, [desde, hasta, cajaId, forma]);
 
-  const dias = useMemo(() => diasPorForma(datos?.dias, forma), [datos, forma]);
+  const dias = useMemo(() => filtrarPorNombre(diasPorForma(datos?.dias, forma), nombre), [datos, forma, nombre]);
+  // Buscando a alguien, los días se enseñan abiertos: se busca para ver sus cobros.
+  const buscando = nombre.trim().length > 0;
   const total = useMemo(() => totalPorForma(dias), [dias]);
   const label = FORMAS_PAGO.find((f) => f.clave === forma)?.label ?? forma;
 
@@ -114,6 +117,13 @@ export default function QuienPagoCaja({ cajaId }) {
           Hasta
           <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className={`${inputCls} py-1.5`} />
         </label>
+        <input
+          type="search"
+          value={nombre}
+          onChange={(e) => setNombre(e.target.value)}
+          placeholder="Buscar por paciente o quien paga…"
+          className={`${inputCls} py-1.5 w-full sm:w-64`}
+        />
         <label className="flex items-center gap-2 text-[12.5px] text-neutral-600">
           <input type="checkbox" checked={verTodos} onChange={(e) => setVerTodos(e.target.checked)} />
           Desplegar todos los días
@@ -157,11 +167,11 @@ export default function QuienPagoCaja({ cajaId }) {
               {cargando && <tr><td colSpan={3} className="px-3 py-6 text-center text-neutral-400">Cargando…</td></tr>}
               {!cargando && dias.length === 0 && (
                 <tr><td colSpan={3} className="px-3 py-8 text-center text-neutral-400">
-                  Nadie pagó {forma === "banco" ? "por el banco" : forma === "tarjeta" ? "con tarjeta" : "en efectivo"} en estas fechas.
+                  {buscando ? `Nadie con «${nombre.trim()}» pagó` : "Nadie pagó"} {forma === "banco" ? "por el banco" : forma === "tarjeta" ? "con tarjeta" : "en efectivo"} en estas fechas.
                 </td></tr>
               )}
               {!cargando && dias.map((d) => {
-                const abierto = verTodos || abiertos.has(d.fecha);
+                const abierto = verTodos || buscando || abiertos.has(d.fecha);
                 return (
                   <Fragment key={d.fecha}>
                     <tr className="border-t border-neutral-100 cursor-pointer hover:bg-neutral-50" onClick={() => alternar(d.fecha)}>
@@ -212,8 +222,8 @@ export default function QuienPagoCaja({ cajaId }) {
 
       <p className="text-[11.5px] text-neutral-400">
         Banco suma transferencias y domiciliaciones. Un cobro pendiente no aparece hasta que entra. Pulsa un día para
-        ver quién pagó y un nombre para abrir el cobro. La descarga lleva lo que se ve: la forma de pago y las fechas
-        elegidas.
+        ver quién pagó y un nombre para abrir el cobro. La descarga lleva lo que se ve: la forma de pago, las fechas
+        elegidas y, si has buscado un nombre, solo sus cobros.
       </p>
 
       {cobroAbierto && (
