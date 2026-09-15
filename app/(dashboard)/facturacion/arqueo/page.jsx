@@ -7,6 +7,7 @@ import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import MovimientosCaja from "../_components/MovimientosCaja.jsx";
 import ResumenCaja from "../_components/ResumenCaja.jsx";
 import EfectivoCaja from "../_components/EfectivoCaja.jsx";
+import QuienPagoCaja from "../_components/QuienPagoCaja.jsx";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -342,6 +343,8 @@ export default function ArqueoPage() {
               ["resumen", "Resumen por día"],
               // Lo que QUEDA en el cajón, arrastrando el saldo (09/09/2026).
               ["efectivo", "Efectivo en caja"],
+              // Quién pagó cada día en efectivo, tarjeta o banco, y bajarlo (15/09/2026, AV-0137).
+              ["quien", "Quién pagó"],
             ].map(([k, lbl]) => (
               <button
                 key={k}
@@ -395,6 +398,7 @@ export default function ArqueoPage() {
       {vista === "movimientos" && <MovimientosCaja cajaId={cajaId} cajas={cajas} />}
       {vista === "resumen" && <ResumenCaja cajaId={cajaId} />}
       {vista === "efectivo" && <EfectivoCaja cajaId={cajaId} onApuntar={() => setVista("movimientos")} />}
+      {vista === "quien" && <QuienPagoCaja cajaId={cajaId} />}
 
       {vista === "cierres" && cierres.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
