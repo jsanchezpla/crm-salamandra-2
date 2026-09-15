@@ -429,6 +429,28 @@ export default function CitasModule({
     router.replace("/citas", { scroll: false });
   }, [searchParams, router]);
 
+  /*
+   * La cita de una notificación (15/09/2026, Rodrigo: «si pincho en una
+   * notificación de la campanita, que me lleve a su contenido»). La campana
+   * manda a `/citas?cita=<id>` (`notificationLink`): se abre su ficha y el
+   * calendario salta a ese día. Luego se limpia la URL, como el alta de arriba.
+   */
+  const citaDeLaCampanaAbierta = useRef(null);
+  useEffect(() => {
+    const id = searchParams.get("cita");
+    if (!id || citaDeLaCampanaAbierta.current === id) return;
+    citaDeLaCampanaAbierta.current = id;
+    fetch(`/api/citas/bookings/${encodeURIComponent(id)}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (!j?.ok) return;
+        setOpenBooking(j.data);
+        if (j.data?.scheduledAt) calendarRef.current?.getApi?.()?.gotoDate(new Date(j.data.scheduledAt));
+      })
+      .catch(() => {});
+    router.replace("/citas", { scroll: false });
+  }, [searchParams, router]);
+
   // `viewerIsAdmin` se decide con /api/auth/me (el ROL), NO con /api/team: en un
   // tenant con citas pero SIN módulo team, /api/team da 403 y un admin real se
   // quedaba como no-admin (perdía "Elegir esta" y la pestaña Solicitudes).
@@ -1484,7 +1506,14 @@ export default function CitasModule({
             }}
             headerToolbar={
               esMovil
-                ? { left: "compacta prev,next", center: "title", right: "listWeek,timeGridTresDias,timeGridDay" }
+                /*
+                 * Semana y Mes también en el móvil (15/09/2026, Rodrigo). Se
+                 * quitaron por ilegibles a 375 px, pero sin ellas no hay manera
+                 * de ver la semana ni el mes desde el teléfono. Se arranca igual
+                 * en Lista; con cinco botones la fila de vistas baja a su propia
+                 * línea (`.agenda-cuartos` en app/globals.css).
+                 */
+                ? { left: "compacta prev,next", center: "title", right: "listWeek,timeGridDay,timeGridTresDias,timeGridWeek,dayGridMonth" }
                 : {
                     left: `meses compacta${veTodaLaAgenda && teamMembers.length > 1 ? " porTerapeuta" : ""} prev,next today`,
                     center: "title",

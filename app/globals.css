@@ -531,6 +531,16 @@ body {
 .fc .fc-daygrid-event-dot { border-color: currentColor; }
 .fc .fc-toolbar.fc-header-toolbar { margin-bottom: 1rem; }
 
+/* Agenda en el móvil (15/09/2026): con Semana y Mes son cinco vistas, que no
+   caben al lado del título. Bajan a una fila propia, a todo lo ancho. Mismo
+   corte que `esMovil` en CitasModule (max-width: 1023px). */
+@media (max-width: 1023px) {
+  .agenda-cuartos .fc .fc-toolbar.fc-header-toolbar { flex-wrap: wrap; row-gap: 0.5rem; }
+  .agenda-cuartos .fc .fc-header-toolbar .fc-toolbar-chunk:last-child { flex-basis: 100%; }
+  .agenda-cuartos .fc .fc-header-toolbar .fc-toolbar-chunk:last-child .fc-button-group { display: flex; width: 100%; }
+  .agenda-cuartos .fc .fc-header-toolbar .fc-toolbar-chunk:last-child .fc-button { flex: 1 1 0; padding-left: 0.25rem; padding-right: 0.25rem; }
+}
+
 /* Que el nombre quepa en la caja de la cita (30/08/2026, Rodrigo). La mitad
    del arreglo está en CitasModule (`displayEventEnd`): sin el «- 12:30» el
    nombre tiene el doble de sitio. Esta es la otra mitad: lo que aun así no

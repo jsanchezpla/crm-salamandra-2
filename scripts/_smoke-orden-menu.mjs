@@ -16,6 +16,14 @@ test("un centro clínico abre por Salud, Tareas y Gestión, y Comercial después
   ]);
 });
 
+test("en un centro clínico Tareas abre por Citas, y Proyectos va detrás", () => {
+  const con = SECCIONES.map((s) =>
+    s.label === "Tareas" ? { ...s, items: [{ key: "projects" }, { key: "calendar" }, { key: "otra" }, { key: "citas" }] } : s,
+  );
+  const tareas = ordenarSecciones(con, conModulos("clinica")).find((s) => s.label === "Tareas");
+  assert.deepEqual(tareas.items.map((i) => i.key), ["citas", "calendar", "projects", "otra"]);
+});
+
 test("con solo `pacientes` también es clínico", () => {
   assert.equal(esMenuClinico(conModulos("pacientes")), true);
 });

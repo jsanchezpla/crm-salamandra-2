@@ -13,6 +13,8 @@ import {
 } from "../../../../../lib/billing/cuotas.js";
 import { madridToday } from "../../../../../lib/utils/madridDate.js";
 import { esCobroRepetido } from "../../../../../lib/billing/cobroDeCuota.js";
+import { pacientesPorFamilia } from "../../../../../lib/billing/cuotasConPacientes.js";
+import { rotuloPacienteDeCuota } from "../../../../../lib/billing/cuotaPacientes.js";
 
 /**
  * La generación mensual de cuotas (01/09/2026, petición de Aumenta:
@@ -92,6 +94,8 @@ async function recogerCuotas({ tenantModels, hasModule, mes }) {
     }
   }
 
+  const familias = await pacientesPorFamilia({ tenantModels, hasModule, cuotas });
+
   // Qué cuotas YA tienen cobro de ese mes (por `payments.cuota_id`).
   const yaGenerados = cuotas.length
     ? await Payment.findAll({
@@ -104,12 +108,24 @@ async function recogerCuotas({ tenantModels, hasModule, mes }) {
     cuotas: cuotas.map((c) => ({
       ...c.toJSON(),
       nombre: c.client?.fiscalName || c.client?.name || "(ficha no encontrada)",
-      paciente: c.patient ? `${c.patient.firstName} ${c.patient.lastName}`.trim() : null,
+      // Sin paciente atado, los hijos de la familia (15/09/2026, Rodrigo: «sale
+      // primero el padre y debería salir primero el paciente»). Solo es rótulo:
+      // el cobro nace igual a nombre de la ficha.
+      paciente: c.patient
+        ? `${c.patient.firstName} ${c.patient.lastName}`.trim()
+        : rotuloDeFamilia(familias.get(String(c.clientId))),
       pagador: c.payer ? c.payer.fiscalName || c.payer.name : null,
     })),
     conceptos: conceptos.map((c) => ({ id: c.id, name: c.name, unitPrice: c.unitPrice })),
     yaGenerados: yaGenerados.map((p) => String(p.cuotaId)),
   };
+}
+
+/** Los hijos de una cuota «de toda la familia», como la columna de Cuotas. */
+function rotuloDeFamilia(pacientes) {
+  if (!pacientes?.length) return null;
+  const r = rotuloPacienteDeCuota({ familiaPacientes: pacientes });
+  return r === "—" ? null : r;
 }
 
 const vista = (f) => ({
