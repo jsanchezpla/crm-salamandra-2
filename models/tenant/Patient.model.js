@@ -158,6 +158,15 @@ export function definePatient(sequelize) {
         allowNull: true,
         defaultValue: null,
       },
+      // La entrevista inicial que NO hace falta (15/09/2026, AV-0141):
+      // `{ at, byTeamMemberId, byUserId }`, o null = se reclama en la Bandeja.
+      // Regla en lib/clinica/pendientesClinicos.js; migración
+      // migrate-pacientes-entrevista-no-necesaria.
+      entrevistaNoNecesaria: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        field: "entrevista_no_necesaria",
+      },
     },
     {
       tableName: "patients",

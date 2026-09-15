@@ -63,6 +63,30 @@ export default function BandejaPage() {
   // Planes a completar y entrevistas sin registrar (15/09/2026, AV-0078).
   const planes = data?.planes ?? [];
   const entrevistas = data?.entrevistas ?? [];
+  const [marcando, setMarcando] = useState(null);
+  async function noHaceFalta(e) {
+    if (!window.confirm(`¿${e.patientName ?? "Este paciente"} no necesita entrevista inicial? Dejará de salir aquí.`)) return;
+    setMarcando(e.patientId);
+    setErrorMsg(null);
+    try {
+      const r = await fetch("/api/clinica/entrevistas/no-necesaria", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ patientId: e.patientId }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error(j.error || "No se pudo guardar");
+      setData((d) => ({
+        ...d,
+        entrevistas: (d?.entrevistas ?? []).filter((x) => x.patientId !== e.patientId),
+        counts: { ...(d?.counts ?? {}), entrevistas: Math.max(0, (d?.counts?.entrevistas ?? 1) - 1) },
+      }));
+    } catch (err) {
+      setErrorMsg(err.message);
+    } finally {
+      setMarcando(null);
+    }
+  }
   /*
    * El enlace para escribir el registro de ESA cita: lleva la cita, la fecha y
    * la profesional, que es lo que hace que se escriba en su sesión y no en una
@@ -256,6 +280,17 @@ export default function BandejaPage() {
                       <div className="text-sm text-[var(--ink-900)] font-medium truncate">{e.patientName ?? "—"}</div>
                       <div className="text-[11px] text-neutral-400">Paciente nuevo · alta el {fmt(e.alta)}</div>
                     </div>
+                    {/* «No hace falta» (15/09/2026, AV-0141): hay pacientes que
+                        no hacen entrevista inicial, y sin esto la tarea se
+                        quedaba 30 días sin forma de quitarla. */}
+                    <button
+                      type="button"
+                      disabled={marcando === e.patientId}
+                      onClick={() => noHaceFalta(e)}
+                      className="shrink-0 text-[11px] text-neutral-500 hover:text-neutral-800 disabled:opacity-40"
+                    >
+                      No hace falta
+                    </button>
                     <Link href={`/pacientes/${e.patientId}`} className="shrink-0 text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline">
                       Abrir ficha
                     </Link>

@@ -532,6 +532,10 @@ export const MODULES = {
     // registro de diagnóstico— y `diagnosticos.entrevista_payment_id`. Aquí
     // por lo mismo que la de arriba. VA ANTES del despliegue.
     "migrate-diagnosticos-2",
+    // La entrevista inicial que no hace falta (15/09/2026, AV-0141):
+    // `patients.entrevista_no_necesaria`. El MODELO Patient la declara, así que
+    // va en los dos bloques y ANTES del despliegue.
+    "migrate-pacientes-entrevista-no-necesaria",
   ],
 
   clinica: [
@@ -643,6 +647,9 @@ export const MODULES = {
      * del despliegue.
      */
     "migrate-diagnosticos-2",
+    // La entrevista inicial que no hace falta (15/09/2026, AV-0141). También
+    // en `pacientes`; VA ANTES del despliegue.
+    "migrate-pacientes-entrevista-no-necesaria",
   ],
 
   // Control horario. Depende de `team_members`, que crea el módulo Equipo: la

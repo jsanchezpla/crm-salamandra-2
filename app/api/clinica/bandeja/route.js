@@ -254,7 +254,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
       // agosto y todos parecerían nuevos (ver lib/clinica/pendientesClinicos.js).
       Patient.findAll({
         where: { id: { [Op.in]: pacientes } },
-        attributes: ["id", "enrollmentDate", "createdAt"],
+        attributes: ["id", "enrollmentDate", "createdAt", "entrevistaNoNecesaria"],
         raw: true,
       }),
       ClinicSession.findAll({
@@ -268,6 +268,8 @@ export const GET = withTenant(async (request, _rc, ctx) => {
       planes,
       altaDelPaciente: new Map(altas.map((p) => [String(p.id), p.enrollmentDate ?? p.createdAt])),
       conEntrevista: new Set(entrevistas.map((e) => String(e.patientId))),
+      // Los marcados «no hace falta» desde la Bandeja (15/09/2026, AV-0141).
+      noNecesitanEntrevista: new Set(altas.filter((p) => p.entrevistaNoNecesaria).map((p) => String(p.id))),
     });
   }
 
