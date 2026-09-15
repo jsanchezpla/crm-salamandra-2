@@ -32,7 +32,7 @@ function aviso(numero, extra = {}) {
     asunto: "Un asunto cualquiera",
     cuerpo: "Un cuerpo cualquiera con más de diez letras.",
     estado: "nuevo",
-    estadoLabel: "Nuevo",
+    estadoLabel: "Activo",
     usuarioNombre: "Alguien",
     mensajes: [],
     adjuntos: [],

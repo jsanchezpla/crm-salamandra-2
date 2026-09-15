@@ -460,9 +460,8 @@ describe("el vocabulario cerrado del Buzón, fijado como dato", () => {
       ["error", "duda", "mejora"]
     );
     assert.deepEqual(ESTADOS, [
-      { key: "nuevo", label: "Nuevo", nivel: "amber" },
+      { key: "nuevo", label: "Activo", nivel: "amber" },
       { key: "enviado", label: "Enviado al registro", nivel: "blue" },
-      { key: "respondido", label: "Respondido", nivel: "green" },
     ]);
     assert.deepEqual(
       PRIORIDADES.map((p) => p.key),
@@ -855,7 +854,7 @@ describe("serializarAviso: al cliente le llega EXACTAMENTE esto, ni un campo má
   it("un estado que no existe no revienta: cae a la etiqueta del primero (Nuevo, amber)", () => {
     const raro = serializarAviso({ ...avisoCompleto(), estado: "archivado" }, { para: "cliente" });
     assert.equal(raro.estado, "archivado");
-    assert.equal(raro.estadoLabel, "Nuevo");
+    assert.equal(raro.estadoLabel, "Activo");
     assert.equal(raro.estadoNivel, "amber");
   });
 

@@ -35,7 +35,6 @@ const NIVEL = {
 const PESTANAS = [
   { key: "activos", label: "Activos" },
   { key: "enviado", label: "En el Registro" },
-  { key: "respondido", label: "Respondidos" },
   { key: "todos", label: "Todos" },
 ];
 

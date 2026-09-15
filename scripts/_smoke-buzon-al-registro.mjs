@@ -205,7 +205,7 @@ describe("los dos estados del Buzón (02/09/2026)", () => {
   it("nuevo → enviado, y los tres nombres viejos se leen como hoy", () => {
     assert.deepEqual(
       ESTADOS.map((e) => e.key),
-      ["nuevo", "enviado", "respondido"]
+      ["nuevo", "enviado"]
     );
     assert.deepEqual(ESTADOS_ANTIGUOS, { en_curso: "enviado", esperando: "nuevo", resuelto: "enviado" });
     assert.equal(estadoActual("en_curso"), "enviado");
