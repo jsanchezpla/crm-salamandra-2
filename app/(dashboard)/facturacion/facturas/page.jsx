@@ -28,7 +28,9 @@ const inputCls =
 // `inicioServicio`/`precioCompleto` son de la PANTALLA: al guardar, el precio
 // viaja ya prorrateado y el desglose escrito en el texto de la línea (el
 // motor del servidor, calculateInvoice, tira los campos que no conoce).
-const EMPTY_LINE = { description: "", quantity: 1, unitPrice: 0, discountPct: 0, vatRate: 21, productId: "", kind: "", inicioServicio: "", precioCompleto: null };
+// `conceptId`: de qué concepto del catálogo salió la línea, solo para que el
+// desplegable lo ENSEÑE (15/09/2026, AV-0150). No viaja al servidor.
+const EMPTY_LINE = { description: "", quantity: 1, unitPrice: 0, discountPct: 0, vatRate: 21, productId: "", kind: "", inicioServicio: "", precioCompleto: null, conceptId: "" };
 
 function addDaysIso(isoDate, days) {
   if (!isoDate || !Number.isFinite(days) || days <= 0) return "";
@@ -275,9 +277,12 @@ export default function FacturasPage() {
 
   const lineasDesdeConceptos = useCallback(
     (ids) => (Array.isArray(ids) ? ids : [])
-      .map((id) => lineaDesdeConcepto(conceptosCatalogo.find((c) => String(c.id) === String(id))))
-      .filter(Boolean)
-      .map((l) => ({ ...EMPTY_LINE, ...l })),
+      .map((id) => {
+        const concepto = conceptosCatalogo.find((c) => String(c.id) === String(id));
+        const linea = lineaDesdeConcepto(concepto);
+        return linea ? { ...EMPTY_LINE, ...linea, conceptId: String(concepto.id) } : null;
+      })
+      .filter(Boolean),
     [conceptosCatalogo]
   );
 
@@ -458,6 +463,9 @@ export default function FacturasPage() {
     setForm((f) => {
       const lines = [...f.lines];
       lines[idx] = { ...lines[idx], [key]: value };
+      // Reescribir el texto a mano deja de ser «el concepto del catálogo»: el
+      // desplegable no puede seguir diciendo uno que ya no es.
+      if (key === "description") lines[idx].conceptId = "";
       return { ...f, lines };
     });
   }
@@ -1140,17 +1148,21 @@ export default function FacturasPage() {
                         return (
                           <div key={idx} className="bg-neutral-50/70 border border-neutral-100 rounded-lg p-3 space-y-2">
                             {/* Catálogo de conceptos y cuotas (31/08/2026):
-                                elegir uno rellena texto, precio e IVA de una vez. */}
+                                elegir uno rellena texto, precio e IVA de una vez.
+                                Y ENSEÑA el que hay (15/09/2026, AV-0150): con
+                                `value=""` fijo, la línea que rellenaba la cuota
+                                seguía diciendo «Elegir del catálogo» y Rosa
+                                creía que tenía que elegirlo ella. */}
                             {conceptosCatalogo.length > 0 && (
                               <Select
-                                value=""
+                                value={l.conceptId ?? ""}
                                 onChange={(v) => {
                                   const concepto = conceptosCatalogo.find((c2) => c2.id === v);
                                   const linea = lineaDesdeConcepto(concepto);
                                   if (!linea) return;
                                   setForm((f) => {
                                     const lines = [...f.lines];
-                                    const next = { ...lines[idx], ...linea, precioCompleto: null };
+                                    const next = { ...lines[idx], ...linea, precioCompleto: null, conceptId: String(concepto.id) };
                                     // Si la línea ya tenía fecha de inicio, el
                                     // precio nuevo del catálogo se prorratea al
                                     // momento con esa misma fecha.

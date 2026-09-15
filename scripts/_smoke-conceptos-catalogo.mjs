@@ -48,6 +48,16 @@ test("elegir un concepto rellena la línea: texto, cantidad 1, precio e IVA", ()
   assert.equal(lineaDesdeConcepto(null), null);
 });
 
+test("el desplegable del catálogo enseña el concepto que puso la cuota (AV-0150)", async () => {
+  // Con `value=""` fijo, la línea rellenada por la cuota decía «Elegir del
+  // catálogo» y parecía que había que elegirlo a mano.
+  const { readFileSync } = await import("node:fs");
+  const pagina = readFileSync(new URL("../app/(dashboard)/facturacion/facturas/page.jsx", import.meta.url), "utf8");
+  assert.ok(!/<Select\s+value=""\s+onChange=\{\(v\) => \{\s+const concepto = conceptosCatalogo/.test(pagina), "el value vacío fijo sigue ahí");
+  assert.match(pagina, /value=\{l\.conceptId \?\? ""\}/);
+  assert.match(pagina, /conceptId: String\(concepto\.id\)/);
+});
+
 test("el catálogo sale en orden alfabético: tildes donde toca y números como números", () => {
   const nombres = (cs) => ordenarPorNombre(cs).map((c) => c.name);
   // «Álava» va donde va la A, no detrás de «Zamora».
