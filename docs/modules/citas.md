@@ -2190,6 +2190,18 @@ Tanda de Aumenta (Isa, por Rodrigo), toda en el base:
   endpoint del calendario (`textColor` = `colorTextoSobre(color)`): sobre
   `#9BBDC7` (lo que pidió Aumenta) sale negra. **Hay que ponerlo en su
   Configuración**; no viene puesto.
+- **Una cita de bono se ve de un vistazo** (16/09/2026, AV-0162 de Aumenta):
+  lleva «Bono 3/10 · Nombre» en la caja y se pinta en naranja `#D98324`, que
+  GANA al color único del centro y al de la persona — es la única excepción a
+  ese ajuste, y a propósito: el sentido es que destaque. Los grises de
+  cancelada / falta / atendida siguen mandando por encima.
+  `lib/citas/marcaDeBono.js` (`esDeBono`, `etiquetaDeSesion`, `colorConBono`),
+  prueba `_smoke-marca-de-bono.mjs`. ⚠️ **Marca `pack_id`, no «el paciente
+  tiene bono»**: lo segundo haría que alguien avisara a una familia de que la
+  sesión se descuenta cuando no se descuenta. Por eso hoy casi no se ve: el
+  16/09/2026, de 12.833 citas futuras de Aumenta solo UNA tenía `pack_id`
+  teniendo 231 bonos vivos. Que la rejilla salga sin marcas no es que esto
+  esté roto; es la tarea de que las citas se enganchen a los bonos (AV-0161).
 - **La caja de un bloqueo dice SOLO la categoría** (`rotuloDeBloqueo`,
   `lib/citas/rotuloBloqueo.js`, compartida por los dos calendarios): sin
   categoría, el motivo; sin ninguno, «Bloqueo». Motivo y persona se leen en

@@ -8,6 +8,7 @@ import { citasDeTallerQueImparte, conteoDeAsistentes } from "../../../../../lib/
 import { colorCitasDe, colorDeCita } from "../../../../../lib/citas/colorCitas.js";
 import { colorTextoSobre } from "../../../../../lib/citas/coloresBloqueo.js";
 import { nombreDeLaCita, includeDelPaciente } from "../../../../../lib/citas/nombreEnLaAgenda.js";
+import { esDeBono, etiquetaDeSesion, colorConBono } from "../../../../../lib/citas/marcaDeBono.js";
 
 const STATUS_COLOR_DIM = {
   cancelled: "#9ca3af",
@@ -167,15 +168,22 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
       // El color único del centro manda si lo hay (03/09/2026, Aumenta); si
       // no, persona → tipo → verde (lib/citas/colorCitas.js).
       const baseColor = colorDeCita({ unico: colorUnico, persona: personColor, tipo: b.eventType?.color });
-      const color = STATUS_COLOR_DIM[b.status] || baseColor;
+      // Una cita de bono se pinta aparte (16/09/2026, AV-0162): gana al color
+      // único del centro y al de la persona, que es el sentido de destacarla.
+      // Los estados apagados siguen mandando justo debajo: una cancelada se
+      // tiene que ver cancelada aunque fuese de bono.
+      const bono = esDeBono(b);
+      const color = STATUS_COLOR_DIM[b.status] || colorConBono({ esBono: bono, color: baseColor });
       // Solo las citas ACTIVAS se pueden arrastrar para reprogramar.
       const arrastrable = b.status !== "cancelled" && b.status !== "no_show" && b.status !== "completed";
-      // Bono: «3/10» delante del nombre. Va en el TÍTULO y no solo en el
+      // Bono: «Bono 3/10» delante del nombre. Va en el TÍTULO y no solo en el
       // detalle porque el sentido de esto es verlo de un vistazo en la rejilla,
-      // sin abrir cita por cita, para saber por dónde va cada persona.
+      // sin abrir cita por cita, para saber por dónde va cada persona. La
+      // palabra se añadió el 16/09/2026 (AV-0162): un número suelto no dice
+      // «bono» a quien coge el horario para avisar a las familias.
       const total = Number(b.eventType?.sessionsCount) || 0;
       const numero = Number(b.sessionNumber) || 0;
-      const sesion = numero > 0 ? (total > 1 ? `${numero}/${total}` : `${numero}`) : null;
+      const sesion = etiquetaDeSesion({ esBono: bono, numero, total });
 
       // Un taller se lee por cuánta gente lleva: «Habilidades sociales · Grupo
       // 1 (8)». Cuando ya se ha pasado lista, dice los dos números —«(6/8)»—,
