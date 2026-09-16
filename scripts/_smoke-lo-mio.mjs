@@ -208,3 +208,49 @@ test("una sesión atada a OTRA cita no cuenta como el registro de esta (AV-0094)
   assert.equal(hallado.via, "dia");
   assert.equal(hallado.sesion.id, "s1");
 });
+
+/*
+ * ── UN DÍA QUE EL CENTRO CERRÓ (16/09/2026, AV-0165) ───────────────────────
+ * Raquel: «me aparece por registrar la sesión de Paula del lunes 14, cuando ese
+ * día fue fiesta y por eso no hubo sesión». El 14/09 estaba de alta como
+ * festivo y el centro canceló 62 de sus 64 citas; la que quedó viva se creó
+ * DESPUÉS de esa limpieza. Lo que fija esto es el matiz que hace que el arreglo
+ * no se coma trabajo de verdad: solo calla con `confirmed`.
+ */
+const CERRADO = new Set(["2026-09-14"]);
+const elLunes = (extra = {}) => cita({ scheduledAt: "2026-09-14T17:30:00.000Z", ...extra });
+const ELMARTES = new Date("2026-09-15T09:00:00.000Z");
+
+test("una cita que se quedó puesta en un día cerrado no pide registro", () => {
+  assert.equal(citaPideRegistro(elLunes({ status: "confirmed" }), ELMARTES, { diasCerrados: CERRADO }), false);
+});
+
+test("pero una marcada COMPLETADA sí: alguien dijo que esa sesión se dio", () => {
+  assert.equal(citaPideRegistro(elLunes({ status: "completed" }), ELMARTES, { diasCerrados: CERRADO }), true);
+});
+
+test("sin días cerrados todo sigue como antes", () => {
+  assert.equal(citaPideRegistro(elLunes({ status: "confirmed" }), ELMARTES), true);
+  assert.equal(citaPideRegistro(elLunes({ status: "confirmed" }), ELMARTES, { diasCerrados: new Set() }), true);
+  assert.equal(citaPideRegistro(elLunes({ status: "confirmed" }), ELMARTES, { diasCerrados: null }), true);
+});
+
+test("un día cerrado NO tapa las citas de los días de al lado", () => {
+  const elDomingo = cita({ status: "confirmed", scheduledAt: "2026-09-13T17:30:00.000Z" });
+  assert.equal(citaPideRegistro(elDomingo, ELMARTES, { diasCerrados: CERRADO }), true);
+});
+
+test("el día cerrado se mira en hora de Madrid, no en UTC", () => {
+  // 23:30 del 13 en UTC es la 1:30 del 14 en Madrid: cae en el festivo.
+  const deMadrugada = cita({ status: "confirmed", scheduledAt: "2026-09-13T23:30:00.000Z" });
+  assert.equal(citaPideRegistro(deMadrugada, ELMARTES, { diasCerrados: CERRADO }), false);
+});
+
+test("la lista de la Bandeja se lo salta igual", () => {
+  const citas = [elLunes({ id: "b-festivo", status: "confirmed" }), cita({ id: "b-normal", status: "confirmed" })];
+  const r = citasSinRegistro(citas, [], { ahora: ELMARTES, diasCerrados: CERRADO });
+  assert.deepEqual(r.sinEmpezar.map((x) => x.cita.id), ["b-normal"]);
+  // Y sin la lista de días cerrados salen las dos, como hasta hoy.
+  const antes = citasSinRegistro(citas, [], { ahora: ELMARTES });
+  assert.equal(antes.sinEmpezar.length, 2);
+});

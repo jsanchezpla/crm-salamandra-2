@@ -463,6 +463,21 @@ incidencia sin nadie al cargo está huérfana, no vista). La respuesta lleva
   otra con `?therapistId=`). Agrega "lo mío pendiente": informes sin entregar
   (vencidos marcados), incidencias asignadas sin resolver y citas de hoy. UI
   `/equipo/bandeja`.
+- **Un día que el centro CERRÓ no pide registros** (16/09/2026, AV-0165 de
+  Aumenta). Raquel: «me aparece por registrar la sesión de Paula del lunes 14,
+  cuando ese día fue fiesta y por eso no hubo sesión». Y era verdad: el 14/09
+  estaba de alta en `blocked_days` como «Festivo local» desde el 31/08, el
+  centro canceló 62 de sus 64 citas de golpe el 06/09, y la que quedó viva se
+  creó el 11/09 —cinco días DESPUÉS de esa limpieza— insistiendo sobre el aviso
+  de festivo que ya da el alta de citas (`permitirFestivo`). La Bandeja
+  reclamaba entonces un registro de un día que el CRM sabía cerrado. Ahora
+  `citaPideRegistro` recibe `diasCerrados` (`cargarFestivos`, mismo Set que usa
+  la agenda) y se la salta. ⚠️ **Solo cuando está `confirmed`**: una `completed`
+  se sigue pidiendo, porque alguien dijo expresamente que esa sesión se dio y un
+  centro cerrado con una sesión dentro —una urgencia, una recuperación— es raro
+  pero posible; callarla sería perder trabajo de verdad en silencio. Lo carga
+  también `lib/home/summary.js`, o el número de la portada y la lista de la
+  Bandeja dirían cosas distintas. Pruebas en `_smoke-lo-mio.mjs`.
 
 ### 5. Dashboard de Dirección ampliado (punto 6)
 

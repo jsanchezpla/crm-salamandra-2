@@ -8,6 +8,7 @@ import { REPORT_TYPE_LABEL } from "../../../../lib/clinica/serialize.js";
 import { categoryLabel, statusLabel, priorityLabel, INCIDENCIA_STATUS } from "../../../../lib/clinica/incidencias.js";
 import { whereIncidenciasDe } from "../../../../lib/clinica/incidenciasDe.js";
 import { ventanaDeLaSemana, citasSinRegistro } from "../../../../lib/clinica/loMio.js";
+import { cargarFestivos } from "../../../../lib/citas/festivos.js";
 import { pendientesPorProfesional, DIAS_PACIENTE_QUE_VIENE } from "../../../../lib/clinica/pendientesClinicos.js";
 import { CLAVE_ENTREVISTA } from "../../../../lib/clinica/entrevistaInicial.js";
 
@@ -84,6 +85,15 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   // "Hoy" en hora ESPAÑOLA (el servidor corre en UTC; sin esto, entre las
   // 00:00 y las 02:00 de España se calcularía el día anterior).
   const todayStr = madridToday();
+
+  /*
+   * Los días que el CENTRO cerró dentro de la ventana (16/09/2026, AV-0165).
+   * Se cargan una vez y se pasan a las dos listas —la propia y la del equipo—,
+   * porque la regla es la misma: una cita que se quedó puesta en un festivo no
+   * reclama registro. El porqué y el matiz de `completed`, en `loMio.js`.
+   */
+  const ventanaSemana = ventanaDeLaSemana(new Date());
+  const diasCerrados = await cargarFestivos(M, { desde: ventanaSemana.desdeDia, hasta: ventanaSemana.hastaDia });
 
   // ── Informes pendientes (no entregados) ──
   const reportRows = await ClinicalReport.findAll({
@@ -274,7 +284,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   }
 
   const { citas: citasSemana, sesiones: sesionesSemana, citasQueExisten: vivasSemana } = await registrosDe([therapistId]);
-  const pendientes = citasSinRegistro(citasSemana, sesionesSemana, { ahora: new Date(), citasQueExisten: vivasSemana });
+  const pendientes = citasSinRegistro(citasSemana, sesionesSemana, { ahora: new Date(), citasQueExisten: vivasSemana, diasCerrados });
   const filaDeRegistro = ({ cita, sesion }) => ({
     bookingId: cita.id,
     patientId: cita.patientId,
@@ -340,7 +350,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     }
     equipo = activos.map((t) => {
       const suyas = citas.filter((c) => String(c.teamMemberId) === String(t.id));
-      const r = citasSinRegistro(suyas, sesiones, { ahora: new Date(), citasQueExisten });
+      const r = citasSinRegistro(suyas, sesiones, { ahora: new Date(), citasQueExisten, diasCerrados });
       return {
         id: t.id,
         name: t.displayName,
