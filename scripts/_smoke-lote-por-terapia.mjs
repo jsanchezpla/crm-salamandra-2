@@ -125,15 +125,18 @@ prueba("sin NIF en la ficha pero con un tutor con DNI, ya NO cae en «sin NIF»"
   afirma.equal(facturables[0].nif, "22222222J");
 });
 
-prueba("«Facturar el mes» se abre desde Cobros Y desde Facturas (AV-0154)", () => {
-  // Rosa, 15/09/2026: «facturación múltiple (no la veo)». El cajón estaba solo
-  // en Cobros, y quien va a hacer cien facturas entra por Facturas. Se monta el
-  // MISMO componente en las dos pantallas; copiarlo sería el fallo.
+prueba("«Facturar el mes» vive en Facturas, y en Cobros solo queda el enlace (AV-0154)", () => {
+  // Rosa, 16/09/2026: «lo más correcto sería que estuviera en el apartado de
+  // facturación, no de cobros». El cajón nació en Cobros el 31/08 y se mudó;
+  // en Cobros queda un enlace para quien lo buscara allí, nunca una copia.
   const lee = (r) => readFileSync(new URL(r, import.meta.url), "utf8");
-  for (const pantalla of ["../app/(dashboard)/facturacion/cobros/page.jsx", "../app/(dashboard)/facturacion/facturas/page.jsx"]) {
-    const src = lee(pantalla);
-    afirma.ok(src.includes('import FacturarMesDrawer from "../_components/FacturarMesDrawer.jsx"'), pantalla + ": no importa el cajón");
-    afirma.ok(src.includes("<FacturarMesDrawer"), pantalla + ": no lo monta");
-    afirma.ok(src.includes("Facturar el mes</button>"), pantalla + ": no tiene el botón");
-  }
+  const facturas = lee("../app/(dashboard)/facturacion/facturas/page.jsx");
+  afirma.ok(facturas.includes('import FacturarMesDrawer from "../_components/FacturarMesDrawer.jsx"'), "Facturas no importa el cajón");
+  afirma.ok(facturas.includes("<FacturarMesDrawer"), "Facturas no monta el cajón");
+  afirma.ok(facturas.includes("Facturar el mes</button>"), "Facturas no tiene el botón");
+  afirma.ok(facturas.includes('get("lote") === "1"'), "?lote=1 no abre el cajón");
+
+  const cobros = lee("../app/(dashboard)/facturacion/cobros/page.jsx");
+  afirma.ok(!cobros.includes("<FacturarMesDrawer"), "Cobros sigue montando el cajón");
+  afirma.ok(cobros.includes("/facturacion/facturas?lote=1"), "Cobros no enlaza a donde ha ido");
 });

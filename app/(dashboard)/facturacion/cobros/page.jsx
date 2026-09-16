@@ -11,7 +11,6 @@ import { useSortState, SortableTh } from "../_components/tableSort.jsx";
 import Select from "@/components/ui/Select.jsx";
 import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
 import ExportButtons from "@/components/billing/ExportButtons.jsx";
-import FacturarMesDrawer from "../_components/FacturarMesDrawer.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 import { useDialogo } from "@/components/ui/Dialogo.jsx";
 import { partesConProrrateo } from "../../../../lib/billing/prorrateo.js";
@@ -112,7 +111,6 @@ export default function CobrosPage() {
   // es (07/09/2026, Registro: «Editar cobro» no dejaba cambiar ni el mes ni el
   // hijo). Vacío sin módulo asistencial (403) o sin pacientes.
   const [pacientesEdicion, setPacientesEdicion] = useState([]);
-  const [showFacturarMes, setShowFacturarMes] = useState(false);
   const [morosidad, setMorosidad] = useState(null);
   const [mesMorosidad, setMesMorosidad] = useState(mesVigente());
   const [saving, setSaving] = useState(false);
@@ -1233,11 +1231,16 @@ export default function CobrosPage() {
               title="Una factura escrita a mano: concepto libre, precio e IVA"
             >+ Factura a mano</Link>
           )}
+          {/* «Facturar el mes» ya NO se abre desde aquí (16/09/2026, AV-0154
+              de Rosa: «lo más correcto sería que estuviera en el apartado de
+              facturación, no de cobros»). Queda el enlace, y no el cajón, para
+              que quien lo buscara aquí sepa dónde ha ido. */}
           {puedeFacturar && (
-            <button
-              onClick={() => setShowFacturarMes(true)}
+            <Link
+              href="/facturacion/facturas?lote=1"
               className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-[var(--color-primary,#1B3A2D)] border border-[var(--color-primary,#1B3A2D)] hover:bg-neutral-50 transition-colors"
-            >Facturar el mes</button>
+              title="Las facturas de las cuotas de un mes, de una vez — ahora en Facturas"
+            >Facturar el mes →</Link>
           )}
           {puedeFacturar && (
             <button
@@ -2253,14 +2256,6 @@ export default function CobrosPage() {
           </aside>
         </>
       )}
-
-      {/* FACTURAR EL MES — la Facturación múltiple de Organízate: las cuotas
-          cobradas del mes se convierten en facturas de una pasada. */}
-      <FacturarMesDrawer
-        open={showFacturarMes}
-        onClose={() => setShowFacturarMes(false)}
-        onDone={() => { load(); loadMorosidad(); }}
-      />
 
       {dialogo}
     </div>

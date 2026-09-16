@@ -651,6 +651,13 @@ export default function FacturasPage() {
     if (new URLSearchParams(window.location.search).get("nueva") === "1") openCreate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me]);
+  // Y `?lote=1` abre «Facturar el mes» (16/09/2026, AV-0154): así llega el
+  // enlace que se quedó en Cobros, donde el cajón vivía hasta hoy.
+  useEffect(() => {
+    if (!me) return;
+    if (new URLSearchParams(window.location.search).get("lote") === "1") setShowFacturarMes(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me]);
 
   // Abre una factura por id (re-fetch con includes: rectifies/rectifiedBy).
   async function openDetailById(id) {
