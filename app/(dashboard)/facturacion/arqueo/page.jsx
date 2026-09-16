@@ -566,7 +566,8 @@ export default function ArqueoPage() {
                   {previo.arrastre && previo.arrastre.importe !== 0 && (
                     <div className="flex justify-between text-neutral-600">
                       <span>
-                        Días sin cerrar desde el {fmtFecha(previo.arrastre.desde)}
+                        {previo.arrastre.desdeElPrincipio ? "Todo lo que hay en el cajón desde el" : "Días sin cerrar desde el"}{" "}
+                        {fmtFecha(previo.arrastre.desde)}
                         {previo.arrastre.dias > 1 ? ` (${previo.arrastre.dias} días)` : ""}
                       </span>
                       <span>{previo.arrastre.importe > 0 ? "+" : ""}{fmt(previo.arrastre.importe)}</span>

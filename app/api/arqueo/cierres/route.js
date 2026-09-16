@@ -4,7 +4,7 @@ import { ok, created, forbidden, error, notFound } from "../../../../lib/utils/a
 import { auditar, datosPeticion, resumen } from "../../../../lib/utils/auditoria.js";
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
 import { Op } from "sequelize";
-import { saldoDeMovimientos, esperadoAlCerrar, fondoSugerido } from "../../../../lib/billing/caja.js";
+import { saldoDeMovimientos, esperadoAlCerrar, fondoSugerido, tramoDeArrastre } from "../../../../lib/billing/caja.js";
 import { madridDayRange } from "../../../../lib/utils/madridDate.js";
 import { whereDeBusquedaCierres, colgarBusqueda } from "../../../../lib/billing/busquedaArqueo.js";
 
@@ -31,12 +31,6 @@ import { whereDeBusquedaCierres, colgarBusqueda } from "../../../../lib/billing/
  * normal— pero el día que un cliente abra la segunda hay que añadir
  * `payments.cash_point_id` ANTES, no después.
  */
-/** Un día de 'AAAA-MM-DD' corrido N días (fechas civiles, sin husos de por medio). */
-function corre(fecha, dias) {
-  const [a, m, d] = String(fecha).slice(0, 10).split("-").map(Number);
-  return new Date(Date.UTC(a, m - 1, d + dias)).toISOString().slice(0, 10);
-}
-
 /** Cuántos días van de 'desde' a 'hasta', los dos incluidos. */
 function cuantosDias(desde, hasta) {
   return Math.round((Date.parse(`${hasta}T00:00:00Z`) - Date.parse(`${desde}T00:00:00Z`)) / 86400000) + 1;
@@ -139,18 +133,58 @@ async function fondoDeEseDia(tenantModels, cashPointId, fecha) {
  * se cuenta si hay un arqueo anterior del que partir: sin él, el fondo se
  * teclea a mano y no hay desde cuándo arrastrar.
  */
+/**
+ * EL PRIMER DÍA QUE PASÓ DINERO POR LA CAJA: el más antiguo entre un cobro en
+ * efectivo y un apunte de esa caja. De ahí arranca el arrastre cuando no hay
+ * ningún arqueo anterior válido (16/09/2026, AV-0157).
+ */
+async function primerDiaConEfectivo(tenantModels, cashPointId) {
+  const { Payment, CashMovement } = tenantModels;
+  const [cobro, apunte] = await Promise.all([
+    Payment.findOne({
+      where: { method: "cash", paidAt: { [Op.ne]: null } },
+      order: [["paidAt", "ASC"]],
+      attributes: ["paidAt"],
+    }),
+    cashPointId && CashMovement
+      ? CashMovement.findOne({ where: { cashPointId }, order: [["date", "ASC"]], attributes: ["date"] })
+      : null,
+  ]);
+  const dias = [];
+  // El día de MADRID, como el resto del arqueo: el servidor va en UTC.
+  if (cobro?.paidAt) dias.push(new Date(cobro.paidAt).toLocaleDateString("sv-SE", { timeZone: "Europe/Madrid" }));
+  if (apunte?.date) dias.push(String(apunte.date).slice(0, 10));
+  return dias.length ? dias.sort()[0] : null;
+}
+
 async function calcularEsperado(tenantModels, cashPointId, fecha, openingAmount) {
   const dia = await efectivoEntre(tenantModels, cashPointId, fecha, fecha);
   const fondo = await fondoDeEseDia(tenantModels, cashPointId, fecha);
 
+  /*
+   * EL ARRASTRE, TAMBIÉN SIN ARQUEO ANTERIOR (16/09/2026, AV-0157). Sin fondo
+   * del que partir se arrastra desde el PRIMER día que pasó dinero por la
+   * caja: si no, el cierre se olvida de todo lo de antes y propone solo lo que
+   * se movió hoy — en Aumenta, −145,50 € frente a los 162,42 € que decía la
+   * pestaña Efectivo. El tramo lo decide `tramoDeArrastre` (lib/billing/caja.js).
+   */
   let arrastre = null;
-  if (fondo && fondo.fecha < fecha) {
-    const desde = corre(fondo.fecha, 1);
-    const hasta = corre(fecha, -1);
-    if (desde <= hasta) {
-      const entre = await efectivoEntre(tenantModels, cashPointId, desde, hasta);
-      arrastre = { desde, hasta, dias: cuantosDias(desde, hasta), ...entre, importe: entre.neto };
-    }
+  const tramo = tramoDeArrastre({
+    fondo,
+    fecha,
+    primerDia: fondo ? null : await primerDiaConEfectivo(tenantModels, cashPointId),
+  });
+  if (tramo) {
+    const entre = await efectivoEntre(tenantModels, cashPointId, tramo.desde, tramo.hasta);
+    arrastre = {
+      ...tramo,
+      dias: cuantosDias(tramo.desde, tramo.hasta),
+      ...entre,
+      importe: entre.neto,
+      // Para que la pantalla pueda decirlo: «desde el principio» no es lo
+      // mismo que «desde el último arqueo».
+      desdeElPrincipio: !fondo,
+    };
   }
 
   // El fondo que manda es el que teclea quien cierra; sin él (la vista previa

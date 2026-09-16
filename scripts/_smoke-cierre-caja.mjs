@@ -41,20 +41,23 @@ const resumen = lee("../app/(dashboard)/facturacion/_components/ResumenCaja.jsx"
 
 describe("la cuenta del cierre la hace el servidor", () => {
   it("y es la misma función que usa el resto del dinero de la caja", () => {
-    assert.match(ruta, /import \{ saldoDeMovimientos, esperadoAlCerrar, fondoSugerido \}/);
+    assert.match(ruta, /import \{ saldoDeMovimientos, esperadoAlCerrar, fondoSugerido, tramoDeArrastre \}/);
     assert.match(ruta, /esperado: esperadoAlCerrar\(\{ fondo: base, arrastre/);
   });
 
   it("con los días que quedaron sin cerrar entre medias", () => {
     const calc = ruta.slice(ruta.indexOf("async function calcularEsperado"), ruta.indexOf("export const GET"));
-    assert.match(calc, /const desde = corre\(fondo\.fecha, 1\);/);
-    assert.match(calc, /const hasta = corre\(fecha, -1\);/);
-    assert.match(calc, /arrastre = \{ desde, hasta, dias: cuantosDias\(desde, hasta\)/);
+    assert.match(calc, /const tramo = tramoDeArrastre\(\{/);
+    assert.match(calc, /dias: cuantosDias\(tramo\.desde, tramo\.hasta\)/);
   });
 
-  it("y sin arqueo anterior no se inventa desde cuándo arrastrar", () => {
+  // 16/09/2026, AV-0157: antes, sin arqueo anterior no se arrastraba nada y el
+  // cierre proponía solo lo del día (en Aumenta, un cajón de −145,50 €). Ahora
+  // se arrastra desde el primer día que pasó dinero por la caja. El tramo y sus
+  // casos, en `scripts/_smoke-arrastre-caja.mjs`.
+  it("y sin arqueo anterior se arrastra desde el primer día con dinero", () => {
     const calc = ruta.slice(ruta.indexOf("async function calcularEsperado"), ruta.indexOf("export const GET"));
-    assert.match(calc, /if \(fondo && fondo\.fecha < fecha\)/);
+    assert.match(calc, /primerDia: fondo \? null : await primerDiaConEfectivo\(/);
   });
 
   it("lo que se guarda lo recalcula el POST, no se fía de la pantalla", () => {
