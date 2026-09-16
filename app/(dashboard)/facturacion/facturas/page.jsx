@@ -16,6 +16,7 @@ import { ivaPorDefecto } from "../../../../lib/billing/ivaPorDefecto.js";
 import PatientReparto from "@/components/billing/PatientReparto.jsx";
 import PartirFacturaModal from "../_components/PartirFacturaModal.jsx";
 import VistaPreviaFacturaModal from "../_components/VistaPreviaFacturaModal.jsx";
+import FacturarMesDrawer from "../_components/FacturarMesDrawer.jsx";
 import { ordenarConSugeridos } from "../../../../lib/billing/empleadosSugeridos.js";
 import { lineaDesdeConcepto } from "../../../../lib/billing/conceptosCatalogo.js";
 import { cuotasQueEntran, conceptosDeCuotas, huellaLineas, sePuedeRellenar } from "../../../../lib/billing/cuotaParaRellenar.js";
@@ -236,6 +237,13 @@ export default function FacturasPage() {
   const [formError, setFormError] = useState(null);
   const [rectifyOpen, setRectifyOpen] = useState(false); // modal de rectificación
   const [partirOpen, setPartirOpen] = useState(false); // partir una factura del lote (06/09/2026)
+  /*
+   * «Facturar el mes» TAMBIÉN desde aquí (16/09/2026, AV-0154 de Rosa: «no la
+   * veo»). El cajón nació en Cobros el 31/08 porque se construye sobre los
+   * cobros del mes, pero quien va a hacer cien facturas entra por Facturas.
+   * Es el MISMO componente montado en dos sitios, no una copia.
+   */
+  const [showFacturarMes, setShowFacturarMes] = useState(false);
 
   /*
    * LA CUOTA DE LA FAMILIA RELLENA LAS LÍNEAS (01/09/2026, petición de Aumenta:
@@ -700,6 +708,13 @@ export default function FacturasPage() {
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
           <Link href="/facturacion" className="text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">← Volver</Link>
+          {puedeFacturar && (
+            <button
+              onClick={() => setShowFacturarMes(true)}
+              className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-[var(--color-primary,#1B3A2D)] border border-[var(--color-primary,#1B3A2D)] hover:bg-neutral-50 transition-colors"
+              title="Las facturas de las cuotas de un mes, de una vez: por pagador, por paciente o por terapia"
+            >Facturar el mes</button>
+          )}
           {puedeFacturar && (
             <button
               onClick={openCreate}
@@ -1403,6 +1418,13 @@ export default function FacturasPage() {
           }}
         />
       )}
+
+      {/* El lote del mes, el MISMO cajón que Cobros (16/09/2026, AV-0154). */}
+      <FacturarMesDrawer
+        open={showFacturarMes}
+        onClose={() => setShowFacturarMes(false)}
+        onDone={() => load()}
+      />
     </div>
   );
 }

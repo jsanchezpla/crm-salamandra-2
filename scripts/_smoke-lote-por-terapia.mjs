@@ -2,6 +2,7 @@
 // Fija la agrupación por terapia de lib/billing/lotesCuotas.js: «Facturar el
 // mes» puede emitir una factura POR CONCEPTO del catálogo, y los cobros sin
 // concepto van juntos en un grupo «resto» del mismo pagador.
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { agruparLoteCuotas } from "../lib/billing/lotesCuotas.js";
@@ -122,4 +123,17 @@ prueba("sin NIF en la ficha pero con un tutor con DNI, ya NO cae en «sin NIF»"
   const { facturables, sinNif } = agrupar({ cobros: [cobroT], clientes: [fichaCon({ taxId: null, fiscalTaxId: null, fiscalGuardianId: null })] });
   afirma.equal(sinNif.length, 0);
   afirma.equal(facturables[0].nif, "22222222J");
+});
+
+prueba("«Facturar el mes» se abre desde Cobros Y desde Facturas (AV-0154)", () => {
+  // Rosa, 15/09/2026: «facturación múltiple (no la veo)». El cajón estaba solo
+  // en Cobros, y quien va a hacer cien facturas entra por Facturas. Se monta el
+  // MISMO componente en las dos pantallas; copiarlo sería el fallo.
+  const lee = (r) => readFileSync(new URL(r, import.meta.url), "utf8");
+  for (const pantalla of ["../app/(dashboard)/facturacion/cobros/page.jsx", "../app/(dashboard)/facturacion/facturas/page.jsx"]) {
+    const src = lee(pantalla);
+    afirma.ok(src.includes('import FacturarMesDrawer from "../_components/FacturarMesDrawer.jsx"'), pantalla + ": no importa el cajón");
+    afirma.ok(src.includes("<FacturarMesDrawer"), pantalla + ": no lo monta");
+    afirma.ok(src.includes("Facturar el mes</button>"), pantalla + ": no tiene el botón");
+  }
 });
