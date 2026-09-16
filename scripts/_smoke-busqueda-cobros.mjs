@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { Op } from "sequelize";
-import { whereDeBusquedaCobros, patronDePalabra, joinsSinColumnas } from "../lib/billing/busquedaCobros.js";
+import { whereDeBusquedaCobros, patronDePalabra, joinsSinColumnas, palabrasDeBusqueda } from "../lib/billing/busquedaCobros.js";
 
 test("todas las palabras, cada una en cualquiera de los campos", () => {
   const where = whereDeBusquedaCobros("garcia f-2026");
@@ -104,4 +104,22 @@ test("sin includes no revienta", () => {
   assert.deepEqual(joinsSinColumnas([]), []);
   assert.deepEqual(joinsSinColumnas(undefined), []);
   assert.deepEqual(joinsSinColumnas(null), []);
+});
+
+test("el cobro de la familia sale al buscar al niño (AV-0155)", () => {
+  // «andres» no casa por ningún campo del cobro (la cuota de la familia no
+  // lleva paciente), pero su familia sí tiene un paciente con ese nombre.
+  const familias = new Map([["andres", ["cli-1"]]]);
+  const where = whereDeBusquedaCobros("andres herguera", { conPaciente: true, familiasPorPalabra: familias });
+  const [dePrimera, deSegunda] = where[Op.and];
+  assert.deepEqual(dePrimera[Op.or].find((c) => "clientId" in c)?.clientId, { [Op.in]: ["cli-1"] });
+  assert.ok(dePrimera[Op.or].some((c) => "$invoice.client.id$" in c));
+  // La palabra sin familias no gana ningún campo de más.
+  assert.equal(deSegunda[Op.or].some((c) => "clientId" in c), false);
+});
+
+test("palabrasDeBusqueda: minúsculas, sin tildes y como mucho seis", () => {
+  assert.deepEqual(palabrasDeBusqueda("  Andrés   HERGUERA "), ["andres", "herguera"]);
+  assert.deepEqual(palabrasDeBusqueda(""), []);
+  assert.equal(palabrasDeBusqueda("a b c d e f g h").length, 6);
 });

@@ -6,7 +6,7 @@ import { updateInvoiceStatus } from "../../../../lib/billing/updateInvoiceStatus
 import { parseSortOrder } from "../../../../lib/billing/parseSort.js";
 import { getTenantStripeConfig } from "../../../../lib/payments/stripeConfig.js";
 import { urlPanelStripe } from "../../../../lib/billing/cobroDesdeStripe.js";
-import { whereDeBusquedaCobros, joinsSinColumnas } from "../../../../lib/billing/busquedaCobros.js";
+import { whereDeBusquedaCobros, joinsSinColumnas, palabrasDeBusqueda, familiasConPacienteQueCasa } from "../../../../lib/billing/busquedaCobros.js";
 import { billingHasPatients } from "../../../../lib/billing/patientLink.js";
 import { dondeEstaElCobroDe } from "../../../../lib/billing/cobroDeCuota.js";
 import { whereFacturasDelPaciente } from "../../../../lib/billing/facturasDelPaciente.js";
@@ -60,7 +60,12 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
     // en el resto de tenants ni existe la columna en el JOIN ni hace falta.
     const { Patient } = tenantModels;
     const conPaciente = Boolean(Patient) && billingHasPatients(hasModule);
-    const busqueda = whereDeBusquedaCobros(searchParams.get("q"), { conPaciente });
+    // Las familias con un paciente que casa (AV-0155): el cobro de la cuota de
+    // la familia no lleva paciente, y buscar al niño tiene que encontrarlo.
+    const familiasPorPalabra = conPaciente
+      ? await familiasConPacienteQueCasa(Patient, palabrasDeBusqueda(searchParams.get("q")))
+      : null;
+    const busqueda = whereDeBusquedaCobros(searchParams.get("q"), { conPaciente, familiasPorPalabra });
     if (busqueda) Object.assign(where, busqueda);
 
     if (searchParams.get("from") || searchParams.get("to")) {
