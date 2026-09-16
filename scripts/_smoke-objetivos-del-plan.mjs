@@ -21,6 +21,8 @@ import {
   editarObjetivo,
   puedeEditarObjetivo,
   MAX_OBJETIVOS,
+  MAX_OBJETIVOS_POR_TERAPEUTA,
+  cabeOtroObjetivo,
   MAX_TEXTO_OBJETIVO,
 } from "../lib/clinica/objetivosDelPlan.js";
 
@@ -48,9 +50,30 @@ describe("normalizarObjetivos", () => {
     assert.equal(r.length, 2);
   });
   it("tope y recorte", () => {
+    // Sin terapeuta son todos del mismo cupo: el de «sin atribuir».
     const muchos = Array.from({ length: 60 }, (_, i) => `Objetivo ${i}`);
-    assert.equal(normalizarObjetivos(muchos).length, MAX_OBJETIVOS);
+    assert.equal(normalizarObjetivos(muchos).length, MAX_OBJETIVOS_POR_TERAPEUTA);
     assert.equal(normalizarObjetivos(["a".repeat(500)])[0].texto.length, 300);
+  });
+
+  /*
+   * El tope es de cada una (16/09/2026, AV-0164): con tres profesionales en el
+   * mismo paciente, la primera que escribía se comía el cupo del plan.
+   */
+  it("el tope es POR TERAPEUTA, no del plan entero", () => {
+    const suyos = (id, n) => Array.from({ length: n }, (_, i) => ({ texto: `Objetivo ${i} de ${id}`, terapeutaId: id }));
+    const r = normalizarObjetivos([...suyos(LOGO, 45), ...suyos(PSICO, 30)]);
+    assert.equal(r.filter((o) => o.terapeutaId === LOGO).length, MAX_OBJETIVOS_POR_TERAPEUTA);
+    assert.equal(r.filter((o) => o.terapeutaId === PSICO).length, 30, "el cupo de una no se come el de la otra");
+    assert.ok(MAX_OBJETIVOS > MAX_OBJETIVOS_POR_TERAPEUTA, "y queda un techo para el plan entero");
+  });
+
+  it("cabeOtroObjetivo avisa antes de tragarse lo escrito", () => {
+    const llena = Array.from({ length: MAX_OBJETIVOS_POR_TERAPEUTA }, (_, i) => ({ texto: `Objetivo ${i}`, terapeutaId: LOGO }));
+    assert.equal(cabeOtroObjetivo(llena, LOGO), false);
+    assert.equal(cabeOtroObjetivo(llena, PSICO), true, "a la otra sí le cabe");
+    assert.equal(cabeOtroObjetivo([], LOGO), true);
+    assert.equal(cabeOtroObjetivo(llena.map((o) => ({ ...o, terapeutaId: null })), null), false, "los sin atribuir también tienen cupo");
   });
 });
 

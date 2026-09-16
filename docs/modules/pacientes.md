@@ -433,7 +433,19 @@ Pestañas (`TABS` en `app/(dashboard)/pacientes/[id]/page.jsx`):
    terapia (del nombre del fichero o del arranque del motivo; sin terapeuta de
    esa terapia, al general). El diagnóstico solo si el informe trae un
    apartado con ese nombre. Sin OCR: escaneados y con contraseña se cuentan y
-   se avisa.
+   se avisa. Desde el 16/09/2026 (AV-0163) el mismo botón trae también el
+   apartado **«Objetivos»**, uno por viñeta y a la misma terapeuta, y solo a
+   quien no tenga ninguno escrito; un párrafo que no quepa en un objetivo (300
+   caracteres) se queda fuera y se dice cuántos, antes que cortarlo por la
+   mitad. Medido sobre 80 informes de producción: 62 con texto, 54 con
+   objetivos, 20 de media por informe.
+   Los **objetivos** son de cada terapeuta desde AV-0061, y desde el 16/09/2026
+   (AV-0164) el tope también: `MAX_OBJETIVOS_POR_TERAPEUTA` = 40 cada una y
+   `MAX_OBJETIVOS` = 200 en todo el plan (`lib/clinica/objetivosDelPlan.js`).
+   Antes eran 40 del plan entero y, en un paciente compartido, la primera que
+   escribía se comía el cupo: la caja se tragaba lo que escribían las demás sin
+   decir nada. Ahora la pantalla pregunta `cabeOtroObjetivo` antes de añadir y,
+   si no cabe, lo dice y no borra lo escrito.
 3. **Sesiones**: lista. Click en una sesión abre un drawer con el registro en
    3 partes (preparación + adjuntos, informe, devolución de la familia).
    Respeta la regla #13 (`top-14 lg:top-0`). **Sin las entrevistas iniciales**

@@ -8,9 +8,10 @@ import { listaDe, terapeutasEfectivos } from "@/lib/clinica/terapeutas.js";
 import { normalizeSpecialties } from "@/lib/clinica/specialties.js";
 
 /**
- * GET /api/pacientes/[id]/plan/desde-informes — el motivo de consulta (y el
- * diagnóstico, si viene con su nombre) que el Plan puede traer de los informes
- * PDF subidos al paciente (15/09/2026, AV-0103 de Silvia).
+ * GET /api/pacientes/[id]/plan/desde-informes — el motivo de consulta, los
+ * objetivos (16/09/2026, AV-0163 de Raquel) y el diagnóstico, si viene con su
+ * nombre, que el Plan puede traer de los informes PDF subidos al paciente
+ * (15/09/2026, AV-0103 de Silvia).
  *
  * Gemelo de `desde-entrevista`: sin IA, NO ESCRIBE, y solo propone lo que en el
  * plan guardado está vacío. Lo que se acepte se guarda por el «Guardar plan» de
@@ -83,7 +84,7 @@ export const GET = withTenant(async (_request, rc, ctx) => {
     const plan = InterventionPlan
       ? await InterventionPlan.findOne({
           where: { patientId: id },
-          attributes: ["diagnosis", "consultationReasons", "consultationReasonsByTherapist"],
+          attributes: ["diagnosis", "consultationReasons", "consultationReasonsByTherapist", "objectives"],
         }).catch(() => null)
       : null;
 

@@ -4,7 +4,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { esInforme, leerInforme, rellenoDesdeInformes, terapiaDelInforme } from "../lib/clinica/planDesdeInformes.js";
+import { esInforme, leerInforme, objetivosDelInforme, rellenoDesdeInformes, terapiaDelInforme } from "../lib/clinica/planDesdeInformes.js";
+import { MAX_TEXTO_OBJETIVO } from "../lib/clinica/objetivosDelPlan.js";
 
 const A = "11111111-1111-4111-8111-111111111111";
 const B = "22222222-2222-4222-8222-222222222222";
@@ -96,7 +97,7 @@ test("va a la terapeuta de su especialidad, gana el más nuevo y no pisa lo escr
   assert.match(r.motivos.find((m) => m.terapeutaId === A).texto, /60 minutos/, "el de 2026, no el de 2025");
   assert.equal(r.motivos.find((m) => m.terapeutaId === B).terapia, "psicologia");
   assert.equal(r.general, null, "con terapeuta de esa terapia, el general no se toca");
-  assert.deepEqual(r.cuenta, { leidos: 3, cifrados: 1, sinTexto: 1, sinMotivo: 0 });
+  assert.deepEqual(r.cuenta, { leidos: 3, cifrados: 1, sinTexto: 1, sinMotivo: 0, objetivosQueNoCaben: 0 });
 
   const conEscrito = rellenoDesdeInformes(
     { consultationReasonsByTherapist: [{ terapeutaId: A, texto: "Lo que escribió ella" }] },
@@ -119,4 +120,75 @@ test("el diagnóstico solo si el plan no lo tiene", () => {
   const informes = [{ fileName: "Informe Pepa.pdf", texto }];
   assert.match(rellenoDesdeInformes({}, [], informes).diagnostico.texto, /^Trastorno del lenguaje/);
   assert.equal(rellenoDesdeInformes({ diagnosis: "El suyo" }, [], informes).diagnostico, null);
+});
+
+/*
+ * ── LOS OBJETIVOS (16/09/2026, AV-0163 de Raquel) ───────────────────────────
+ * «Sacar los objetivos del informe subido del año pasado, al igual que se ha
+ * hecho con el motivo de consulta». Lo que sale es una LISTA, no un texto.
+ */
+const CON_OBJETIVOS = [
+  "INFORME DE EVOLUCIÓN",
+  "USC/WPS Nº 1648",
+  "OBJETIVOS",
+  "• Mejorar la conciencia fonológica en tareas de segmentación",
+  "silábica y de rima.",
+  "USC/WPS Nº 1648",
+  "USC/WPS Nº 1648",
+  "• Ampliar el vocabulario expresivo en campos semánticos",
+  "cotidianos.",
+  "• Corto.",
+  "Trabajar la comprensión de textos narrativos breves.",
+  "EVOLUCIÓN",
+  "Ha mejorado a lo largo del curso.",
+].join("\n");
+
+test("los objetivos salen uno a uno, sin la viñeta y saltando el pie en mayúsculas", () => {
+  assert.deepEqual(objetivosDelInforme(CON_OBJETIVOS).textos, [
+    "Mejorar la conciencia fonológica en tareas de segmentación silábica y de rima.",
+    "Ampliar el vocabulario expresivo en campos semánticos cotidianos.",
+    "Trabajar la comprensión de textos narrativos breves.",
+  ]);
+  assert.deepEqual(objetivosDelInforme("INFORME\nEVOLUCIÓN\nVa bien."), { textos: [], noCaben: 0 }, "sin apartado, ninguno");
+  assert.equal(objetivosDelInforme(CON_OBJETIVOS, { max: 2 }).textos.length, 2);
+});
+
+test("un párrafo que no cabe en un objetivo se queda fuera, y se cuenta", () => {
+  const largo = `OBJETIVOS\n• ${"palabra ".repeat(80)}\n• Mejorar la atención sostenida en tareas de mesa.\nEVOLUCIÓN`;
+  const r = objetivosDelInforme(largo);
+  assert.deepEqual(r.textos, ["Mejorar la atención sostenida en tareas de mesa."]);
+  assert.equal(r.noCaben, 1, `no cabe en los ${MAX_TEXTO_OBJETIVO} caracteres del campo`);
+});
+
+test("los objetivos van a la terapeuta del informe y no pisan los que ya tiene", () => {
+  const informes = [
+    { fileName: "Pepa INFORME Servicio de LOGOPEDIA - Junio 2026.pdf", fecha: "2026-06-02", texto: CON_OBJETIVOS },
+    { fileName: "Pepa INFORME Servicio de LOGOPEDIA - Junio 2025.pdf", fecha: "2025-06-02", texto: CON_OBJETIVOS },
+  ];
+  const terapeutas = [{ id: A, especialidades: ["logopedia"] }];
+
+  const r = rellenoDesdeInformes({}, terapeutas, informes);
+  assert.equal(r.objetivos.length, 1, "gana el más nuevo, no se traen los dos");
+  assert.equal(r.objetivos[0].terapeutaId, A);
+  assert.equal(r.objetivos[0].fileName, informes[0].fileName);
+  assert.equal(r.objetivos[0].textos.length, 3);
+
+  const suyos = rellenoDesdeInformes({ objectives: [{ texto: "El que escribió ella", terapeutaId: A }] }, terapeutas, informes);
+  assert.deepEqual(suyos.objetivos, [], "quien ya tiene objetivos no recibe los de un informe viejo");
+});
+
+test("sin terapeuta de esa terapia, los objetivos quedan sin atribuir", () => {
+  const informes = [{ fileName: "Informe Pepa.pdf", texto: CON_OBJETIVOS }];
+  const r = rellenoDesdeInformes({}, [{ id: B, especialidades: ["psicologia"] }], informes);
+  assert.equal(r.objetivos.length, 1);
+  assert.equal(r.objetivos[0].terapeutaId, null);
+  assert.deepEqual(rellenoDesdeInformes({ objectives: ["Uno suelto"] }, [], informes).objetivos, []);
+});
+
+test("un informe sin motivo pero con objetivos ya no se descarta", () => {
+  const soloObjetivos = [{ fileName: "Pepa INFORME Servicio de LOGOPEDIA.pdf", texto: CON_OBJETIVOS }];
+  const r = rellenoDesdeInformes({}, [{ id: A, especialidades: ["logopedia"] }], soloObjetivos);
+  assert.equal(r.motivos.length, 0);
+  assert.equal(r.cuenta.sinMotivo, 1);
+  assert.equal(r.objetivos.length, 1);
 });

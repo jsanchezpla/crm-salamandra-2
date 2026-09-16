@@ -18,6 +18,8 @@ import useGrabadora, { fmtSegundos } from "@/components/clinica/useGrabadora.js"
 import { leerRespuestaApi } from "@/lib/utils/respuestaApi.js";
 import {
   normalizarObjetivos,
+  cabeOtroObjetivo,
+  MAX_OBJETIVOS_POR_TERAPEUTA,
   agruparPorTerapeuta,
   editarObjetivo,
   puedeEditarObjetivo,
@@ -112,12 +114,28 @@ function ObjetivosPorTerapeuta({ objetivos, onChange, terapeutas, equipo, yo, ca
   // posición en la lista NORMALIZADA, no en `objetivos`.
   const [editando, setEditando] = useState(null);
   const [avisoEdicion, setAvisoEdicion] = useState(null);
+  // Por terapeuta: «aquí ya no cabe otro» (AV-0164).
+  const [avisoTope, setAvisoTope] = useState({});
   const grupos = agruparPorTerapeuta(objetivos, { terapeutas, equipo, yo });
   const anadir = (terapeutaId) => {
     const v = (borradores[terapeutaId ?? ""] ?? "").trim();
     if (!v) return;
+    /*
+     * Si no cabe, se DICE y no se borra lo escrito (16/09/2026, AV-0164).
+     * Araceli escribió varios objetivos en un paciente compartido y la caja se
+     * los tragó uno detrás de otro: `normalizarObjetivos` recorta al tope y
+     * devolvía la misma lista, así que no pasaba nada y no se veía por qué.
+     */
+    if (!cabeOtroObjetivo(objetivos, terapeutaId)) {
+      setAvisoTope((a) => ({
+        ...a,
+        [terapeutaId ?? ""]: `Ya hay ${MAX_OBJETIVOS_POR_TERAPEUTA} objetivos aquí, que es el tope. Quita alguno que ya esté conseguido para escribir este.`,
+      }));
+      return;
+    }
     onChange(normalizarObjetivos([...objetivos, { texto: v, terapeutaId }]));
     setBorradores((b) => ({ ...b, [terapeutaId ?? ""]: "" }));
+    setAvisoTope((a) => ({ ...a, [terapeutaId ?? ""]: null }));
   };
   // Por ÍNDICE, no por texto ni por identidad: dos terapeutas pueden tener el
   // mismo objetivo, y `agruparPorTerapeuta` devuelve copias.
@@ -234,6 +252,9 @@ function ObjetivosPorTerapeuta({ objetivos, onChange, terapeutas, equipo, yo, ca
                 );
               })}
             </div>
+            {canEdit && g.terapeutaId !== null && avisoTope[g.terapeutaId] && (
+              <p className="text-[10px] text-amber-700 mb-1.5">{avisoTope[g.terapeutaId]}</p>
+            )}
             {canEdit && g.terapeutaId !== null && (
               <div className="flex gap-2">
                 <input
@@ -692,8 +713,9 @@ export default function InterventionPlanSection({ patientId, canEdit = true }) {
 
   /**
    * Trae de los informes PDF subidos el motivo de cada terapia (15/09/2026,
-   * AV-0103). Como el de la entrevista: no guarda, y solo toca lo que en
-   * pantalla siga vacío, aunque esté a medio escribir sin guardar.
+   * AV-0103) y sus objetivos (16/09/2026, AV-0163). Como el de la entrevista:
+   * no guarda, y solo toca lo que en pantalla siga vacío, aunque esté a medio
+   * escribir sin guardar.
    */
   async function traerDeLosInformes() {
     setTrayendo(true);
@@ -713,20 +735,43 @@ export default function InterventionPlanSection({ patientId, canEdit = true }) {
       // Solo lo que siga vacío; se vuelve a mirar al aplicar por si se ha
       // escrito algo mientras se leían los PDF.
       const motivos = (d.motivos ?? []).filter((m) => !motivoDe(form.consultationReasonsByTherapist, m.terapeutaId));
+      // Los objetivos, solo a quien no tenga ninguno escrito (AV-0163).
+      const tieneObjetivos = (id) => form.objectives.some((o) => (o.terapeutaId ?? null) === id);
+      const objetivos = (d.objetivos ?? []).filter((o) => !tieneObjetivos(o.terapeutaId ?? null));
       const general = d.general && !form.consultationReasons.trim() ? d.general : null;
       const diagnostico = d.diagnostico && !form.diagnosis.trim() ? d.diagnostico : null;
+      // La lista de objetivos se arma AQUÍ y no dentro del setForm: el Plan
+      // admite 40 en total, así que hay que contar cuántos entran de verdad
+      // para no decir «20 objetivos» cuando han cabido 6.
+      let listaObjetivos = normalizarObjetivos(form.objectives);
+      const puestos = [];
+      for (const o of objetivos) {
+        const id = o.terapeutaId ?? null;
+        const antes = listaObjetivos.length;
+        listaObjetivos = normalizarObjetivos([...listaObjetivos, ...o.textos.map((texto) => ({ texto, terapeutaId: id }))]);
+        puestos.push({ ...o, cuantos: listaObjetivos.length - antes });
+      }
       setForm((f) => {
         const nuevo = { ...f };
         for (const m of motivos) {
           if (motivoDe(nuevo.consultationReasonsByTherapist, m.terapeutaId)) continue;
           nuevo.consultationReasonsByTherapist = ponerMotivo(nuevo.consultationReasonsByTherapist, m.terapeutaId, m.texto);
         }
+        if (puestos.some((o) => o.cuantos)) nuevo.objectives = listaObjetivos;
         if (general && !f.consultationReasons.trim()) nuevo.consultationReasons = general.texto;
         if (diagnostico && !f.diagnosis.trim()) nuevo.diagnosis = diagnostico.texto;
         return nuevo;
       });
       const traido = [
         ...motivos.map((m) => `el motivo de ${nombreDe(m.terapeutaId)} de «${m.fileName}»`),
+        ...puestos
+          .filter((o) => o.cuantos)
+          .map(
+            (o) =>
+              `${o.cuantos} objetivo${o.cuantos > 1 ? "s" : ""} ${
+                o.terapeutaId ? `para ${nombreDe(o.terapeutaId)}` : "sin terapeuta, para que los repartas"
+              } de «${o.fileName}»`,
+          ),
         general ? `el motivo general de «${general.fileName}»` : null,
         diagnostico ? `el diagnóstico, tal cual lo escribe «${diagnostico.fileName}»` : null,
       ].filter(Boolean);
@@ -735,11 +780,17 @@ export default function InterventionPlanSection({ patientId, canEdit = true }) {
         c.sinTexto ? `${c.sinTexto} sin texto (escaneado${c.sinTexto > 1 ? "s" : ""})` : null,
         c.cifrados ? `${c.cifrados} con contraseña` : null,
       ].filter(Boolean);
-      const nota = aMano.length ? ` No se ha podido leer: ${aMano.join(" y ")}; esos hay que mirarlos a mano.` : "";
+      const nota =
+        (aMano.length ? ` No se ha podido leer: ${aMano.join(" y ")}; esos hay que mirarlos a mano.` : "") +
+        // Un párrafo entero no entra en un objetivo y se prefiere dejarlo fuera
+        // a meterlo cortado por la mitad (AV-0163).
+        (puestos.some((o) => o.cuantos) && c.objetivosQueNoCaben
+          ? ` Se han quedado fuera ${c.objetivosQueNoCaben} párrafo(s) demasiado largos para un objetivo: están en el informe.`
+          : "");
       setAviso(
         traido.length
           ? `Traído ${traido.join(", ")}. Revísalo y pulsa «Guardar plan».${nota}`
-          : `Leídos ${c.leidos ?? 0} informes y no hay nada que traer: o no traen «Motivo de consulta» o lo de su terapia ya está escrito.${nota}`,
+          : `Leídos ${c.leidos ?? 0} informes y no hay nada que traer: o no traen «Motivo de consulta» ni «Objetivos», o lo de su terapia ya está escrito.${nota}`,
       );
     } catch (e) {
       setErr(e.message);
@@ -779,8 +830,9 @@ export default function InterventionPlanSection({ patientId, canEdit = true }) {
             >
               {trayendo ? "Buscando…" : "Traer de la entrevista inicial"}
             </button>
-            {/* De los informes PDF subidos (15/09/2026, AV-0103): el apartado
-                «Motivo de consulta» copiado tal cual, a la terapia del informe. */}
+            {/* De los informes PDF subidos (15/09/2026, AV-0103): los apartados
+                «Motivo de consulta» y «Objetivos» (AV-0163) copiados tal cual,
+                a la terapia del informe. */}
             <button
               type="button"
               onClick={traerDeLosInformes}
