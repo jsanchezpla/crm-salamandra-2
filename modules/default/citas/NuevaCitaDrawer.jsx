@@ -1094,6 +1094,26 @@ export function NuevaCitaDrawer({
                     placeholder="— Selecciona —"
                     searchable
                   />
+                  {/*
+                      QUE ELEGIR AQUÍ NO LE QUITA TERAPEUTA (16/09/2026,
+                      AV-0168 de Aumenta, Olga: «si un paciente acude a
+                      logopedia y pedagogía… al crear la cita con el logopeda,
+                      no sé si se elimina el anterior»).
+
+                      No se elimina: crear una cita no toca `patient_therapists`
+                      —eso solo se edita en la ficha—, y el desplegable llega
+                      con su terapeuta principal puesto, que es lo que hace
+                      pensar que se está eligiendo «el» terapeuta del paciente.
+                      En Aumenta hay 56 pacientes con dos o tres terapias, así
+                      que la duda la va a tener más gente. La frase lo dice
+                      donde nace, y no en un correo que se pierde.
+                  */}
+                  {!esTaller && createForm.patientId && (
+                    <p className="text-[10px] text-neutral-400 mt-1">
+                      Solo dice quién da ESTA cita. Los terapeutas del paciente se cambian en su ficha: elegir
+                      otro aquí no le quita ninguno.
+                    </p>
+                  )}
                   {esTaller && (
                     <p className="text-[10px] text-neutral-400 mt-1">
                       Es quien figura como responsable de la cita. Los demás que lo imparten salen igual, y
