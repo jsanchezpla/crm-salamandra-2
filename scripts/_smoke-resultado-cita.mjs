@@ -109,3 +109,13 @@ test("los botones solo salen en citas que ya han empezado, y nunca en una cancel
   assert.equal(admiteResultado(cita({ scheduledAt: null }), AHORA), false);
   assert.equal(admiteResultado(null, AHORA), false);
 });
+
+// 16/09/2026, AV-0161 (Olga, Aumenta): la ventana de cancelar decía «ni vino ni
+// contaba como falta» y no hablaba del bono, justo al revés de lo que hace la
+// regla (`gastaSesion`): con menos de 24 h, la cancelación GASTA la sesión.
+test("cancelar avisa de lo que le pasa a la sesión del bono", () => {
+  const cancelar = resultadoPorClave("cancelada");
+  assert.match(cancelar.motivo.texto, /24 h/);
+  assert.match(cancelar.ayuda, /solo gasta sesión si se cancela con menos de 24 h/);
+  assert.doesNotMatch(cancelar.ayuda, /ni contaba como falta\./);
+});
