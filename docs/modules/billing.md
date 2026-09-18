@@ -2632,3 +2632,42 @@ apuntes.
   que el endpoint YA entendía y la pantalla no ofrecía, la casilla de
   descuadres y un «Quitar filtros»; con algo puesto, la tabla vacía dice que no
   hay ninguno que case y no que nunca se haya cerrado la caja.
+
+## Los 69 € del cuadre de caja de Aumenta (18/09/2026)
+
+Aumenta, por teléfono el 17/09: «no entienden dónde cuadra los 69 € en la caja,
+revisarla bien con Organízate». **Medido contra producción: la caja está bien y
+los 69 € son reales.** Es esto:
+
+- El saldo de caja que traía Organízate entró como un apunte de ENTRADA el
+  01/09/2026. El 11/09 se apuntó con **92,81 €**; el 15/09, a petición de
+  Rodrigo, se corrigió a **161,81 €**, que es el saldo del cierre del
+  31/08/2026.
+- La diferencia entre las dos cifras es exactamente **69,00 €**: lo que el cajón
+  se movió del 1 al 4 de septiembre. Comprobado en producción:
+  **3.631,00 € cobrados en efectivo − 3.700,00 € de salidas = −69,00 €**. Es
+  decir, 92,81 € era el saldo de Organízate DESPUÉS de esos cuatro días, que ya
+  estaban en el CRM como cobros y como apuntes de salida: apuntarlo así los
+  restaba dos veces.
+- Y el cajón cuadra a la cifra: el único cierre real de Aumenta (16/09/2026)
+  contó 161,42 € contra 161,42 € esperados, descuadre 0. Los 828 cierres
+  anteriores son los cascarones importados de Organízate, a cero y sin autor.
+
+**Nada de esto era un fallo del cálculo; lo era la pantalla.** Dos arreglos:
+
+- **La razón de un apunte se lee donde se lee el apunte.** La explicación de la
+  corrección estaba escrita en las observaciones del apunte, y esa columna solo
+  existía en «Entradas y salidas»: en «Efectivo en caja» y en «Resumen por día»
+  el apunte enseñaba solo su concepto, así que los 161,81 € aparecían sin motivo
+  justo en las dos pantallas donde se cuadra. Ahora la observación va debajo del
+  concepto en las tres (`notes` viaja en los `apuntes` de
+  `construirResumenCaja`).
+- **«Se partía de» ya no llama conteo a lo que nadie contó.** La tarjeta y el
+  pie de «Efectivo en caja» decían siempre «contado al cerrar el …»; desde
+  AV-0157 el saldo puede venir de que no hay ningún arqueo válido y entonces la
+  fecha llega a `null`, así que se leía «contado al cerrar el » con el hueco
+  vacío. En Aumenta es el caso NORMAL. Lo decide `origenDelSaldoInicial`
+  (`lib/billing/caja.js`, prueba en `_smoke-caja.mjs`) con tres respuestas —de
+  un cierre contado, arrastrado desde el principio sin que nadie lo contara, o
+  sin nada anterior— y lo leen la tarjeta y el pie, para que la misma cifra no
+  tenga dos explicaciones.

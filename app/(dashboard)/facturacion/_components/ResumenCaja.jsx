@@ -342,7 +342,14 @@ export default function ResumenCaja({ cajaId }) {
                                     <td className={`px-2 py-1.5 font-medium ${mv.direction === "out" ? "text-rose-600" : "text-emerald-700"}`}>
                                       {mv.direction === "out" ? "Salida" : "Entrada"}
                                     </td>
-                                    <td className="px-2 py-1.5 text-neutral-700">{mv.concept}</td>
+                                    <td className="px-2 py-1.5 text-neutral-700">
+                                      {mv.concept}
+                                      {/* La observación del apunte, donde se lee el apunte
+                                          (18/09/2026, cuadre de caja de Aumenta). */}
+                                      {mv.notes && (
+                                        <span className="block text-[11px] text-neutral-400 whitespace-pre-wrap">{mv.notes}</span>
+                                      )}
+                                    </td>
                                     <td className={`px-2 py-1.5 text-right tabular font-medium ${mv.direction === "out" ? "text-rose-600" : "text-emerald-700"}`}>
                                       {mv.direction === "out" ? "−" : "+"}{fmtMoney(mv.amount)}
                                     </td>
