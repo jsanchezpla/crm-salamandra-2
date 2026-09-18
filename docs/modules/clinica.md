@@ -2839,8 +2839,16 @@ Lo que se hizo:
 | La herencia | El POST de `/api/clinica/sessions` lee la duración de la cita en la MISMA consulta que ya hacía para el diagnóstico (`diagnosticoDelRegistro` devuelve `duracionCita`), y solo si la cita es de ese paciente. Antes se tiraba: las 500 sesiones enganchadas a una cita tenían `duration` null mientras su cita decía 45 o 60. |
 | Se puede corregir | El registro estrena campo **«Duración (min)»** (`RegistroSesionEditor.jsx`), al lado del día y la hora. Vacío es una respuesta —«no se apuntó»— y se guarda como null. El PATCH ya aceptaba `duration`; ahora pasa por `minutosDeSesion` (entero 1..480 o null). |
 | Los 22.996 de antes | `scripts/vaciar-duracion-sesiones-volcadas.js <slug>` (simula por defecto, `--confirm` escribe, `--deshacer <fichero>` restaura con el valor anterior fila a fila). Toca SOLO las filas con el marcador del volcado; no roza el texto clínico. |
+| Las 508 que sí tenían cita | `scripts/backfill-duracion-sesion-desde-cita.js <slug>`: las sesiones ya enganchadas a una cita y sin duración heredan la de SU cita, hacia atrás. En Aumenta, 271 a 45 y 237 a 60. Dos condiciones que se quedan escritas aunque hoy las cumplan todas: solo si la sesión NO tiene duración (la escrita a mano gana) y solo si la cita es DEL MISMO PACIENTE. Mismo `minutosDeSesion` que el POST y el PATCH. |
 
 La ficha pasa a decir «— min» donde no se sabe, que es lo que hay que decir.
+
+*Comprobado en producción el 18/09/2026*, y merece quedar escrito porque es la
+parte que casi se da por buena sin mirar: con `749a0a2c` desplegado, las cuatro
+primeras sesiones nacidas de una cita heredaron su duración —tres de 60 y **una
+de 45**—, y las nacidas sin cita se quedaron en `null`. La de 45 es la que cierra
+la duda: que una terapeuta teclee «60» a mano es plausible; que cuatro tecleen
+justo el número de su cita, con un 45 entre medias, no.
 
 ## El Word del informe lleva la marca del centro (18/09/2026, AV-0172, Rodrigo)
 
