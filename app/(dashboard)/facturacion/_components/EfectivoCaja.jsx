@@ -20,6 +20,7 @@
 
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { hoyVigente, mesVigente } from "@/lib/billing/cuotas.js";
+import { origenDelSaldoInicial } from "@/lib/billing/caja.js";
 import { fmtMoney } from "./Kpi.jsx";
 import CobroDrawer from "./CobroDrawer.jsx";
 
@@ -126,6 +127,14 @@ export default function EfectivoCaja({ cajaId, onApuntar }) {
   );
 
   const partida = datos?.saldoInicial ?? null;
+  /*
+   * QUÉ SE DICE DEL SALDO DEL QUE SE PARTE (18/09/2026, cuadre de caja de
+   * Aumenta). Lo decide `origenDelSaldoInicial` en lib y no este JSX, porque lo
+   * leen la tarjeta y el pie: si cada uno lo decidiera, la misma cifra tendría
+   * dos explicaciones. Antes decía siempre «contado al cerrar el …» y con un
+   * saldo arrastrado desde el principio (AV-0157) la fecha llegaba vacía.
+   */
+  const origen = origenDelSaldoInicial(partida);
   const totalEntrado = Number(datos?.total?.efectivo?.importe ?? 0) + Number(datos?.total?.movimientos?.entradas ?? 0);
   const totalSalido = Number(datos?.total?.movimientos?.salidas ?? 0);
 
@@ -176,9 +185,7 @@ export default function EfectivoCaja({ cajaId, onApuntar }) {
           <div className="rounded-xl border border-neutral-200 bg-white px-4 py-3">
             <div className="text-[11px] uppercase tracking-wide text-neutral-400">Se partía de</div>
             <div className="text-lg font-semibold text-neutral-800 tabular">{fmtMoney(partida?.importe ?? 0)}</div>
-            <div className="text-[11px] text-neutral-400 mt-0.5">
-              {partida ? `contado al cerrar el ${fmtFecha(partida.fecha)}` : "sin cierre anterior: se empieza en cero"}
-            </div>
+            <div className="text-[11px] text-neutral-400 mt-0.5">{origen.breve}</div>
           </div>
           <div className="rounded-xl border border-neutral-200 bg-white px-4 py-3">
             <div className="text-[11px] uppercase tracking-wide text-neutral-400">Entró en efectivo</div>
@@ -294,15 +301,25 @@ export default function EfectivoCaja({ cajaId, onApuntar }) {
                               </li>
                             ))}
                             {apuntes.map((mv) => (
-                              <li key={mv.id} className="flex items-center gap-3 px-3 py-1.5">
-                                <span className="text-[11px] text-neutral-400 w-12 shrink-0">
+                              <li key={mv.id} className="flex items-start gap-3 px-3 py-1.5">
+                                <span className="text-[11px] text-neutral-400 w-12 shrink-0 pt-px">
                                   {mv.direction === "out" ? "salida" : "entrada"}
                                 </span>
-                                <span className="min-w-0 flex-1 text-[12px] text-neutral-700 truncate">
-                                  {mv.concept}
-                                  {mv.createdBy?.displayName && <span className="text-neutral-400"> · {mv.createdBy.displayName}</span>}
+                                <span className="min-w-0 flex-1 text-[12px] text-neutral-700">
+                                  <span className="block truncate">
+                                    {mv.concept}
+                                    {mv.createdBy?.displayName && <span className="text-neutral-400"> · {mv.createdBy.displayName}</span>}
+                                  </span>
+                                  {/* La observación del apunte, aquí y no solo en «Entradas y
+                                      salidas» (18/09/2026, cuadre de caja de Aumenta): el saldo
+                                      que se trajo de Organízate se corrigió en 69 €, la razón se
+                                      escribió en esta nota y desde el cajón no se veía, así que
+                                      el número aparecía sin explicación justo donde se cuadra. */}
+                                  {mv.notes && (
+                                    <span className="block text-[11px] text-neutral-400 whitespace-pre-wrap">{mv.notes}</span>
+                                  )}
                                 </span>
-                                <span className={`text-[12px] tabular shrink-0 ${mv.direction === "out" ? "text-rose-600" : "text-neutral-700"}`}>
+                                <span className={`text-[12px] tabular shrink-0 pt-px ${mv.direction === "out" ? "text-rose-600" : "text-neutral-700"}`}>
                                   {mv.direction === "out" ? "− " : ""}{fmtMoney(mv.amount)}
                                 </span>
                               </li>
@@ -321,9 +338,7 @@ export default function EfectivoCaja({ cajaId, onApuntar }) {
 
       <p className="text-[11.5px] text-neutral-400">
         Solo efectivo: la tarjeta y el banco no pasan por el cajón.{" "}
-        {partida
-          ? `Se parte de los ${fmtMoney(partida.importe)} contados al cerrar el ${fmtFecha(partida.fecha)}.`
-          : "No hay ningún cierre anterior a estas fechas con dinero contado, así que se empieza en cero: cierra la caja un día y a partir de ahí el saldo se arrastra solo."}
+        {origen.tipo === "cero" ? origen.frase : `Se parte de ${fmtMoney(partida.importe)}: ${origen.breve}.`}
         {" "}Un cobro pendiente no cuenta hasta que entra. Pulsa un día para ver quién pagó en
         efectivo y qué entró o salió del cajón.
       </p>
