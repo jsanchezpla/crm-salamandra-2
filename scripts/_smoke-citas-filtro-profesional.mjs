@@ -43,6 +43,7 @@ import {
   SIN_PROFESIONAL,
   COLOR_CITA_POR_DEFECTO,
   trocearFiltroDeProfesionales,
+  duenoSugeridoDelBloqueo,
 } from "../lib/citas/filtros.js";
 import { filtroDeProfesionales, soloLoSuyo } from "../lib/citas/visibilidad.js";
 
@@ -178,5 +179,50 @@ describe("lo que NO cambia: el permiso de quien solo ve lo suyo", () => {
     const f = soloLoSuyo(null);
     const iguales = f[Op.or].find((c) => Op.eq in c)[Op.eq];
     assert.equal(iguales, "00000000-0000-0000-0000-000000000000");
+  });
+});
+
+/*
+ * ── DE QUIÉN ES EL BLOQUEO QUE SE ABRE DESDE EL CALENDARIO (18/09/2026) ──────
+ *
+ * Aumenta: «si se está en el horario de una terapeuta que se ponga
+ * automáticamente como la dueña en el desplegable Quién». La pista es el mismo
+ * filtro de arriba, y lo que fija esta prueba es que SOLO se adivina cuando hay
+ * una respuesta cierta: con dos agendas en pantalla, o con «Sin asignar» de por
+ * medio, sugerir a una de ellas sería elegir por quien mira.
+ */
+describe("duenoSugeridoDelBloqueo", () => {
+  test("una sola profesional en pantalla: el bloqueo es suyo", () => {
+    assert.equal(duenoSugeridoDelBloqueo([A]), A);
+  });
+
+  test("sin filtro («todos») no se adivina", () => {
+    assert.equal(duenoSugeridoDelBloqueo(null), null);
+    assert.equal(duenoSugeridoDelBloqueo(undefined), null);
+    assert.equal(duenoSugeridoDelBloqueo([]), null);
+  });
+
+  test("con dos o más, tampoco: el hueco no es de nadie en concreto", () => {
+    assert.equal(duenoSugeridoDelBloqueo([A, B]), null);
+    assert.equal(duenoSugeridoDelBloqueo([A, B, C]), null);
+  });
+
+  test("«sin asignar» no es una persona, ni sola ni acompañada", () => {
+    assert.equal(duenoSugeridoDelBloqueo([SIN_PROFESIONAL]), null);
+    assert.equal(duenoSugeridoDelBloqueo([A, SIN_PROFESIONAL]), null);
+  });
+
+  test("lo que no tiene forma de ficha de equipo no se sugiere", () => {
+    // `team_member_id` es `uuid`: mandar otra cosa sería un 22P02 al guardar.
+    assert.equal(duenoSugeridoDelBloqueo(["undefined"]), null);
+    assert.equal(duenoSugeridoDelBloqueo([""]), null);
+    assert.equal(duenoSugeridoDelBloqueo([null]), null);
+    assert.equal(duenoSugeridoDelBloqueo(["todos"]), null);
+  });
+
+  test("no es una valla: devuelve un id, no un permiso", () => {
+    // Quien no pueda elegir persona no ve el desplegable y el servidor le pone
+    // el bloqueo a su nombre haga lo que haga el navegador. Esto solo rellena.
+    assert.equal(typeof duenoSugeridoDelBloqueo([B]), "string");
   });
 });

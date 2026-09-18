@@ -19,6 +19,9 @@ export default function ExportButtons({ xlsxUrl, showBulk = true }) {
   const [to, setTo] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  // El nombre del niño en los PDF del lote (18/09/2026, AV-0175). Sale por
+  // defecto, igual que en la factura suelta; la casilla es para quitarlo.
+  const [conPaciente, setConPaciente] = useState(true);
   const rootRef = useRef(null);
 
   useEffect(() => {
@@ -35,7 +38,10 @@ export default function ExportButtons({ xlsxUrl, showBulk = true }) {
     setBusy(true);
     setErr(null);
     try {
-      const res = await fetch(`/api/billing/invoices/bulk-pdf?from=${from}&to=${to}`, { method: "POST" });
+      const res = await fetch(
+        `/api/billing/invoices/bulk-pdf?from=${from}&to=${to}${conPaciente ? "" : "&paciente=0"}`,
+        { method: "POST" },
+      );
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         setErr(j.error || "No se han podido generar los PDFs");
@@ -88,6 +94,11 @@ export default function ExportButtons({ xlsxUrl, showBulk = true }) {
               <label className="block text-[11px] font-medium text-neutral-500 mb-1">Hasta</label>
               <input type="date" value={to} onChange={(e) => setTo(e.target.value)}
                 className="w-full mb-3 rounded-md px-2.5 py-1.5 text-sm border border-neutral-200 focus:outline-none focus:border-neutral-400" />
+              <label className="flex items-center gap-2 text-[11px] text-neutral-600 mb-3">
+                <input type="checkbox" checked={conPaciente} onChange={(e) => setConPaciente(e.target.checked)}
+                  className="rounded border-neutral-300" />
+                Con el nombre del paciente
+              </label>
               {err && <p className="text-xs text-red-600 mb-2">{err}</p>}
               <button type="button" onClick={downloadBulk} disabled={busy || !from || !to}
                 className="w-full px-3 py-1.5 rounded-md text-sm font-medium text-white bg-[var(--color-primary,#1B3A2D)] hover:opacity-90 disabled:opacity-50 transition">
