@@ -727,3 +727,35 @@ Clientes, que un día ignoró el filtro de visibilidad de su lista.
 ## Revisión del 06/09/2026 (incidencias)
 
 - El PATCH de una incidencia solo cuenta lo que de verdad cambia (campos comparados con la fila; responsables por conjunto): «Guardar cambios» sin tocar nada ya no borra el visto de las demás. El modal sincroniza `verification`/`falta` con lo que devuelve el servidor (antes reabría la que se había cerrado sola). El visto de quien no es responsable se rechaza antes de escribir. Una responsable `inactive` no cuenta para el repaso ni para el cierre (`filasQueCuentan`). El diálogo de eliminar dice cuando tu visto cierra la incidencia.
+
+
+## «Error interno del servidor» al crear una incidencia: el enum corto (18/09/2026, AV-0203 de Aumenta)
+
+> Arantxa: «intento mandar una incidencia y me sale error interno del servidor.
+> Adjunto prueba».
+
+El desplegable ofrecía **diez** categorías (`INCIDENCIA_CATEGORIES` en
+`lib/clinica/incidencias.js`) y el tipo `enum_incidencias_category` de
+PostgreSQL tenía **ocho**. Elegir **«Otros»** o **«Solicitud laboral»** pasaba
+la validación del endpoint —que mira la lista del código— y reventaba en el
+INSERT: `invalid input value for enum … "otros"`, o sea un 500 en la cara de
+quien apunta la incidencia. Estaba así en los OCHO schemas que tienen la tabla,
+no solo en Aumenta, y el log de nginx tenía cuatro `POST /api/clinica/incidencias`
+con 500 solo ese día — dos de ellos después de dos despliegues, que es lo que lo
+convirtió en urgente.
+
+Pasó porque `scripts/migrate-incidencias-module.js` llevaba las categorías
+**escritas a mano** y solo creaba el tipo cuando NO existía: el commit que
+añadió las dos al código (`5b670d5c`) no tocó la base, y los tenants que ya
+tenían el enum se quedaron cortos. Ahora la migración **lee la lista de `/lib`**
+y, si el tipo ya existe, le añade lo que falte con `ALTER TYPE … ADD VALUE IF
+NOT EXISTS` (no quita ni renombra nada, así que se puede repetir). Prueba:
+`_smoke-incidencias-enum.mjs`, que vigila justo eso — que la migración no
+vuelva a tener su propia lista.
+
+**El otro camino al mismo 500, tapado de paso**: `assigned_to_id` y
+`reported_by_id` tienen clave ajena contra `team_members` y el alta los escribía
+sin comprobar que existieran (la tabla pivote sí filtraba, pero corre DESPUÉS
+del `create`). Un id de una ficha borrada daba el mismo error interno. Desde hoy
+los dos pasan por `responsablesQueExisten`: si la ficha ya no está, la
+incidencia nace sin responsable o sin autor, pero nace.
