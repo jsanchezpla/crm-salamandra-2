@@ -2,7 +2,7 @@
 // ninguna conexión: los modelos van de pega, escritos aquí abajo.
 /**
  * _smoke-incidencias-filtros.mjs — los filtros del listado de incidencias
- * admiten VARIOS valores (18/09/2026, AV-0169 de Aumenta).
+ * admiten VARIOS valores (18/09/2026, AV-198 de Aumenta).
  *
  * Aumenta, por el Registro: «en incidencias de equipo quieren que el filtro sea
  * múltiple y no solo de una opción». Lo que se comprueba aquí es lo que el

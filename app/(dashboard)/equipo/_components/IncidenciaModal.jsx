@@ -181,7 +181,7 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
    * Multi-responsable: se parte de `assignees` (nuevo) y se cae al legacy
    * `assignedToId` para las incidencias creadas antes del cambio.
    *
-   * ── UNA NUEVA NACE A MI NOMBRE (18/09/2026, AV-0169 de Aumenta) ───────────
+   * ── UNA NUEVA NACE A MI NOMBRE (18/09/2026, AV-198 de Aumenta) ───────────
    * «Que aparezca el nombre automáticamente en registrada y responsable del
    * dueño de la cuenta»: al abrir una nueva, quien la escribe sale ya marcado
    * como responsable. Es un RELLENO, no una regla: se quita con un clic en el
@@ -599,7 +599,7 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
             </div>
             <div>
               {/* Quién la registra sale relleno con el NOMBRE de quien está
-                  usando el CRM (18/09/2026, AV-0169), pero recepción apunta
+                  usando el CRM (18/09/2026, AV-198), pero recepción apunta
                   cosas que le cuenta otra persona y se puede cambiar. La opción
                   neutra solo se ve cuando esa cuenta no tiene ficha de equipo:
                   entonces quien la rellena es el servidor. */}

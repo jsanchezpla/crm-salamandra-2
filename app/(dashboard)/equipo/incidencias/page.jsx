@@ -43,7 +43,7 @@ export default function IncidenciasPage() {
   const [loading, setLoading] = useState(true);
   const [pestanas, setPestanas] = useState([]); // [] = todas (ver STATUS_TABS)
   /*
-   * ── LOS TRES FILTROS SON DE VARIOS (18/09/2026, AV-0169 de Aumenta) ──────
+   * ── LOS TRES FILTROS SON DE VARIOS (18/09/2026, AV-198 de Aumenta) ──────
    * «Que el filtro sea múltiple y no solo de una opción». Contrato de
    * `MultiSelect`: `null` = todos (que NO es tenerlos todos marcados), `[a,b]`
    * = solo esos, `[]` no existe. El servidor los recibe repetidos
@@ -186,7 +186,7 @@ export default function IncidenciasPage() {
   const puedeVerTodas = !soloLasMias;
   const misMarcado = puedeVerTodas && soloMias && Boolean(data?.yoSoy);
   /*
-   * ── UN SOLO BOTÓN EN VEZ DE CUATRO CONTROLES (18/09/2026, AV-0169) ────────
+   * ── UN SOLO BOTÓN EN VEZ DE CUATRO CONTROLES (18/09/2026, AV-198) ────────
    * Aumenta: «se quejan de que hay mucho filtro y es muy confuso». Arriba se
    * quedan las pestañas de estado y el buscador, que son los de todos los días;
    * los tres desplegables y el interruptor de las vistas se recogen en este
