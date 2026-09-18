@@ -149,11 +149,14 @@ export default function FichaDeTipoDeBonoPage() {
           </h2>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[820px]">
+          <table className="w-full text-sm min-w-[920px]">
             <thead>
               <tr className="border-b border-neutral-100 text-left text-[11px] uppercase tracking-wide text-neutral-400">
                 <th className="px-4 py-3 font-medium">Paciente</th>
                 <th className="px-4 py-3 font-medium">Familia</th>
+                {/* Quién da las sesiones (18/09/2026, AV-0183). En el grupo es
+                    la pregunta natural: «¿quién lleva estos diez bonos?». */}
+                <th className="px-4 py-3 font-medium">Terapeuta</th>
                 <th className="px-4 py-3 font-medium">Sesiones</th>
                 <th className="px-4 py-3 font-medium text-right">Importe</th>
                 <th className="px-4 py-3 font-medium">Cobro</th>
@@ -163,10 +166,10 @@ export default function FichaDeTipoDeBonoPage() {
             </thead>
             <tbody>
               {cargando && !datos && (
-                <tr><td colSpan={7} className="text-center py-12 text-xs text-neutral-400">Cargando...</td></tr>
+                <tr><td colSpan={8} className="text-center py-12 text-xs text-neutral-400">Cargando...</td></tr>
               )}
               {!cargando && abiertos.length === 0 && (
-                <tr><td colSpan={7} className="text-center py-12 text-xs text-neutral-400">
+                <tr><td colSpan={8} className="text-center py-12 text-xs text-neutral-400">
                   Nadie tiene este bono abierto. Con «Añadir al grupo» se lo puedes dar a varios de una vez.
                 </td></tr>
               )}
@@ -179,6 +182,9 @@ export default function FichaDeTipoDeBonoPage() {
                     {b.clientId ? (
                       <Link href={`/clientes/${b.clientId}`} className="hover:underline">{b.familia || "—"}</Link>
                     ) : (b.familia || "—")}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-neutral-600">
+                    {b.terapeuta || <span className="italic text-neutral-300">sin asignar</span>}
                   </td>
                   <td className="px-4 py-3 text-xs text-neutral-600 tabular">{rotuloDelBono(b)}</td>
                   <td className="px-4 py-3 text-xs text-right tabular text-neutral-700">

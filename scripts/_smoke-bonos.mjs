@@ -28,6 +28,10 @@
  *  - NADIE SE CUENTA DOS VECES, y un bono sin paciente es de la FAMILIA: se
  *    cuenta esa familia, no sus hijos (un montón de diez sesiones sin dueño no
  *    son diez por hijo).
+ *  - EL BONO TIENE TERAPEUTA, Y PUEDE NO TENERLO (18/09/2026, AV-0183). Se
+ *    valida la FORMA, no la existencia —de eso sabe la API, que tiene la
+ *    plantilla delante—, el vacío es un valor (sirve para quitar al que se puso
+ *    mal) y al renovar se hereda: renovar es seguir con la misma terapeuta.
  *  - LOS CÉNTIMOS SON CÉNTIMOS. El bono se valida en céntimos enteros; un
  *    importe con decimales se rechaza en vez de guardarse a lo que salga, que
  *    es como nació un bono de 150 € con un pendiente de 15.000 €.
@@ -135,6 +139,17 @@ describe("qué se valida al dar un bono", () => {
     assert.equal(limpiarBono({ eventTypeId: uuid(), status: "anulado" }).valores.status, "anulado");
   });
 
+  it("el terapeuta es opcional, y el vacío sirve para quitarlo", () => {
+    const quien = uuid();
+    assert.equal(limpiarBono({ eventTypeId: uuid(), teamMemberId: quien }).valores.teamMemberId, quien);
+    // Sin decir nada en el alta: sin asignar, que es lo que llevan los bonos de
+    // un centro sin equipo y los que ya estaban dados.
+    assert.equal(limpiarBono({ eventTypeId: uuid() }).valores.teamMemberId, null);
+    // Y el vacío escrito a propósito: se quita al que se puso mal.
+    assert.equal(limpiarBono({ teamMemberId: "" }, { parcial: true }).valores.teamMemberId, null);
+    assert.match(limpiarBono({ eventTypeId: uuid(), teamMemberId: "marta" }).problema, /terapeuta/i);
+  });
+
   it("parcial (el PATCH) solo toca lo que venga: editar la nota no pide sesiones", () => {
     const { valores, problema } = limpiarBono({ notes: "  pagó en dos veces  " }, { parcial: true });
     assert.equal(problema, null);
@@ -159,6 +174,15 @@ describe("volver a coger el bono", () => {
     assert.equal(nuevo.patientId, "p1");
     assert.equal(nuevo.totalSessions, 10);
     assert.equal(nuevo.amount, 30000);
+  });
+
+  it("hereda a quien lo llevaba, y deja cambiarlo en el mismo botón", () => {
+    const marta = uuid();
+    const luis = uuid();
+    assert.equal(renovacionDe(bono({ teamMemberId: marta })).teamMemberId, marta);
+    assert.equal(renovacionDe(bono({ teamMemberId: marta }), { teamMemberId: luis }).teamMemberId, luis);
+    // Y lo de siempre sigue valiendo: un bono sin terapeuta renueva sin él.
+    assert.equal(renovacionDe(agotado).teamMemberId, null);
   });
 
   it("NO copia la nota del trato anterior ni el estado", () => {

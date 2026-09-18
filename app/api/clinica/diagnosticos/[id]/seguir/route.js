@@ -116,6 +116,9 @@ export const POST = withTenant(async (request, routeCtx, ctx) => {
         clientId,
         clientEmail: normalizaCorreo(ficha?.portalEmail || ficha?.email),
         patientId: expediente.patientId,
+        // Quien lleva el expediente lleva su bono (18/09/2026, AV-0183): el
+        // dato ya está escrito en el diagnóstico, no hay que preguntarlo otra vez.
+        teamMemberId: expediente.therapistId ?? null,
         eventTypeId: tipo.id,
         nombreDelTipo: tipo.name,
         // SIN TOPE: las horas las acota el expediente (`cabeHora`).

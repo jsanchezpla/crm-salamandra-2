@@ -105,6 +105,12 @@ export default function BonosPage() {
   const [buscaCerrados, setBuscaCerrados] = useState("");
   const [filtroTipo, setFiltroTipo] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("");
+  /*
+   * POR QUIÉN LO DA (18/09/2026, AV-0183 de Aumenta). `sin` son los que no
+   * tienen a nadie: es la lista con la que se reparte lo que ya estaba dado,
+   * que aquí son todos los anteriores a hoy.
+   */
+  const [filtroTerapeuta, setFiltroTerapeuta] = useState("");
   // El filtro que usa quien lleva el dinero: los bonos dados que nadie ha
   // pagado todavía. Es la lista con la que se llama por teléfono.
   const [soloPendientes, setSoloPendientes] = useState(false);
@@ -172,8 +178,24 @@ export default function BonosPage() {
     return m;
   }, [bonos]);
 
+  /*
+   * Las terapeutas que SALEN en la lista, no la plantilla entera: el
+   * desplegable se monta con lo que ya está cargado y no pide nada al servidor.
+   * Quien no tiene ningún bono no tiene por qué ocupar sitio aquí.
+   */
+  const terapeutasEnLista = useMemo(() => {
+    const m = new Map();
+    for (const b of bonos) {
+      if (!b.teamMemberId) continue;
+      if (!m.has(String(b.teamMemberId))) m.set(String(b.teamMemberId), b.terapeuta || "(sin nombre)");
+    }
+    return [...m.entries()].sort((a, b2) => a[1].localeCompare(b2[1], "es"));
+  }, [bonos]);
+
+  const sinTerapeuta = useMemo(() => bonos.filter((b) => !b.teamMemberId).length, [bonos]);
+
   const casa = useCallback(
-    (b, texto) => coincidePorNombre(texto, [b.paciente, b.familia, b.nombre, b.correo, b.notes]),
+    (b, texto) => coincidePorNombre(texto, [b.paciente, b.familia, b.nombre, b.terapeuta, b.correo, b.notes]),
     []
   );
 
@@ -181,10 +203,12 @@ export default function BonosPage() {
     return bonos.filter((b) => {
       if (filtroTipo && String(b.eventTypeId) !== filtroTipo) return false;
       if (filtroEstado && estadoDelBono(b) !== filtroEstado) return false;
+      if (filtroTerapeuta === "sin" && b.teamMemberId) return false;
+      if (filtroTerapeuta && filtroTerapeuta !== "sin" && String(b.teamMemberId) !== filtroTerapeuta) return false;
       if (soloPendientes && !(Number(b.cobro?.pendiente) > 0)) return false;
       return true;
     });
-  }, [bonos, filtroTipo, filtroEstado, soloPendientes]);
+  }, [bonos, filtroTipo, filtroEstado, filtroTerapeuta, soloPendientes]);
 
   const visibles = useMemo(
     () => ordenarBonos(filtrados.filter((b) => !bonoCerrado(b) && casa(b, busca))),
@@ -274,6 +298,18 @@ export default function BonosPage() {
           options={ESTADOS}
           className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200"
         />
+        {(terapeutasEnLista.length > 0 || sinTerapeuta > 0) && (
+          <Select
+            value={filtroTerapeuta}
+            onChange={setFiltroTerapeuta}
+            options={[
+              { value: "", label: "Todos los terapeutas" },
+              ...terapeutasEnLista.map(([id, nombre]) => ({ value: id, label: nombre })),
+              ...(sinTerapeuta ? [{ value: "sin", label: `Sin asignar (${sinTerapeuta})` }] : []),
+            ]}
+            className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200"
+          />
+        )}
         <label className="flex items-center gap-1.5 text-xs text-neutral-600 cursor-pointer">
           <input
             type="checkbox"
@@ -290,7 +326,7 @@ export default function BonosPage() {
 
       <div className="bg-white border border-neutral-100 rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[920px]">
+          <table className="w-full text-sm min-w-[1020px]">
             <thead>
               <tr className="border-b border-neutral-100 text-left text-[11px] uppercase tracking-wide text-neutral-400">
                 {/* El paciente DELANTE de la familia (03/09/2026, Aumenta: «en
@@ -298,6 +334,9 @@ export default function BonosPage() {
                     el paciente»). */}
                 <th className="px-4 py-3 font-medium">Paciente</th>
                 <th className="px-4 py-3 font-medium">Familia</th>
+                {/* Quién da las sesiones (18/09/2026, AV-0183 de Aumenta:
+                    «no aparece el terapeuta al que se le asigna»). */}
+                <th className="px-4 py-3 font-medium">Terapeuta</th>
                 <th className="px-4 py-3 font-medium">Bono</th>
                 <th className="px-4 py-3 font-medium">Sesiones</th>
                 <th className="px-4 py-3 font-medium text-right">Importe</th>
@@ -308,10 +347,10 @@ export default function BonosPage() {
             </thead>
             <tbody>
               {cargando && bonos.length === 0 && (
-                <tr><td colSpan={8} className="text-center py-12 text-xs text-neutral-400">Cargando...</td></tr>
+                <tr><td colSpan={9} className="text-center py-12 text-xs text-neutral-400">Cargando...</td></tr>
               )}
               {!cargando && visibles.length === 0 && (
-                <tr><td colSpan={8} className="text-center py-12 text-xs text-neutral-400">
+                <tr><td colSpan={9} className="text-center py-12 text-xs text-neutral-400">
                   {bonos.length
                     ? "Ningún bono con sesiones libres casa con esos filtros."
                     : "Todavía no hay bonos. Da el primero y su cobro aparecerá pendiente en Cobros."}
@@ -354,7 +393,7 @@ export default function BonosPage() {
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[820px]">
+            <table className="w-full text-sm min-w-[920px]">
               <tbody>
                 {cerrados.map((b) => (
                   <tr key={b.id} className="border-b border-neutral-50 text-neutral-400">
@@ -364,6 +403,7 @@ export default function BonosPage() {
                         <Link href={`/clientes/${b.clientId}`} className="hover:underline">{b.familia || "—"}</Link>
                       ) : (b.familia || "—")}
                     </td>
+                    <td className="px-4 py-2.5 text-xs">{b.terapeuta || "—"}</td>
                     <td className="px-4 py-2.5 text-xs">{b.nombre}</td>
                     <td className="px-4 py-2.5 text-xs"><RotuloSesiones bono={b} /></td>
                     <td className="px-4 py-2.5 text-xs text-right tabular">{b.amount ? formatMoney(b.amount) : "—"}</td>
@@ -423,6 +463,9 @@ function FilaBono({ bono: b, onEditar, onAnular, onRenovar }) {
         {b.clientId ? (
           <Link href={`/clientes/${b.clientId}`} className="hover:underline">{b.familia || "—"}</Link>
         ) : (b.familia || "—")}
+      </td>
+      <td className="px-4 py-3 text-xs text-neutral-600">
+        {b.terapeuta || <span className="italic text-neutral-300">sin asignar</span>}
       </td>
       <td className="px-4 py-3 text-xs text-neutral-600">
         {b.nombre}

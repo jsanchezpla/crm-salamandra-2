@@ -48,6 +48,14 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     if (searchParams.get("clientId")) where.clientId = searchParams.get("clientId");
     if (searchParams.get("patientId")) where.patientId = searchParams.get("patientId");
     /*
+     * Por quién lo da (18/09/2026, AV-0183). `sin` son los que no tienen a
+     * nadie asignado: es la lista con la que se reparte lo que ya estaba dado,
+     * y sin ella habría que pedirlos todos y filtrarlos en el navegador.
+     */
+    const terapeuta = searchParams.get("terapeuta");
+    if (terapeuta === "sin") where.teamMemberId = null;
+    else if (terapeuta) where.teamMemberId = terapeuta;
+    /*
      * `estado` filtra por la COLUMNA (activo / anulado) y no por «agotado»:
      * agotado no está escrito en ninguna parte, sale de contar las citas
      * (`lib/billing/bonos.js`). Filtrarlo en SQL exigiría un contador guardado,
@@ -103,6 +111,23 @@ export const POST = withTenant(async (request, _ctx, ctx) => {
     const importe = muestra.valores.amount;
     const compradoEl = muestra.valores.purchasedAt ?? new Date();
     const notes = muestra.valores.notes;
+
+    /*
+     * ── QUIÉN DA LAS SESIONES ───────────────────────────────────────────────
+     * Se comprueba UNA vez, como el tipo y el importe: lo comparten todos los
+     * del lote. Que no esté puesto es legítimo (un centro sin equipo, o un bono
+     * que todavía no tiene profesional); que esté puesto y no exista, no — sería
+     * dejar en la fila un id que no lleva a ninguna parte, que es exactamente lo
+     * que la regla de cliente+equipo evita al pedir FK real y no texto.
+     */
+    const terapeutaId = muestra.valores.teamMemberId ?? null;
+    if (terapeutaId) {
+      const { TeamMember } = tenantModels;
+      if (!TeamMember) return error("Este centro no tiene plantilla: el bono no puede llevar terapeuta", 422);
+      const persona = await TeamMember.findByPk(terapeutaId, { attributes: ["id"] });
+      if (!persona) return error("Esa persona del equipo no existe", 422);
+    }
+
     const permitirDuplicados = body?.permitirDuplicados === true;
     const creador = await quienLoCrea(request, tenantModels);
 
@@ -189,6 +214,7 @@ export const POST = withTenant(async (request, _ctx, ctx) => {
         clientId,
         clientEmail: correo || null,
         patientId: patientId || null,
+        teamMemberId: terapeutaId,
         eventTypeId: tipo.id,
         nombreDelTipo: tipo.name,
         totalSessions: sesiones,
@@ -230,6 +256,7 @@ export const POST = withTenant(async (request, _ctx, ctx) => {
         after: {
           altas: creados.length,
           tipo: tipo.name,
+          terapeuta: terapeutaId,
           sesiones,
           // En céntimos, como se guarda.
           importe,

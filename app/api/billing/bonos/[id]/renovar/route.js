@@ -38,7 +38,7 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, hasM
     const userRole = request.headers.get("x-user-role") ?? "user";
     if (!puedeDarBonos({ role: userRole, hasModule })) return forbidden(MOTIVO_SIN_PERMISO);
 
-    const { SessionPack, EventType } = tenantModels;
+    const { SessionPack, EventType, TeamMember } = tenantModels;
     if (!SessionPack) return notFound("Ese bono no existe");
 
     const { id } = (await ctx?.params) ?? {};
@@ -54,8 +54,15 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, hasM
     const pedido = limpiarBono(body, { parcial: true });
     if (pedido.problema) return error(pedido.problema, 422);
     const cambios = {};
-    for (const campo of ["totalSessions", "amount", "notes", "patientId", "purchasedAt"]) {
+    for (const campo of ["totalSessions", "amount", "notes", "patientId", "teamMemberId", "purchasedAt"]) {
       if (campo in body) cambios[campo] = pedido.valores[campo];
+    }
+    // Quien lo llevaba se hereda (`renovacionDe`); si en el botón se cambia,
+    // la persona tiene que existir, igual que en el alta.
+    if (cambios.teamMemberId) {
+      if (!TeamMember) return error("Este centro no tiene plantilla: el bono no puede llevar terapeuta", 422);
+      const persona = await TeamMember.findByPk(cambios.teamMemberId, { attributes: ["id"] });
+      if (!persona) return error("Esa persona del equipo no existe", 422);
     }
 
     const valores = renovacionDe(antes, cambios);
@@ -74,6 +81,7 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, hasM
       // aquel funcionaba este también.
       clientEmail: antes.correo || null,
       patientId: valores.patientId,
+      teamMemberId: valores.teamMemberId,
       eventTypeId: tipo.id,
       nombreDelTipo: tipo.name,
       totalSessions: sesiones,

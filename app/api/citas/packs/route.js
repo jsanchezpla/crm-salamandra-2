@@ -30,6 +30,7 @@ import { puedeDarBonos, MOTIVO_SIN_PERMISO } from "../../../../lib/citas/quienDa
 
 const normalizeEmail = (v) => (typeof v === "string" ? v.trim().toLowerCase() : "");
 const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * GET /api/citas/packs?clientId=…&email=… — los bonos VIVOS de una persona
@@ -217,6 +218,23 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
      * Se comprueba que el paciente ES de esa ficha: si no, el bono quedaría
      * atado a la familia de uno y al niño de otra, y no lo encontraría nadie.
      */
+    /*
+     * ── QUIÉN DA LAS SESIONES (18/09/2026, AV-0183 de Aumenta) ──────────────
+     * La otra puerta al mismo dato: el alta desde la ficha. Isabel lo pidió
+     * mirando Facturación → Bonos, pero el bono es el mismo y la columna es la
+     * misma, y dos altas que guardan cosas distintas es como se acaba con media
+     * lista sin terapeuta. Opcional, como en la otra puerta.
+     */
+    let teamMemberId = null;
+    if (body.teamMemberId) {
+      const { TeamMember } = tenantModels;
+      if (!TeamMember) return error("Este centro no tiene plantilla: el bono no puede llevar terapeuta", 422);
+      if (!UUID_RE.test(String(body.teamMemberId))) return error("El terapeuta del bono no es válido", 422);
+      const persona = await TeamMember.findByPk(body.teamMemberId, { attributes: ["id"] });
+      if (!persona) return error("Esa persona del equipo no existe", 422);
+      teamMemberId = persona.id;
+    }
+
     let patientId = null;
     if (body.patientId) {
       const { Patient } = tenantModels;
@@ -273,6 +291,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
         clientEmail: clientEmail || null,
         clientId,
         patientId,
+        teamMemberId,
         eventTypeId: eventType.id,
         totalSessions,
         // Se pagó fuera de la pasarela: no hay plazos que gestionar aquí.

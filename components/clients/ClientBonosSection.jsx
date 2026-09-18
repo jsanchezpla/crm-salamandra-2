@@ -476,6 +476,13 @@ function DarBonoForm({ cliente, pacientes = [], patientFijo = null, onHecho }) {
   const [sinCobro, setSinCobro] = useState(false);
   // Abrir el desplegable al catálogo entero (ver `tiposVisibles`, más abajo).
   const [verTodosLosTipos, setVerTodosLosTipos] = useState(false);
+  /*
+   * QUIÉN DA LAS SESIONES (18/09/2026, AV-0183 de Aumenta). La misma pregunta
+   * que el alta de Facturación → Bonos: son dos puertas al mismo bono, y si
+   * solo una la hiciera, media lista seguiría sin terapeuta.
+   */
+  const [teamMemberId, setTeamMemberId] = useState("");
+  const [equipo, setEquipo] = useState([]);
   const [nota, setNota] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [err, setErr] = useState(null);
@@ -546,6 +553,19 @@ function DarBonoForm({ cliente, pacientes = [], patientFijo = null, onHecho }) {
    */
   const { deBono, resto, hayResto } = useMemo(() => repartirTiposDeBono(tipos), [tipos]);
   const tiposVisibles = verTodosLosTipos || deBono.length === 0 ? tipos : deBono;
+  /*
+   * La plantilla. Sin módulo de equipo la puerta responde 403 y la lista se
+   * queda vacía: entonces el campo no se pinta, en vez de enseñar un
+   * desplegable que nadie puede rellenar.
+   */
+  useEffect(() => {
+    let vivo = true;
+    fetch("/api/team?status=all&limit=200", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { data: {} }))
+      .then((j) => { if (vivo) setEquipo(j?.data?.members ?? []); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, []);
 
   const tipoElegido = tipos.find((x) => String(x.id) === String(eventTypeId)) ?? null;
 
@@ -584,6 +604,9 @@ function DarBonoForm({ cliente, pacientes = [], patientFijo = null, onHecho }) {
           clientEmail: correo || null,
           patientId: patientId || null,
           eventTypeId,
+          // '' = sin asignar, que es un valor legítimo (bonos que da la casa,
+          // centros sin equipo).
+          teamMemberId: teamMemberId || null,
           totalSessions: Number(sesiones) || 1,
           amount: sinCobro || importe === "" ? null : eurosToCents(importe),
           notes: nota.trim() || null,
@@ -678,6 +701,23 @@ function DarBonoForm({ cliente, pacientes = [], patientFijo = null, onHecho }) {
           </p>
         )}
       </div>
+
+      {/* Quién da las sesiones (18/09/2026, AV-0183). Sin equipo no se pinta. */}
+      {equipo.length > 0 && (
+        <div>
+          <label className="block text-[11px] font-medium text-gray-500 mb-1">Terapeuta</label>
+          <select value={teamMemberId} onChange={(e) => setTeamMemberId(e.target.value)} className={inputCls}>
+            <option value="">Sin asignar</option>
+            {equipo.map((m) => (
+              <option key={m.id} value={m.id}>{m.displayName || m.email || "(sin nombre)"}</option>
+            ))}
+          </select>
+          <p className="text-[11px] text-gray-400 mt-1">
+            Quién da las sesiones de este bono. No cambia a quién se le descuentan —eso lo deciden la
+            ficha y el paciente—: es para saber de quién es el bono y su dinero.
+          </p>
+        </div>
+      )}
 
       {/*
         * De quién es (08/09/2026, AV-0055 de Aumenta). Solo sale cuando la

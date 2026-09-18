@@ -53,7 +53,7 @@ export const PATCH = withTenant(async (request, ctx, { tenant, tenantModels, has
     const userRole = request.headers.get("x-user-role") ?? "user";
     if (!puedeDarBonos({ role: userRole, hasModule })) return forbidden(MOTIVO_SIN_PERMISO);
 
-    const { SessionPack, EventType, Patient, Payment } = tenantModels;
+    const { SessionPack, EventType, Patient, Payment, TeamMember } = tenantModels;
     if (!SessionPack) return notFound("Ese bono no existe");
 
     const { id } = (await ctx?.params) ?? {};
@@ -98,11 +98,23 @@ export const PATCH = withTenant(async (request, ctx, { tenant, tenantModels, has
       }
     }
 
+    /*
+     * Cambiar quién lo lleva (18/09/2026, AV-0183). El vacío es un valor: sirve
+     * para QUITAR el que se puso mal, y por eso solo se comprueba la plantilla
+     * cuando de verdad viene alguien.
+     */
+    if (valores.teamMemberId) {
+      if (!TeamMember) return error("Este centro no tiene plantilla: el bono no puede llevar terapeuta", 422);
+      const persona = await TeamMember.findByPk(valores.teamMemberId, { attributes: ["id"] });
+      if (!persona) return error("Esa persona del equipo no existe", 422);
+    }
+
     const tipo = EventType ? await EventType.findByPk(pack.eventTypeId) : null;
     const antesFila = {
       totalSessions: pack.totalSessions,
       amount: pack.amount,
       patientId: pack.patientId,
+      teamMemberId: pack.teamMemberId,
       status: pack.status,
       purchasedAt: pack.purchasedAt,
       notes: pack.notes,

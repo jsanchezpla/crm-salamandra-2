@@ -2735,15 +2735,58 @@ sin tope como «Agotado»: ese arreglo está en `citas.md` («El bono de un
 diagnóstico, en la ficha»). Las dos pantallas anulan el mismo bono y ahora
 avisan con la misma pieza.
 
+### Quién da las sesiones del bono (18/09/2026, AV-0183)
+
+Isabel, de Aumenta: «no aparece el terapeuta al que se le asigna». Al dar un
+bono se elegía paciente, tipo, sesiones, importe y fecha, y **del equipo,
+nadie**: no es que no se enseñara, es que `session_packs` no tenía dónde
+guardarlo. Con 243 bonos dados, repasar los de una terapeuta obligaba a abrir
+ficha por ficha, y el cobro que nace con el bono no se le imputaba a nadie.
+
+Rompía la regla de siempre —**todo registro tiene un CLIENTE y un miembro del
+EQUIPO**, por FK real (`docs/decisions/2026-07-23-conexion-cliente-equipo.md`)—,
+así que lo que se añade es la columna, no un texto.
+
+- `session_packs.team_member_id`, **opcional y NULL por defecto**
+  (`scripts/migrate-session-packs-terapeuta.js`, bloque `citas`, ANTES del
+  despliegue). Hay centros sin equipo y bonos que da la casa.
+- **No se rellena hacia atrás.** El terapeuta NO se puede deducir de las citas
+  del bono: 234 de los 243 de Aumenta no tienen ninguna todavía, porque los
+  bonos se dan por adelantado, antes de la primera sesión. Adivinarlo con los 9
+  que sí las tienen sería escribir un dato que nadie ha dicho. Lo ya dado se
+  reparte a mano, y para eso está el filtro **«Sin asignar (N)»**.
+- **No decide nada.** A quién se le descuentan las sesiones lo siguen diciendo
+  el correo o la ficha, y el paciente es el filtro de dentro de la familia
+  (`lib/citas/packs.js`). Esto es quién lo lleva, para poder mirarlo y para que
+  su dinero tenga dueño.
+- **Las dos puertas lo preguntan**, porque las dos escriben la misma columna: el
+  cajón de Facturación (`DrawerBono`) y el alta desde la ficha
+  (`ClientBonosSection` → `POST /api/citas/packs`). Una sola dejaría media
+  lista sin terapeuta.
+- **Se propone, no se impone**: con UN destinatario, las terapeutas que ya
+  llevan a ese paciente salen arriba marcadas «· le lleva» y entra la de
+  referencia (`ordenarConSugeridos` de `lib/billing/empleadosSugeridos.js`, la
+  misma pieza que el alta de una factura). En un alta en grupo no se propone
+  nadie: cada niño tiene las suyas.
+- **Renovar lo hereda** (`renovacionDe`) y se puede cambiar en el mismo botón.
+  El bono de un **diagnóstico** nace con el terapeuta del expediente
+  (`diagnosticos.therapist_id`), que ya está escrito.
+- **El vacío es un valor**: sirve para quitar al que se puso mal, y por eso ni
+  el alta ni el PATCH lo rechazan.
+- En pantalla: columna **Terapeuta** en las dos tablas de `/facturacion/bonos`,
+  desplegable para filtrar (montado con los que salen en la lista, sin pedir
+  nada al servidor) y el buscador encuentra también por su nombre. La API acepta
+  `GET /api/billing/bonos?terapeuta=<id>` y `?terapeuta=sin`.
+
 ### Piezas
 
 | | |
 | --- | --- |
-| **Pantallas** | `/facturacion/bonos` (todos, con filtros por tipo, estado y «sin cobrar»; cuadro de agotados y anulados abajo), `/facturacion/bonos/tipos` (los grupos), `/facturacion/bonos/tipos/[id]` (quién lo lleva + los que pasaron, y «Añadir al grupo»). Desde el 12/09/2026 un bono SIN TOPE (`total` a null: el de un expediente de diagnóstico, ver «Diagnóstico» en `clinica.md`) se rotula «sin tope · diagnóstico» con enlace a `/clinica/diagnosticos`, que es donde se ve su barra de horas, y NO tiene «Renovar» ni «Volver a darlo»: copiarían `totalSessions` null y la API lo resolvería a las sesiones del tipo, o sea que nacería un bono CON tope |
+| **Pantallas** | `/facturacion/bonos` (todos, con filtros por tipo, estado, terapeuta y «sin cobrar»; cuadro de agotados y anulados abajo), `/facturacion/bonos/tipos` (los grupos), `/facturacion/bonos/tipos/[id]` (quién lo lleva + los que pasaron, y «Añadir al grupo»). Desde el 12/09/2026 un bono SIN TOPE (`total` a null: el de un expediente de diagnóstico, ver «Diagnóstico» en `clinica.md`) se rotula «sin tope · diagnóstico» con enlace a `/clinica/diagnosticos`, que es donde se ve su barra de horas, y NO tiene «Renovar» ni «Volver a darlo»: copiarían `totalSessions` null y la API lo resolvería a las sesiones del tipo, o sea que nacería un bono CON tope |
 | **Endpoints** | `GET/POST /api/billing/bonos` · `GET/PATCH /api/billing/bonos/[id]` · `POST /api/billing/bonos/[id]/renovar` · `GET /api/billing/bonos/tipos` (`?todos=1` para el desplegable del alta) · `GET /api/billing/bonos/tipos/[id]`. Todos gateados por `billing`, y el que escribe también por `puedeDarBonos` (`lib/citas/quienDaBonos.js`: dirección o quien lleve Facturación) |
 | **Lib** | `lib/billing/bonos.js` (puro: estado, validación, grupos, renovación, totales; desde el 12/09/2026 `bonoSinTope` —`total` null explícito—, con el que `estadoDelBono` da siempre `vivo` y `rotuloDelBono` «Sin tope · N usadas») · `lib/billing/bonosConSesiones.js` (servidor: los bonos con sus sesiones y su cobro) · `lib/billing/altaDeBono.js` (el bono y su cobro en la misma transacción; desde el 12/09/2026 acepta `totalSessions: null`, `diagnosticoId` y `cobro: { conceptId, texto, invoiceText }`, que `cobroPendienteDeBono` de `cobroDelBono.js` admite igual, para que el pendiente de un diagnóstico se llame como su producto —«Diagnóstico Simple»— y no «Bono «DIAGNÓSTICO»»; sin ellos es el alta de siempre) · `lib/billing/tiposDeBono.js` (puro: qué tipos de cita llevan bono y cuáles son citas sueltas, para los desplegables del alta y el filtro; ver «Qué tipos salen al dar un bono») |
 | **Componentes** | `components/billing/DrawerBono.jsx` (alta, alta en un grupo y edición) · `components/billing/useAccionesDeBono.js` (anular, reactivar, renovar, con sus avisos) |
-| **Migración** | Del submódulo, **ninguna**: la tabla y sus columnas ya estaban (`migrate-cobro-de-bono`, `traer-bonos-de-organizate`). El 12/09/2026 `migrate-diagnosticos` (bloque `citas`, ANTES del despliegue) le añade `session_packs.diagnostico_id` y deja `total_sessions` NULLABLE (NULL = sin tope); los bonos que había siguen con su número |
+| **Migración** | Del submódulo, **ninguna**: la tabla y sus columnas ya estaban (`migrate-cobro-de-bono`, `traer-bonos-de-organizate`). El 12/09/2026 `migrate-diagnosticos` (bloque `citas`, ANTES del despliegue) le añade `session_packs.diagnostico_id` y deja `total_sessions` NULLABLE (NULL = sin tope); los bonos que había siguen con su número. El 18/09/2026 `migrate-session-packs-terapeuta` (bloque `citas`, ANTES del despliegue) le añade `session_packs.team_member_id` a NULL, sin rellenar nada hacia atrás |
 | **Pruebas** | `scripts/_smoke-bonos.mjs` y `scripts/_smoke-tipos-de-bono.mjs` (`node:test`, ligeras, en `npm test`) |
 | **Auditoría** | `bono.created`, `bono.updated`, `bono.anulado`, `bono.renovado` (prefijo `bono` → Facturación en `lib/actividad/etiquetas.js`). No hay `bono.deleted`: un bono no se borra, se anula |
 

@@ -32,6 +32,9 @@ import SelectorDestinatarios from "./SelectorDestinatarios.jsx";
 import { eurosToCents, centsToEuros } from "../../lib/payments/money.js";
 import { rotuloDelBono, parteDelCobro, SESIONES_MAX } from "../../lib/billing/bonos.js";
 import { repartirTiposDeBono, tiposQueSePuedenDar } from "../../lib/billing/tiposDeBono.js";
+// Los terapeutas del paciente, arriba del desplegable: la misma regla que el
+// alta de una factura (31/08/2026), y por eso se lee de ahí y no se copia.
+import { ordenarConSugeridos } from "../../lib/billing/empleadosSugeridos.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -77,6 +80,16 @@ export default function DrawerBono({
   const [fecha, setFecha] = useState(bono?.compradoEl ? String(bono.compradoEl).slice(0, 10) : hoyIso());
   const [nota, setNota] = useState(bono?.notes ?? "");
   const [patientId, setPatientId] = useState(bono?.patientId ?? "");
+  /*
+   * QUIÉN DA LAS SESIONES (18/09/2026, AV-0183 de Aumenta: «no aparece el
+   * terapeuta al que se le asigna»).
+   *
+   * Sigue siendo opcional —hay bonos que da la casa y centros sin equipo— pero
+   * ahora se puede decir, se guarda en el bono y se ve en la lista.
+   */
+  const [teamMemberId, setTeamMemberId] = useState(bono?.teamMemberId ?? "");
+  const [equipo, setEquipo] = useState([]);
+  const [terapeutasDelPaciente, setTerapeutasDelPaciente] = useState([]);
   const [pacientesDeLaFamilia, setPacientesDeLaFamilia] = useState([]);
   const [permitirDuplicados, setPermitirDuplicados] = useState(false);
   /*
@@ -123,6 +136,56 @@ export default function DrawerBono({
     !!eventTypeId && !deBono.some((t) => String(t.id) === String(eventTypeId));
   const mostrandoTodos = verTodosLosTipos || elegidoFuera || deBono.length === 0;
   const tiposVisibles = mostrandoTodos ? dables : deBono;
+  /*
+   * La plantilla. Sin módulo de equipo la puerta responde 403 y la lista se
+   * queda vacía: entonces el campo no se pinta, en vez de enseñar un
+   * desplegable mudo que nadie puede rellenar.
+   */
+  useEffect(() => {
+    let vivo = true;
+    fetch("/api/team?status=all&limit=200", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { data: {} }))
+      .then((j) => { if (vivo) setEquipo(j?.data?.members ?? []); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, []);
+
+  /*
+   * Las terapeutas que YA llevan a ese paciente, para ponerlas arriba y
+   * proponer la primera. El CRM lo sabe (`lib/clinica/terapeutas.js`) y hasta
+   * hoy Bonos no se lo preguntaba a nadie.
+   *
+   * Solo con UN destinatario: en un alta en grupo de ocho niños, cada uno tiene
+   * las suyas y proponer las del primero para todos sería peor que no proponer
+   * nada. El bono del grupo lo lleva quien se elija a mano.
+   */
+  const pacienteParaSugerir = editando
+    ? bono?.patientId ?? null
+    : destinatarios.length === 1
+      ? destinatarios[0]?.patientId ?? null
+      : null;
+  useEffect(() => {
+    if (!pacienteParaSugerir) { setTerapeutasDelPaciente([]); return; }
+    let vivo = true;
+    fetch(`/api/pacientes/${pacienteParaSugerir}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { data: {} }))
+      .then((j) => {
+        if (!vivo) return;
+        // La lista viene con `teamMemberId` (terapeutasEfectivos), no `id`.
+        const ids = (j?.data?.therapists ?? []).map((t) => t.teamMemberId ?? t.id).filter(Boolean);
+        setTerapeutasDelPaciente(ids);
+        // Si nadie ha elegido todavía, entra la de referencia (la primera). No
+        // se pisa una elección hecha a mano.
+        if (ids.length) setTeamMemberId((actual) => actual || ids[0]);
+      })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [pacienteParaSugerir]);
+
+  const equipoOrdenado = useMemo(
+    () => ordenarConSugeridos(equipo, terapeutasDelPaciente),
+    [equipo, terapeutasDelPaciente]
+  );
 
   // Los hermanos, para poder decir de quién es el bono (AV-0055). Solo en la
   // edición: en el alta el paciente lo trae el selector de destinatarios.
@@ -169,6 +232,9 @@ export default function DrawerBono({
 
     const cuerpo = {
       eventTypeId,
+      // '' = sin asignar, que es un valor: también sirve para quitar el que se
+      // puso mal.
+      teamMemberId: teamMemberId || null,
       totalSessions: n,
       // A céntimos aquí y no en la API: es la unidad de `session_packs` y de
       // Stripe, y la conversión vive en el borde del formulario.
@@ -191,6 +257,7 @@ export default function DrawerBono({
               purchasedAt: cuerpo.purchasedAt,
               notes: cuerpo.notes,
               patientId: patientId || null,
+              teamMemberId: cuerpo.teamMemberId,
             }),
           })
         : await fetch("/api/billing/bonos", {
@@ -352,6 +419,33 @@ export default function DrawerBono({
               </p>
             )}
           </div>
+
+          {/* ── QUIÉN LO DA (18/09/2026, AV-0183) ──────────────────────────
+              Detrás del tipo de bono porque es la otra mitad de la misma frase:
+              «diez sesiones de logopedia, con Marta». Sin equipo no se pinta. */}
+          {equipo.length > 0 && (
+            <div>
+              <label className="block text-[11px] font-medium text-neutral-500 mb-1">Terapeuta</label>
+              <Select
+                value={String(teamMemberId)}
+                onChange={setTeamMemberId}
+                options={[
+                  { value: "", label: "Sin asignar" },
+                  ...equipoOrdenado.map((m) => ({
+                    value: String(m.id),
+                    label: `${m.displayName || m.email || "(sin nombre)"}${m.sugerido ? " · le lleva" : ""}`,
+                  })),
+                ]}
+                searchable
+                className="w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200"
+              />
+              <p className="text-[11px] text-neutral-400 mt-1">
+                Quién da las sesiones de este bono. Las de «le lleva» salen arriba porque ya son las
+                terapeutas de ese paciente. No cambia a quién se le descuentan las sesiones —eso lo
+                decide la familia y el paciente—: es para saber de quién es el bono y su dinero.
+              </p>
+            </div>
+          )}
 
           {editando && pacientesDeLaFamilia.length > 1 && (
             <div>

@@ -64,6 +64,33 @@ export function defineSessionPack(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      /**
+       * QUIÉN DA LAS SESIONES DE ESTE BONO (18/09/2026, AV-0183 de Aumenta).
+       *
+       * Isabel: «no aparece el terapeuta al que se le asigna». Al dar un bono se
+       * elegía paciente, tipo, sesiones, importe y fecha — y nadie del equipo.
+       * Con 243 bonos dados en Aumenta, repasar los de una terapeuta obligaba a
+       * abrir ficha por ficha, y el cobro que nace con el bono no se le imputaba
+       * a nadie.
+       *
+       * Es la regla de siempre del CRM: todo registro tiene un CLIENTE y un
+       * miembro del EQUIPO, por FK real y nunca por texto
+       * (`docs/decisions/2026-07-23-conexion-cliente-equipo.md`).
+       *
+       * NULL = sin asignar, que es lo que llevan los que ya estaban dados y lo
+       * que sigue valiendo. No se puede rellenar hacia atrás deduciéndolo de las
+       * citas: 234 de los 243 de Aumenta no tienen ninguna todavía, porque los
+       * bonos se dan por adelantado, antes de la primera sesión.
+       *
+       * NO decide nada: el bono se engancha a las citas por correo o por ficha,
+       * y el paciente es el filtro de dentro de la familia
+       * (`lib/citas/packs.js`). Esto es quién lo lleva, para poder mirarlo y
+       * para que su dinero tenga dueño.
+       */
+      teamMemberId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       eventTypeId: {
         type: DataTypes.UUID,
         allowNull: false,
@@ -195,6 +222,7 @@ export function defineSessionPack(sequelize) {
         { fields: ["client_email", "event_type_id", "status"], name: "session_packs_email_type_idx" },
         { fields: ["client_id"], name: "session_packs_client_idx" },
         { fields: ["patient_id"], name: "session_packs_patient_idx" },
+        { fields: ["team_member_id"], name: "session_packs_team_idx" },
         { fields: ["diagnostico_id"], name: "session_packs_diagnostico_idx" },
       ],
     }

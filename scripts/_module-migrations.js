@@ -436,6 +436,10 @@ export const MODULES = {
     // adelante, así que contando citas saldrían todos enteros. ANTES del
     // despliegue: el modelo pide la columna por nombre.
     "migrate-session-packs-previas",
+    // Quién da las sesiones del bono (18/09/2026, AV-0183 de Aumenta): sin la
+    // columna, Bonos no se podía mirar por profesional y su cobro no tenía
+    // dueño. ANTES del despliegue: el modelo pide la columna por nombre.
+    "migrate-session-packs-terapeuta",
     // De quién es un hueco reservado (08/09/2026): el nombre del niño sale del
     // rótulo, que es texto libre, y pasa a viajar por el enlace.
     "migrate-bloqueos-paciente",
