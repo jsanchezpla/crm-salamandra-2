@@ -18,7 +18,7 @@ import InterventionPlanSection from "@/components/clinica/InterventionPlanSectio
 import PreviewBanner from "../../clinica/_components/PreviewBanner.jsx";
 import PropuestaIA from "@/components/clinica/PropuestaIA.jsx";
 import { REPORT_TYPES_NUEVOS, REPORT_TYPE_LABEL, nombreDelInforme } from "@/lib/clinica/serialize.js";
-import { fechaNacimientoCorta as fmtFechaNacimiento } from "@/lib/clinica/edad.js";
+import { edadDe, edadParaGuardar, fechaNacimientoCorta as fmtFechaNacimiento } from "@/lib/clinica/edad.js";
 import {
   aFormulario,
   apartadosConPlantillas,
@@ -687,6 +687,14 @@ export default function PacienteFichaPage() {
 
   const [showEdit, setShowEdit] = useState(false);
   const [editForm, setEditForm] = useState(null);
+  /*
+   * La edad del formulario abierto, a partir de lo que hay tecleado AHORA en
+   * «Fecha de nacimiento» (AV-0178). Misma función que usan la cabecera, el
+   * listado y los informes, para que no digan tres edades distintas el día del
+   * cumpleaños: `lib/clinica/edad.js`. Sin `age` a propósito —aquí interesa lo
+   * que sale de la fecha, no lo que quedara escrito—.
+   */
+  const edadDelFormulario = editForm?.birthDate ? edadDe({ birthDate: editForm.birthDate }) : null;
   const [showReport, setShowReport] = useState(false);
   // `sourceSessionIds`: qué registros de sesión alimentan el informe evolutivo
   // (sprint 2026-07, punto 3.1). Selección LIBRE: el trimestre natural no
@@ -851,6 +859,10 @@ export default function PacienteFichaPage() {
       // La fecha de nacimiento (03/09/2026, AV-0034): existía en la tabla y
       // la trajo Organízate, pero la ficha solo enseñaba la edad suelta.
       birthDate: patient.birthDate ?? "",
+      // Su DNI (18/09/2026, AV-0179): la ficha lo enseñaba y no había
+      // ninguna pantalla donde escribirlo — 502 de 1.201 lo trajeron de
+      // Organízate y el resto no se podía completar.
+      dni: patient.dni ?? "",
       educationCenter: patient.educationCenter ?? "", educationLevel: patient.educationLevel ?? "",
       attendanceFrequency: patient.attendanceFrequency ?? "", referralReason: patient.referralReason ?? "",
       referredBy: patient.referredBy ?? "", objectives: (patient.objectives ?? []).join(", "), status: patient.status ?? "active",
@@ -874,7 +886,9 @@ export default function PacienteFichaPage() {
     try {
       const payload = {
         ...editForm,
-        age: editForm.age === "" ? null : Number(editForm.age),
+        // Con fecha de nacimiento, la edad escrita se BORRA (AV-0178): la
+        // regla, con su prueba, en `lib/clinica/edad.js`.
+        age: edadParaGuardar(editForm),
         birthDate: editForm.birthDate || null,
         objectives: editForm.objectives.split(",").map((s) => s.trim()).filter(Boolean),
         // Las filas a medio rellenar (persona sin elegir) no se mandan. El
@@ -1474,18 +1488,44 @@ export default function PacienteFichaPage() {
                 <input className={inputCls} placeholder="Nombre *" value={editForm.firstName} onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })} />
                 <input className={inputCls} placeholder="Apellidos *" value={editForm.lastName} onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })} />
               </div>
+              {/* La edad SALE de la fecha en cuanto se teclea (18/09/2026,
+                  AV-0178 de Aumenta: «¿se podría calcular la edad automáticamente
+                  poniendo la fecha de nacimiento? Y que aparezca en el campo de
+                  edad de la ficha»). Se calculaba ya para la cabecera y para los
+                  informes desde el 03/09 (`lib/clinica/edad.js`), pero aquí la
+                  casilla seguía en blanco y parecía que había que rellenarla a
+                  mano. Con fecha, la casilla se va: una edad guardada miente al
+                  año siguiente y la fecha no. Sin fecha, sigue estando. */}
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
-                  <span className="text-[10px] uppercase tracking-wider text-neutral-400">Fecha de nacimiento</span>
+                  <span className="text-[10px] uppercase tracking-wider text-neutral-400">
+                    Fecha de nacimiento
+                    {edadDelFormulario != null && (
+                      <span className="ml-1.5 normal-case tracking-normal text-neutral-500">
+                        · {edadDelFormulario} año{edadDelFormulario === 1 ? "" : "s"}
+                      </span>
+                    )}
+                  </span>
                   <input className={`${inputCls} mt-0.5`} type="date" value={editForm.birthDate} onChange={(e) => setEditForm({ ...editForm, birthDate: e.target.value })} />
                 </label>
-                <label className="block">
-                  <span className="text-[10px] uppercase tracking-wider text-neutral-400">Edad (si no se sabe la fecha)</span>
-                  <input className={`${inputCls} mt-0.5`} type="number" min={0} max={120} placeholder="Edad" value={editForm.age} onChange={(e) => setEditForm({ ...editForm, age: e.target.value })} />
-                </label>
+                {editForm.birthDate ? (
+                  <div className="block">
+                    <span className="text-[10px] uppercase tracking-wider text-neutral-400">Edad</span>
+                    <p className="mt-0.5 text-sm text-neutral-600 leading-[38px]">
+                      {edadDelFormulario != null ? `${edadDelFormulario} año${edadDelFormulario === 1 ? "" : "s"}` : "—"}
+                      <span className="ml-1.5 text-[11px] text-neutral-400">se calcula sola</span>
+                    </p>
+                  </div>
+                ) : (
+                  <label className="block">
+                    <span className="text-[10px] uppercase tracking-wider text-neutral-400">Edad (si no se sabe la fecha)</span>
+                    <input className={`${inputCls} mt-0.5`} type="number" min={0} max={120} placeholder="Edad" value={editForm.age} onChange={(e) => setEditForm({ ...editForm, age: e.target.value })} />
+                  </label>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <input className={inputCls} placeholder="Curso" value={editForm.educationLevel} onChange={(e) => setEditForm({ ...editForm, educationLevel: e.target.value })} />
+                <input className={inputCls} placeholder="DNI / NIE" value={editForm.dni} onChange={(e) => setEditForm({ ...editForm, dni: e.target.value })} />
               </div>
               <input className={inputCls} placeholder="Centro escolar" value={editForm.educationCenter} onChange={(e) => setEditForm({ ...editForm, educationCenter: e.target.value })} />
               <div className="grid grid-cols-2 gap-3">

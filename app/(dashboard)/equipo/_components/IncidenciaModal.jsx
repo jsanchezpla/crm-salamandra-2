@@ -677,6 +677,17 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
             </div>
           )}
 
+          {/* Primero lo que PASÓ y luego lo que se HIZO (18/09/2026, AV-0182
+              de Aumenta). Isabel: «usamos el cuadro de observaciones para
+              describir la incidencia y el de acciones para cuando hemos hecho
+              algo con ella». Estaban al revés: se abría la ficha y lo primero
+              que pedía era el remedio de algo que aún no se había contado.
+              Ahora van en el orden en que ocurren —observaciones, acción,
+              verificación—, que es además el de la exportación. */}
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-neutral-400">Observaciones</label>
+            <TextareaCrece value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className={`mt-1 ${inputCls}`} placeholder="Contexto, detalle, lo que haga falta recordar…" />
+          </div>
           <div>
             {/* La columna existía desde el principio; el formulario no la
                 enseñaba, así que no había forma de escribirla (04/08/2026). */}
@@ -710,10 +721,6 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
             </p>
           </div>
 
-          <div>
-            <label className="text-[10px] uppercase tracking-wider text-neutral-400">Observaciones</label>
-            <TextareaCrece value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className={`mt-1 ${inputCls}`} placeholder="Contexto, detalle, lo que haga falta recordar…" />
-          </div>
 
           {/* Documentos adjuntos (26/08/2026, Aumenta): justificantes, fotos,
               informes. Con paciente, el documento se ve también en su ficha;
