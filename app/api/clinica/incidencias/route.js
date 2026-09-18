@@ -27,7 +27,9 @@ const INCLUDES = includesDeIncidencias;
 
 /**
  * GET /api/clinica/incidencias — lista con filtros.
- * ?status= ?category= ?patientId= ?assignedToId= ?reportedById= ?mine=1
+ * ?status= ?category= ?patientId= ?assignedToId= ?reportedById= ?mine=1 ?faltas=1
+ * Los de varios valores (`status`, `category`, `assignedToId`, `reportedById`)
+ * aceptan comas o el parámetro repetido — ver `lib/clinica/filtroIncidencias.js`.
  * Devuelve tambien `yoSoy`: el miembro del equipo que esta mirando (o null).
  */
 export const GET = withTenant(async (request, _rc, ctx) => {
@@ -41,7 +43,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
 
   // Los filtros y el alcance viven en lib/clinica/filtroIncidencias.js desde el
   // 11/09/2026: son los mismos para la lista y para el Excel (AV-0125).
-  const { where, yoSoy, misVistas, verVistas, esAdmin } = await whereDeIncidencias({ request, sp, M, ctx });
+  const { where, whereSinPestana, yoSoy, misVistas, verVistas, esAdmin } = await whereDeIncidencias({ request, sp, M, ctx });
 
   const rows = await Incidencia.findAll({
     where,
@@ -53,10 +55,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   // Conteo por estado (para las pestañas), sin filtro de estado ni de pestaña:
   // las de siempre se cuentan por estado y las faltas aparte (las abiertas,
   // que son las que hay que gestionar).
-  const baseWhere = { ...where };
-  delete baseWhere.status;
-  delete baseWhere.falta;
-  const all = await Incidencia.findAll({ where: baseWhere, attributes: ["status", "falta"], raw: true });
+  const all = await Incidencia.findAll({ where: whereSinPestana, attributes: ["status", "falta"], raw: true });
   const counts = { pending: 0, in_progress: 0, resolved: 0, faltas: 0 };
   for (const r of all) {
     if (r.falta) {
