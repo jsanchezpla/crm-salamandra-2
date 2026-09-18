@@ -19,7 +19,7 @@ import MultiSelect from "@/components/ui/MultiSelect.jsx";
 import { useDialogo } from "@/components/ui/Dialogo.jsx";
 import ModalFestivos from "@/components/citas/ModalFestivos.jsx";
 import { COLOR_BLOQUEO_POR_DEFECTO, colorTextoSobre } from "@/lib/citas/coloresBloqueo.js";
-import { SIN_PROFESIONAL, COLOR_CITA_POR_DEFECTO } from "@/lib/citas/filtros.js";
+import { SIN_PROFESIONAL, COLOR_CITA_POR_DEFECTO, duenoSugeridoDelBloqueo } from "@/lib/citas/filtros.js";
 import { filtroAlAbrirLaAgenda } from "@/lib/citas/filtroInicialAgenda.js";
 import {
   memoriaDelNavegador,
@@ -883,7 +883,10 @@ export default function CitasModule({
     const d = iso ? new Date(iso) : null;
     const date = d && !Number.isNaN(d.getTime()) ? toDateInput(d) : "";
     const time = d && !Number.isNaN(d.getTime()) && iso.includes("T") ? toTimeInput(d) : "";
-    setCreacion({ date, time });
+    // Si se está mirando la agenda de UNA profesional, el bloqueo que se cree
+    // desde aquí nace a su nombre y no al de quien mira (18/09/2026). La regla
+    // —y por qué con dos o más no se adivina— en `lib/citas/filtros.js`.
+    setCreacion({ date, time, duenoSugerido: duenoSugeridoDelBloqueo(visibleTmIds) });
   }
 
   /*
