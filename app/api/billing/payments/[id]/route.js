@@ -1,9 +1,10 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { logBillingAudit, resumenImporte, datosPeticion } from "../../../../../lib/billing/audit.js";
-import { ok, noContent, error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
+import { ok, error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { updateInvoiceStatus } from "../../../../../lib/billing/updateInvoiceStatus.js";
 import { billingHasPatients, pacienteValeParaElCobro } from "../../../../../lib/billing/patientLink.js";
 import { exigeMetodo } from "../../../../../lib/billing/caja.js";
+import { repartoAlBorrarLaCuota } from "../../../../../lib/billing/eliminarCobro.js";
 
 const VALID_STATUS = new Set(["pending", "completed", "failed", "refunded"]);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -212,16 +213,32 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
   }
 });
 
+/**
+ * DELETE /api/billing/payments/[id] — borrar el cobro, y con `?cuota=1` también
+ * la cuota que lo generó (18/09/2026, AV-0190 de Aumenta: «quieren saber que si al
+ * eliminar el cobro se borra la cuota — quieren tener la opción de eliminar
+ * también la cuota»).
+ *
+ * Sin el parámetro no se toca la cuota, que es lo de siempre: la cuota sigue
+ * activa y volverá a generar el cobro del mes en curso. El porqué de preguntarlo
+ * y el reparto de lo que se lleva la cuota, en `lib/billing/eliminarCobro.js`.
+ *
+ * Los dos borrados van por separado a propósito: primero el cobro (con su
+ * `payment.deleted`) y después la cuota (con su `cuota.deleted`), para que el
+ * rastro cuente las dos cosas aunque la segunda falle.
+ */
 export const DELETE = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
 
-    const { Payment, Invoice } = tenantModels;
+    const { Payment, Invoice, Cuota } = tenantModels;
     const { id } = await params;
     const payment = await Payment.findByPk(id);
     if (!payment) return notFound("Cobro no encontrado");
 
+    const tambienLaCuota = new URL(request.url).searchParams.get("cuota") === "1";
     const invoiceId = payment.invoiceId;
+    const cuotaId = payment.cuotaId ?? null;
     // Borrar un cobro cambia lo que el cliente debe: tiene que quedar rastro.
     const antesBorrar = resumenImporte(payment);
     const idPago = payment.id;
@@ -235,10 +252,59 @@ export const DELETE = withTenant(async (request, { params }, { tenant, tenantMod
       before: antesBorrar,
       after: null,
     });
+
+    let cuota = null;
+    if (tambienLaCuota && cuotaId && Cuota) {
+      cuota = await borrarLaCuota({ tenantModels, cuotaId, salvo: idPago, tenant, request });
+    }
+
     const invoice = await Invoice.findByPk(invoiceId);
     if (invoice) await updateInvoiceStatus(invoice, Payment);
-    return noContent();
+    return ok({ borrado: true, cuota });
   } catch (err) {
     return serverError(err);
   }
 });
+
+/**
+ * Borra la cuota del cobro que se acaba de eliminar y los cobros suyos que
+ * todavía no son dinero ni papel. No lanza: el cobro YA está borrado y que la
+ * cuota no se pueda quitar no puede convertir eso en un 500 — se cuenta en la
+ * respuesta para que la pantalla lo diga.
+ */
+async function borrarLaCuota({ tenantModels, cuotaId, salvo, tenant, request }) {
+  const { Cuota, Payment } = tenantModels;
+  try {
+    const cuota = await Cuota.findByPk(cuotaId);
+    if (!cuota) return { borrada: false, motivo: "la cuota ya no existe" };
+
+    const suyos = await Payment.findAll({ where: { cuotaId: cuota.id } });
+    const { seBorran, seQuedan } = repartoAlBorrarLaCuota(suyos, { salvo });
+    for (const p of seBorran) await p.destroy();
+
+    await cuota.destroy();
+    await logBillingAudit({
+      tenantId: tenant.id,
+      ...datosPeticion(request),
+      action: "cuota.deleted",
+      entity: "Cuota",
+      entityId: cuotaId,
+      // Cuántos cobros se quedan sin cuota que los explique, que es lo que hay
+      // que poder mirar dentro de un mes.
+      before: {
+        clienteId: cuota.clientId ?? null,
+        pacienteId: cuota.patientId ?? null,
+        importe: cuota.amount != null ? String(cuota.amount) : null,
+        desde: cuota.startDate ?? null,
+        activa: !!cuota.active,
+        desdeElCobro: salvo,
+        cobrosBorrados: seBorran.length,
+        cobrosQueSeQuedan: seQuedan.length,
+      },
+      after: null,
+    });
+    return { borrada: true, cobrosBorrados: seBorran.length, cobrosQueSeQuedan: seQuedan.length };
+  } catch (err) {
+    return { borrada: false, motivo: err?.message || "no se pudo borrar la cuota" };
+  }
+}

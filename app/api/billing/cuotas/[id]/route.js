@@ -1,8 +1,9 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, errorConDatos, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { logBillingAudit, datosPeticion } from "../../../../../lib/billing/audit.js";
-import { limpiarCuota, cuadrarBajaYActiva, cobroSePuedeRehacer, mesVigente } from "../../../../../lib/billing/cuotas.js";
+import { limpiarCuota, cuadrarBajaYActiva, mesVigente } from "../../../../../lib/billing/cuotas.js";
 import { sincronizarCobrosDelTramo } from "../../../../../lib/billing/cobrosDelTramo.js";
+import { repartoAlBorrarLaCuota } from "../../../../../lib/billing/eliminarCobro.js";
 
 /**
  * PATCH/DELETE /api/billing/cuotas/[id] — modificar, dar de baja o eliminar una
@@ -163,9 +164,11 @@ export const DELETE = withTenant(async (request, { params }, { tenant, tenantMod
       );
     }
 
-    // Los que no son dinero ni papel se van con la cuota que los creó.
-    const sueltos = await Payment.findAll({ where: { cuotaId: cuota.id, status: "pending" } });
-    const borrables = sueltos.filter((p) => cobroSePuedeRehacer(p).ok);
+    // Los que no son dinero ni papel se van con la cuota que los creó. El
+    // reparto vive en `lib/billing/eliminarCobro.js` porque lo comparte con el
+    // «Eliminar el cobro y la cuota» de la pantalla de Cobros (18/09/2026).
+    const suyos = await Payment.findAll({ where: { cuotaId: cuota.id } });
+    const { seBorran: borrables } = repartoAlBorrarLaCuota(suyos);
     for (const p of borrables) await p.destroy();
 
     const antes = resumenCuota(cuota);
