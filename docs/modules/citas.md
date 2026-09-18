@@ -2146,6 +2146,17 @@ Rodrigo el mismo día:
 - Las dos cosas las cuenta `GET /api/citas/vista` (`vistaDe()` en
   `lib/citas/vistaAgenda.js`, prueba `_smoke-vista-agenda.mjs`) y el
   calendario las aplica como `hiddenDays`, `slotMinTime` y `slotMaxTime`.
+- **El fin de semana se abre POR SEMANAS, no para siempre (18/09/2026,
+  AV-0173)**. Hasta hoy, una sola cita en sábado o domingo anulaba el ajuste
+  `lv` y todas las semanas salían con siete columnas: en Aumenta la única cita
+  de fin de semana de sus doce mil era una de prueba del 12/09, y le estrechó
+  la agenda a veinte personas. Ahora `vistaDe()` devuelve `hiddenDays` según el
+  ajuste y, aparte, `finesDeSemanaConCita` (las FECHAS de sábado o domingo con
+  cita, en la misma ventana que la rejilla); el calendario decide tramo a tramo
+  con `diasOcultosEn(vista, desde, hasta)` —el `hasta` es exclusivo, como el
+  `currentEnd` de FullCalendar—, así que la semana que tiene una cita el sábado
+  la enseña y las demás siguen en lunes a viernes. Ninguna cita se queda
+  invisible, que era lo que protegía la regla vieja.
 - **«Ajustar»** (botón de la botonera): encoge las franjas (`.agenda-compacta`
   en `app/globals.css`) y con `expandRows` la jornada entera cabe en la
   pantalla sin desplazarse; se recuerda en `localStorage`.

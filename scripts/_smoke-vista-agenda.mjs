@@ -13,7 +13,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { semanaLaboralDe, esSemanaValida, diasOcultos, horasDeApertura, vistaDe, aMinutos, aHoraFc } from "../lib/citas/vistaAgenda.js";
+import { semanaLaboralDe, esSemanaValida, diasOcultos, horasDeApertura, vistaDe, diasOcultosEn, aMinutos, aHoraFc } from "../lib/citas/vistaAgenda.js";
 
 describe("semanaLaboralDe", () => {
   it("«lv» esconde el fin de semana; cualquier otra cosa es la semana completa", () => {
@@ -67,7 +67,7 @@ describe("horasDeApertura", () => {
 describe("vistaDe", () => {
   it("junta las dos reglas en lo que pide el calendario", () => {
     const v = vistaDe({ settings: { citas: { semanaLaboral: "lv" } } }, [{ startTime: "09:00", endTime: "20:00" }]);
-    assert.deepEqual(v, { semanaLaboral: "lv", hiddenDays: [0, 6], finDeSemanaConCitas: false, slotMinTime: "08:30:00", slotMaxTime: "20:30:00", desdeHorario: true });
+    assert.deepEqual(v, { semanaLaboral: "lv", hiddenDays: [0, 6], finesDeSemanaConCita: [], finDeSemanaConCitas: false, slotMinTime: "08:30:00", slotMaxTime: "20:30:00", desdeHorario: true });
   });
 
   it("las citas reales ABREN la rejilla cuando caen fuera del horario de apertura (la demo: franjas de mañana, citas a las 18:15)", () => {
@@ -81,12 +81,18 @@ describe("vistaDe", () => {
     assert.deepEqual([v.slotMinTime, v.slotMaxTime, v.desdeHorario], ["08:30:00", "21:00:00", true]);
   });
 
-  it("con citas en fin de semana, el fin de semana NO se esconde aunque el ajuste sea L-V", () => {
-    const v = vistaDe({ settings: { citas: { semanaLaboral: "lv" } } }, [], { citas: { desde: "09:00", hasta: "14:00", finDeSemana: true } });
-    assert.deepEqual(v.hiddenDays, []);
+  it("el ajuste del centro manda SIEMPRE: las citas de fin de semana viajan aparte, por fecha", () => {
+    const v = vistaDe({ settings: { citas: { semanaLaboral: "lv" } } }, [], {
+      citas: { desde: "09:00", hasta: "14:00", finDeSemana: true, dias: ["2026-09-12", "basura", "2026-11-07"] },
+    });
+    // Antes esto devolvía [] y le quitaba la semana L-V a todo el centro
+    // durante catorce días por UNA cita (AV-0173).
+    assert.deepEqual(v.hiddenDays, [0, 6]);
+    assert.deepEqual(v.finesDeSemanaConCita, ["2026-09-12", "2026-11-07"]);
     assert.equal(v.finDeSemanaConCitas, true);
     const sin = vistaDe({ settings: { citas: { semanaLaboral: "lv" } } }, [], { citas: { desde: "09:00", hasta: "14:00", finDeSemana: false } });
     assert.deepEqual(sin.hiddenDays, [0, 6]);
+    assert.deepEqual(sin.finesDeSemanaConCita, []);
   });
 
   it("unas citas mal leídas (sin horas, o fin antes del inicio) no rompen nada", () => {
@@ -94,6 +100,41 @@ describe("vistaDe", () => {
     assert.deepEqual(vistaDe({ settings: {} }, [{ startTime: "09:00", endTime: "14:00" }], { citas: null }), base);
     assert.deepEqual(vistaDe({ settings: {} }, [{ startTime: "09:00", endTime: "14:00" }], { citas: { desde: "x", hasta: "y" } }), base);
     assert.deepEqual(vistaDe({ settings: {} }, [{ startTime: "09:00", endTime: "14:00" }], { citas: { desde: "23:30", hasta: "00:30" } }), base);
+  });
+});
+
+describe("diasOcultosEn", () => {
+  // La semana del 7 al 13 de septiembre de 2026 (lunes a domingo) tiene la
+  // cita del sábado 12; la del 14 al 20, ninguna.
+  const vista = vistaDe({ settings: { citas: { semanaLaboral: "lv" } } }, [], {
+    citas: { desde: "09:00", hasta: "20:00", dias: ["2026-09-12"] },
+  });
+
+  it("la semana con cita el sábado enseña el fin de semana", () => {
+    assert.deepEqual(diasOcultosEn(vista, new Date(2026, 8, 7), new Date(2026, 8, 14)), []);
+  });
+
+  it("las demás semanas siguen en lunes a viernes", () => {
+    assert.deepEqual(diasOcultosEn(vista, new Date(2026, 8, 14), new Date(2026, 8, 21)), [0, 6]);
+    assert.deepEqual(diasOcultosEn(vista, new Date(2026, 7, 31), new Date(2026, 8, 7)), [0, 6]);
+  });
+
+  it("el final del tramo es EXCLUSIVO, como el de FullCalendar", () => {
+    // Del 5 al 12: el sábado 12 ya no entra.
+    assert.deepEqual(diasOcultosEn(vista, "2026-09-05", "2026-09-12"), [0, 6]);
+    assert.deepEqual(diasOcultosEn(vista, "2026-09-12", "2026-09-13"), []);
+  });
+
+  it("un mes entero se abre si alguno de sus fines de semana tiene cita", () => {
+    assert.deepEqual(diasOcultosEn(vista, new Date(2026, 8, 1), new Date(2026, 9, 1)), []);
+    assert.deepEqual(diasOcultosEn(vista, new Date(2026, 9, 1), new Date(2026, 10, 1)), [0, 6]);
+  });
+
+  it("sin tramo, sin fechas o con un centro de semana completa, manda el ajuste", () => {
+    assert.deepEqual(diasOcultosEn(vista, null, null), [0, 6]);
+    assert.deepEqual(diasOcultosEn({ hiddenDays: [0, 6] }, new Date(2026, 8, 7), new Date(2026, 8, 14)), [0, 6]);
+    assert.deepEqual(diasOcultosEn({ hiddenDays: [], finesDeSemanaConCita: ["2026-09-12"] }, new Date(2026, 8, 7), new Date(2026, 8, 14)), []);
+    assert.deepEqual(diasOcultosEn(null, new Date(2026, 8, 7), new Date(2026, 8, 14)), []);
   });
 });
 
