@@ -2475,3 +2475,37 @@ solo sin explicar por qué se lee como un error de la pantalla. **Es una
 sugerencia, no una valla**: el servidor impone los permisos igual. Pruebas: las
 seis últimas de `_smoke-citas-filtro-profesional.mjs`.
 
+
+## Los dos «ese hueco está ocupado», y la serie que no se pierde entera (18/09/2026, AV-0167 de Aumenta)
+
+> «Estoy en octubre, en la agenda de Elena. Intento crear una cita semanal […] y
+> me dice que hay otra cita en ese hueco y no me deja crear la cita para poder
+> programarla hasta el 30/06/2027.»
+
+El POST de citas devuelve 409 por dos motivos que no se parecen en nada, y la
+pantalla los trataba igual:
+
+- **Un BLOQUEO o un festivo** (`motivo: "bloqueo"`): el centro cerrado o alguien
+  de vacaciones. Se avisa y se puede insistir (`permitirBloqueo`,
+  `permitirFestivo`); es lo de siempre y sigue igual.
+- **OTRA CITA en el mismo rato** (`motivo: "solape"`): encima de una cita no
+  cabe otra, y no hay permiso que lo cambie. El diálogo decía «Ese hueco está
+  bloqueado» y ofrecía **«Crearla igualmente»**, que reenviaba y volvía a
+  fallar — de ahí la tarea «Crear cita igualmente… no hace nada»: no es que no
+  hiciera nada, es que no podía hacer nada. Ahora se dice «Ahí ya hay otra
+  cita», con la hora y sin botón inútil.
+
+Y lo que de verdad dejaba sin trabajo: **una serie de cuarenta semanas se perdía
+entera porque la primera chocaba**. Las repeticiones sí saben saltarse las que
+chocan y contarlo al final; la primera cortaba el flujo. Cuando el choque es un
+solape y hay repetición, se pregunta «¿Sigo con las otras N?» y se crean las que
+caben. Si la primera no llegó a existir, **el correo a la familia lo manda la
+primera que sí entre** (`omitirCorreo` deja de ser fijo en el bucle), y el
+resumen lo dice: «La primera no cabía, así que no se ha creado. De las demás han
+entrado N».
+
+**Dónde**: `app/api/citas/bookings/route.js` (los dos `errorConDatos` con
+`motivo`) y `modules/default/citas/NuevaCitaDrawer.jsx` (`primeraCreada`). El
+`motivo` viaja aparte del texto a propósito: un cliente viejo que no lo mire
+sigue leyendo el mismo mensaje, y la pantalla cae al texto («Solapa con otra
+cita…») si no llega.

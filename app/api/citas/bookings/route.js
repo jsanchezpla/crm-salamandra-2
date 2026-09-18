@@ -2,7 +2,7 @@ import { fmtDateTime } from "@/lib/utils/format.js";
 import { Op } from "sequelize";
 import { filtroPorNombre } from "../../../../lib/utils/busquedaDb.js";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
-import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
+import { ok, created, error, errorConDatos, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { filtrarCitas } from "../../../../lib/citas/dinero.js";
 import {
   normalizeString,
@@ -484,17 +484,31 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
         const detalle = cuantos === 1
           ? `(${rotulos[0] ?? "sin etiqueta"})`
           : `por ${cuantos} huecos a la vez (${rotulos.join(", ") || "sin etiqueta"}): si has quitado uno, quedan los demás`;
-        return error(
+        /*
+         * `motivo` para que la pantalla sepa QUÉ preguntar (18/09/2026,
+         * AV-0167): este 409 sí se perdona con `permitirBloqueo`, y el de
+         * abajo —otra cita en el mismo rato— no se perdona con nada. Sin
+         * distinguirlos, el diálogo decía «Ese hueco está bloqueado» a los dos
+         * y ofrecía «Crearla igualmente» para algo que iba a volver a fallar.
+         */
+        return errorConDatos(
           `Ese tramo está bloqueado ${detalle}. Vuelve a enviarlo confirmando si quieres crearla igualmente.`,
-          409
+          409,
+          { motivo: "bloqueo" }
         );
       }
     }
 
     // Solapamiento (solo con citas del MISMO profesional, o sin asignar).
+    // `motivo: "solape"` avisa a la pantalla de que esto NO se puede forzar:
+    // no hay permiso que quepa encima de otra cita (18/09/2026, AV-0167).
     const overlap = await findBookingOverlap(Booking, { scheduledAt, duration, teamMemberId });
     if (overlap) {
-      return error(`Solapa con otra cita activa el ${fmtDateTime(overlap.scheduledAt)}`, 409);
+      return errorConDatos(
+        `Solapa con otra cita activa el ${fmtDateTime(overlap.scheduledAt)}`,
+        409,
+        { motivo: "solape" }
+      );
     }
 
     // Paciente asignado (Clínica/Pacientes). Opcional.
