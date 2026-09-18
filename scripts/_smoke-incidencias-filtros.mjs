@@ -16,7 +16,9 @@
  *   · los TIPOS (pendientes, en proceso, resueltas) se suman entre ellos y con
  *     las faltas, que viven en otra rama;
  *   · «las mías» (`mine=1`) es «la registré yo O soy responsable» —las dos cosas
- *     que pidió Rosa— y sigue siendo cosa de dirección.
+ *     que pidió Rosa— y sigue siendo cosa de dirección;
+ *   · y NO esconde las faltas, que desde AV-0197 no son de nadie (18/09/2026),
+ *     sin tocar por eso el alcance de quien no es dirección, que es privacidad.
  *
  * Se prueba lo que DEVUELVE `whereDeIncidencias`, con modelos de pega: sin base
  * de datos y sin servidor.
@@ -172,10 +174,12 @@ test("mine=1 son las que registré YO O tengo asignadas, no solo las asignadas",
   assert.equal(w.id, undefined);
   const ramas = w[Op.and] ?? [];
   assert.equal(ramas.length, 1, "«las mías» entra como UN and, sin pisar nada");
-  const alternativas = ramas[0][Op.or] ?? [];
-  assert.equal(alternativas.length, 2, "tiene que ser un O de dos: asignadas y registradas");
+  // Dentro va «las mías O es una falta» (18/09/2026), y «las mías» es a su vez
+  // «soy responsable O la registré yo»: se busca en los dos niveles.
+  const aplanar = (nodo) => (nodo?.[Op.or] ? nodo[Op.or].flatMap(aplanar) : [nodo]);
+  const hojas = aplanar(ramas[0]);
   assert.ok(
-    alternativas.some((a) => a.reportedById === ISABEL),
+    hojas.some((a) => a?.reportedById === ISABEL),
     "las que registró ella tienen que entrar: eran justo las que se perdían",
   );
 });
@@ -269,6 +273,57 @@ test("los recuentos se cuentan sin el tipo, pero con el resto de filtros", async
   assert.equal(whereSinPestana[Op.or], undefined, "la rama de la pestaña también se va");
 });
 
+// ── Las faltas se salen de «las mías» (18/09/2026) ──────────────────────────
+
+test("«Solo las mías» no esconde las faltas: no tienen dueño", async () => {
+  const { M } = modelosDePega({ fichaDe: ISABEL, enlaces: { [ISABEL]: ["i9"] } });
+  const { where: w } = await whereDeIncidencias({
+    request: peticion("u1"),
+    sp: new URLSearchParams("faltas=1&mine=1"),
+    M,
+    ctx: ctxAdmin,
+  });
+  const alternativas = (w[Op.and] ?? [])[0]?.[Op.or] ?? [];
+  assert.equal(alternativas.length, 2, "«las mías» O «es una falta»");
+  const ramaFaltas = alternativas.find((a) => a.falta);
+  assert.ok(ramaFaltas, "tiene que haber una rama que deje pasar las faltas");
+  assert.equal(ramaFaltas.falta[Op.ne], null);
+});
+
+test("y esa puerta NO se la abre a quien no es dirección: eso es privacidad", async () => {
+  // AV-0018: una terapeuta no ve las incidencias de otra. Si las faltas se
+  // salieran también de ESE freno, todo el equipo vería a qué paciente le falló
+  // la cita de quién.
+  const { M } = modelosDePega({ fichaDe: ISABEL, enlaces: { [ISABEL]: ["i9"] } });
+  const { where: w } = await whereDeIncidencias({
+    request: peticion("u1"),
+    sp: new URLSearchParams("faltas=1&mine=1"),
+    M,
+    ctx: { user: { role: "user" } },
+  });
+  const ramas = w[Op.and] ?? [];
+  assert.equal(ramas.length, 1, "solo el alcance, sin la puerta de las faltas");
+  const alternativas = ramas[0][Op.or] ?? [];
+  assert.ok(
+    !alternativas.some((a) => a?.falta),
+    "el alcance de quien no es dirección no puede dejar pasar faltas ajenas",
+  );
+});
+
+test("el contador de «Faltas» deja de decir 0: se cuenta con la misma puerta", async () => {
+  const { M } = modelosDePega({ fichaDe: ISABEL, enlaces: { [ISABEL]: ["i9"] } });
+  const { whereSinPestana } = await whereDeIncidencias({
+    request: peticion("u1"),
+    sp: new URLSearchParams("mine=1"),
+    M,
+    ctx: ctxAdmin,
+  });
+  // Los recuentos se sacan de este `where`; si la rama de las faltas no
+  // estuviera aquí, la marca seguiría diciendo 0 aunque la lista las enseñara.
+  const alternativas = (whereSinPestana[Op.and] ?? [])[0]?.[Op.or] ?? [];
+  assert.ok(alternativas.some((a) => a?.falta), "la puerta de las faltas cuenta también para los recuentos");
+});
+
 // ── Lo que la pantalla manda ────────────────────────────────────────────────
 
 test("la pantalla manda un parámetro por valor, no uno con comas sin validar", async () => {
@@ -288,4 +343,7 @@ test("la pantalla manda un parámetro por valor, no uno con comas sin validar", 
     "«Solo las mías» tiene que venir puesto de fábrica");
   // Y «Faltas» sigue siendo un parámetro suyo, no un estado más.
   assert.ok(/params\.set\("faltas", "1"\)/.test(src));
+  // La excepción de las faltas tiene que estar ESCRITA en la casilla: una regla
+  // que no se lee es una regla que sorprende.
+  assert.ok(/Las faltas salen siempre/.test(src), "la casilla tiene que decir que las faltas no se filtran");
 });

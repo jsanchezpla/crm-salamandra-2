@@ -20,7 +20,7 @@
 | **Interruptores y parámetros** | ninguno que lea el código (ni `featureFlags` ni `logicOverrides`); lo que decide es el rol (fresco de BD en `access`), `visibleModules: ["team", "clinica"]` y `requiresAll` de `components/layout/Sidebar.jsx`, y `users.module_access` |
 | **Pantallas propias** | ninguna (letrero `ui_override` vacío en producción) |
 | **Scripts** | activar: `node scripts/enable-module.js <slug> team` (y `team_avanzado`); `MODULES.team` de `scripts/_module-migrations.js`: `migrate-team-fields`, `migrate-rename-therapist-to-employee`, `migrate-team-modules-salary`, `migrate-team-members-avatar-color`, `migrate-team-specialties`, `migrate-team-weekly-hours`, `migrate-team-member-hours` (+ CORE `migrate-team-members-block-color` y `migrate-team-colegiada`); lo de `team_avanzado` va en `MODULES.clinica` (`migrate-incidencias-module`, `migrate-incentive-items`, `migrate-clinica-performance-roles`) · seeds: `seed-team-demo.js` (`npm run db:seed:team`), `_hechos/seed-aumenta-equipo-real.js` (el equipo real de Aumenta, 24/07/2026: no relanzar) · accesos: `check-module-access.js` (`npm run db:check-access`), `grant-module-access.js` (ojo: `[]` = «no tocar», al revés que el gate) · Actividad: `migrate-audit-logs-index.js` (master, ONE_OFF ya corrido), `podar-audit-logs.js` (retención: las cuatro demos de `lib/demo/demos.js` 7 días, clientes reales 3 años; lo lanza `crm-poda.timer` los domingos) · `npm run db:check-links` (`team_member_id` en `plans`, `interactions`, `client_notes`…) · correo de cuenta: `migrate-users-email-contacto.js` (`npm run db:migrate:correo-cuenta`, MASTER, va ANTES del despliegue) y `backfill-correo-cuenta.js` (copia el correo de la ficha; en seco por defecto) |
-| **Pruebas** | `scripts/_smoke-incidencias-filtros.mjs` (`node:test`, 18/09/2026, en `npm test`, 24 casos): los filtros del listado de incidencias de varios valores — que uno suelto filtra como siempre, que varios entran con O, que faltas + estados son dos ramas y no una condición imposible, que lo que no vale se cae antes del `where`, que «las mías» son las registradas Y las asignadas, y que la pantalla manda un parámetro por valor y se abre con «Solo las mías» puesto · `scripts/_smoke-correo-cuenta.mjs` (`node:test`, 26/08/2026, en `npm test`, 28 casos): la forma de un correo, la caída a `email`, que MANDE el identificador cuando dos cuentas responden al mismo texto, que las tres puertas lo exijan y que dos identificadores no den el doble de intentos · `scripts/_smoke-team-borrar.mjs` (`node:test`, 26/08/2026, en `npm test`): las tres puertas del borrado, que las columnas sin FK sigan declaradas y que ni la pantalla ni el modal decidan por su cuenta · `scripts/_smoke-actividad-etiquetas.mjs` (`node:test`, 19/08/2026, en `npm test`): `lib/actividad/etiquetas.js` —las frases, el traductor genérico, módulos y prefijos— y un CRUCE que lee todos los `action: "x.y"` de `app/api` y `lib` y exige frase propia (el 19/08 faltaban 21 y ganaron la suya ese día; `DEUDA_CONOCIDA` está vacía): una acción nueva sin frase pone la prueba en rojo; y que ningún prefijo con frase caiga en «Otros» (el filtro «Configuración» buscaba `tenant.*` y se escribe `configuracion.*`) · `scripts/_smoke-team-colegiada.mjs` (`node:test`, 28/08/2026, en `npm test`, 18 casos): el nº de colegiación y la titulación de quien firma un informe — que el serializer los devuelve `null` y nunca `""` (una cadena vacía imprimiría una línea en blanco bajo una firma), que el POST los mete de verdad en el `TeamMember.create` y no solo los lee, que el PATCH los edita y vaciarlos vale, y que la migración está en **CORE** y no en `MODULES.team` (el modelo declara las columnas para TODOS los tenants: en el módulo sería un 42703 en Equipo y en los desplegables de profesionales de cualquier cliente sin `team`) · las que nombran `TeamMember` son de Citas (`_smoke-horario-profesional.mjs`, `_smoke-bloqueos-quien-ve.mjs`, `_smoke-citas-sin-profesional.mjs`) |
+| **Pruebas** | `scripts/_smoke-incidencias-filtros.mjs` (`node:test`, 18/09/2026, en `npm test`, 27 casos): los filtros del listado de incidencias de varios valores — que uno suelto filtra como siempre, que varios entran con O, que faltas + estados son dos ramas y no una condición imposible, que lo que no vale se cae antes del `where`, que «las mías» son las registradas Y las asignadas, y que la pantalla manda un parámetro por valor y se abre con «Solo las mías» puesto · `scripts/_smoke-correo-cuenta.mjs` (`node:test`, 26/08/2026, en `npm test`, 28 casos): la forma de un correo, la caída a `email`, que MANDE el identificador cuando dos cuentas responden al mismo texto, que las tres puertas lo exijan y que dos identificadores no den el doble de intentos · `scripts/_smoke-team-borrar.mjs` (`node:test`, 26/08/2026, en `npm test`): las tres puertas del borrado, que las columnas sin FK sigan declaradas y que ni la pantalla ni el modal decidan por su cuenta · `scripts/_smoke-actividad-etiquetas.mjs` (`node:test`, 19/08/2026, en `npm test`): `lib/actividad/etiquetas.js` —las frases, el traductor genérico, módulos y prefijos— y un CRUCE que lee todos los `action: "x.y"` de `app/api` y `lib` y exige frase propia (el 19/08 faltaban 21 y ganaron la suya ese día; `DEUDA_CONOCIDA` está vacía): una acción nueva sin frase pone la prueba en rojo; y que ningún prefijo con frase caiga en «Otros» (el filtro «Configuración» buscaba `tenant.*` y se escribe `configuracion.*`) · `scripts/_smoke-team-colegiada.mjs` (`node:test`, 28/08/2026, en `npm test`, 18 casos): el nº de colegiación y la titulación de quien firma un informe — que el serializer los devuelve `null` y nunca `""` (una cadena vacía imprimiría una línea en blanco bajo una firma), que el POST los mete de verdad en el `TeamMember.create` y no solo los lee, que el PATCH los edita y vaciarlos vale, y que la migración está en **CORE** y no en `MODULES.team` (el modelo declara las columnas para TODOS los tenants: en el módulo sería un 42703 en Equipo y en los desplegables de profesionales de cualquier cliente sin `team`) · las que nombran `TeamMember` son de Citas (`_smoke-horario-profesional.mjs`, `_smoke-bloqueos-quien-ve.mjs`, `_smoke-citas-sin-profesional.mjs`) |
 | **Decisiones** | `../decisions/2026-07-23-conexion-cliente-equipo.md` · `../decisions/2026-07-28-repaso-de-seguridad.md` (el rol fresco de `withTenant`, de lo que viven los endpoints de `access`) · `../decisions/2026-08-01-activar-un-modulo-tiene-dos-puertas.md` · `../decisions/2026-08-26-el-correo-de-una-cuenta-no-es-su-usuario.md` |
 | **En este doc** | Modelos · Filtrado de campos sensibles · Eventos de auditoría · Endpoints · Frontend · Migración y backfill · El correo de una cuenta — 2026-08-26 · Actividad (registro legible) — 2026-07-27 |
 
@@ -744,10 +744,37 @@ registra» y marcado como responsable (se quita con un clic). Sale de su ficha d
 equipo (`lib/team/currentTeamMember.js`), nunca de su correo: una cuenta sin
 ficha se queda como estaba y es el servidor quien rellena.
 
-Prueba: `scripts/_smoke-incidencias-filtros.mjs` (`node:test`, en `npm test`, 24
+### Y las faltas se salen de «las mías» (18/09/2026, el mismo día)
+
+El choque se vio horas después: AV-0197 había dejado de asignarle la falta a
+nadie (`assignedToId: null`, y quien la registra es la terapeuta que la marcó) y
+«Solo las mías» va por dueño. Quien lleva administración no es ninguna de las dos
+cosas en una falta, así que abría Incidencias y veía **0 de 42** — y la marca
+«Faltas» también decía 0, porque los recuentos se sacan con el mismo filtro
+puesto. Las dos piezas eran correctas por separado; juntas escondían las faltas
+justo a quien las gestiona («en administración recibimos casi todas», Olga).
+
+Jorge eligió entre tres arreglos posibles: las faltas se salen del filtro. La
+condición de `mine=1` pasa a ser «las mías **O** es una falta», y **la casilla lo
+dice** («Las faltas salen siempre: no son de nadie»): una excepción que no se lee
+es una excepción que sorprende. Como los recuentos usan ese mismo `where`, la
+marca se arregla sola.
+
+**Lo que esto NO toca, y es lo importante**: el ALCANCE de quien no es dirección
+(`whereIncidenciasVisibles`) se queda igual. Ese es el freno de privacidad de
+AV-0018 —una terapeuta no ve las incidencias de otra—, y sacarle las faltas
+enseñaría a todo el equipo a qué paciente le falló la cita de quién. La puerta
+nueva es solo la casilla de dirección.
+
+Medido en producción el 18/09/2026, antes y después: administración pasa de ver
+0 faltas a ver las 42, y la marca «Faltas» de 0 a 36 (las abiertas reales); una
+terapeuta sigue viendo 0 por el alcance.
+
+Prueba: `scripts/_smoke-incidencias-filtros.mjs` (`node:test`, en `npm test`, 27
 casos) sobre lo que DEVUELVE `whereDeIncidencias` con modelos de pega — un valor
-suelto, varios, la mezcla de faltas y estados, lo que no vale, «las mías» y lo
-que manda la pantalla.
+suelto, varios, la mezcla de faltas y estados, lo que no vale, «las mías», que la
+puerta de las faltas NO se le abre a quien no es dirección, que los recuentos la
+llevan, y lo que manda la pantalla.
 
 ## El listado de incidencias se exporta a Excel (11/09/2026, AV-0125 de Aumenta)
 

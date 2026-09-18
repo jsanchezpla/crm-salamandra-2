@@ -236,7 +236,7 @@ export default function IncidenciasPage() {
             {soloLasMias
               ? "Ves las incidencias que registraste tú o que tienes asignadas. Dirección las ve todas."
               : misMarcado
-                ? "Ves las que registraste tú o tienes asignadas. Quita «Solo las mías» en Filtros para verlas todas."
+                ? "Ves las que registraste tú o tienes asignadas, más todas las faltas. Quita «Solo las mías» en Filtros para verlas todas."
                 : "Registro y seguimiento de incidencias del equipo."}
           </p>
         </div>
@@ -382,7 +382,10 @@ export default function IncidenciasPage() {
               <span>
                 Solo las mías
                 <span className="block text-neutral-400">
-                  Las que registré yo o tengo asignadas.
+                  {/* Que la excepción se LEA (18/09/2026): las faltas no tienen
+                      responsable desde AV-0197, así que un filtro que va por
+                      dueño las dejaba fuera a todo el mundo. */}
+                  Las que registré yo o tengo asignadas. Las faltas salen siempre: no son de nadie.
                   {!data?.yoSoy && " Esta cuenta no tiene ficha de equipo, así que ahora mismo no acota nada."}
                 </span>
               </span>
