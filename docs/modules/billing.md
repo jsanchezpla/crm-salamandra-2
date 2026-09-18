@@ -1140,6 +1140,17 @@ endpoint `GET`/`POST /api/billing/invoices/bulk-issue`, lógica pura en
   esa fecha es una constante compartida en el endpoint) y no guarda nada ni
   gasta número: aquí lo emitido son decenas de facturas de un botonazo y no se
   borran.
+- **Qué se IMPRIME en cada línea** (17/09/2026, Aumenta: «facturas emitidas
+  formato»): manda el `invoice_text` del cobro —el «Texto en la factura» de sus
+  conceptos, que escribe el plan de cuotas—; si el cobro no lo trae (los
+  apuntados a mano desde Cobros nacen sin él) se imprime el «Texto en la
+  factura» del concepto que dice `payments.concept_id`, que `bulk-issue` baja
+  del catálogo y le pasa a `lineasDeCuota` en `textosPorConcepto`. **La NOTA es
+  el último recurso**, solo para el cobro que no tiene ni texto ni concepto: es
+  de puertas adentro y en la emisión del 17/09 salieron impresas «Reserva de
+  plaza ya abonada: −30 €» y «Pendiente según Organízate … el CRM tenía 260,00
+  €», que es justo lo que se prohibió el 09/09. El `name` del concepto («Cuota
+  T.O. 45x1») no se imprime NUNCA: es el rótulo interno.
 - **Una factura por pagador** (`payments.client_id`): el reparto de cuota entre
   dos pagadores ya viene resuelto, cada uno factura lo que pagó. Una **línea
   por cobro** («Cuota septiembre 2026», con la nota del cobro detrás).

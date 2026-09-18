@@ -241,6 +241,49 @@ describe("lineasDeCuota — se imprime el texto de factura, y tal cual", () => {
     assert.equal(l2.description, "Cuota septiembre 2026 — Pagado en recepción");
   });
 
+  /*
+   * ── 17/09/2026, Aumenta: «facturas emitidas formato» ───────────────────
+   * Un cobro apuntado a mano desde Cobros no tiene `invoiceText` —solo lo
+   * rellena el plan de cuotas—, y su factura caía a la NOTA: en la emisión
+   * del 17/09 salieron impresas «Reserva de plaza ya abonada: −30 €» y
+   * «Pendiente según Organízate … el CRM tenía 260,00 €». Si el cobro dice de
+   * qué concepto es, manda el «Texto en la factura» de ese concepto.
+   */
+  it("sin texto de factura, imprime el concepto del catálogo y NUNCA la nota", () => {
+    const aMano = cobro("c5", FAM_GARCIA, 115, {
+      conceptId: "k1",
+      notes: "Cuota septiembre 2026 — Cuota Pedagogía 45x2 — Reserva de plaza ya abonada: −30 € — Pendiente según Organízate: 151.25 € (Organízate #20281); el CRM tenía 260.00 €",
+    });
+    const catalogo = [{ id: "k1", name: "Cuota Pedagogía 45x2", description: "2 sesiones de 45 min semanales" }];
+    const [linea] = lineasDeCuota({ cobros: [aMano], mes: "2026-09", vatRate: 0, textosPorConcepto: catalogo });
+    assert.equal(linea.description, "2 sesiones de 45 min semanales");
+    assert.ok(!/Organ[íi]zate|Reserva de plaza|CRM ten|Cuota septiembre/.test(linea.description));
+    assert.equal(linea.unitPrice, 115);
+  });
+
+  it("y el nombre interno del concepto no se imprime: sin texto, manda la nota", () => {
+    const aMano = cobro("c6", FAM_GARCIA, 50, { conceptId: "k2", notes: "Pagado en recepción" });
+    const sinTexto = [{ id: "k2", name: "Cuota T.O. 45x1", description: "   " }];
+    const [linea] = lineasDeCuota({ cobros: [aMano], mes: "2026-09", vatRate: 0, textosPorConcepto: sinTexto });
+    assert.equal(linea.description, "Cuota septiembre 2026 — Pagado en recepción");
+  });
+
+  it("y un cobro de otro concepto, o sin catálogo, sigue como estaba", () => {
+    const catalogo = [{ id: "k1", description: "2 sesiones de 45 min semanales" }];
+    const otro = cobro("c7", FAM_GARCIA, 60, { conceptId: "k9", notes: "Cuota septiembre 2026 — Cuota HHSS 1h" });
+    const [l1] = lineasDeCuota({ cobros: [otro], mes: "2026-09", vatRate: 0, textosPorConcepto: catalogo });
+    assert.equal(l1.description, "Cuota septiembre 2026 — Cuota HHSS 1h");
+    const [l2] = lineasDeCuota({ cobros: [otro], mes: "2026-09", vatRate: 0 });
+    assert.equal(l2.description, "Cuota septiembre 2026 — Cuota HHSS 1h");
+  });
+
+  it("y el texto de factura del cobro sigue ganándole al catálogo", () => {
+    const conTexto = cobro("c8", FAM_GARCIA, 90, { conceptId: "k1", invoiceText: "Terapia 45 min semanales", notes: "lo que sea" });
+    const catalogo = [{ id: "k1", description: "2 sesiones de 45 min semanales" }];
+    const [linea] = lineasDeCuota({ cobros: [conTexto], mes: "2026-09", vatRate: 0, textosPorConcepto: catalogo });
+    assert.equal(linea.description, "Terapia 45 min semanales");
+  });
+
   it("y el cuadre con lo cobrado sigue siendo exacto", () => {
     const lines = lineasDeCuota({
       cobros: [cobro("c4", "fam1", 190, { invoiceText: "Terapia 1 h semanal" })],
