@@ -62,11 +62,14 @@ describe("las pantallas leen la regla y no su propia copia", () => {
     assert.equal(OPCIONES_DE_COBRO.length, 4);
   });
 
-  it("Cobros, la ficha del cliente y la del paciente llaman a `formaDeCobro`", () => {
+  it("Cobros, las dos fichas y el Excel llaman a `formaDeCobro`", () => {
     for (const ruta of [
       "../app/(dashboard)/facturacion/cobros/page.jsx",
       "../components/billing/ClientPaymentsSection.jsx",
       "../components/billing/PatientBillingSection.jsx",
+      // El Excel se baja de la misma pantalla: si dijera «Transferencia» donde
+      // la tabla dice «Ninguno», la queja volvería por otra puerta.
+      "../app/api/billing/exports/payments/route.js",
     ]) {
       const src = lee(ruta);
       assert.match(src, /formaDeCobro\(/, `${ruta} no usa la regla`);

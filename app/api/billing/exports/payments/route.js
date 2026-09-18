@@ -5,8 +5,8 @@ import { parseSortOrder } from "@/lib/billing/parseSort.js";
 import { xlsxResponse, baseUrlFrom, MONEY_FMT, fmtDateEs } from "@/lib/billing/exportXlsx.js";
 import { whereDeBusquedaCobros, palabrasDeBusqueda, familiasConPacienteQueCasa } from "@/lib/billing/busquedaCobros.js";
 import { billingHasPatients } from "@/lib/billing/patientLink.js";
+import { formaDeCobro, FORMAS_DE_COBRO } from "@/lib/billing/formaDeCobro.js";
 
-const METHOD = { card: "Tarjeta", transfer: "Transferencia", cash: "Efectivo", direct_debit: "Domiciliación" };
 const STATUS = { completed: "Completado", pending: "Pendiente", failed: "Fallido", refunded: "Reembolsado" };
 
 /**
@@ -114,8 +114,9 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, tenant, hasM
         ...(conPaciente ? { paciente: paciente || "—" } : {}),
         cliente: cliente?.name || "—",
         factura,
-        // Sin método = un pendiente que nadie ha cobrado todavía (10/09/2026).
-        metodo: METHOD[p.method] ?? p.method ?? "Sin decidir",
+        // Un cobro pendiente no dice por dónde entró el dinero, aquí tampoco:
+        // la misma regla que la pantalla (18/09/2026, AV-0188).
+        metodo: formaDeCobro(p),
         fecha: fmtDateEs(p.paidAt),
         estado: STATUS[p.status] ?? p.status,
         amount: Number(p.amount || 0),
@@ -131,7 +132,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, tenant, hasM
         { label: "Desde", value: from || "—" },
         { label: "Hasta", value: to || "—" },
         { label: "Estado", value: status ? STATUS[status] ?? status : "Todos" },
-        { label: "Método", value: method ? METHOD[method] ?? method : "Todos" },
+        { label: "Método", value: method ? FORMAS_DE_COBRO[method] ?? method : "Todos" },
         { label: "Generado", value: new Date().toLocaleString("es-ES") },
       ],
     });
