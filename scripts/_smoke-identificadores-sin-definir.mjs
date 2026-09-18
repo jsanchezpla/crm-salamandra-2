@@ -31,19 +31,53 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-test("ningún identificador sin definir en app, lib, components, modules y scripts", () => {
-  // Se llama al binario por su ruta y no por `npm run`: así no depende de que
+/*
+ * ── DÓNDE ESTÁ ESLINT (18/09/2026) ─────────────────────────────────────────
+ * Se pedía por una ruta fija, `RAIZ/node_modules/eslint/bin/eslint.js`, y en
+ * una copia de trabajo del repo sin dependencias instaladas eso no existe: la
+ * prueba salía ROJA sin que hubiera nada mal. Con varias sesiones abriendo
+ * worktrees a la vez, ese rojo aparecía antes de cada push y costaba el rato
+ * de comprobar que era mentira. Ahora se resuelve como cualquier otro import
+ * —subiendo por los `node_modules` desde la raíz del repo— y, si de verdad no hay
+ * dependencias, la prueba se SALTA diciendo por qué en vez de acusar al
+ * código. Si hay dependencias pero falta eslint, eso sí es un fallo: alguien
+ * se ha llevado la herramienta que vigila esto.
+ */
+function buscaEslint(desde) {
+  let dir = desde;
+  for (;;) {
+    const candidato = join(dir, "node_modules", "eslint", "bin", "eslint.js");
+    if (existsSync(candidato)) return candidato;
+    const padre = dirname(dir);
+    if (padre === dir) return null;
+    dir = padre;
+  }
+}
+
+const HAY_DEPENDENCIAS = existsSync(join(RAIZ, "node_modules"));
+const ESLINT = buscaEslint(RAIZ);
+
+test("ningún identificador sin definir en app, lib, components, modules y scripts", (t) => {
+  if (!ESLINT) {
+    if (HAY_DEPENDENCIAS) {
+      assert.fail("hay node_modules pero no eslint: instala las dependencias (npm ci) o mira qué se lo ha llevado");
+    }
+    t.skip("esta copia del repo no tiene dependencias instaladas (npm ci); el chequeo se pasa donde sí las hay");
+    return;
+  }
+  // Se llama al binario directamente y no por `npm run`: así no depende de que
   // el `package.json` conserve el nombre del script ni de cómo resuelva npm
   // los ejecutables en Windows.
   const r = spawnSync(
     process.execPath,
     [
-      join(RAIZ, "node_modules", "eslint", "bin", "eslint.js"),
+      ESLINT,
       "--no-config-lookup",
       "-c", "eslint.undef.mjs",
       "--quiet",
