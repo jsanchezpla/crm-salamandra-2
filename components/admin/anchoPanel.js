@@ -53,5 +53,9 @@ export const MAX_ANCHO_PANEL = "max-w-[1800px]";
  * @returns {string}
  */
 export function anchoPanel() {
-  return `min-h-screen px-6 lg:px-12 py-10 lg:py-14 ${MAX_ANCHO_PANEL} mx-auto`;
+  // El margen del móvil bajó de 24 a 16 px el 18/09/2026: en una pantalla de
+  // 375, 24 a cada lado son 48 px que le faltan al texto de las tarjetas, y el
+  // panel se mira desde el móvil todos los días. De `sm` hacia arriba, igual
+  // que siempre.
+  return `min-h-screen px-4 sm:px-6 lg:px-12 py-8 sm:py-10 lg:py-14 ${MAX_ANCHO_PANEL} mx-auto`;
 }

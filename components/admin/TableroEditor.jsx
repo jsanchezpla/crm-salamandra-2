@@ -282,7 +282,7 @@ export function ModalApuntar({ onHecho, onCerrar }) {
           onChange={(e) => setTitulo(e.target.value)}
           autoFocus
           placeholder="El buscador de pacientes no encuentra por apellido"
-          className="w-full rounded px-3 py-2 text-[13px] outline-none"
+          className="w-full rounded px-3 py-2 text-[16px] sm:text-[13px] outline-none"
           style={ESTILO_CAMPO}
         />
       </Campo>
@@ -292,7 +292,7 @@ export function ModalApuntar({ onHecho, onCerrar }) {
           value={quien}
           onChange={(e) => setQuien(e.target.value)}
           placeholder="`aumenta`"
-          className="w-full rounded px-3 py-2 text-[13px] outline-none"
+          className="w-full rounded px-3 py-2 text-[16px] sm:text-[13px] outline-none"
           style={ESTILO_CAMPO}
         />
       </Campo>
@@ -303,7 +303,7 @@ export function ModalApuntar({ onHecho, onCerrar }) {
           onChange={(e) => setCuerpo(e.target.value)}
           rows={6}
           placeholder={"**Lo que pasa.** …\n\n**Cuánto duele.** …"}
-          className="w-full rounded px-3 py-2 text-[12.5px] leading-relaxed outline-none"
+          className="w-full rounded px-3 py-2 text-[16px] sm:text-[12.5px] leading-relaxed outline-none"
           style={ESTILO_CAMPO}
         />
       </Campo>
@@ -376,7 +376,7 @@ export function ModalEditar({ tarea, version, onHecho, onCerrar }) {
           value={titulo}
           onChange={(e) => setTitulo(e.target.value)}
           autoFocus
-          className="w-full rounded px-3 py-2 text-[13px] outline-none"
+          className="w-full rounded px-3 py-2 text-[16px] sm:text-[13px] outline-none"
           style={ESTILO_CAMPO}
         />
       </Campo>
@@ -384,7 +384,7 @@ export function ModalEditar({ tarea, version, onHecho, onCerrar }) {
         <input
           value={quien}
           onChange={(e) => setQuien(e.target.value)}
-          className="w-full rounded px-3 py-2 text-[13px] outline-none"
+          className="w-full rounded px-3 py-2 text-[16px] sm:text-[13px] outline-none"
           style={ESTILO_CAMPO}
         />
       </Campo>
@@ -393,7 +393,7 @@ export function ModalEditar({ tarea, version, onHecho, onCerrar }) {
           value={cuerpo}
           onChange={(e) => setCuerpo(e.target.value)}
           rows={12}
-          className="w-full rounded px-3 py-2 text-[12.5px] leading-relaxed outline-none"
+          className="w-full rounded px-3 py-2 text-[16px] sm:text-[12.5px] leading-relaxed outline-none"
           style={ESTILO_CAMPO}
         />
       </Campo>
@@ -471,7 +471,7 @@ export function ModalCerrar({ tarea, onHecho, onCerrar }) {
           rows={5}
           autoFocus
           placeholder="Lo arregló el commit 6ffb4f5, desplegado el 24/08."
-          className="w-full rounded px-3 py-2 text-[12.5px] leading-relaxed outline-none"
+          className="w-full rounded px-3 py-2 text-[16px] sm:text-[12.5px] leading-relaxed outline-none"
           style={ESTILO_CAMPO}
         />
       </Campo>

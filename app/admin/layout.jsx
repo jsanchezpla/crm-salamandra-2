@@ -92,30 +92,51 @@ export default function AdminLayout({ children }) {
         fontFamily: "var(--admin-mono), ui-sans-serif, system-ui, sans-serif",
       }}
     >
+      {/*
+        EN EL MÓVIL SE ENVUELVE (18/09/2026, Rodrigo: «el backlog en el móvil es
+        como un escritorio vertical, hay que hacer scroll horizontal»).
+
+        Esta barra era una sola fila sin envolver: la franja, nueve rótulos, la
+        campana y salir suman 910 px, así que en un móvil de 375 la PÁGINA ENTERA
+        medía 910 y todo lo demás se leía empujado hacia un lado. No era el
+        Registro lo que se salía, era su menú.
+
+        Ahora envuelve por debajo de `lg`: arriba la franja y lo de la derecha,
+        y los rótulos en la línea siguiente, que es donde caben. En escritorio
+        vuelve a ser exactamente la fila de siempre (`lg:h-12`, `lg:flex-nowrap`,
+        sin orden propio).
+      */}
       <nav
-        className="flex items-center gap-1 px-6 lg:px-12 h-12"
+        className="flex flex-wrap items-center gap-y-1 px-4 sm:px-6 lg:px-12 py-2 lg:flex-nowrap lg:gap-1 lg:py-0 lg:h-12"
         style={{ borderBottom: "1px solid var(--line)", background: "var(--panel)" }}
       >
         {/* La señal de "no estás en el CRM de un cliente". Antes lo decía el
             fondo negro; ahora lo dice esto, y por eso va en color pleno y no
-            como un rótulo más de la barra. */}
+            como un rótulo más de la barra.
+            En el móvil se dice más corto para que quepa en su línea, pero se
+            dice: sin esta franja no hay nada que distinga el panel del CRM. */}
         <span
-          className="text-[11px] uppercase tracking-[0.16em] mr-5 px-2.5 py-1 rounded font-semibold text-white"
+          className="text-[11px] uppercase tracking-[0.16em] whitespace-nowrap px-2.5 py-1 rounded font-semibold text-white lg:mr-5"
           style={{ background: "var(--ok)" }}
         >
-          Salamandra · panel interno
+          <span className="lg:hidden">Panel interno</span>
+          <span className="hidden lg:inline">Salamandra · panel interno</span>
         </span>
-        {SECCIONES.map((s) => (
-          <a
-            key={s.href}
-            href={s.href}
-            className="text-[12px] px-3 py-1.5 rounded transition-colors"
-            style={{ color: "var(--dim)" }}
-          >
-            {s.texto}
-          </a>
-        ))}
-        <div className="ml-auto flex items-center gap-4">
+        {/* Los rótulos, en su propia línea en el móvil (`order-3` + `w-full`) y
+            en la fila de siempre en escritorio. */}
+        <div className="order-3 mt-1 flex w-full flex-wrap items-center gap-1 lg:order-none lg:mt-0 lg:w-auto lg:flex-nowrap">
+          {SECCIONES.map((s) => (
+            <a
+              key={s.href}
+              href={s.href}
+              className="text-[13px] px-3 py-1.5 rounded transition-colors lg:text-[12px]"
+              style={{ color: "var(--dim)" }}
+            >
+              {s.texto}
+            </a>
+          ))}
+        </div>
+        <div className="ml-auto order-2 flex items-center gap-4 lg:order-none">
           {/* Lo que nos han escrito los clientes y no hemos mirado. Va en la
               BARRA y no dentro del buzón porque el buzón es la única pantalla
               donde ya se veía, y es justo la que no estás mirando cuando entra

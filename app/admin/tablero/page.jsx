@@ -120,7 +120,9 @@ function Etiqueta({ children, color }) {
  */
 function Selector({ etiqueta, valor, opciones, onElegir }) {
   return (
-    <div className="flex items-center gap-1">
+    // `flex-wrap`: «Ordenar · Prioridad · Recientes · Antiguas» mide 280 px y en
+    // un móvil no cabe en una línea (18/09/2026).
+    <div className="flex items-center gap-1 flex-wrap">
       <Etiqueta>{etiqueta}</Etiqueta>
       {opciones.map(([clave, texto, ayuda]) => {
         const puesta = valor === clave;
@@ -130,7 +132,7 @@ function Selector({ etiqueta, valor, opciones, onElegir }) {
             type="button"
             title={ayuda}
             onClick={() => onElegir(clave)}
-            className="px-2.5 py-1 rounded-md text-[12px] transition-colors cursor-pointer"
+            className="px-3 py-1.5 text-[13px] sm:px-2.5 sm:py-1 sm:text-[12px] rounded-md transition-colors cursor-pointer"
             style={{
               background: puesta ? "var(--panel-alto)" : "transparent",
               color: puesta ? "var(--text)" : "var(--tenue)",
@@ -151,7 +153,7 @@ function BotonTarjeta({ children, onClick, ocupada = false, destacado = false })
       type="button"
       onClick={onClick}
       disabled={ocupada}
-      className="text-[11.5px] px-2.5 py-1 rounded transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+      className="text-[12.5px] px-3 py-1.5 sm:text-[11.5px] sm:px-2.5 sm:py-1 rounded transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
       style={
         destacado
           ? { background: "var(--ok)", color: "#fff", border: "1px solid var(--ok)" }
@@ -185,7 +187,9 @@ function Tick({ marcada, ocupada, onToggle }) {
         e.stopPropagation();
         onToggle();
       }}
-      className="shrink-0 mt-[1px] w-[18px] h-[18px] rounded-[5px] grid place-items-center text-[11px] transition-colors disabled:opacity-40"
+      /* 22 px en el móvil: con 18 px y el dedo, el vecino de al lado es la
+         flecha que despliega la tarea (18/09/2026). */
+      className="shrink-0 mt-[1px] w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] rounded-[5px] grid place-items-center text-[11px] transition-colors disabled:opacity-40"
       style={{
         border: `1px solid ${marcada ? "var(--ok)" : "color-mix(in srgb, var(--tenue) 45%, transparent)"}`,
         background: marcada ? "color-mix(in srgb, var(--ok) 22%, transparent)" : "transparent",
@@ -400,7 +404,7 @@ function Procedencia({ documentos }) {
       {filas.map(([nombre, m]) => (
         <p
           key={nombre}
-          className="text-[11px] tabular-nums"
+          className="text-[12px] sm:text-[11px] tabular-nums"
           style={{ color: m.origen === "base" ? "var(--tenue)" : "#B45309" }}
         >
           <span className="uppercase tracking-[0.14em]">{nombre}</span>
@@ -423,7 +427,7 @@ function Procedencia({ documentos }) {
 /** De quién es. Dos botones porque somos dos; el segundo clic la deja sin dueño. */
 function Reparto({ responsables, asignadoA, ocupada, onElegir }) {
   return (
-    <span className="flex items-center gap-1 shrink-0">
+    <span className="flex items-center gap-1 shrink-0 ml-auto">
       {responsables.map((r) => {
         const suya = asignadoA === r;
         return (
@@ -437,7 +441,7 @@ function Reparto({ responsables, asignadoA, ocupada, onElegir }) {
               e.stopPropagation();
               onElegir(suya ? null : r);
             }}
-            className="px-2 py-0.5 rounded-md text-[11px] capitalize transition-colors disabled:opacity-40"
+            className="px-2.5 py-1 text-[12px] sm:px-2 sm:py-0.5 sm:text-[11px] rounded-md capitalize transition-colors disabled:opacity-40"
             style={{
               background: suya ? "var(--panel-alto)" : "transparent",
               color: suya ? "var(--text)" : "var(--tenue)",
@@ -761,7 +765,7 @@ export default function TableroPage() {
       <header className="mb-8">
         <Etiqueta>Salamandra · panel interno</Etiqueta>
         <h1
-          className="mt-2 text-[42px] lg:text-[58px] leading-[0.95] tracking-tight"
+          className="mt-2 text-[34px] sm:text-[42px] lg:text-[58px] leading-[0.95] tracking-tight"
           style={{ fontFamily: "var(--admin-display)" }}
         >
           Qué hay
@@ -816,7 +820,7 @@ export default function TableroPage() {
               montones cae la lista, ordenar dice en qué orden va cada montón.
               Se combinan — por cliente + antiguas contesta «¿qué le llevamos
               debiendo más tiempo a Aumenta?», que agrupando solo no se ve. */}
-          <div className="flex items-center gap-5 flex-wrap">
+          <div className="flex items-center gap-x-5 gap-y-3 flex-wrap">
             <Selector
               etiqueta="Agrupar por"
               valor={agrupacion}
@@ -844,7 +848,10 @@ export default function TableroPage() {
             value={filtro}
             onChange={(e) => setFiltro(e.target.value)}
             placeholder="Filtrar por cliente — p. ej. «aumenta», «nutri_laura»"
-            className="flex-1 min-w-[240px] max-w-md rounded-lg px-3 py-2 text-[13px] outline-none"
+            /* 16 px en el móvil y no 13: por debajo de 16, Safari hace zoom al
+               enfocar el cuadro y deja la pantalla corrida de lado
+               (18/09/2026). Mismo motivo en los cuadros del editor. */
+            className="flex-1 min-w-[200px] max-w-md rounded-lg px-3 py-2 text-[16px] sm:text-[13px] outline-none"
             style={{
               background: "var(--panel)",
               border: "1px solid var(--line)",
@@ -900,7 +907,16 @@ export default function TableroPage() {
                   className="group rounded-lg px-4 py-3"
                   style={{ background: "var(--panel)", border: "1px solid var(--line)" }}
                 >
-                  <summary className="cursor-pointer list-none flex items-start gap-3">
+                  {/*
+                    EN EL MÓVIL LA FILA ENVUELVE (18/09/2026, Rodrigo). El
+                    reparto son dos botones que no se encogen, así que en 375 px
+                    dejaban al título unos 120: «Las anotaciones de una cita no
+                    se ven en…» salía a cuatro palabras por línea. Con
+                    `flex-wrap` y un mínimo para el título, el reparto se baja
+                    solo a la línea de abajo cuando no cabe, y en escritorio no
+                    cambia nada porque ahí sobra sitio.
+                  */}
+                  <summary className="cursor-pointer list-none flex items-start gap-2 flex-wrap sm:flex-nowrap sm:gap-3">
                     {/*
                       LA FLECHITA (12/08/2026). El `list-none` de aquí al lado
                       quita el triángulo que pone el navegador, y sin nada en su
@@ -937,8 +953,8 @@ export default function TableroPage() {
                       className="inline-block w-[3px] rounded-full shrink-0 self-stretch"
                       style={{ background: t.tono.color }}
                     />
-                    <span className="flex-1 min-w-0">
-                      <span className="text-[14px]">{t.titulo}</span>
+                    <span className="flex-1 min-w-[8rem]">
+                      <span className="text-[15px] sm:text-[14px]">{t.titulo}</span>
                       {/*
                         LA PRIORIDAD, EN LA FILA Y SIN ABRIR NADA (24/08/2026,
                         Jorge: «que no haya que meterse dentro de ella para
@@ -959,7 +975,7 @@ export default function TableroPage() {
                       */}
                       {t.tono.etiqueta && (
                         <span
-                          className="ml-2 text-[10px] uppercase tracking-[0.14em] whitespace-nowrap px-1.5 py-0.5 rounded"
+                          className="ml-2 text-[11px] sm:text-[10px] uppercase tracking-[0.14em] break-words sm:whitespace-nowrap px-1.5 py-0.5 rounded"
                           style={{
                             color: t.tono.color,
                             border: `1px solid ${t.tono.color}`,
@@ -970,7 +986,11 @@ export default function TableroPage() {
                       )}
                       {t.quien && (
                         <span
-                          className="ml-2 text-[11px] px-1.5 py-0.5 rounded whitespace-nowrap"
+                          /* Sin `whitespace-nowrap`: una tarea compartida lleva
+                             aquí «aumenta, salamandra_solutions» y en el móvil
+                             esos 139 px eran lo único que seguía sacando la
+                             página de la pantalla (18/09/2026). */
+                          className="ml-2 text-[12px] sm:text-[11px] px-1.5 py-0.5 rounded break-words sm:whitespace-nowrap"
                           style={{
                             color: "var(--dim)",
                             border: "1px solid color-mix(in srgb, var(--tenue) 35%, transparent)",
@@ -1033,7 +1053,7 @@ export default function TableroPage() {
                       */}
                       {fechaCorta(t.apuntadaEn) && (
                         <span
-                          className="ml-2 text-[11px] tabular-nums whitespace-nowrap"
+                          className="ml-2 text-[12px] sm:text-[11px] tabular-nums whitespace-nowrap"
                           style={{ color: "var(--tenue)" }}
                           title={`Apuntada el ${fechaLarga(t.apuntadaEn)}`}
                         >
@@ -1051,7 +1071,7 @@ export default function TableroPage() {
                   {/* El cuerpo se pinta tal cual, respetando saltos de línea: es
                       texto escrito para leerse, no datos que reformatear. */}
                   <div
-                    className="mt-3 ml-[15px] text-[12.5px] leading-relaxed whitespace-pre-wrap"
+                    className="mt-3 ml-[15px] text-[13.5px] sm:text-[12.5px] leading-relaxed whitespace-pre-wrap break-words"
                     style={{ color: "var(--dim)" }}
                   >
                     {t.cuerpo}
@@ -1119,7 +1139,7 @@ export default function TableroPage() {
                       no escondida detrás del botón: para eso se escribió. */}
                   {t.solucion && editando !== t.clave && (
                     <div
-                      className="mt-3 ml-[15px] rounded px-3 py-2 text-[12.5px] leading-relaxed whitespace-pre-wrap"
+                      className="mt-3 ml-[15px] rounded px-3 py-2 text-[13.5px] sm:text-[12.5px] leading-relaxed whitespace-pre-wrap break-words"
                       style={{ background: "var(--panel-alto)", color: "var(--dim)" }}
                     >
                       <span
@@ -1170,7 +1190,7 @@ export default function TableroPage() {
                         rows={5}
                         autoFocus
                         placeholder="Cómo se arregla. Lo que sepas ahora vale: dónde está, qué hay que tocar, con qué se comprueba."
-                        className="w-full rounded px-3 py-2 text-[12.5px] leading-relaxed outline-none"
+                        className="w-full rounded px-3 py-2 text-[16px] sm:text-[12.5px] leading-relaxed outline-none"
                         style={{
                           background: "var(--panel-alto)",
                           border: "1px solid var(--line)",
@@ -1278,7 +1298,10 @@ export default function TableroPage() {
         ))}
       </div>
 
-      <p className="mt-10 text-[11px] leading-relaxed" style={{ color: "var(--tenue)" }}>
+      <p
+        className="mt-10 text-[12px] sm:text-[11px] leading-relaxed"
+        style={{ color: "var(--tenue)" }}
+      >
         El texto de cada tarea es la última versión publicada del Registro. Apuntar, mover,
         reescribir, cerrar y borrar se hace desde aquí y publica una versión nueva, con tu nombre y
         el motivo; para editar a mano sigue estando{" "}
