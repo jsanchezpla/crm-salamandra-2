@@ -121,6 +121,8 @@ export default function AyudaModule({ esDemo = false }) {
   // «cero sin leer»— y apagaría el punto un instante antes de volver a
   // encenderlo.
   const yaCargado = useRef(false);
+  // El `?aviso=` de la campana se atiende una sola vez (AV-0212).
+  const abiertoPorLaUrl = useRef(false);
 
   const cargar = useCallback(async (silencioso = false) => {
     if (!silencioso) setCargando(true);
@@ -143,6 +145,25 @@ export default function AyudaModule({ esDemo = false }) {
   useEffect(() => {
     cargar();
   }, [cargar]);
+
+  /*
+   * ── VENIR DESDE LA CAMPANA ABRE ESE AVISO (18/09/2026, AV-0212) ───────────
+   *
+   * La campana enlaza a `/ayuda?aviso=<id>` (lib/notifications/alerts.js). Se
+   * espera a que la lista esté cargada porque el panel necesita la fila, no
+   * solo el id; y se hace UNA vez —`abiertoPorLaUrl`— para que cerrar el panel
+   * no lo vuelva a abrir mientras el parámetro siga en la barra de direcciones.
+   * Si ese aviso ya no está en su lista no pasa nada: se queda la pantalla como
+   * siempre, sin error.
+   */
+  useEffect(() => {
+    if (abiertoPorLaUrl.current || !yaCargado.current || !avisos.length) return;
+    const id = new URLSearchParams(window.location.search).get("aviso");
+    if (!id) return;
+    abiertoPorLaUrl.current = true;
+    const suyo = avisos.find((a) => String(a.id) === String(id));
+    if (suyo) setAbierto(suyo);
+  }, [avisos]);
 
   /**
    * Cuántas respuestas nuestras le quedan por abrir.
