@@ -323,6 +323,17 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
   // porque llega por la barra de direcciones. La comparten el registro y la
   // preparación: es «cuándo es (o fue) la sesión».
   const [fecha, setFecha] = useState(() => paraInputLocal(fechaDePreparacion(fechaDeLaUrl) ?? new Date()));
+  /*
+   * ── CUÁNTO DURÓ (18/09/2026, Aumenta) ──────────────────────────────────────
+   * Olga: «aparece duración 45 min en la ficha de paciente cuando la mayoría de
+   * sus sesiones son de 60 min». La duración se guardaba desde el primer día y
+   * NO SE PODÍA ESCRIBIR desde ninguna pantalla: el volcado de Organízate puso
+   * 45 a las 22.996 sesiones que trajo y ahí se quedó, sin forma de corregirlo.
+   * Se deja vacío a propósito cuando no se sabe —la ficha pinta «— min» y el
+   * PDF se salta la línea—; en un registro que sale de una cita, el servidor lo
+   * rellena con la duración de esa cita (`lib/clinica/duracionDeLaSesion.js`).
+   */
+  const [duracion, setDuracion] = useState("");
   // ⚠️ La preparación vive en UN solo sitio: `form.prepText`. Las dos pantallas
   // —el registro completo y «Preparar la sesión»— escriben en él. Hasta el
   // 01/09/2026 la de preparación tenía su propio estado (`prepSolo`) y el texto
@@ -524,6 +535,7 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
     setApartados(lista);
     setPlantillaKey(s.contentSections?.[CLAVE_PLANTILLA] ?? plantillasDelCentro?.[0]?.key ?? "");
     setFecha(paraInputLocal(s.sessionDate));
+    setDuracion(s.duration == null ? "" : String(s.duration));
     setForm({
       prepText: s.prepText ?? "",
       parentFeedback: s.parentFeedback ?? "",
@@ -1044,6 +1056,11 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
       reparto.contentSections[CLAVE_PLANTILLA] = plantillaKey;
       const cuerpo = {
         sessionDate: cuandoEsLaSesion().toISOString(),
+        // Cuánto duró (18/09/2026). Viaja siempre, también vacío: dejar el
+        // campo en blanco es borrar la duración a conciencia. En un registro
+        // NUEVO que sale de una cita, vacío no significa null —el servidor lo
+        // hereda de la cita—, que es justo lo que antes se tiraba.
+        duration: duracion,
         ...reparto,
         prepText: form.prepText,
         parentFeedback: form.parentFeedback,
@@ -1367,6 +1384,22 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
                 <div>
                   <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1.5">Día y hora de la sesión</div>
                   <input type="datetime-local" className={ta} value={fecha} onChange={(e) => setFecha(e.target.value)} />
+                </div>
+                {/* Cuánto duró. Vacío es una respuesta válida —«no se apuntó»—
+                    y es lo que se guarda: la ficha dirá «— min» en vez de un
+                    número que nadie midió (18/09/2026). */}
+                <div className="w-full sm:w-40">
+                  <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1.5">Duración (min)</div>
+                  <input
+                    type="number"
+                    min={1}
+                    max={480}
+                    step={5}
+                    className={ta}
+                    value={duracion}
+                    placeholder="Sin apuntar"
+                    onChange={(e) => setDuracion(e.target.value)}
+                  />
                 </div>
               </div>
             </div>

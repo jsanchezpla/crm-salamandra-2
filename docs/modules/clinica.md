@@ -2800,3 +2800,44 @@ En `/facturacion/bonos`, un bono con `total` a null (el del diagnóstico) se
 rotula «sin tope · diagnóstico» y enlaza a `/clinica/diagnosticos`; no tiene
 «Renovar» ni «Volver a darlo» (copiaría `totalSessions` null y la API lo
 resolvería a las sesiones del tipo: nacería un bono CON tope).
+
+## Cuánto duró la sesión: el «45 min» del volcado (18/09/2026, Aumenta)
+
+> «Aparece duración 45 min en la ficha de paciente de citas cuando la mayoría
+> de sus sesiones son de 60 min.» (Olga, por el Registro)
+
+**No era un default del CRM, ni la duración del tipo de cita, ni la última
+cita.** `scripts/_hechos/import-aumenta-sesiones.js` escribía `duration: 45` a
+fuego en cada fila que traía, porque **Organízate no guarda cuánto duró una
+sesión**. Medido en producción el 18/09/2026:
+
+| `clinic_sessions.duration` | sesiones | desde | hasta |
+| --- | --- | --- | --- |
+| **45** | **22.996** | 2024-02-21 | **2026-07-31** |
+| null | 695 | 2026-09-01 | 2026-09-25 |
+| 60 | 57 | 2026-09-01 | 2026-09-22 |
+| 90 | 14 | 2026-09-09 | 2026-09-16 |
+
+Las 22.996 son EXACTAMENTE las del volcado (`observations->>'origen' =
+'organizate'`), el corte cae en la migración y **ninguna otra sesión del centro
+decía 45**: el marcador y el número casan fila a fila. Un relleno constante
+presentado como medida — y no solo en pantalla: la ficha del paciente lo pinta
+y `sessionPdf.js` lo imprime («45 minutos») en cada registro que sale del
+centro.
+
+**Las CITAS estaban bien**, y conviene dejarlo escrito para que no se persiga
+dos veces: de 14.558 citas solo 15 descuadraban con la duración de su cuota (10
+en `ENTREVISTA INICIAL`), y cruzando con la cuota activa de cada familia —en
+las de un solo minutaje— salía 45→45 en 6.027 citas (109 familias) y 60→60 en
+5.142 (107). **Esto no comparte causa con el desplegable de cuotas.**
+
+Lo que se hizo:
+
+| | |
+| --- | --- |
+| La regla | `lib/clinica/duracionDeLaSesion.js` + `scripts/_smoke-duracion-sesion.mjs`. Manda lo que escribe la terapeuta; si no lo escribe, **se hereda de la CITA** (que sí lo sabe); y si no hay ninguna de las dos, **null**. Nunca un número por defecto. |
+| La herencia | El POST de `/api/clinica/sessions` lee la duración de la cita en la MISMA consulta que ya hacía para el diagnóstico (`diagnosticoDelRegistro` devuelve `duracionCita`), y solo si la cita es de ese paciente. Antes se tiraba: las 500 sesiones enganchadas a una cita tenían `duration` null mientras su cita decía 45 o 60. |
+| Se puede corregir | El registro estrena campo **«Duración (min)»** (`RegistroSesionEditor.jsx`), al lado del día y la hora. Vacío es una respuesta —«no se apuntó»— y se guarda como null. El PATCH ya aceptaba `duration`; ahora pasa por `minutosDeSesion` (entero 1..480 o null). |
+| Los 22.996 de antes | `scripts/vaciar-duracion-sesiones-volcadas.js <slug>` (simula por defecto, `--confirm` escribe, `--deshacer <fichero>` restaura con el valor anterior fila a fila). Toca SOLO las filas con el marcador del volcado; no roza el texto clínico. |
+
+La ficha pasa a decir «— min» donde no se sabe, que es lo que hay que decir.
