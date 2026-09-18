@@ -1232,6 +1232,10 @@ export default function CobrosPage() {
   if (filterStatus) exportParams.set("status", filterStatus);
   if (filterFrom) exportParams.set("from", filterFrom);
   if (filterTo) exportParams.set("to", filterTo);
+  // La búsqueda también (18/09/2026, AV de Aumenta): el Excel se bajaba los 352
+  // cobros con «garcía» escrito en el buscador, porque `q` era el único filtro
+  // de la pantalla que no viajaba. Los otros cuatro sí iban y sí se respetaban.
+  if (search) exportParams.set("q", search);
   const exportUrl = `/api/billing/exports/payments${exportParams.toString() ? `?${exportParams}` : ""}`;
 
   return (
