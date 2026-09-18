@@ -21,17 +21,15 @@ import { etiquetaDeMoroso, filtrarMorosos, repartirMorosos, resumenDeMorosidad }
 import { preguntaAlEliminarCobroDeCuota, COBRO_Y_CUOTA } from "../../../../lib/billing/eliminarCobro.js";
 import { exigeMetodo } from "../../../../lib/billing/caja.js";
 import { repartirConOrganizacion } from "../../../../lib/clients/organizaciones.js";
+import { FORMAS_DE_COBRO, OPCIONES_DE_COBRO, formaDeCobro, esSinForma } from "@/lib/billing/formaDeCobro.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
 
-const METHOD_LABELS = {
-  card: "Tarjeta",
-  transfer: "Transferencia",
-  cash: "Efectivo",
-  direct_debit: "Domiciliación",
-};
-const METODOS_OPCIONES = Object.entries(METHOD_LABELS).map(([k, v]) => ({ value: k, label: v }));
+// Los rótulos y la regla de qué se enseña viven en /lib desde el 18/09/2026
+// (AV-0188): estaban copiados en cinco pantallas.
+const METHOD_LABELS = FORMAS_DE_COBRO;
+const METODOS_OPCIONES = OPCIONES_DE_COBRO;
 /*
  * «Sin decidir» (10/09/2026, Rodrigo). Un cobro PENDIENTE puede no tener
  * método: el de la cuota del mes y el del bono nacen así, porque dar la deuda
@@ -100,6 +98,30 @@ export default function CobrosPage() {
     return () => { vivo = false; };
   }, [showForm, form.modo, form.clientId]);
   const orgReparte = Boolean(orgDeLaFicha && orgDeLaFicha.pct != null && Number(orgDeLaFicha.pct) > 0);
+  /*
+   * ── LO QUE ESE PACIENTE YA DEBE (18/09/2026, AV-0188, Rodrigo) ──────────
+   *
+   * Rosa mandó una captura con una familia que aparecía a la vez cobrada y
+   * debiendo: al volcar un pago del banco se apuntó un cobro NUEVO en vez de
+   * saldar el que ya estaba. Rodrigo: «si va a ocurrir otro fallo humano
+   * avisa de que hay un cobro pendiente al mismo paciente e indica cuál es
+   * con un botón para que vayan directamente».
+   *
+   * `pendientesDelMes` no vale para esto: solo mira la cuota del mes elegido y
+   * solo en modo cuota. Aquí se piden los pendientes de ESE paciente sea del
+   * mes que sea, que es como se ve el duplicado de otro mes.
+   */
+  const [pendientesDelPaciente, setPendientesDelPaciente] = useState([]);
+  useEffect(() => {
+    setPendientesDelPaciente([]);
+    if (!showForm || form.modo === "factura" || !form.patientId) return;
+    let vivo = true;
+    fetch(`/api/billing/payments?status=pending&patientId=${encodeURIComponent(form.patientId)}&limit=20`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (vivo) setPendientesDelPaciente(j?.data?.payments ?? j?.data ?? []); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [showForm, form.modo, form.patientId]);
   // Los pacientes de la familia elegida, para poder cobrar lo de UNO. Vacío
   // cuando el centro no tiene módulo asistencial (el endpoint responde 403) o
   // cuando esa ficha no tiene pacientes: entonces el selector no se enseña.
@@ -363,6 +385,29 @@ export default function CobrosPage() {
     ...explicaCobro({ notes: p.notes, concepto: nombreDelConcepto(p.conceptId) }),
   });
   const pendientesExplicados = pendientesDelMes.map(explicado);
+  /*
+   * Abrir el cobro pendiente que ya existe, desde el propio aviso (18/09/2026,
+   * AV-0188, Rodrigo: «avisa de que hay un cobro pendiente al mismo paciente e
+   * indica cuál es con un botón para que vayan directamente»).
+   *
+   * Se cierra el alta antes: si no, quedan dos cajones abiertos uno encima de
+   * otro y no se sabe cuál se está guardando. Lo tecleado se pierde a
+   * propósito — se va a MIRAR el que ya hay, que es justo lo contrario de
+   * apuntar otro.
+   */
+  const abrirCobroPendiente = (cobro) => {
+    setShowForm(false);
+    setEditing({
+      ...cobro,
+      method: cobro.method ?? "",
+      paidAt: String(cobro.paidAt ?? "").slice(0, 10),
+      estadoOriginal: cobro.status,
+      fechaOriginal: String(cobro.paidAt ?? "").slice(0, 10),
+      periodMonth: cobro.periodMonth ? String(cobro.periodMonth).slice(0, 7) : "",
+      patientId: cobro.patientId ?? "",
+      refundedAt: cobro.refundedAt ? String(cobro.refundedAt).slice(0, 10) : hoyVigente(),
+    });
+  };
   const cobradosExplicados = cobradosDelMes.filter((c) => c.deCuota).map(explicado);
   const aparteExplicados = aparteDelMes.map(explicado);
   const sumaAparte =
@@ -1484,7 +1529,14 @@ export default function CobrosPage() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-neutral-600 text-xs">
-                    {METHOD_LABELS[p.method] ?? p.method ?? <span className="text-neutral-300">Sin decidir</span>}
+                    {/* Un cobro PENDIENTE no tiene forma de pago, diga lo que
+                        diga la columna (18/09/2026, AV-0188): la regla, en
+                        `lib/billing/formaDeCobro.js`. */}
+                    {esSinForma(formaDeCobro(p)) ? (
+                      <span className="text-neutral-300">{formaDeCobro(p)}</span>
+                    ) : (
+                      formaDeCobro(p)
+                    )}
                   </td>
                   <td className="px-4 py-3 text-neutral-500 text-xs">{fmtDate(p.paidAt)}</td>
                   <td className="px-4 py-3"><StatusBadge status={p.status} kind="payment" /></td>
@@ -1908,6 +1960,52 @@ export default function CobrosPage() {
                     </span>
                   </label>
                 )}
+                {/* Ese paciente ya debe algo (18/09/2026, AV-0188). Sale en
+                    cualquier modo y de cualquier mes: es el aviso que habría
+                    evitado el cobro duplicado de 260 €. Se descuentan los que
+                    ya se nombran abajo como pendientes del mes, para no decir
+                    dos veces lo mismo. */}
+                {(() => {
+                  const yaNombrados = new Set(pendientesDelMes.map((x) => String(x.id)));
+                  const otros = pendientesDelPaciente.filter((x) => !yaNombrados.has(String(x.id)));
+                  if (!otros.length) return null;
+                  const suma = Math.round(otros.reduce((t, x) => t + Number(x.amount || 0), 0) * 100) / 100;
+                  return (
+                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                      <p className="text-[11px] text-amber-800 mb-1.5">
+                        {otros.length === 1
+                          ? "Ojo: este paciente ya tiene un cobro pendiente."
+                          : `Ojo: este paciente ya tiene ${otros.length} cobros pendientes.`}{" "}
+                        Si es esto lo que vienen a pagar, cóbralo ahí en vez de apuntar otro.
+                      </p>
+                      <ul className="space-y-1">
+                        {otros.map((x) => (
+                          <li key={x.id} className="flex items-center justify-between gap-3 text-[12px] text-amber-900">
+                            <span className="truncate">
+                              {x.periodMonth ? String(x.periodMonth).slice(0, 7) : "sin mes"}
+                              {x.notes ? ` · ${String(x.notes).slice(0, 40)}` : ""}
+                            </span>
+                            <span className="flex items-center gap-2 shrink-0">
+                              <span className="tabular font-medium">{fmtMoney(x.amount)}</span>
+                              <button
+                                type="button"
+                                onClick={() => abrirCobroPendiente(x)}
+                                className="text-[11px] font-medium text-amber-900 underline hover:no-underline"
+                              >
+                                Ir a ese cobro
+                              </button>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                      {otros.length > 1 && (
+                        <p className="mt-1.5 text-[11px] text-amber-700">
+                          En total <span className="tabular font-medium">{fmtMoney(suma)}</span> sin cobrar.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
                 {/* Con un cobro suelto de una cita, el pendiente del mes NO es lo
                     que se está cobrando: se nombra para que nadie lo dé por
                     saldado, y ahí se queda (10/09/2026). */}
@@ -1930,7 +2028,17 @@ export default function CobrosPage() {
                         <li key={p.id}>
                           <div className="flex justify-between gap-3 text-[12px] text-neutral-700">
                             <span className="truncate">{p.concepto ?? "Cuota del mes"}</span>
-                            <span className="tabular font-medium shrink-0">{fmtMoney(p.amount)}</span>
+                            <span className="flex items-center gap-2 shrink-0">
+                              <span className="tabular font-medium">{fmtMoney(p.amount)}</span>
+                              {/* Ir al que ya hay en vez de apuntar otro (AV-0188). */}
+                              <button
+                                type="button"
+                                onClick={() => abrirCobroPendiente(p)}
+                                className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline"
+                              >
+                                Verlo
+                              </button>
+                            </span>
                           </div>
                           {p.motivos.length > 0 && (
                             <p className="text-[10px] text-neutral-500 leading-snug">{p.motivos.join(" · ")}</p>

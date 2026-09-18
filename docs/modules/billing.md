@@ -2923,3 +2923,39 @@ Lo otro que pedía ese mismo aviso: «las facturas emitidas salen con borrador»
 el estado «Emitida»—, pero **«no salen correlativas en el buscador» SÍ lo era**:
 el GET ordenaba solo por `issueDate` y las 229 facturas de septiembre comparten
 fecha. Arreglado el mismo día; el porqué, en la sección de arriba.
+
+## Un cobro pendiente no dice por dónde entró el dinero (18/09/2026, AV-0188, Rodrigo)
+
+Rosa mandó una captura de Cobros con una fila que decía «Transferencia ·
+Pendiente». Eso se lee como dinero que ya entró por el banco, y no había
+entrado nada: hasta el 10/09/2026 `payments.method` era obligatorio y el
+generador de cuotas lo rellenaba con `transfer` para tapar el hueco. En Aumenta
+quedan **125 pendientes** arrastrando una forma que nadie eligió (124
+«Transferencia» y 1 «Tarjeta»).
+
+- La regla es `formaDeCobro(cobro)` en `lib/billing/formaDeCobro.js`: **un cobro
+  `pending` se rotula «Ninguno», diga lo que diga la columna**; en cuanto se
+  cobra, manda `method`. Los rótulos y las opciones del desplegable viven ahí
+  también — estaban copiados en cinco pantallas.
+- **Se arregla al LEER, no reescribiendo las 125 filas**: el dato viejo no
+  estorba a nadie más (el arqueo y la caja solo miran lo cobrado) y tocar filas
+  de un centro en uso para arreglar un rótulo es cambiar el precio por el
+  escaparate. Si algún día se limpian, la función da lo mismo.
+- Lo usan Cobros, la pestaña de la ficha del cliente y la del paciente. Prueba:
+  `scripts/_smoke-forma-de-cobro.mjs`, que además vigila que ninguna pantalla
+  vuelva a escribirse su propio mapa.
+
+### Y el aviso de que ese paciente ya debe algo
+
+La otra mitad del mismo aviso: una familia aparecía a la vez **cobrada y
+debiendo** porque al volcar un pago del banco se apuntó un cobro NUEVO en vez de
+saldar el que ya estaba (una sola pareja en toda la base: 260 € de septiembre).
+Rodrigo: «si va a ocurrir otro fallo humano avisa de que hay un cobro pendiente
+al mismo paciente e indica cuál es con un botón para que vayan directamente».
+
+Al elegir paciente en «+ Registrar cobro» se piden sus pendientes **de cualquier
+mes** (`/api/billing/payments?status=pending&patientId=…`) y sale un aviso ámbar
+con cada uno y un botón **«Ir a ese cobro»** que abre el cajón de edición. El
+aviso descuenta los que ya se nombran como pendientes del mes, para no decir dos
+veces lo mismo, y abrir el cobro CIERRA el alta: dos cajones abiertos a la vez y
+no se sabe cuál se está guardando.

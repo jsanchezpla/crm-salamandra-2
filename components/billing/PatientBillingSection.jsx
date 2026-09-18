@@ -27,6 +27,7 @@ import { ejerciciosDe, facturasDelEjercicio, sePuedeDescargar } from "@/lib/bill
 import { esDeLaFamilia } from "@/lib/billing/facturasDelPaciente.js";
 import { useRouter } from "next/navigation";
 import PatientReparto from "./PatientReparto.jsx";
+import { formaDeCobro } from "../../lib/billing/formaDeCobro.js";
 
 const STATUS_LABEL = {
   draft: "Borrador", issued: "Emitida", sent: "Enviada", paid: "Pagada",
@@ -39,7 +40,7 @@ const STATUS_CLS = {
   cancelled: "bg-neutral-100 text-neutral-400", rectified: "bg-violet-50 text-violet-700",
 };
 /** Cómo pagó. Los mismos rótulos que la pantalla de Cobros. */
-const METODO = { card: "Tarjeta", transfer: "Transferencia", cash: "Efectivo", direct_debit: "Domiciliación" };
+// Los rótulos y la regla, en /lib (18/09/2026, AV-0188).
 const ESTADO_COBRO = { completed: "Cobrado", pending: "Pendiente", failed: "Fallido", refunded: "Devuelto" };
 const ESTADO_COBRO_CLS = {
   completed: "bg-emerald-50 text-emerald-700",
@@ -327,7 +328,7 @@ export default function PatientBillingSection({ patientId, clientId }) {
             {pagos.map((p) => (
               <li key={p.id} className="py-2 flex items-center gap-3 text-xs">
                 <span className="text-neutral-400 shrink-0 tabular-nums">{fmt(p.paidAt)}</span>
-                <span className="text-neutral-500 shrink-0">{METODO[p.method] || p.method || "—"}</span>
+                <span className="text-neutral-500 shrink-0">{formaDeCobro(p)}</span>
                 {esDeLaFamilia(p) && (
                   <span
                     className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 shrink-0"

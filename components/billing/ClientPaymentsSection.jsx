@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { formaDeCobro } from "../../lib/billing/formaDeCobro.js";
 
 /**
  * Histórico de COBROS de un cliente (15/09/2026, Rodrigo): la pestaña gemela
@@ -11,7 +12,7 @@ import Link from "next/link";
  * esconde sola.
  */
 
-const METODO = { card: "Tarjeta", transfer: "Transferencia", cash: "Efectivo", direct_debit: "Domiciliación" };
+// Los rótulos y la regla, en /lib (18/09/2026, AV-0188).
 const ESTADO = { completed: "Cobrado", pending: "Pendiente", failed: "Fallido", refunded: "Devuelto" };
 const ESTADO_CLS = {
   completed: "bg-emerald-50 text-emerald-700",
@@ -106,7 +107,7 @@ export default function ClientPaymentsSection({ clientId }) {
                       <td className="px-3 py-2 text-xs text-neutral-500 tabular">{fmtDate(p.paidAt)}</td>
                       <td className="px-3 py-2 text-xs text-neutral-500 tabular">{p.periodMonth ? String(p.periodMonth).slice(0, 7) : "—"}</td>
                       {conPaciente && <td className="px-3 py-2 text-xs text-neutral-700">{p.patientName || "—"}</td>}
-                      <td className="px-3 py-2 text-xs text-neutral-700">{METODO[p.method] || "—"}</td>
+                      <td className="px-3 py-2 text-xs text-neutral-700">{formaDeCobro(p)}</td>
                       <td className="px-3 py-2 text-xs">
                         <span className={`text-[10px] px-2 py-0.5 rounded-full ${ESTADO_CLS[p.status] || "bg-neutral-100 text-neutral-500"}`}>
                           {ESTADO[p.status] || p.status}
