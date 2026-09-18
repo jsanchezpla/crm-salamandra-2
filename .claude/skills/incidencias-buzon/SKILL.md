@@ -205,8 +205,20 @@ Cómo se escribe la respuesta:
 - **Dale las gracias y sé breve.** Cuatro líneas.
 - **No prometas nada que no esté hecho.**
 
-Si estaba arreglado, el aviso se marca **`resuelto`**, no `en_curso`:
-`-e TRIAJE_ESTADO=resuelto`.
+⚠️ **Contestar NO cambia el estado del aviso, y son DOS comandos** (18/09/2026:
+se contestó AV-0189 creyendo que `-e TRIAJE_ESTADO=resuelto` en el `responder`
+lo cerraba, y el aviso se quedó en `nuevo` en la bandeja). `responder` guarda el
+mensaje, pone `respondido_at` y enciende la campana; el estado solo lo mueve
+`marcar`. Si estaba arreglado, se marca **`resuelto`**, no `en_curso`:
+
+```bash
+ssh crm-vps 'docker exec -i -e TRIAJE_ACCION=marcar -e TRIAJE_REF=AV-0007 -e TRIAJE_ESTADO=resuelto -e TRIAJE_CONFIRMAR=1 crm-salamandra-app-1 node --input-type=module' < scripts/buzon-triaje.mjs
+```
+
+Y compruébalo, que es lo que faltó: el aviso tiene que quedar con `estado`
+`resuelto` **y** con `respondido_at` puesto. Con `TRIAJE_ACCION=listar` ya no
+sale (listar solo trae lo que falta por triar), así que se mira en la bandeja de
+`/admin/buzon` o preguntándole a `master.buzon_avisos` en solo lectura.
 
 ## Paso 6 — Publicarlo
 

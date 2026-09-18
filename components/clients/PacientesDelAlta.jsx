@@ -13,6 +13,12 @@
  * el cliente (una adulta que viene a consulta), basta marcar la casilla: eso
  * copia su nombre a los campos, que quedan a la vista y editables. Nada de
  * adivinar por detrás cómo se parte un nombre en nombre y apellidos.
+ *
+ * ⚠️ Con el alta que empieza por el paciente (`primero`) la casilla también
+ * sale, pero copia AL REVÉS: del paciente al titular de la ficha (18/09/2026,
+ * AV-0201 de Aumenta). Olga: «he creado un cliente, mayor de edad, pero si no
+ * pongo unas xxx al menos en el nombre de un familiar no me deja avanzar». Sin
+ * esta casilla, un paciente adulto obligaba a inventarse un padre.
  */
 
 import {
@@ -24,10 +30,13 @@ import {
 } from "../../lib/clients/formularioAlta.js";
 
 export const PACIENTE_VACIO = {
-  firstName: "", lastName: "", birthDate: "", educationCenter: "", educationLevel: "",
+  firstName: "", lastName: "", birthDate: "", dni: "", educationCenter: "", educationLevel: "",
   relationship: "", referralReason: "",
 };
 const VACIO = PACIENTE_VACIO;
+
+/** «Lucía» + «Ruiz Pérez» → «Lucía Ruiz Pérez», sin espacios de más. */
+const nombreCompleto = (p) => [p?.firstName, p?.lastName].map((s) => String(s ?? "").trim()).filter(Boolean).join(" ");
 
 const inputCls =
   "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)] placeholder:text-gray-300";
@@ -40,19 +49,44 @@ const inputCls =
  */
 export const TEXTAREA_CRECE = "field-sizing-content min-h-[4.75rem] max-h-80 resize-y";
 
-export default function PacientesDelAlta({ pacientes, onChange, nombreCliente, primero = false }) {
+export default function PacientesDelAlta({ pacientes, onChange, nombreCliente, primero = false, onTitularEsElPaciente }) {
   const actualizar = (i, campos) =>
     onChange(pacientes.map((p, idx) => (idx === i ? { ...p, ...campos } : p)));
 
   const añadir = () => onChange([...pacientes, { ...VACIO }]);
   const quitar = (i) => onChange(pacientes.filter((_, idx) => idx !== i));
 
+  /**
+   * La casilla copia en el sentido que toque:
+   *   · alta normal (la familia primero) → del titular AL paciente;
+   *   · alta por paciente (`primero`)    → del paciente AL titular, que es lo
+   *     que hacía falta para dar de alta a un adulto sin inventarse un padre.
+   */
   const marcarEsElCliente = (i, marcado) => {
     if (!marcado) {
       actualizar(i, { relationship: "" });
+      if (primero) onTitularEsElPaciente?.(null);
+      return;
+    }
+    if (primero) {
+      const p = pacientes[i] ?? {};
+      actualizar(i, { relationship: PARENTESCO_ES_EL_CLIENTE });
+      onTitularEsElPaciente?.(nombreCompleto(p));
       return;
     }
     actualizar(i, { ...partirNombre(nombreCliente), relationship: PARENTESCO_ES_EL_CLIENTE });
+  };
+
+  /**
+   * Mientras la casilla esté marcada, el nombre del titular sigue al del
+   * paciente: se marca antes de teclear tantas veces como después, y un
+   * titular que se quedara con el nombre a medias es peor que no copiarlo.
+   */
+  const escribir = (i, campos) => {
+    actualizar(i, campos);
+    if (!primero) return;
+    const p = { ...(pacientes[i] ?? {}), ...campos };
+    if (p.relationship === PARENTESCO_ES_EL_CLIENTE) onTitularEsElPaciente?.(nombreCompleto(p));
   };
 
   return (
@@ -87,16 +121,17 @@ export default function PacientesDelAlta({ pacientes, onChange, nombreCliente, p
               </button>
             </div>
 
-            {/* Con el alta que empieza por el paciente esta casilla sobra:
-                aquí el paciente es el hijo y la familia se teclea después. */}
-            {!primero && (
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={esElCliente}
-                  onChange={(e) => marcarEsElCliente(i, e.target.checked)}
-                  className="rounded border-gray-300 accent-[var(--color-primary)]" />
-                <span className="text-xs text-gray-600">El paciente es el propio cliente</span>
-              </label>
-            )}
+            {/* En el alta por paciente la casilla dice lo que se pregunta ahí
+                —si viene solo— y copia su nombre al titular de la ficha; en la
+                de siempre, al revés. Es la misma marca en los dos casos. */}
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={esElCliente}
+                onChange={(e) => marcarEsElCliente(i, e.target.checked)}
+                className="rounded border-gray-300 accent-[var(--color-primary)]" />
+              <span className="text-xs text-gray-600">
+                {primero ? "Es mayor de edad y abre su propia ficha" : "El paciente es el propio cliente"}
+              </span>
+            </label>
 
             {CAMPOS_PACIENTE.map(({ label, key, type, placeholder }) => (
               <div key={key}>
@@ -111,11 +146,11 @@ export default function PacientesDelAlta({ pacientes, onChange, nombreCliente, p
                     que recorrerlo a lo ancho (AV-0134, Aumenta). */}
                 {type === "textarea" ? (
                   <textarea rows={3} value={p[key] || ""} placeholder={placeholder}
-                    onChange={(e) => actualizar(i, { [key]: e.target.value })}
+                    onChange={(e) => escribir(i, { [key]: e.target.value })}
                     className={`${inputCls} ${TEXTAREA_CRECE}`} />
                 ) : (
                   <input type={type} value={p[key] || ""} placeholder={placeholder}
-                    onChange={(e) => actualizar(i, { [key]: e.target.value })}
+                    onChange={(e) => escribir(i, { [key]: e.target.value })}
                     className={inputCls} />
                 )}
               </div>

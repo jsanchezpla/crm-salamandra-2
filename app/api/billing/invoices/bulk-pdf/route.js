@@ -12,10 +12,16 @@ import { invoicePatientInclude } from "@/lib/billing/patientLink.js";
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
- * POST /api/billing/invoices/bulk-pdf?from=YYYY-MM-DD&to=YYYY-MM-DD
+ * POST /api/billing/invoices/bulk-pdf?from=YYYY-MM-DD&to=YYYY-MM-DD[&paciente=0]
  * Descarga un ZIP con los PDFs de todas las facturas emitidas (no borrador) cuya
  * fecha de emisión cae en el rango. El ZIP se transmite en streaming: cada PDF se
  * genera y se añade sobre la marcha, sin acumular todos en memoria.
+ *
+ * `paciente=0` quita el nombre del niño de todos los PDF del lote, igual que en
+ * la descarga de una sola (18/09/2026, AV-0175 de Isabel: «en facturas
+ * múltiples o simples, dar opción de poner el nombre del paciente o no; no todo
+ * el mundo lo quiere»). La casilla existía solo en la factura suelta, así que
+ * quien bajaba el mes entero no tenía forma de quitarlo.
  */
 export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule }) => {
   try {
@@ -23,6 +29,8 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     const { searchParams } = new URL(request.url);
     const from = searchParams.get("from");
     const to = searchParams.get("to");
+    // Sale por defecto, como en la factura suelta: quitarlo es lo que se pide.
+    const conPaciente = searchParams.get("paciente") !== "0";
     if (!DATE_RE.test(from || "") || !DATE_RE.test(to || "")) {
       return error("Parámetros from y to obligatorios en formato YYYY-MM-DD");
     }
@@ -67,7 +75,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
             settings,
             partnerName,
             logo,
-            patientName: inv.patient
+            patientName: conPaciente && inv.patient
               ? `${inv.patient.firstName || ""} ${inv.patient.lastName || ""}`.trim() || null
               : null,
             stamp,

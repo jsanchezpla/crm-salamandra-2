@@ -45,6 +45,7 @@ import {
   contarPacientes,
   filaDeCuota,
   ordenarFilas,
+  ordenarCuotasPorServicio,
   cuotaLlevaTipo,
 } from "../lib/billing/tiposDeCuota.js";
 
@@ -252,5 +253,56 @@ describe("la fila de la ficha del tipo", () => {
       { paciente: "Iker", deBaja: false },
     ]);
     assert.deepEqual(filas.map((f) => f.paciente), ["Iker", "Zoe", "Ana"]);
+  });
+});
+
+/* ── El listado de cuotas, por servicio (AV-0194) ─────────────────────────── */
+
+describe("el listado de cuotas sale agrupado por servicio", () => {
+  const LOGO = "c-logo";
+  const TO = "c-to";
+  const catalogo = new Map([
+    [LOGO, { id: LOGO, name: "Cuota Logopedia 45x1" }],
+    [TO, { id: TO, name: "Cuota T.O. 60x1" }],
+  ]);
+  const c = (conceptIds, paciente) => ({
+    conceptIds,
+    patient: paciente ? { firstName: paciente, lastName: "" } : null,
+  });
+
+  it("junta las del mismo servicio y las ordena por paciente", () => {
+    const filas = ordenarCuotasPorServicio(
+      [c([TO], "Zoe"), c([LOGO], "Iker"), c([TO], "Ana"), c([LOGO], "Bea")],
+      catalogo,
+    );
+    assert.deepEqual(
+      filas.map((f) => `${f.conceptIds[0]}:${f.patient.firstName}`),
+      ["c-logo:Bea", "c-logo:Iker", "c-to:Ana", "c-to:Zoe"],
+    );
+  });
+
+  it("una cuota de dos terapias hace grupo propio, no se mete en ninguno de los dos", () => {
+    const filas = ordenarCuotasPorServicio([c([TO], "Zoe"), c([LOGO, TO], "Ana"), c([LOGO], "Iker")], catalogo);
+    assert.deepEqual(filas.map((f) => f.patient.firstName), ["Iker", "Ana", "Zoe"]);
+  });
+
+  it("las de importe suelto, sin concepto que las nombre, van al final", () => {
+    const filas = ordenarCuotasPorServicio([c([], "Ana"), c([TO], "Zoe")], catalogo);
+    assert.deepEqual(filas.map((f) => f.patient.firstName), ["Zoe", "Ana"]);
+  });
+
+  it("sin paciente se ordena por la familia, y no rompe si no hay ni eso", () => {
+    const familia = (nombre, ids) => ({ conceptIds: ids, client: { name: nombre } });
+    const filas = ordenarCuotasPorServicio([familia("Zurdo", [LOGO]), familia("Abad", [LOGO]), { conceptIds: [LOGO] }], catalogo);
+    const nombres = filas.map((f) => f.client?.name ?? "(sin ficha)");
+    assert.ok(nombres.indexOf("Abad") < nombres.indexOf("Zurdo"), "Abad va antes que Zurdo");
+    assert.equal(nombres.length, 3);
+  });
+
+  it("no toca la lista que le dan", () => {
+    const original = [c([TO], "Zoe"), c([LOGO], "Ana")];
+    const copia = [...original];
+    ordenarCuotasPorServicio(original, catalogo);
+    assert.deepEqual(original, copia);
   });
 });

@@ -28,7 +28,13 @@ import {
   textosDelAlta,
   hayPacienteConNombre,
 } from "../lib/clients/altaPorPaciente.js";
-import { camposCliente, PERFIL_SALUD } from "../lib/clients/formularioAlta.js";
+import {
+  camposCliente,
+  esNombreDeAlgunPaciente,
+  hayPacienteQueEsElTitular,
+  PARENTESCO_ES_EL_CLIENTE,
+  PERFIL_SALUD,
+} from "../lib/clients/formularioAlta.js";
 
 describe("la bandera", () => {
   it("vive en el módulo pacientes y sin ella el alta empieza por la familia", () => {
@@ -69,6 +75,51 @@ describe("los textos del alta", () => {
     assert.match(porPaciente[0].label, /padre, madre o tutor/i);
     // El resto de campos no cambia: mismas claves en el mismo orden.
     assert.deepEqual(normal.map((c) => c.key), porPaciente.map((c) => c.key));
+  });
+});
+
+/*
+ * El paciente adulto que abre su propia ficha (18/09/2026, AV-0201 de Aumenta).
+ * Olga: «he creado un cliente, mayor de edad, pero si no pongo unas xxx al
+ * menos en el nombre de un familiar no me deja avanzar». Con el alta por
+ * paciente el titular era obligatorio y se llamaba «padre, madre o tutor»: a un
+ * adulto que viene solo había que inventarle uno.
+ */
+describe("el paciente es el titular", () => {
+  it("se reconoce por el parentesco que ya se guardaba", () => {
+    assert.equal(hayPacienteQueEsElTitular([{ relationship: PARENTESCO_ES_EL_CLIENTE }]), true);
+    assert.equal(hayPacienteQueEsElTitular([{ relationship: "Hijo/a" }]), false);
+    assert.equal(hayPacienteQueEsElTitular([{}, { relationship: PARENTESCO_ES_EL_CLIENTE }]), true);
+    assert.equal(hayPacienteQueEsElTitular([]), false);
+    assert.equal(hayPacienteQueEsElTitular(null), false);
+  });
+
+  it("el rótulo del nombre deja de hablar de padres y no se pregunta el parentesco", () => {
+    const conFamilia = camposCliente(PERFIL_SALUD, { conPacientes: true, titularEsProgenitor: true });
+    const esElPaciente = camposCliente(PERFIL_SALUD, { conPacientes: true, titularEsElPaciente: true });
+    assert.match(conFamilia[0].label, /padre, madre o tutor/i);
+    assert.equal(esElPaciente[0].key, "name");
+    assert.doesNotMatch(esElPaciente[0].label, /padre|madre|tutor/i);
+    // «¿qué eres del paciente?» no significa nada si el paciente eres tú.
+    assert.ok(conFamilia.some((c) => c.key === "parentescoTitular"));
+    assert.ok(!esElPaciente.some((c) => c.key === "parentescoTitular"));
+  });
+
+  it("los textos dejan de pedir una familia que no existe", () => {
+    const t = textosDelAlta({ porPaciente: true, pacienteEsElTitular: true });
+    assert.doesNotMatch(t.sinNombreTitular, /padre|madre|tutor/i);
+    assert.match(t.sinNombreTitular, /paciente/i);
+    assert.doesNotMatch(t.cabeceraFamilia.titulo, /familia/i);
+    // Y sin marcar la casilla, todo sigue como estaba.
+    assert.match(textosDelAlta({ porPaciente: true }).sinNombreTitular, /padre|madre|tutor/i);
+  });
+
+  it("distingue el nombre copiado del tecleado, para no borrar lo que escribió alguien", () => {
+    const pacientes = [{ firstName: "Ana", lastName: "Ruiz Pérez" }];
+    assert.equal(esNombreDeAlgunPaciente(pacientes, "  ana   RUIZ pérez "), true);
+    assert.equal(esNombreDeAlgunPaciente(pacientes, "Marta Gil"), false);
+    assert.equal(esNombreDeAlgunPaciente(pacientes, ""), false);
+    assert.equal(esNombreDeAlgunPaciente([], "Ana Ruiz Pérez"), false);
   });
 });
 
