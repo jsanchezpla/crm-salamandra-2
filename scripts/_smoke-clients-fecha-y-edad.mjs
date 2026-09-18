@@ -77,7 +77,16 @@ test("la edad que manda el servidor manda, y `null` significa «no lo sé»", ()
 });
 
 test("una fecha futura no pinta años en negativo", () => {
-  const manana = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  /*
+   * Mañana en hora LOCAL, no en UTC (19/09/2026). Con `toISOString` esta
+   * prueba fallaba entre medianoche y las dos de la madrugada de Madrid:
+   * allí el UTC va un día por detrás, así que «mañana» salía siendo HOY y
+   * la edad era 0 en vez de null. `edadDesde` calcula en hora local y
+   * estaba bien; lo frágil era el reloj de la prueba.
+   */
+  const m = new Date();
+  m.setDate(m.getDate() + 1);
+  const manana = `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, "0")}-${String(m.getDate()).padStart(2, "0")}`;
   const { edad, texto } = fechaYEdad(manana);
   assert.equal(edad, null);
   assert.equal(texto, fechaCorta(manana)); // la fecha sí, la edad no
