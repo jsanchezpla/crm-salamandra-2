@@ -13,6 +13,7 @@ import assert from "node:assert/strict";
 import {
   normalizarProgenitores,
   normalizarPacientes,
+  CAMPOS_PACIENTE,
   camposCliente,
   PERFIL_SALUD,
   PERFIL_COMERCIAL,
@@ -144,6 +145,24 @@ prueba("el motivo de cada paciente llega hasta el objeto que se guarda", () => {
     { firstName: "Lucía", lastName: "Ruiz Pérez", referralReason: "Dificultades de atención." },
   ]);
   assert.equal(pacientes[0].referralReason, "Dificultades de atención.");
+});
+
+// El DNI del PACIENTE (18/09/2026, AV-0179 de Aumenta). La columna existía y la
+// ficha lo enseñaba, pero no estaba ni en el formulario ni en la lista blanca:
+// se enseñaba un dato que no había forma de escribir.
+prueba("el DNI del paciente se pregunta en el alta y se guarda", () => {
+  assert.ok(CAMPOS_PACIENTE.some((c) => c.key === "dni"), "el alta tiene que preguntarlo");
+  const { pacientes } = normalizarPacientes([
+    { firstName: "Lucía", lastName: "Ruiz Pérez", dni: " 12345678z " },
+  ]);
+  assert.equal(pacientes[0].dni, "12345678z");
+});
+
+prueba("un paciente con SOLO el DNI tecleado no se descarta como fila vacía", () => {
+  // La fila en blanco se tira a propósito; una con el DNI puesto no lo está,
+  // y antes caía en el mismo saco porque `dni` no contaba como «resto».
+  const { error } = normalizarPacientes([{ dni: "12345678Z" }]);
+  assert.match(String(error), /nombre|apellidos/i);
 });
 
 prueba("partirNombre dice lo mismo en la pantalla y en el servidor", () => {

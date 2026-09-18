@@ -283,7 +283,7 @@ Fichero: `models/tenant/Patient.model.js`. Tabla: `patients`.
 | `firstName` | VARCHAR(120) NOT NULL | Nombre del paciente. |
 | `lastName` | VARCHAR(120) NOT NULL | Apellidos. |
 | `birthDate` | DATEONLY nullable | Fecha de nacimiento. |
-| `age` | INTEGER nullable | Edad escrita a mano (0-120). Desde el 03/09/2026 (AV-0034) es el RESPALDO: la ficha, el listado y los informes enseñan `edad`, que el serializador calcula desde `birthDate` con `lib/clinica/edad.js` y solo cae a `age` si no hay fecha. Los dos formularios (alta y editar) piden la fecha; la casilla «Edad» queda para quien no la sabe. |
+| `age` | INTEGER nullable | Edad escrita a mano (0-120). Desde el 03/09/2026 (AV-0034) es el RESPALDO: la ficha, el listado y los informes enseñan `edad`, que el serializador calcula desde `birthDate` con `lib/clinica/edad.js` y solo cae a `age` si no hay fecha. Los dos formularios (alta y editar) piden la fecha; la casilla «Edad» queda para quien no la sabe —y desde el 18/09/2026 (AV-0178) **desaparece en cuanto hay fecha**: en su sitio sale la edad calculada, que se actualiza mientras se teclea la fecha, y al guardar `age` se escribe a `null` (`edadParaGuardar`, misma prueba). Antes la casilla se quedaba en blanco al lado de una fecha ya puesta y parecía que había que rellenarla a mano. En producción, 999 de 1.201 pacientes de Aumenta tienen fecha y 33 edad escrita; de las 32 que tenían las dos, una ya se contradecía. |
 | `educationCenter` | VARCHAR(200) nullable | Centro escolar (ej. "CEIP Las Acacias"). |
 | `educationLevel` | VARCHAR(80) nullable | Curso académico (ej. "3º Primaria"). |
 | `referralReason` | TEXT nullable | Motivo de derivación. |
@@ -296,7 +296,7 @@ Fichero: `models/tenant/Patient.model.js`. Tabla: `patients`.
 | `dischargeDate` | DATEONLY nullable | Fecha de alta médica (cuando aplica). |
 | `dischargeReason` | TEXT nullable | Motivo del alta. |
 | `notes` | TEXT nullable | Notas internas. |
-| `dni` | VARCHAR(20) nullable | Datos personales (sprint Pacientes & Clientes, `migrate-patients-clients-phase1.js`). |
+| `dni` | VARCHAR(20) nullable | Datos personales (sprint Pacientes & Clientes, `migrate-patients-clients-phase1.js`). **Desde el 18/09/2026 (AV-0179) se puede escribir**: está en el alta (`CAMPOS_PACIENTE`, y en la lista blanca de `normalizarPacientes` —sin ella se tecleaba y no se guardaba—) y en «Editar ficha». La ficha lo enseñaba desde siempre y no había ninguna pantalla donde ponerlo: en Aumenta lo trajo la importación en 502 de 1.201 pacientes y los otros 699 no había forma de completarlos. |
 | `address` | VARCHAR(255) nullable | Domicilio. |
 | `relationship` | VARCHAR(60) nullable | Parentesco con el cliente que paga (hijo/a · tutor legal · cónyuge · el propio cliente · hermano/a; texto libre para «otro»). |
 | `consents` | JSONB NOT NULL DEFAULT `{}` | Consentimientos RGPD con traza legal: `{ images, marketing, whatsapp }`, cada uno `{ granted, at, by }` (`lib/clinica/consents.js`). |
