@@ -149,7 +149,7 @@ describe("agruparLoteCuotas", () => {
 });
 
 describe("lineasDeCuota — cuadre del total con lo cobrado", () => {
-  it("a IVA 0: una línea por cobro, con el mes en cristiano y la nota detrás", () => {
+  it("a IVA 0: una línea por cobro, con el mes en cristiano y la nota FUERA", () => {
     const lines = lineasDeCuota({
       cobros: [cobro("c1", FAM_GARCIA, 250), cobro("c2", FAM_GARCIA, 100, { notes: "hermano pequeño" })],
       mes: "2026-09",
@@ -157,7 +157,8 @@ describe("lineasDeCuota — cuadre del total con lo cobrado", () => {
     });
     assert.equal(lines.length, 2);
     assert.equal(lines[0].description, "Cuota septiembre 2026");
-    assert.equal(lines[1].description, "Cuota septiembre 2026 — hermano pequeño");
+    // 18/09/2026: la nota del cobro ya no sale al papel, ni detrás ni delante.
+    assert.equal(lines[1].description, "Cuota septiembre 2026");
     assert.deepEqual(lines.map((l) => l.unitPrice), [250, 100]);
     const calc = calculateInvoice({ lines, irpfRate: 0 });
     assert.equal(calc.total, 350);
@@ -203,19 +204,33 @@ describe("lineasDeCuota — cuadre del total con lo cobrado", () => {
   });
 });
 
-// ── Revisión del 06/09/2026: la etiqueta del mes no se repite ────────────────
-describe("lineasDeCuota — la nota del cobro generado ya lleva «Cuota mes»", () => {
-  it("no antepone la etiqueta cuando la nota ya empieza por ella", () => {
+// ── 18/09/2026: la NOTA no sale al papel, y punto ───────────────────────────
+// Esto sustituye a la revisión del 06/09/2026, que se ocupaba de que la
+// etiqueta del mes no se repitiera cuando la línea salía de la nota. Ya no sale
+// de la nota nunca: al comprobar en producción el arreglo del 17/09 quedaban
+// cuatro cobros que habrían impreso «Cuota septiembre 2026 — Cuota cobrada en
+// Organízate el 01/09/2026 (Organízate #20138, pago 16493, tarjeta)» en la
+// factura de una familia. Sin concepto que imprimir se imprime la etiqueta sola.
+describe("lineasDeCuota — la nota del cobro se queda dentro", () => {
+  it("una nota generada por el CRM no viaja a la factura", () => {
     const generado = cobro("c1", "fam1", 160, { notes: "Cuota septiembre 2026 — Logopedia · 2 sesiones/semana" });
     const [linea] = lineasDeCuota({ cobros: [generado], mes: "2026-09", vatRate: 0 });
-    assert.equal(linea.description, "Cuota septiembre 2026 — Logopedia · 2 sesiones/semana");
+    assert.equal(linea.description, "Cuota septiembre 2026");
   });
-  it("y sí la antepone a una nota escrita a mano, o la pone sola si no hay nota", () => {
+  it("ni una escrita a mano, ni el rastro del volcado de Organízate", () => {
     const manual = cobro("c2", "fam1", 50, { notes: "Pagado en recepción" });
     const [l1] = lineasDeCuota({ cobros: [manual], mes: "2026-09", vatRate: 0 });
-    assert.equal(l1.description, "Cuota septiembre 2026 — Pagado en recepción");
-    const [l2] = lineasDeCuota({ cobros: [cobro("c3", "fam1", 50, { notes: "" })], mes: "2026-09", vatRate: 0 });
+    assert.equal(l1.description, "Cuota septiembre 2026");
+    const delVolcado = cobro("c3", "fam1", 90, {
+      notes: "Cuota septiembre 2026 — Cuota cobrada en Organízate el 01/09/2026 (Organízate #20138, pago 16493, tarjeta)",
+    });
+    const [l2] = lineasDeCuota({ cobros: [delVolcado], mes: "2026-09", vatRate: 0 });
     assert.equal(l2.description, "Cuota septiembre 2026");
+    assert.ok(!/Organ[íi]zate|tarjeta|pago \d/.test(l2.description));
+  });
+  it("y el importe no se toca por dejar de imprimir la nota", () => {
+    const lines = lineasDeCuota({ cobros: [cobro("c4", "fam1", 137.5, { notes: "lo que sea" })], mes: "2026-09", vatRate: 0 });
+    assert.equal(calculateInvoice({ lines, irpfRate: 0 }).total, 137.5);
   });
 });
 
@@ -231,14 +246,14 @@ describe("lineasDeCuota — se imprime el texto de factura, y tal cual", () => {
     assert.ok(!/Logopedia|T\.O\.|sesiones de 4|Cuota septiembre/.test(linea.description));
   });
 
-  it("y cae a la nota en los cobros de antes de la columna y en los de a mano", () => {
+  it("y sin texto de factura no cae a la nota: cae a la etiqueta del mes", () => {
     const viejo = cobro("c2", "fam1", 145, { notes: "Cuota septiembre 2026 — Cuota Logopedia 45x1" });
     const [l1] = lineasDeCuota({ cobros: [viejo], mes: "2026-09", vatRate: 0 });
-    assert.equal(l1.description, "Cuota septiembre 2026 — Cuota Logopedia 45x1");
-    // Un texto de factura vacío no borra la nota.
+    assert.equal(l1.description, "Cuota septiembre 2026");
+    // Un texto de factura en blanco cuenta como no tenerlo.
     const vacio = cobro("c3", "fam1", 50, { notes: "Pagado en recepción", invoiceText: "   " });
     const [l2] = lineasDeCuota({ cobros: [vacio], mes: "2026-09", vatRate: 0 });
-    assert.equal(l2.description, "Cuota septiembre 2026 — Pagado en recepción");
+    assert.equal(l2.description, "Cuota septiembre 2026");
   });
 
   /*
@@ -261,20 +276,21 @@ describe("lineasDeCuota — se imprime el texto de factura, y tal cual", () => {
     assert.equal(linea.unitPrice, 115);
   });
 
-  it("y el nombre interno del concepto no se imprime: sin texto, manda la nota", () => {
+  it("y el nombre interno del concepto no se imprime NUNCA: sin texto, la etiqueta", () => {
     const aMano = cobro("c6", FAM_GARCIA, 50, { conceptId: "k2", notes: "Pagado en recepción" });
     const sinTexto = [{ id: "k2", name: "Cuota T.O. 45x1", description: "   " }];
     const [linea] = lineasDeCuota({ cobros: [aMano], mes: "2026-09", vatRate: 0, textosPorConcepto: sinTexto });
-    assert.equal(linea.description, "Cuota septiembre 2026 — Pagado en recepción");
+    assert.equal(linea.description, "Cuota septiembre 2026");
+    assert.ok(!/T.O.|recepción/.test(linea.description), "ni el rótulo interno ni la nota");
   });
 
-  it("y un cobro de otro concepto, o sin catálogo, sigue como estaba", () => {
+  it("y un concepto que ya no está en el catálogo no arrastra su nota", () => {
     const catalogo = [{ id: "k1", description: "2 sesiones de 45 min semanales" }];
     const otro = cobro("c7", FAM_GARCIA, 60, { conceptId: "k9", notes: "Cuota septiembre 2026 — Cuota HHSS 1h" });
     const [l1] = lineasDeCuota({ cobros: [otro], mes: "2026-09", vatRate: 0, textosPorConcepto: catalogo });
-    assert.equal(l1.description, "Cuota septiembre 2026 — Cuota HHSS 1h");
+    assert.equal(l1.description, "Cuota septiembre 2026");
     const [l2] = lineasDeCuota({ cobros: [otro], mes: "2026-09", vatRate: 0 });
-    assert.equal(l2.description, "Cuota septiembre 2026 — Cuota HHSS 1h");
+    assert.equal(l2.description, "Cuota septiembre 2026");
   });
 
   it("y el texto de factura del cobro sigue ganándole al catálogo", () => {

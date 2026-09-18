@@ -33,6 +33,20 @@ describe("parseSortOrder — el desempate va detrás de la clave elegida", () =>
     assert.deepEqual(order, [["issueDate", "DESC"], ["number", "DESC"]]);
   });
 
+  /*
+   * ── Y EL DESEMPATE DE VERDAD ES EL DE `ordenPorNumero` (18/09/2026) ──────
+   * Comprobando el arreglo en producción, el 01/09 de Aumenta abría con
+   * R-C2600028 y R-C2600027: dentro de un mismo día, «R-C26…» va delante de
+   * «C26…» por puro orden alfabético. El endpoint pasa como desempate el
+   * MISMO orden que usa al ordenar por número —normales delante,
+   * rectificativas detrás—, así que aquí se prueba que se pega entero.
+   */
+  it("y si el desempate trae la agrupación de rectificativas, entra entera", () => {
+    const grupo = { sql: "CASE WHEN … THEN 1 ELSE 0 END" };
+    const order = parseSortOrder("issueDate", "desc", ALLOWED, FALLBACK, [[grupo, "ASC"], ["number", "DESC"]]);
+    assert.deepEqual(order, [["issueDate", "DESC"], [grupo, "ASC"], ["number", "DESC"]]);
+  });
+
   it("también ascendente, y el desempate no cambia de sentido", () => {
     const order = parseSortOrder("issueDate", "asc", ALLOWED, FALLBACK, DESEMPATE);
     assert.deepEqual(order, [["issueDate", "ASC"], ["number", "DESC"]]);

@@ -1145,12 +1145,16 @@ endpoint `GET`/`POST /api/billing/invoices/bulk-issue`, lógica pura en
   conceptos, que escribe el plan de cuotas—; si el cobro no lo trae (los
   apuntados a mano desde Cobros nacen sin él) se imprime el «Texto en la
   factura» del concepto que dice `payments.concept_id`, que `bulk-issue` baja
-  del catálogo y le pasa a `lineasDeCuota` en `textosPorConcepto`. **La NOTA es
-  el último recurso**, solo para el cobro que no tiene ni texto ni concepto: es
-  de puertas adentro y en la emisión del 17/09 salieron impresas «Reserva de
-  plaza ya abonada: −30 €» y «Pendiente según Organízate … el CRM tenía 260,00
-  €», que es justo lo que se prohibió el 09/09. El `name` del concepto («Cuota
-  T.O. 45x1») no se imprime NUNCA: es el rótulo interno.
+  del catálogo y le pasa a `lineasDeCuota` en `textosPorConcepto`. **La NOTA no
+  se imprime NUNCA** (18/09/2026, Jorge): es de puertas adentro, y sin nada que
+  imprimir la línea dice «Cuota <mes>» y se acabó. Antes caía a la nota, y en la
+  emisión del 17/09 salieron impresas «Reserva de plaza ya abonada: −30 €» y
+  «Pendiente según Organízate … el CRM tenía 260,00 €»; con el arreglo del
+  concepto quedaban aún CUATRO cobros sin concepto que habrían impreso «Cuota
+  cobrada en Organízate el 01/09/2026 (Organízate #20138, pago 16493,
+  tarjeta)». El `name` del concepto («Cuota T.O. 45x1») tampoco se imprime: es
+  el rótulo interno. Lo que la nota explica sigue entero en la pantalla de
+  Cobros, que es su sitio.
 - **Una factura por pagador** (`payments.client_id`): el reparto de cuota entre
   dos pagadores ya viene resuelto, cada uno factura lo que pagó. Una **línea
   por cobro** («Cuota septiembre 2026», con la nota del cobro detrás).
@@ -1824,9 +1828,11 @@ emitida —son documentos fiscales— ni cambia ningún importe.
   123, 115, 114, 097… El `fallback` del GET SÍ llevaba `["number", "DESC"]`
   detrás, pero solo se usa cuando el `sortBy` NO está en el whitelist. Ahora el
   desempate se pasa aparte (quinto argumento de `parseSortOrder`) y se pega
-  siempre, salvo que ya se ordene por esa misma columna. Ordenar por número
-  sigue siendo cosa de `ordenPorNumero` (normales delante, rectificativas
-  detrás).
+  siempre, salvo que ya se ordene por esa misma columna. Y el desempate **es**
+  `ordenPorNumero` —normales delante, rectificativas detrás—, no un
+  `["number", "DESC"]` a secas: con eso, dentro de un mismo día las «R-C26…»
+  se colaban delante por puro orden alfabético y el 01/09 de Aumenta abría con
+  R-C2600028 y R-C2600027 (visto al comprobarlo en producción, 18/09/2026).
 - **El vencimiento: DOS condiciones** (18/09/2026, resuelto por Jorge). El
   centro puede apagarlo —`imprimeVencimiento(settings)`, el ajuste de
   Configuración— y, aunque lo tenga encendido, tampoco se imprime cuando no

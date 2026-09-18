@@ -132,23 +132,32 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
         ? { "patient.lastName": [{ model: tenantModels.Patient, as: "patient" }, "lastName"] }
         : {}),
     };
+    /*
+     * El desempate y el orden por número son LO MISMO (18/09/2026, AV-0176):
+     * normales delante, rectificativas detrás, y dentro de cada grupo por
+     * número. Con `[["number", "DESC"]]` a secas, dentro de un mismo día las
+     * R-C26… se colaban delante de las C26… por puro orden alfabético — el
+     * 01/09 de Aumenta abría con R-C2600028 y R-C2600027.
+     */
+    const porNumero = (dir) =>
+      ordenPorNumero({
+        dir,
+        codigos: codigosR,
+        literal: (sql) => Invoice.sequelize.literal(sql),
+        escape: (v) => Invoice.sequelize.escape(v),
+      });
     const order =
       searchParams.get("sortBy") === "number"
-        ? ordenPorNumero({
-            dir: searchParams.get("sortDir"),
-            codigos: codigosR,
-            literal: (sql) => Invoice.sequelize.literal(sql),
-            escape: (v) => Invoice.sequelize.escape(v),
-          })
+        ? porNumero(searchParams.get("sortDir"))
         : parseSortOrder(
             searchParams.get("sortBy"),
             searchParams.get("sortDir"),
             allowedSort,
-            [["issueDate", "DESC"], ["number", "DESC"]],
-            // El desempate va SIEMPRE detrás (18/09/2026, AV-0176): ordenando
-            // por fecha, las 229 facturas de septiembre empatan todas y salían
-            // sin orden. Ver `lib/billing/parseSort.js`.
-            [["number", "DESC"]]
+            [["issueDate", "DESC"], ...porNumero("DESC")],
+            // Y va SIEMPRE detrás de la clave elegida: ordenando por fecha, las
+            // 229 facturas de septiembre empatan todas y salían sin orden.
+            // Ver `lib/billing/parseSort.js`.
+            porNumero("DESC")
           );
 
     const { count, rows } = await Invoice.findAndCountAll({
