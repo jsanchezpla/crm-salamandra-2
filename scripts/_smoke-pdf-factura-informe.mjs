@@ -1350,3 +1350,33 @@ describe("buildReportPdfBuffer: bordes", () => {
     assert.equal(await dia("2026-01-05T12:00:00Z"), "05 de enero de 2026");
   });
 });
+
+/* ── La casilla del paciente, en las dos descargas (AV-0175) ─────────────── */
+
+describe("el nombre del paciente se puede quitar en la factura suelta Y en el ZIP", () => {
+  /*
+   * Isabel, 17/09/2026: «en facturas múltiples o simples dar opción de poner
+   * el nombre del paciente o no, no todo el mundo lo quiere». La casilla
+   * existía solo en la factura suelta, así que quien bajaba el mes entero no
+   * tenía forma de quitarlo. Aquí se fija que las DOS puertas leen el mismo
+   * `paciente=0`: si una se queda atrás, la familia recibe el nombre del niño
+   * impreso sin haberlo pedido.
+   */
+  const lee = (r) => readFileSync(join(RAIZ, r), "utf8");
+
+  it("la descarga de UNA lo respeta", () => {
+    assert.match(lee("app/api/billing/invoices/[id]/pdf/route.js"), /searchParams\.get\("paciente"\) !== "0"/);
+  });
+
+  it("el ZIP de VARIAS lo respeta igual", () => {
+    const src = lee("app/api/billing/invoices/bulk-pdf/route.js");
+    assert.match(src, /searchParams\.get\("paciente"\) !== "0"/, "el ZIP no lee el parámetro");
+    assert.match(src, /conPaciente && inv\.patient/, "lo lee pero no lo usa al armar el PDF");
+  });
+
+  it("y el botón de descargar el ZIP manda la casilla", () => {
+    const src = lee("components/billing/ExportButtons.jsx");
+    assert.match(src, /conPaciente \? "" : "&paciente=0"/, "el popover no manda el parámetro");
+    assert.match(src, /Con el nombre del paciente/, "no hay casilla que marcar");
+  });
+});
