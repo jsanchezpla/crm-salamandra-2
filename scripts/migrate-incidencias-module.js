@@ -16,6 +16,9 @@
 
 import { Sequelize } from "sequelize";
 import { acotarSlugs } from "./_solo-este-tenant.js";
+// La lista de categorías vive en /lib y la leen el endpoint, la pantalla y esta
+// migración: escribirla dos veces es lo que rompió AV-0203 (ver `ensureEnums`).
+import { INCIDENCIA_CATEGORIES } from "../lib/clinica/incidencias.js";
 
 function log(msg) { process.stdout.write(`  ${msg}\n`); }
 function header(msg) { process.stdout.write(`\n▶ ${msg}\n`); }
@@ -70,9 +73,41 @@ async function ensureIndex(s, t, schema, indexName, table, colsSql) {
   log(`✓ ${schema} index ${indexName}: creado`);
 }
 
+/** Los valores que tiene HOY ese enum en ese schema. */
+async function enumValues(s, name, schema) {
+  const [rows] = await s.query(
+    `SELECT e.enumlabel AS v
+       FROM pg_type tp
+       JOIN pg_enum e ON e.enumtypid = tp.oid
+       JOIN pg_namespace n ON n.oid = tp.typnamespace
+      WHERE tp.typname = $1 AND n.nspname = $2
+      ORDER BY e.enumsortorder`,
+    { bind: [name, schema] }
+  );
+  return rows.map((r) => r.v);
+}
+
+/*
+ * ── EL ENUM SE SINCRONIZA, NO SOLO SE CREA (18/09/2026, AV-0203 de Aumenta) ──
+ *
+ * Arantxa: «intento mandar una incidencia y me sale error interno del
+ * servidor». El desplegable ofrecía DIEZ categorías y el tipo de PostgreSQL
+ * tenía OCHO: elegir «Otros» o «Solicitud laboral» pasaba la validación del
+ * endpoint —que mira `INCIDENCIA_CATEGORIES`— y reventaba en el INSERT con
+ * «invalid input value for enum». Un 500 por una lista escrita dos veces.
+ *
+ * Pasó porque esta migración llevaba las categorías a mano y solo actuaba
+ * cuando el tipo NO existía: `5b670d5c` añadió las dos al código y los tenants
+ * que ya tenían el enum se quedaron cortos. Estaban los ocho schemas del CRM.
+ *
+ * Por eso ahora: la lista sale de `lib/clinica/incidencias.js` (una sola
+ * fuente) y, si el tipo ya existe, se le AÑADE lo que falte. `ADD VALUE` no
+ * quita ni renombra nada, así que es seguro de repetir; los valores de más que
+ * hubiera en la base se dejan estar (alguno puede tener filas).
+ */
 async function ensureEnums(s, schema) {
   const enums = [
-    { name: "enum_incidencias_category", values: ["terapeutica", "organizativa", "documental", "administrativa", "tecnologica", "comunicativa", "coordinacion", "informacion"] },
+    { name: "enum_incidencias_category", values: INCIDENCIA_CATEGORIES.map((c) => c.key) },
     { name: "enum_incidencias_status", values: ["pending", "in_progress", "resolved"] },
     { name: "enum_incidencias_priority", values: ["low", "medium", "high"] },
   ];
@@ -80,7 +115,20 @@ async function ensureEnums(s, schema) {
     if (!(await enumTypeExists(s, e.name, schema))) {
       await s.query(`CREATE TYPE "${schema}"."${e.name}" AS ENUM (${e.values.map((v) => `'${v}'`).join(", ")})`);
       log(`✓ ${schema} enum ${e.name}: creado`);
+      continue;
     }
+    const tiene = await enumValues(s, e.name, schema);
+    const faltan = e.values.filter((v) => !tiene.includes(v));
+    for (const v of faltan) {
+      // Los valores viajan interpolados (un parámetro no vale en un ALTER
+      // TYPE), así que se exige la forma de una clave: letras, números y guion
+      // bajo. Prueba: `_smoke-incidencias-enum.mjs`.
+      if (!/^[a-z0-9_]+$/.test(v)) throw new Error(`valor de enum no válido: ${v}`);
+      // Fuera de transacción a propósito: un valor nuevo no se puede usar en la
+      // misma en la que se añade, y aquí solo se declara.
+      await s.query(`ALTER TYPE "${schema}"."${e.name}" ADD VALUE IF NOT EXISTS '${v}'`);
+    }
+    if (faltan.length) log(`✓ ${schema} enum ${e.name}: añadidos ${faltan.join(", ")}`);
   }
 }
 

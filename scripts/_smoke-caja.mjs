@@ -41,6 +41,7 @@ import {
   saldoDiarioEfectivo,
   fondoSugerido,
   esperadoAlCerrar,
+  origenDelSaldoInicial,
 } from "../lib/billing/caja.js";
 
 const CAJA = "11111111-1111-1111-1111-111111111111";
@@ -476,5 +477,47 @@ describe("el día que se arquea manda lo contado", () => {
     );
     assert.equal(filas[0].efectivoDelDia.descuadre, 0);
     assert.equal(filas[0].efectivoDelDia.queda, 140);
+  });
+});
+
+/*
+ * DE DÓNDE SALE EL SALDO DEL QUE SE PARTE (18/09/2026, cuadre de caja de
+ * Aumenta). La pestaña «Efectivo en caja» decía siempre «contado al cerrar el
+ * …», y desde AV-0157 el saldo puede venir de que nadie ha cerrado nunca: la
+ * fecha llega a null y la frase se quedaba con el hueco vacío, presentando
+ * como un conteo un número que nadie contó. En Aumenta es el caso normal.
+ */
+describe("arqueo · de dónde sale el saldo del que se parte", () => {
+  it("sin nada anterior, se empieza en cero y se dice", () => {
+    const o = origenDelSaldoInicial(null);
+    assert.equal(o.tipo, "cero");
+    assert.equal(o.fecha, null);
+    assert.match(o.breve, /cero/);
+  });
+
+  it("de un cierre con conteo, dice la fecha en que se contó", () => {
+    const o = origenDelSaldoInicial({ importe: 161.42, fecha: "2026-09-16" });
+    assert.equal(o.tipo, "cierre");
+    assert.equal(o.fecha, "16/09/2026");
+    assert.equal(o.breve, "contado al cerrar el 16/09/2026");
+  });
+
+  it("sin arqueo válido, NO dice que lo contara nadie", () => {
+    const o = origenDelSaldoInicial({ importe: 307.92, fecha: null, desdeElPrincipio: true });
+    assert.equal(o.tipo, "acumulado");
+    assert.equal(o.fecha, null);
+    assert.doesNotMatch(o.breve, /contad/i);
+    assert.doesNotMatch(o.breve, /cerrar els*$/);
+  });
+
+  it("desdeElPrincipio manda aunque venga fecha", () => {
+    const o = origenDelSaldoInicial({ importe: 50, fecha: "2026-09-01", desdeElPrincipio: true });
+    assert.equal(o.tipo, "acumulado");
+  });
+
+  it("una fecha que no es una fecha no se cuela en la frase", () => {
+    const o = origenDelSaldoInicial({ importe: 50, fecha: "no-es-fecha" });
+    assert.equal(o.tipo, "acumulado");
+    assert.doesNotMatch(o.breve, /no-es-fecha/);
   });
 });
