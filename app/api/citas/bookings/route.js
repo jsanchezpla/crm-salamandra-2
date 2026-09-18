@@ -18,6 +18,11 @@ import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMemb
 import { meetUrlInicial } from "../../../../lib/citas/videollamada.js";
 import { veTodaLaAgenda, soloLoSuyo } from "../../../../lib/citas/visibilidad.js";
 import { cargarFestivos, esFestivo } from "../../../../lib/citas/festivos.js";
+/*
+ * Los tres motivos del 409 y qué se perdona: UNA sola lista, que leen a la vez
+ * este endpoint y el drawer (`lib/citas/choqueAlCrear.js`, AV-0166).
+ */
+import { MOTIVO_FESTIVO, MOTIVO_BLOQUEO, MOTIVO_SOLAPE } from "../../../../lib/citas/choqueAlCrear.js";
 import { duracionDeContacto } from "../../../../lib/citas/slots.js";
 import { citaPuedeAvisar } from "../../../../lib/clients/comunicaciones.js";
 import { sendEmail, envioRealizado } from "../../../../lib/email/resendClient.js";
@@ -339,7 +344,20 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     // El festivo protege la agenda pública, no ata las manos a quien manda.
     const festivos = await cargarFestivos(tenantModels);
     if (esFestivo(festivos, getMadridParts(scheduledAt)) && body.permitirFestivo !== true) {
-      return error("Ese día está marcado como festivo o cierre del centro. Vuelve a enviarlo confirmando si quieres crearla igualmente.", 409);
+      /*
+       * El festivo TAMBIÉN manda su motivo (18/09/2026, AV-0166). Sin él caía
+       * en el «si no es solape, es bloqueo» de la pantalla y un día cerrado
+       * salía como «Ese hueco está bloqueado»: quien lo leía se iba a buscar a
+       * Citas → Bloqueos un bloqueo que no existe.
+       *
+       * Y la frase ya no dice «vuelve a enviarlo confirmando»: eso es lo que
+       * hace la pantalla, no algo que quien apunta la cita tenga que leer.
+       */
+      return errorConDatos(
+        "Ese día está marcado como festivo o cierre del centro.",
+        409,
+        { motivo: MOTIVO_FESTIVO }
+      );
     }
 
     /*
@@ -492,10 +510,18 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
          * distinguirlos, el diálogo decía «Ese hueco está bloqueado» a los dos
          * y ofrecía «Crearla igualmente» para algo que iba a volver a fallar.
          */
+        /*
+         * De QUIÉN es el bloqueo (AV-0166: «¿de quién?»). No hace falta buscar
+         * el nombre: un bloqueo o es del centro (`teamMemberId` null, tapa a
+         * todo el mundo) o es de la persona que atiende ESTA cita
+         * —`cargarAusencias` no devuelve otros—, y ese nombre la pantalla ya lo
+         * tiene delante en el formulario.
+         */
+        const deQuien = chocan.some((b) => b.teamMemberId == null) ? "centro" : "profesional";
         return errorConDatos(
-          `Ese tramo está bloqueado ${detalle}. Vuelve a enviarlo confirmando si quieres crearla igualmente.`,
+          `Ese tramo está bloqueado ${detalle}.`,
           409,
-          { motivo: "bloqueo" }
+          { motivo: MOTIVO_BLOQUEO, deQuien }
         );
       }
     }
@@ -508,7 +534,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       return errorConDatos(
         `Solapa con otra cita activa el ${fmtDateTime(overlap.scheduledAt)}`,
         409,
-        { motivo: "solape" }
+        { motivo: MOTIVO_SOLAPE }
       );
     }
 

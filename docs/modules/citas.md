@@ -2586,3 +2586,60 @@ Las **41** que ya estaban asignadas se soltaron con
 `scripts/_hechos/soltar-faltas-asignadas.js` (respaldo en el VPS antes de
 tocar). No se tocó ningún responsable puesto a mano: solo se quitó a quien está
 en la lista del centro.
+
+## Y qué pasa si se crea igualmente (18/09/2026, AV-0166 de Aumenta)
+
+> «Al crear una cita y te pone el mensaje de (Ese hueco está bloqueado) si le
+> dan a Crearla igualmente no hace nada, **convendría saber el funcionamiento
+> que hace cuando sale ese mensaje**.»
+
+La misma queja que AV-0167, con una segunda mitad que quedó sin hacer: el aviso
+no explicaba nada. Tres cosas, encima de lo anterior.
+
+**1. La regla se fue a `lib/`.** Qué se perdona y con qué vivía en el JSX, y
+encima olfateando el TEXTO del error (`/^Solapa con otra cita/`). Ahora está en
+`lib/citas/choqueAlCrear.js` (prueba: `_smoke-citas-choque.mjs`, 9 casos), que
+leen a la vez el endpoint y el drawer — regla #2 y regla 16 de CLAUDE.md. Con
+dos listas, el día que se añada un cuarto motivo la pantalla ofrecería forzar
+algo que el servidor no perdona, que es el fallo de origen:
+
+| `motivo` | Qué ha pasado | Perdón | Forzable |
+| --- | --- | --- | --- |
+| `festivo` | El centro cierra ese día | `permitirFestivo` | sí |
+| `bloqueo` | Ese tramo está bloqueado (+ `deQuien`: `"centro"` / `"profesional"`) | `permitirBloqueo` | sí |
+| `solape` | Ya hay otra cita del mismo profesional | — | **no** |
+
+El texto se sigue mirando como red de seguridad para respuestas sin `motivo`,
+pero **solo hacia `solape`**: equivocarse hacia «no forzable» quita un botón que
+valía; hacia «forzable», devuelve el botón muerto.
+
+**2. El festivo ya no se disfraza de bloqueo.** No mandaba `motivo`, así que caía
+en el «si no es solape, es bloqueo» y un día cerrado salía como «Ese hueco está
+bloqueado» — quien lo leía se iba a Citas → Bloqueos a buscar un bloqueo que no
+existe. Ahora manda `MOTIVO_FESTIVO` y tiene su título: «Ese día el centro está
+cerrado».
+
+**3. El aviso dice la consecuencia.** Mismo patrón que cancelar una cita de bono
+(`58e4edcd`): el hecho, la consecuencia y lo que NO cambia. Del bloqueo se dice
+**de quién es** (del centro, o de quien atiende la cita — no hace falta buscar el
+nombre: `cargarAusencias` solo devuelve esos dos casos, y el nombre ya está en el
+formulario) y, lo que nadie sabía, que **forzar la cita NO quita el bloqueo**: el
+hueco sigue cerrado, así que el widget público sigue sin ofrecer esa hora
+(`restarAusencias` en las dos rutas de disponibilidad, y `book/route.js` la
+rechaza además al reservar). Queda una cita dentro de un rato marcado como no
+disponible, visible solo por dentro; para abrir el hueco de verdad hay que quitar
+el bloqueo en Citas → Bloqueos.
+
+**Y el segundo 409, que era la otra mitad del «no hace nada».** Al forzar el
+bloqueo, la respuesta podía volver a chocar —con la cita que había debajo— y ese
+segundo choque caía en el `throw` del `catch`, que pinta el aviso rojo en la
+**cabecera** del drawer: a seiscientas líneas de formulario del botón, fuera de
+la pantalla. Se pulsaba «Crearla igualmente» y no se veía absolutamente nada.
+No era raro: el 18/09/2026 Aumenta tenía **9.620 bloqueos vigentes y 302 con una
+cita activa encima** (todos de una persona, ninguno del centro). Ahora ese
+segundo choque sale en un diálogo: «Se ha saltado el hueco bloqueado, pero hay
+otra cosa debajo».
+
+Lo que NO toca: **mover** una cita (`PATCH /api/citas/bookings/[id]`) sigue con
+su 409 de solape sin `motivo` y sin avisar de bloqueos — es la misma decisión de
+producto que ya quedó aparcada en `lib/citas/choqueConBloqueos.js`.
