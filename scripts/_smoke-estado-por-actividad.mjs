@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  estadoPorActividad, inicioDelCurso, inicioDelCursoAnterior, elMasVivo, ESTADOS_QUE_SE_REACTIVAN,
+  estadoPorActividad, inicioDelCurso, inicioDelCursoAnterior, elMasVivo, sube, ESTADOS_QUE_SE_REACTIVAN,
 } from "../lib/clients/estadoPorActividad.js";
 
 const hoy = new Date("2026-09-15T10:00:00Z");
@@ -71,4 +71,13 @@ test("una ficha abierta ESTE curso tampoco puede ser baja", () => {
   assert.equal(estadoPorActividad({ altaEn: "2026-08-02" }, cli), "inactive");
   // Y con cita del curso manda la cita, como siempre.
   assert.equal(estadoPorActividad({ altaEn: "2026-09-17", ultimaCita: "2026-09-20" }, cli), "active");
+});
+
+test("«solo subir» sabe qué cambios mejoran y cuáles no", () => {
+  assert.equal(sube("discharged", "paused"), true);
+  assert.equal(sube("inactive", "active"), true);
+  assert.equal(sube("paused", "active"), true);
+  assert.equal(sube("active", "paused"), false);
+  assert.equal(sube("paused", "inactive"), false);
+  assert.equal(sube("paused", "paused"), false);
 });

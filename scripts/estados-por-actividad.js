@@ -40,12 +40,20 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
-import { estadoPorActividad, elMasVivo, inicioDelCurso, inicioDelCursoAnterior } from "../lib/clients/estadoPorActividad.js";
+import { estadoPorActividad, elMasVivo, sube, inicioDelCurso, inicioDelCursoAnterior } from "../lib/clients/estadoPorActividad.js";
 import { auditar } from "../lib/utils/auditoria.js";
 
 const args = process.argv.slice(2);
 const SLUG = args.find((a) => !a.startsWith("--") && !a.endsWith(".json"));
 const CONFIRMAR = args.includes("--confirm");
+/*
+ * `--solo-subir` (18/09/2026): aplica SOLO lo que mejora de estado —de Baja a
+ * En pausa, de En pausa a Activo—. Sirve para arreglar a quien está peor de lo
+ * que le toca (los de la cola de admisión de AV-0177) sin bajar de Activo, de
+ * paso, a trece fichas que nadie ha mirado hoy. Bajar es otra decisión y se
+ * toma lanzándolo sin esta opción.
+ */
+const SOLO_SUBIR = args.includes("--solo-subir");
 const iDeshacer = args.indexOf("--deshacer");
 const DESHACER = iDeshacer >= 0 ? args[iDeshacer + 1] : null;
 const out = (m = "") => process.stdout.write(`${m}\n`);
@@ -103,7 +111,8 @@ async function main() {
   const hoy = new Date();
   const inicio = inicioDelCurso(hoy);
   out(`\n${SLUG} · curso en marcha desde ${inicio}, anterior desde ${inicioDelCursoAnterior(hoy)}`);
-  out(CONFIRMAR ? "MODO ESCRITURA\n" : "ENSAYO (no escribe nada)\n");
+  out(CONFIRMAR ? "MODO ESCRITURA" : "ENSAYO (no escribe nada)");
+  out(SOLO_SUBIR ? "SOLO SUBIR: no se baja de estado a nadie\n" : "");
 
   const conPacientes = await hay("patients");
   const conSesiones = await hay("clinic_sessions");
@@ -198,6 +207,12 @@ async function main() {
     if (nuevo !== f.status) cambiosFam.push({ id: f.id, de: f.status, a: nuevo });
   }
 
+  // `--solo-subir`: se descarta lo que empeora DESPUÉS de calcularlo todo, así
+  // que el recuento de arriba sigue diciendo lo que saldría del pase entero.
+  const soloLasQueSuben = (lista) => (SOLO_SUBIR ? lista.filter((c) => sube(c.de, c.a)) : lista);
+  const cambiosPacAplicar = soloLasQueSuben(cambiosPac);
+  const cambiosFamAplicar = soloLasQueSuben(cambiosFam);
+
   const resumenEstados = (filas, mapa) => {
     const m = {};
     for (const f of filas) m[mapa(f)] = (m[mapa(f)] ?? 0) + 1;
@@ -209,18 +224,27 @@ async function main() {
   out(`  Familias: ${familias.length} · después: ${JSON.stringify(resumenEstados(familias, (f) => finalFam.get(String(f.id)) ?? f.status))}`);
   contar(cambiosFam, "Familias");
 
+  if (SOLO_SUBIR) {
+    out(`\n  Con --solo-subir se aplican ${cambiosPacAplicar.length} paciente(s) y ${cambiosFamAplicar.length} familia(s); el resto se queda como está.`);
+    contar(cambiosPacAplicar, "Pacientes que suben");
+    contar(cambiosFamAplicar, "Familias que suben");
+  }
+
   if (!CONFIRMAR) {
     out("\nEnsayo: nada escrito. Añade --confirm para aplicarlo.");
     return;
   }
 
   const fichero = `${process.env.RESPALDO_DIR || "/tmp"}/estados-por-actividad-${SLUG}-${Date.now()}.json`;
-  writeFileSync(fichero, JSON.stringify({ slug: SLUG, fecha: hoy.toISOString(), pacientes: cambiosPac, familias: cambiosFam }));
+  writeFileSync(
+    fichero,
+    JSON.stringify({ slug: SLUG, fecha: hoy.toISOString(), pacientes: cambiosPacAplicar, familias: cambiosFamAplicar })
+  );
   out(`\nRespaldo del estado anterior: ${fichero}`);
 
   await db.transaction(async (t) => {
-    if (cambiosPac.length) await aplicar("patients", agrupar(cambiosPac), t);
-    if (cambiosFam.length) await aplicar("clients", agrupar(cambiosFam), t);
+    if (cambiosPacAplicar.length) await aplicar("patients", agrupar(cambiosPacAplicar), t);
+    if (cambiosFamAplicar.length) await aplicar("clients", agrupar(cambiosFamAplicar), t);
   });
 
   const { Tenant } = getMasterModels();
@@ -231,7 +255,13 @@ async function main() {
     action: "client.estados_por_actividad",
     entity: "clients",
     entityId: null,
-    after: { curso: inicio, pacientes: cambiosPac.length, familias: cambiosFam.length, respaldo: fichero },
+    after: {
+      curso: inicio,
+      pacientes: cambiosPacAplicar.length,
+      familias: cambiosFamAplicar.length,
+      soloSubir: SOLO_SUBIR,
+      respaldo: fichero,
+    },
   });
   out("✓ Escrito.");
 }
