@@ -2323,6 +2323,14 @@ function FilaMoroso({ m }) {
           compartido con hermanos
         </span>
       )}
+      {/* De qué MES es la deuda (18/09/2026): el número de meses ya estaba,
+          pero había que ir a buscar cuáles eran. Va fuera de la pastilla para
+          que el importe siga siendo lo primero que se lee. */}
+      {etiqueta.meses && (
+        <span className="text-[11px] text-neutral-500" title={`Meses sin pagar: ${etiqueta.meses}`}>
+          {etiqueta.meses}
+        </span>
+      )}
       <span className={`text-[11px] px-2 py-0.5 rounded-full ${color}`}>{etiqueta.texto}</span>
     </li>
   );
@@ -2350,14 +2358,6 @@ function BotonCuota({ href, children = "Cambiar el importe" }) {
       </svg>
       {children}
     </Link>
-      {/* De qué MES es la deuda (18/09/2026): el número de meses ya estaba,
-          pero había que ir a buscar cuáles eran. Va fuera de la pastilla para
-          que el importe siga siendo lo primero que se lee. */}
-      {etiqueta.meses && (
-        <span className="text-[11px] text-neutral-500" title={`Meses sin pagar: ${etiqueta.meses}`}>
-          {etiqueta.meses}
-        </span>
-      )}
   );
 }
 
