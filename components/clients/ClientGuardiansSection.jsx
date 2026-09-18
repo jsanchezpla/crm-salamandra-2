@@ -147,6 +147,12 @@ export default function ClientGuardiansSection({ clientId }) {
                         {g.email && <span>{g.email}</span>}
                         {g.phone && <span>{g.phone}</span>}
                         {g.dni && <span>DNI {g.dni}</span>}
+                        {/* El domicilio no se edita aquí a propósito: es lo que
+                            el tutor escribió al firmar el contrato en el portal
+                            y solo cambia firmando otra vez. Se enseña porque,
+                            sin esta línea, era un dato que el centro tenía
+                            guardado y no podía ver en ninguna pantalla. */}
+                        {g.domicilio && <span>{g.domicilio}</span>}
                       </div>
                     </div>
                     <div className="text-[11px] shrink-0">

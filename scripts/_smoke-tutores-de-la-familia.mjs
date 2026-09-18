@@ -31,6 +31,7 @@ import assert from "node:assert/strict";
 import {
   tutoresDeLaFamilia,
   fusionarTutoresDeFicha,
+  normalizeGuardians,
   MAX_TUTORES,
 } from "../lib/clients/guardians.js";
 
@@ -252,5 +253,69 @@ describe("fusionarTutoresDeFicha: escribir sin ver el DNI ni quién firma", () =
   it("el parentesco se acota a la lista cerrada, como al normalizar", () => {
     const { guardians } = fusionarTutoresDeFicha([], [{ name: "Ana", relationship: "abuela" }]);
     assert.equal(guardians[0].relationship, "tutor");
+  });
+});
+
+/**
+ * El domicilio que el tutor escribió al firmar (18/09/2026).
+ *
+ * `tutorDeclarado` (lib/clients/datosFicha.js) guarda seis datos de quien firma
+ * el contrato en el portal: nombre, parentesco, DNI, teléfono, correo Y
+ * DOMICILIO. Los cinco primeros sobrevivían a volver a guardar la lista de
+ * tutores; el domicilio no, porque `normalizeGuardians` rehace cada tutor clave
+ * a clave y esa no estaba. Desaparecía sin aviso y sin vuelta atrás: el contrato
+ * firmado guarda su copia, pero de ahí no regresa a la ficha.
+ *
+ * En producción son 2 tutores de `nutri_laura`, los dos con domicilio puesto y
+ * los dos en fichas que se siguen tocando (la última, el 03/09/2026).
+ */
+describe("el domicilio del tutor sobrevive a que alguien guarde la lista", () => {
+  it("normalizeGuardians ya no lo tira: la ficha de la familia devuelve el tutor entero", () => {
+    const [g] = normalizeGuardians([
+      {
+        id: "3f1a2b4c-5d6e-4f70-8a91-b2c3d4e5f607",
+        name: "Ana Ruiz",
+        relationship: "madre",
+        dni: "12345678Z",
+        phone: "600",
+        email: "ana@x.es",
+        domicilio: "C/ Mallorca 210, 3º 2ª",
+        signer: true,
+      },
+    ]);
+    assert.equal(g.domicilio, "C/ Mallorca 210, 3º 2ª");
+    assert.equal(g.dni, "12345678Z", "y los otros cinco siguen donde estaban");
+  });
+
+  it("un tutor sin domicilio lo tiene a null, no a undefined ni a cadena vacía", () => {
+    const [sin] = normalizeGuardians([{ name: "Javier", relationship: "padre" }]);
+    const [blanco] = normalizeGuardians([{ name: "Javier", relationship: "padre", domicilio: "   " }]);
+    assert.equal(sin.domicilio, null);
+    assert.equal(blanco.domicilio, null);
+  });
+
+  it("fusionarTutoresDeFicha lo hereda, como el DNI: esa pantalla no lo enseña", () => {
+    const actuales = [
+      { id: "a1", name: "Ana Ruiz", relationship: "madre", dni: "12345678Z", phone: "600", email: "ana@x.es", domicilio: "C/ Mallorca 210", signer: true },
+    ];
+    const { guardians } = fusionarTutoresDeFicha(actuales, [
+      { id: "a1", name: "Ana Ruiz", relationship: "madre", phone: "699 999 999", email: "ana@x.es" },
+    ]);
+    assert.equal(guardians[0].phone, "699 999 999");
+    assert.equal(guardians[0].domicilio, "C/ Mallorca 210");
+  });
+
+  it("y no se puede colar uno por el cuerpo: solo lo cambia quien firma", () => {
+    const actuales = [{ id: "a1", name: "Ana Ruiz", relationship: "madre", domicilio: "C/ Mallorca 210", signer: false }];
+    const { guardians } = fusionarTutoresDeFicha(actuales, [
+      { id: "a1", name: "Ana Ruiz", relationship: "madre", domicilio: "Otro sitio 1" },
+    ]);
+    assert.equal(guardians[0].domicilio, "C/ Mallorca 210");
+  });
+
+  it("un tutor nuevo desde la ficha del paciente nace sin domicilio, como nace sin DNI", () => {
+    const { guardians } = fusionarTutoresDeFicha([], [{ name: "Abuela Carmen", relationship: "otro", phone: "622" }]);
+    assert.equal(guardians[0].domicilio, null);
+    assert.equal(guardians[0].dni, null);
   });
 });

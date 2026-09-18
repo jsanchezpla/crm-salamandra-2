@@ -171,6 +171,15 @@ además, no se sabía cuál de los dos tutores había firmado.
   (`components/clients/ClientGuardiansSection.jsx`): el endpoint existía desde
   el 29/07 pero no había pantalla, así que en la práctica ninguna familia tenía
   tutores y el caso de los padres separados no se podía representar.
+- **El domicilio del tutor es un dato declarado, no uno que teclee el centro**
+  (18/09/2026). Lo escribe quien firma el contrato en el portal
+  (`tutorDeclarado`, `lib/clients/datosFicha.js`) y ninguna pantalla lo deja
+  editar: la ficha de la familia lo **enseña** y la del paciente ni lo enseña.
+  Hasta esta fecha, `normalizeGuardians` rehacía cada tutor sin él y guardar la
+  lista lo borraba sin aviso y sin vuelta atrás — el contrato firmado guarda su
+  copia, pero de ahí no vuelve a la ficha. Ahora se conserva al normalizar y se
+  hereda al fusionar, igual que el DNI. Fijado en
+  `scripts/_smoke-tutores-de-la-familia.mjs`.
 - UI: sección «Contrato» de la ficha de cliente
   (`components/clients/ClientContractSection.jsx`). Se esconde sola si el
   tenant no tiene la tabla `documents` (`archivoDisponible: false`).
