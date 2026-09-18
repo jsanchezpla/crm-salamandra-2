@@ -672,6 +672,16 @@ ficha se quedan fuera aunque el aviso las citara: son texto libre donde
 administración apunta acuerdos de pago e impagos, y no hay forma de separar lo
 que es dinero de lo que no mirándolas.
 
+**La dirección fiscal cae como domicilio** (medido en producción el mismo día).
+De las **1.107 familias con paciente** de Aumenta, solo **8** tienen
+`customFields.domicilio`; **988** lo tienen en `fiscalAddress` (y 985 en
+`fiscalCity`), que es como entró de Organízate. Sin esa caída la tarjeta salía
+vacía justo en la reina que la pidió. Una dirección POSTAL no es «el tema
+económico»: es dónde vive la familia escrito en la casilla de al lado. Se usa
+solo como caída —lo escrito a mano manda— y lo que sigue sin salir es lo que es
+dinero y solo dinero: el NIF (`taxId`, `fiscalTaxId`) y la razón social
+(`fiscalName`).
+
 **Dónde vive la regla.** `lib/clients/familiaEnLaFicha.js`, que construye el
 bloque CAMPO A CAMPO desde `customFields` en vez de quitar cosas de la ficha
 entera: así una columna nueva de dinero en `Client` no se cuela sola. El

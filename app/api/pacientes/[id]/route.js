@@ -71,7 +71,11 @@ function payerInclude({ Client, ClientContactMethod }, tenantHasModule) {
   // propia ficha—, así que la ficha del paciente decía «sin contactos» con el
   // número guardado. El serializador cae a la ficha (y a los tutores) cuando
   // no hay métodos de contacto: `payerContactsOf` en lib/clinica/serialize.js.
-  const inc = { model: Client, as: "client", attributes: ["id", "name", "separated", "guardians", "email", "phone", "taxId", "customFields"] };
+  // `fiscalAddress`/`fiscalZip`/`fiscalCity` (18/09/2026): en Aumenta el
+  // domicilio de la familia vive ahí en 988 de 1.107 fichas —así entró de
+  // Organízate—, y sin ellos la tarjeta «La familia» salía vacía. Los lee
+  // `familiaEnLaFicha.js`, que NO deja salir el NIF ni la razón social.
+  const inc = { model: Client, as: "client", attributes: ["id", "name", "separated", "guardians", "email", "phone", "taxId", "customFields", "fiscalAddress", "fiscalZip", "fiscalCity"] };
   if (ClientContactMethod) {
     inc.include = [{ model: ClientContactMethod, as: "contactMethods", attributes: ["id", "kind", "value", "label", "isPrimary"] }];
   }
