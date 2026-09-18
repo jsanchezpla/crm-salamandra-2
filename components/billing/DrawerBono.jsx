@@ -31,6 +31,7 @@ import Select from "../ui/Select.jsx";
 import SelectorDestinatarios from "./SelectorDestinatarios.jsx";
 import { eurosToCents, centsToEuros } from "../../lib/payments/money.js";
 import { rotuloDelBono, parteDelCobro, SESIONES_MAX } from "../../lib/billing/bonos.js";
+import { repartirTiposDeBono } from "../../lib/billing/tiposDeBono.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -78,6 +79,17 @@ export default function DrawerBono({
   const [patientId, setPatientId] = useState(bono?.patientId ?? "");
   const [pacientesDeLaFamilia, setPacientesDeLaFamilia] = useState([]);
   const [permitirDuplicados, setPermitirDuplicados] = useState(false);
+  /*
+   * VER TODO EL CATÁLOGO (18/09/2026, Aumenta: «al crear un bono, al elegir el
+   * tipo de bono, que solo salgan las citas con bono y no todas»).
+   *
+   * El desplegable arranca con los tipos que llevan bono —en Aumenta, 5 de los
+   * 72 tipos de cita que tiene— y el resto se abre con un clic: dar un bono
+   * sobre un tipo suelto es legítimo y se sigue pudiendo, solo deja de ser lo
+   * primero que hay que descartar 67 veces. La regla vive en
+   * `lib/billing/tiposDeBono.js`, con su prueba.
+   */
+  const [verTodosLosTipos, setVerTodosLosTipos] = useState(false);
 
   const [guardando, setGuardando] = useState(false);
   const [err, setErr] = useState(null);
@@ -93,6 +105,21 @@ export default function DrawerBono({
   }, [tipos, tipoFijo, eventTypeId]);
 
   const nombreDelTipo = tipoNombre ?? tipo?.name ?? tipoFijo?.name ?? "";
+
+  // Los de bono delante, el resto detrás. Sin un solo tipo de bono (un centro
+  // que aún no le ha puesto sesiones a nada) se enseña el catálogo entero: un
+  // desplegable vacío parece roto y dejaría sin dar el primer bono.
+  const { deBono, resto, hayResto } = useMemo(() => repartirTiposDeBono(tipos), [tipos]);
+  /*
+   * Y si el tipo YA elegido no está entre los de bono, se enseña todo: el
+   * desplegable se quedaría en «Elige…» con un valor puesto detrás, que es
+   * peor que una lista larga. Hoy no pasa (el filtro de la pantalla ya solo
+   * ofrece tipos de bono), pero es de una línea y no hay que acordarse.
+   */
+  const elegidoFuera =
+    !!eventTypeId && !deBono.some((t) => String(t.id) === String(eventTypeId));
+  const mostrandoTodos = verTodosLosTipos || elegidoFuera || deBono.length === 0;
+  const tiposVisibles = mostrandoTodos ? tipos : deBono;
 
   // Los hermanos, para poder decir de quién es el bono (AV-0055). Solo en la
   // edición: en el alta el paciente lo trae el selector de destinatarios.
@@ -283,7 +310,7 @@ export default function DrawerBono({
               <Select
                 value={String(eventTypeId)}
                 onChange={elegirTipo}
-                options={tipos.map((t) => ({
+                options={tiposVisibles.map((t) => ({
                   value: String(t.id),
                   label: `${t.name}${(Number(t.sesionesDelTipo) || 1) > 1 ? ` · ${t.sesionesDelTipo} sesiones` : " · cita suelta"}${t.oculto ? " · oculto" : ""}`,
                 }))}
@@ -291,6 +318,35 @@ export default function DrawerBono({
                 searchable
                 className="w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200"
               />
+            )}
+            {/* El resto del catálogo no se borra: se guarda detrás de un clic. */}
+            {!editando && !tipoFijo && hayResto && deBono.length > 0 && !elegidoFuera && (
+              <p className="text-[11px] text-neutral-400 mt-1">
+                {mostrandoTodos ? (
+                  <>
+                    Salen los {tipos.length} tipos de cita del centro.{" "}
+                    <button
+                      type="button"
+                      onClick={() => setVerTodosLosTipos(false)}
+                      className="underline hover:text-neutral-600"
+                    >
+                      Ver solo los de bono
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    Salen los {deBono.length} tipos que llevan bono: los que el catálogo vende por
+                    sesiones y los que ya tienen bonos dados.{" "}
+                    <button
+                      type="button"
+                      onClick={() => setVerTodosLosTipos(true)}
+                      className="underline hover:text-neutral-600"
+                    >
+                      Ver los {resto.length} restantes
+                    </button>
+                  </>
+                )}
+              </p>
             )}
           </div>
 

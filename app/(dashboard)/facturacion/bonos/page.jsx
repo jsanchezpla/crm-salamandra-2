@@ -49,6 +49,7 @@ import {
   totalesDeBonos,
 } from "@/lib/billing/bonos.js";
 import { coincidePorNombre } from "@/lib/utils/busqueda.js";
+import { esTipoDeBono } from "@/lib/billing/tiposDeBono.js";
 
 const ESTADOS = [
   { value: "", label: "Vivos y cerrados" },
@@ -253,7 +254,9 @@ export default function BonosPage() {
           options={[
             { value: "", label: "Todos los bonos" },
             ...tipos
-              .filter((t) => (Number(t.sesionesDelTipo) || 1) > 1 || vivosPorTipo.has(String(t.id)))
+              // La misma regla que el desplegable del alta, ya con nombre y
+              // prueba: pack del catálogo o tipo suelto con bonos dados.
+              .filter((t) => esTipoDeBono(t))
               .map((t) => ({
                 value: String(t.id),
                 label: `${t.name}${vivosPorTipo.get(String(t.id)) ? ` (${vivosPorTipo.get(String(t.id))})` : ""}`,

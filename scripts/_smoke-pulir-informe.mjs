@@ -27,6 +27,7 @@
  *   node scripts/_smoke-pulir-informe.mjs
  */
 
+import { readFileSync } from "node:fs";
 import {
   SECCIONES_PULIBLES,
   SECCIONES_SINTESIS,
@@ -227,6 +228,38 @@ paso("La demo enseña que la IA completa lo vacío");
   esperar((propuesta.achievements ?? []).length > 0, "el modo simulado propone los logros que faltaban");
   const v = verificarSinInventar(loQueHayQuePulir(recienVolcado), propuesta);
   esperar(v.ok, "y su propuesta pasa la verificación de siempre", v.motivos.join("; "));
+}
+
+// ── 4 bis. La EVOLUCIÓN se cuenta por aspectos, no sesión a sesión (AV-0172) ─
+paso("La evolución agrupa por lo trabajado y puede soltar las fechas");
+{
+  const entrada = loQueHayQuePulir(VOLCADO);
+
+  /*
+   * Laura Garrido (16/09/2026): «el desarrollo de la evolución sigue haciendo un
+   * volcado literal por sesión… la idea es de manera general qué aspectos se han
+   * trabajado, sin importar la sesión donde se vieron». Para que eso se pueda
+   * escribir, una propuesta que junta lo de varias sesiones y NO repite sus
+   * fechas tiene que pasar la verificación: quitar una fecha no es inventarla.
+   */
+  const porAspectos = {
+    evolution: [
+      "Se ha trabajado la atención sostenida con tareas de búsqueda visual y de escucha, primero con apoyo del adulto y después sin él. Mantiene la tarea más tiempo que al principio y pide ayuda cuando se pierde, lo que sugiere mejor conciencia de la propia dificultad.",
+    ],
+  };
+  const v = verificarSinInventar(entrada, porAspectos);
+  esperar(v.ok, "una evolución por aspectos y sin fechas pasa la verificación", v.motivos.join("; "));
+
+  // Y lo que sigue sin pasar es lo de siempre: una fecha que nadie escribió.
+  const conFechaNueva = { evolution: ["En noviembre empieza a sostener la tarea sin apoyo."] };
+  esperar(!verificarSinInventar(entrada, conFechaNueva).ok, "pero una fecha que no estaba sigue sin pasar");
+
+  // El prompt tiene que PEDIRLO, o el modelo seguirá contando sesión a sesión:
+  // es lo único de esto que vive en texto y no en una función.
+  const src = readFileSync(new URL("../lib/clinica/pulirInforme.js", import.meta.url), "utf8");
+  esperar(/POR ASPECTOS TRABAJADOS/.test(src), "el prompt pide la evolución por aspectos trabajados");
+  esperar(/NUNCA un párrafo por sesión/.test(src), "y dice expresamente que no sea un párrafo por sesión");
+  esperar(!/CONSERVA LAS FECHAS que traigan las anotaciones/.test(src), "y ya no obliga a conservar todas las fechas");
 }
 
 // ── 5. Sin nada volcado ────────────────────────────────────────────────────
