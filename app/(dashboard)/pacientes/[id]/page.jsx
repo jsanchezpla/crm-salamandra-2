@@ -10,6 +10,9 @@ import ClientBonosSection from "@/components/clients/ClientBonosSection.jsx";
 import SpecialtyPicker from "@/components/clinica/SpecialtyPicker.jsx";
 import TerapeutasPicker from "@/components/clinica/TerapeutasPicker.jsx";
 import NuevaCoordinacionModal from "../../../../components/clinica/NuevaCoordinacionModal.jsx";
+import ActaCoordinacion from "../../../../components/clinica/ActaCoordinacion.jsx";
+import { useQuienSoy } from "../../../../components/clinica/quienSoy.js";
+import { puedeEditarCoordinacion, esDireccion } from "../../../../lib/clinica/alcanceCoordinaciones.js";
 import PatientDocumentsSection from "@/components/clinica/PatientDocumentsSection.jsx";
 import EnviarRegistroModal from "@/components/clinica/EnviarRegistroModal.jsx";
 import CitasDelPaciente from "@/components/citas/CitasDelPaciente.jsx";
@@ -676,6 +679,10 @@ export default function PacienteFichaPage() {
   const [familyContract, setFamilyContract] = useState(null);
   // Alta de coordinación desde la propia ficha (sprint 2026-07, punto 7).
   const [nuevaCoordinacion, setNuevaCoordinacion] = useState(false);
+  // El acta que se está corrigiendo (18/09/2026, AV-0102). `null` = ninguna.
+  // Quién soy solo sirve para enseñar el botón: quien decide es el servidor.
+  const [corrigiendoCoordinacion, setCorrigiendoCoordinacion] = useState(null);
+  const { yo: yoEquipo, rol } = useQuienSoy();
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   // `?pestana=plan` abre esa pestaña (15/09/2026, AV-0078): la Bandeja manda
@@ -1396,15 +1403,20 @@ export default function PacienteFichaPage() {
             <div className="bg-white border border-dashed border-neutral-200 rounded-xl p-10 text-center"><p className="text-sm text-neutral-600">Sin coordinaciones registradas.</p></div>
           ) : (
             <div className="space-y-3">
+              {/* La MISMA tarjeta que el listado general (18/09/2026, AV-0102):
+                  aquí se pintaba una versión recortada —tipo, fecha,
+                  participantes y temas— y un acta con todo el contenido en
+                  «Acuerdos» se veía vacía. */}
               {coordinations.map((c) => (
-                <div key={c.id} className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-[10px] uppercase tracking-wider text-violet-700 bg-violet-50 px-2 py-0.5 rounded-full">{c.typeLabel}</span>
-                    <span className="text-[10px] text-neutral-400 tabular">{fmtDate(c.date)}</span>
-                  </div>
-                  <div className="text-[11px] text-neutral-500 mb-1">Participantes: {c.participants || "—"}</div>
-                  <p className="text-xs text-neutral-700 leading-relaxed whitespace-pre-line">{(c.topicsList?.length ? c.topicsList.filter(Boolean).join("\n") : c.topics) || "—"}</p>
-                </div>
+                <ActaCoordinacion
+                  key={c.id}
+                  acta={c}
+                  onEditar={
+                    puedeEditarCoordinacion({ esAdmin: esDireccion(rol), row: { createdById: c.createdById }, teamMemberId: yoEquipo })
+                      ? setCorrigiendoCoordinacion
+                      : null
+                  }
+                />
               ))}
             </div>
           )}
@@ -1420,6 +1432,16 @@ export default function PacienteFichaPage() {
           patientId={id}
           patientName={`${patient.firstName} ${patient.lastName}`}
           onClose={() => setNuevaCoordinacion(false)}
+          onCreada={() => load()}
+        />
+      )}
+
+      {corrigiendoCoordinacion && (
+        <NuevaCoordinacionModal
+          coordinacion={corrigiendoCoordinacion}
+          patientId={id}
+          patientName={`${patient.firstName} ${patient.lastName}`}
+          onClose={() => setCorrigiendoCoordinacion(null)}
           onCreada={() => load()}
         />
       )}

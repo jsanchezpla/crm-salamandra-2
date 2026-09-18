@@ -5,34 +5,13 @@ import { serializeCoordination } from "../../../../lib/clinica/serialize.js";
 import { logClinicaAudit, auditSummary } from "../../../../lib/clinica/audit.js";
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
 import { lineasDelFormulario, asistentesDelFormulario } from "../../../../lib/clinica/actaCoordinacion.js";
+import { contactoValido } from "../../../../lib/clinica/contactoDelPaciente.js";
 
 function gate(ctx) {
   return ctx.hasModule("clinica") || ctx.hasModule("pacientes");
 }
 const TYPES = ["family", "school", "psychiatrist", "neuropediatrician", "other_therapist", "orientator", "other"];
 const SCOPES = ["internal", "external"];
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/**
- * El contacto externo con el que se coordinó, comprobando que pertenece a la
- * agenda DE ESE paciente.
- *
- * Sin esa comprobación, mandar el id del contacto de otro niño enlazaría el
- * acta con la orientadora de una familia distinta: una fuga de datos clínicos
- * entre familias, y de las difíciles de ver porque el acta se guardaría sin
- * error. Devuelve null ante cualquier duda; el enlace es opcional.
- */
-async function contactoValido(models, patientId, contactoId) {
-  if (!contactoId || !patientId) return null;
-  if (!UUID_RE.test(String(contactoId)) || !UUID_RE.test(String(patientId))) return null;
-  const { ExternalContact } = models;
-  if (!ExternalContact) return null;
-  const c = await ExternalContact.findOne({
-    where: { id: String(contactoId), patientId: String(patientId) },
-    attributes: ["id"],
-  });
-  return c ? c.id : null;
-}
 
 export const GET = withTenant(async (request, _rc, ctx) => {
   if (!gate(ctx)) return forbidden("Módulo Clínica no activo");

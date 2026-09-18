@@ -460,7 +460,15 @@ Pestañas (`TABS` en `app/(dashboard)/pacientes/[id]/page.jsx`):
    para que no dependan de estar entre las 100 últimas sesiones.
 5. **Coordinaciones**: primero la agenda de **contactos externos** del paciente
    (`PatientExternalContactsSection`, `/api/pacientes/[id]/contactos/**`), luego
-   las actas, con alta (`NuevaCoordinacionModal`).
+   las actas, con alta y corrección (`NuevaCoordinacionModal`, que hace las dos).
+   Desde el 18/09/2026 (AV-0102) el acta se pinta con **la misma tarjeta que el
+   listado general** (`components/clinica/ActaCoordinacion.jsx`): aquí había una
+   versión recortada —tipo, fecha, participantes y temas— que se dejaba fuera
+   los acuerdos, los próximos pasos, con quién fue la reunión y la firma, así
+   que un acta con todo el contenido en «Acuerdos» se veía vacía (593 de las 701
+   de Aumenta tenían algo que no se pintaba). El botón «Editar» sale a quien la
+   registró y a dirección; quien decide es el endpoint. Detalle en
+   `clinica.md`.
 6. **Documentos**: adjuntos del paciente (`PatientDocumentsSection`,
    `/api/pacientes/[id]/documents/**`). Arriba, la tarjeta del **contrato
    estándar de la clínica** (`/api/pacientes/contract-template`): «Subir

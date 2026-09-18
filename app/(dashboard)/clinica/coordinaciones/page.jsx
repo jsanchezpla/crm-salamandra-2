@@ -9,9 +9,11 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import NuevaCoordinacionModal from "../../../../components/clinica/NuevaCoordinacionModal.jsx";
+import ActaCoordinacion from "../../../../components/clinica/ActaCoordinacion.jsx";
+import { useQuienSoy } from "../../../../components/clinica/quienSoy.js";
+import { puedeEditarCoordinacion, esDireccion } from "../../../../lib/clinica/alcanceCoordinaciones.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 const TIPOS = [
@@ -25,11 +27,6 @@ const TIPOS = [
   { key: "other", label: "Otro" },
 ];
 
-function fmtDate(iso) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
-}
-
 export default function CoordinacionesPage() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -37,6 +34,9 @@ export default function CoordinacionesPage() {
   const [tipo, setTipo] = useState("");
   const [scope, setScope] = useState("");
   const [creando, setCreando] = useState(false);
+  // El acta que se está corrigiendo (18/09/2026, AV-0102). `null` = ninguna.
+  const [corrigiendo, setCorrigiendo] = useState(null);
+  const { yo, rol } = useQuienSoy();
 
   const load = useCallback(() => {
     setLoading(true);
@@ -121,72 +121,29 @@ export default function CoordinacionesPage() {
       ) : (
         <div className="space-y-3">
           {rows.map((c) => (
-            <div key={c.id} className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
-              <div className="flex items-center gap-2 mb-2 flex-wrap">
-                <span className="text-[10px] uppercase tracking-wider text-violet-700 bg-violet-50 px-2 py-0.5 rounded-full">{c.typeLabel}</span>
-                {c.scopeLabel && (
-                  <span className="text-[10px] uppercase tracking-wider text-neutral-500 bg-neutral-100 px-2 py-0.5 rounded-full">{c.scopeLabel}</span>
-                )}
-                <span className="text-[10px] text-neutral-400 tabular">{fmtDate(c.date)}</span>
-                {c.relatedPatientId && (
-                  <Link href={`/pacientes/${c.relatedPatientId}`} className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline">
-                    {c.patientName || "Ver paciente"}
-                  </Link>
-                )}
-                {/* La firma NO va aquí arriba: va al pie del acta, que es donde
-                    se firma. Ver el bloque «Firmado por» al final de la tarjeta. */}
-              </div>
-              {c.externalEntity && <div className="text-[11px] text-neutral-600 mb-1">Con: {c.externalEntity}</div>}
-              {/* Quién estuvo, separando el centro de la gente de fuera. Las
-                  actas antiguas guardan los asistentes como texto suelto y no
-                  dicen de qué lado está cada uno: esas caen a la línea de
-                  siempre en vez de repartirse a ojo. */}
-              {(c.participantsInternal?.length > 0 || c.participantsExternal?.length > 0) ? (
-                <div className="text-[11px] text-neutral-500 mb-1 space-y-0.5">
-                  {c.participantsInternal?.length > 0 && (
-                    <div>Del centro: {c.participantsInternal.map((p) => [p.name, p.role].filter(Boolean).join(" · ")).join(", ")}</div>
-                  )}
-                  {c.participantsExternal?.length > 0 && (
-                    <div>De fuera: {c.participantsExternal.map((p) => [p.name, p.role].filter(Boolean).join(" · ")).join(", ")}</div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-[11px] text-neutral-500 mb-1">Participantes: {c.participants || "—"}</div>
-              )}
-              {/* Un tema por línea (13/09/2026): unidos con comas volvía la
-                  ambigüedad de la coma, ahora al pintar. */}
-              <p className="text-xs text-neutral-700 leading-relaxed whitespace-pre-line">{(c.topicsList?.length ? c.topicsList.filter(Boolean).join("\n") : c.topics) || "—"}</p>
-              {c.agreements?.length > 0 && (
-                <div className="mt-2">
-                  <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-0.5">Acuerdos</div>
-                  <ul className="list-disc list-outside ml-4 text-xs text-neutral-700 space-y-0.5">
-                    {c.agreements.map((a, i) => <li key={i} className="whitespace-pre-line">{a}</li>)}
-                  </ul>
-                </div>
-              )}
-              {c.nextActions?.length > 0 && (
-                <div className="mt-2">
-                  <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-0.5">Próximos pasos</div>
-                  <ul className="list-disc list-outside ml-4 text-xs text-neutral-700 space-y-0.5">
-                    {c.nextActions.map((a, i) => <li key={i} className="whitespace-pre-line">{a}</li>)}
-                  </ul>
-                </div>
-              )}
-              {/* La firma, al pie y en todas: un acta la escribe alguien y eso
-                  no se pierde aunque esa persona ya no trabaje en el centro
-                  (Rodrigo, 02/08/2026). `createdByLabel` resuelve el orden en el
-                  servidor — ficha de equipo primero, nombre suelto si no la hay. */}
-              {c.createdByLabel && (
-                <div className="mt-3 pt-2 border-t border-neutral-100 text-[10px] text-neutral-400">
-                  Firmado por {c.createdByLabel}
-                </div>
-              )}
-            </div>
+            <ActaCoordinacion
+              key={c.id}
+              acta={c}
+              mostrarPaciente
+              onEditar={
+                puedeEditarCoordinacion({ esAdmin: esDireccion(rol), row: { createdById: c.createdById }, teamMemberId: yo })
+                  ? setCorrigiendo
+                  : null
+              }
+            />
           ))}
         </div>
       )}
 
       {creando && <NuevaCoordinacionModal onClose={() => setCreando(false)} onCreada={load} />}
+      {corrigiendo && (
+        <NuevaCoordinacionModal
+          coordinacion={corrigiendo}
+          patientName={corrigiendo.patientName}
+          onClose={() => setCorrigiendo(null)}
+          onCreada={load}
+        />
+      )}
     </div>
   );
 }

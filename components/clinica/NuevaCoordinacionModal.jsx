@@ -15,12 +15,18 @@
  * campo de NOMBRE libre («La registró»), para la reunión que llevó alguien sin
  * ficha de equipo; si se deja vacío manda el usuario de la sesión.
  *
+ * Desde el 18/09/2026 (AV-0102) el mismo formulario CORRIGE un acta ya
+ * registrada: con `coordinacion` puesta, se rellena con lo que hay y manda un
+ * PATCH a `/api/clinica/coordinations/[id]` en vez de un POST. Se reutiliza y
+ * no se escribe un editor aparte porque los campos son exactamente los mismos,
+ * y dos formularios para la misma acta acaban admitiendo cosas distintas.
+ *
  * Temas, acuerdos y próximos pasos se mandan como TEXTO y los trocea el
  * servidor por líneas (`lib/clinica/actaCoordinacion.js`, 13/09/2026): la coma
  * no parte la frase.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const TIPOS = [
   { key: "family", label: "Familia" },
@@ -49,8 +55,39 @@ const VACIO = {
   createdByName: "",
 };
 
-export default function NuevaCoordinacionModal({ patientId = null, patientName = null, onClose, onCreada }) {
-  const [form, setForm] = useState({ ...VACIO, relatedPatientId: patientId ?? "" });
+/**
+ * Del acta guardada al formulario. El servidor devuelve listas (`agreements`,
+ * `nextActions`, `topicsList`) y el formulario escribe texto con una línea por
+ * punto: es el troceo del alta al revés, así que corregir un acta no reescribe
+ * lo que no se toca.
+ */
+function comoFormulario(c) {
+  const lineas = (v) => (Array.isArray(v) ? v.filter(Boolean).join("\n") : v || "");
+  return {
+    coordinationType: c.type ?? "school",
+    scope: c.scope ?? "external",
+    externalEntity: c.externalEntity ?? "",
+    externalContactId: c.externalContactId ?? "",
+    coordinationDate: c.date ? String(c.date).slice(0, 10) : new Date().toISOString().slice(0, 10),
+    relatedPatientId: c.relatedPatientId ?? "",
+    // Los asistentes van por comas en el campo, como dice su rótulo. Si el acta
+    // los trae estructurados (las importadas de Organízate), se pinta el
+    // nombre: el papel de cada uno vive en el contacto, no aquí.
+    participants: Array.isArray(c.participantsList)
+      ? c.participantsList.map((x) => (x && typeof x === "object" ? x.name : x)).filter(Boolean).join(", ")
+      : c.participants ?? "",
+    topics: lineas(c.topicsList?.length ? c.topicsList : c.topics),
+    agreements: lineas(c.agreements),
+    nextActions: lineas(c.nextActions),
+    createdByName: c.createdByName ?? "",
+  };
+}
+
+export default function NuevaCoordinacionModal({ coordinacion = null, patientId = null, patientName = null, onClose, onCreada }) {
+  const editando = Boolean(coordinacion?.id);
+  const [form, setForm] = useState(
+    editando ? comoFormulario(coordinacion) : { ...VACIO, relatedPatientId: patientId ?? "" }
+  );
   const [pacientes, setPacientes] = useState([]);
   const [contactos, setContactos] = useState([]);
   const [guardando, setGuardando] = useState(false);
@@ -69,13 +106,20 @@ export default function NuevaCoordinacionModal({ patientId = null, patientName =
   // paciente: enseñar la agenda de otro niño sería, además de inútil, una fuga
   // de datos entre familias.
   const pacienteElegido = form.relatedPatientId;
+  // Al CORREGIR, el contacto que ya traía el acta no se pierde: el efecto de
+  // abajo corre también en el primer render, y sin esta marca dejaría el
+  // desplegable en «Sin especificar» sin que nadie lo hubiera tocado —y el
+  // PATCH lo guardaría así—. Solo se respeta la primera vez: si luego se cambia
+  // de paciente, el contacto de la agenda del otro niño SÍ tiene que irse.
+  const contactoOriginal = useRef(editando ? coordinacion.externalContactId ?? "" : "");
   useEffect(() => {
     setContactos([]);
     // `setForm` directo y no el helper `set`: ese se declara MÁS ABAJO, y
     // aunque en la práctica funcione (el efecto corre después del render, con
     // `set` ya asignado), depender de ese orden es una trampa para el próximo
     // que mueva las líneas.
-    setForm((f) => ({ ...f, externalContactId: "" }));
+    setForm((f) => ({ ...f, externalContactId: contactoOriginal.current }));
+    contactoOriginal.current = "";
     if (!pacienteElegido) return;
     fetch(`/api/pacientes/${pacienteElegido}/contactos`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
@@ -90,8 +134,8 @@ export default function NuevaCoordinacionModal({ patientId = null, patientName =
     setGuardando(true);
     setError(null);
     try {
-      const r = await fetch("/api/clinica/coordinations", {
-        method: "POST",
+      const r = await fetch(editando ? `/api/clinica/coordinations/${coordinacion.id}` : "/api/clinica/coordinations", {
+        method: editando ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
@@ -120,7 +164,7 @@ export default function NuevaCoordinacionModal({ patientId = null, patientName =
       <div className="fixed inset-0 bg-black/40 z-40" onClick={guardando ? undefined : onClose} aria-hidden="true" />
       <div className="fixed inset-x-0 top-14 lg:top-8 bottom-0 lg:bottom-8 z-50 flex items-start justify-center px-4 overflow-y-auto">
         <div className="w-full max-w-lg bg-white rounded-xl shadow-2xl p-5 lg:p-6 my-4">
-          <h2 className="font-display text-lg text-[var(--ink-900)] mb-1">Nueva coordinación</h2>
+          <h2 className="font-display text-lg text-[var(--ink-900)] mb-1">{editando ? "Corregir coordinación" : "Nueva coordinación"}</h2>
           <p className="text-[11px] text-neutral-500 mb-4">
             {patientName ? `Sobre ${patientName}.` : "Con quién se ha hablado, qué se acordó y qué queda por hacer."}
           </p>
@@ -247,7 +291,7 @@ export default function NuevaCoordinacionModal({ patientId = null, patientName =
               className="text-xs font-medium px-4 py-2 rounded-lg text-white disabled:opacity-50"
               style={{ background: "var(--color-primary, #1B3A2D)" }}
             >
-              {guardando ? "Guardando…" : "Registrar coordinación"}
+              {guardando ? "Guardando…" : editando ? "Guardar cambios" : "Registrar coordinación"}
             </button>
           </div>
         </div>

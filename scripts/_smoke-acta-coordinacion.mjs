@@ -261,15 +261,26 @@ describe("la ruta y las pantallas siguen donde estaban", () => {
     ]) assert.ok(src.includes(trozo), `falta ${trozo} en la ruta`);
   });
 
-  it("el listado pinta un tema por línea y respeta los saltos de acuerdos y próximos pasos", () => {
-    const src = leer("app/(dashboard)/clinica/coordinaciones/page.jsx");
+  /*
+   * Desde el 18/09/2026 (AV-0102) el acta se pinta en UN solo sitio,
+   * `components/clinica/ActaCoordinacion.jsx`, y de ahí tiran el listado
+   * general y la pestaña de la ficha del paciente. Antes eran dos tarjetas
+   * distintas y la de la ficha se dejaba fuera los acuerdos y los próximos
+   * pasos, que es de lo que se quejó Aumenta.
+   */
+  it("la tarjeta del acta pinta un tema por línea y respeta los saltos de acuerdos y próximos pasos", () => {
+    const src = leer("components/clinica/ActaCoordinacion.jsx");
     assert.ok(src.includes('topicsList.filter(Boolean).join("\\n")'));
     assert.ok(src.includes('c.agreements.map((a, i) => <li key={i} className="whitespace-pre-line">'));
     assert.ok(src.includes('c.nextActions.map((a, i) => <li key={i} className="whitespace-pre-line">'));
   });
 
-  it("la ficha del paciente pinta los temas uno por línea", () => {
-    assert.ok(leer("app/(dashboard)/pacientes/[id]/page.jsx").includes('topicsList.filter(Boolean).join("\\n")'));
+  it("las dos pantallas usan esa tarjeta y ninguna se pinta la suya", () => {
+    for (const p of ["app/(dashboard)/clinica/coordinaciones/page.jsx", "app/(dashboard)/pacientes/[id]/page.jsx"]) {
+      const src = leer(p);
+      assert.ok(src.includes("<ActaCoordinacion"), `${p} ya no usa la tarjeta compartida`);
+      assert.ok(!src.includes("c.agreements.map("), `${p} se ha vuelto a pintar el acta por su cuenta`);
+    }
   });
 
   it("el modal dice «uno por línea» en los tres campos", () => {
