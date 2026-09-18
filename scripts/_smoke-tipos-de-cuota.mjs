@@ -46,6 +46,7 @@ import {
   filaDeCuota,
   ordenarFilas,
   ordenarCuotasPorServicio,
+  nombresDePacientes,
   cuotaLlevaTipo,
 } from "../lib/billing/tiposDeCuota.js";
 
@@ -304,5 +305,50 @@ describe("el listado de cuotas sale agrupado por servicio", () => {
     const copia = [...original];
     ordenarCuotasPorServicio(original, catalogo);
     assert.deepEqual(original, copia);
+  });
+});
+
+/* ── Buscar un paciente desde los tipos de cuota (AV-0192) ───────────────── */
+
+describe("los tipos dicen a quién llevan, para poder buscarlo", () => {
+  const LOGO = "c-logo";
+  const pac = (nombre, apellido) => ({ firstName: nombre, lastName: apellido });
+
+  it("saca el nombre del paciente de la cuota y el de los hermanos cuando es de la familia", () => {
+    const nombres = nombresDePacientes([
+      { conceptIds: [LOGO], patient: pac("Hugo", "Castro") },
+      { conceptIds: [LOGO], familiaPacientes: [pac("Ana", "Ruiz"), pac("Iker", "Ruiz")] },
+    ]);
+    assert.deepEqual(nombres, ["Ana Ruiz", "Hugo Castro", "Iker Ruiz"]);
+  });
+
+  it("no repite a quien sale en dos cuotas, y ordena en español", () => {
+    const nombres = nombresDePacientes([
+      { patient: pac("Zoe", "Ñuño") },
+      { patient: pac("Ana", "Ruiz") },
+      { patient: pac("Ana", "Ruiz") },
+    ]);
+    assert.deepEqual(nombres, ["Ana Ruiz", "Zoe Ñuño"]);
+  });
+
+  it("una cuota sin nadie no inventa nombres", () => {
+    assert.deepEqual(nombresDePacientes([{ conceptIds: [LOGO] }]), []);
+    assert.deepEqual(nombresDePacientes(), []);
+  });
+
+  it("cada tipo del resumen trae los suyos, y solo los de las cuotas VIVAS", () => {
+    const conceptos = [{ id: LOGO, name: "Cuota Logopedia 45x1", unitPrice: 145 }];
+    const { tipos } = resumenPorTipo({
+      conceptos,
+      cuotas: [
+        { conceptIds: [LOGO], patient: pac("Hugo", "Castro"), startDate: "2026-09-01" },
+        // De baja el mes pasado: no tiene que salir al buscarlo.
+        { conceptIds: [LOGO], patient: pac("Vieja", "Baja"), startDate: "2025-09-01", endDate: "2026-08-31" },
+      ],
+      hoy: "2026-09-18",
+    });
+    const t = tipos.find((x) => x.id === LOGO);
+    assert.deepEqual(t.nombres, ["Hugo Castro"]);
+    assert.equal(t.bajas, 1);
   });
 });

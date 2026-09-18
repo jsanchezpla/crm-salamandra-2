@@ -50,10 +50,26 @@ export default function TiposDeCuotaPage() {
 
   useEffect(() => { cargar(); }, [cargar]);
 
+  /*
+   * El buscador busca por el TIPO y por el PACIENTE (18/09/2026, AV-0192:
+   * «vendría bien un buscador de pacientes en los tipos de cuotas»).
+   *
+   * La pregunta que no se podía hacer era la del día a día: «¿en qué cuota
+   * está este niño?». Había que abrir los tipos uno a uno. Los nombres vienen
+   * del servidor (`nombres` de cada tipo, solo de sus cuotas vivas) y, cuando
+   * la búsqueda casa por un niño y no por el nombre del tipo, la fila dice por
+   * quién ha salido: si no, parece que el buscador se ha equivocado.
+   */
   const visibles = useMemo(() => {
-    const lista = tipos.filter(
-      (t) => (verVacios || t.cuotas > 0 || t.bajas > 0) && coincidePorNombre(busca, [t.name, t.description, t.category])
-    );
+    const lista = tipos
+      .filter((t) => verVacios || t.cuotas > 0 || t.bajas > 0)
+      .map((t) => {
+        const nombres = Array.isArray(t.nombres) ? t.nombres : [];
+        const porElTipo = coincidePorNombre(busca, [t.name, t.description, t.category]);
+        const porPaciente = busca.trim() ? nombres.filter((n) => coincidePorNombre(busca, [n])) : [];
+        return { ...t, casan: porElTipo ? [] : porPaciente, entra: porElTipo || porPaciente.length > 0 };
+      })
+      .filter((t) => t.entra);
     // Primero las que más gente lleva: es el orden en que se repasan.
     return lista.sort((a, b) => b.cuotas - a.cuotas || a.name.localeCompare(b.name, "es"));
   }, [tipos, busca, verVacios]);
@@ -98,7 +114,7 @@ export default function TiposDeCuotaPage() {
         <input
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
-          placeholder="Buscar un tipo de cuota…"
+          placeholder="Buscar un tipo de cuota o un paciente…"
           className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition w-full sm:w-72"
         />
         <label className="flex items-center gap-1.5 text-xs text-neutral-600 cursor-pointer">
@@ -133,7 +149,7 @@ export default function TiposDeCuotaPage() {
               )}
               {!cargando && visibles.length === 0 && (
                 <tr><td colSpan={6} className="text-center py-12 text-xs text-neutral-400">
-                  {busca.trim() ? "Ningún tipo de cuota se llama así." : "Todavía no hay ningún tipo de cuota con pacientes."}
+                  {busca.trim() ? "Ningún tipo de cuota se llama así, y nadie con ese nombre tiene una." : "Todavía no hay ningún tipo de cuota con pacientes."}
                 </td></tr>
               )}
               {visibles.map((t) => (
@@ -151,6 +167,14 @@ export default function TiposDeCuotaPage() {
                         <span className="text-[10.5px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700">borrado del catálogo</span>
                       )}
                     </div>
+                    {/* Por quién ha salido esta fila, cuando ha salido por un
+                        paciente y no por su nombre (AV-0192). */}
+                    {t.casan?.length > 0 && (
+                      <div className="text-[10.5px] text-neutral-500 mt-0.5">
+                        {t.casan.slice(0, 3).join(", ")}
+                        {t.casan.length > 3 && ` +${t.casan.length - 3}`}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-xs text-neutral-500">{t.description || <span className="text-neutral-300">el nombre de arriba</span>}</td>
                   <td className="px-4 py-3 text-right tabular text-neutral-600">

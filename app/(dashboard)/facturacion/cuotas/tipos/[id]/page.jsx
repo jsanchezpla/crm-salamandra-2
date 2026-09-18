@@ -33,6 +33,7 @@ import { fmtMoney } from "../../../_components/Kpi.jsx";
 import { cursoVigente, cursosParaElegir, rotuloCurso, mesCorto } from "@/lib/billing/cursoEscolar.js";
 import { comoQuitarElTipo } from "@/lib/billing/tiposDeCuota.js";
 import { hoyVigente } from "@/lib/billing/cuotas.js";
+import { coincidePorNombre } from "@/lib/utils/busqueda.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -69,6 +70,7 @@ export default function TipoDeCuotaPage() {
   const [okMsg, setOkMsg] = useState(null);
   const [pestana, setPestana] = useState("pacientes");
   const [verBajas, setVerBajas] = useState(false);
+  const [busca, setBusca] = useState("");
   const [showAnadir, setShowAnadir] = useState(false);
   const [cobroAbierto, setCobroAbierto] = useState(null);
   const { confirmar, dialogo } = useDialogo();
@@ -90,9 +92,19 @@ export default function TipoDeCuotaPage() {
 
   useEffect(() => { cargar(); }, [cargar]);
 
+  /*
+   * El buscador de la ficha (18/09/2026, AV-0192). Los tipos grandes de
+   * Aumenta llevan decenas de familias, y las tres pestañas enseñan las mismas
+   * filas: buscar aquí sirve igual para ver su cuota, su precio o su mes a
+   * mes. Busca por el niño Y por la familia, que es como se pregunta —unas
+   * veces se sabe el nombre del paciente y otras el de quien paga—.
+   */
   const filas = useMemo(
-    () => (datos?.filas ?? []).filter((f) => verBajas || !f.deBaja),
-    [datos, verBajas]
+    () =>
+      (datos?.filas ?? [])
+        .filter((f) => verBajas || !f.deBaja)
+        .filter((f) => coincidePorNombre(busca, [f.paciente, f.familia, f.pagador])),
+    [datos, verBajas, busca]
   );
   const bajas = (datos?.filas ?? []).filter((f) => f.deBaja).length;
 
@@ -276,6 +288,13 @@ export default function TipoDeCuotaPage() {
           />
         )}
 
+        <input
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder="Buscar un paciente o una familia…"
+          className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition w-full sm:w-64"
+        />
+
         {bajas > 0 && (
           <label className="flex items-center gap-1.5 text-xs text-neutral-600 cursor-pointer">
             <input
@@ -292,7 +311,9 @@ export default function TipoDeCuotaPage() {
 
       {filas.length === 0 ? (
         <div className="bg-white border border-neutral-100 rounded-xl px-4 py-12 text-center text-xs text-neutral-400">
-          Todavía no la paga nadie. Añade pacientes y aparecerán aquí con sus meses.
+          {busca.trim()
+            ? "Nadie con ese nombre lleva esta cuota."
+            : "Todavía no la paga nadie. Añade pacientes y aparecerán aquí con sus meses."}
         </div>
       ) : pestana === "pacientes" ? (
         <PestanaPacientes filas={filas} onQuitar={quitar} />
