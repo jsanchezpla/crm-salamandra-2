@@ -177,18 +177,33 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
   // El nombre del paciente elegido en el buscador (31/08/2026): la lista de
   // `patients` corta en 1.000 y con 1.174 el elegido puede no estar en ella.
   const [pacienteNombre, setPacienteNombre] = useState(null);
-  // Multi-responsable: se parte de `assignees` (nuevo) y se cae al legacy
-  // `assignedToId` para las incidencias creadas antes del cambio.
+  /*
+   * Multi-responsable: se parte de `assignees` (nuevo) y se cae al legacy
+   * `assignedToId` para las incidencias creadas antes del cambio.
+   *
+   * ── UNA NUEVA NACE A MI NOMBRE (18/09/2026, AV-0169 de Aumenta) ───────────
+   * «Que aparezca el nombre automáticamente en registrada y responsable del
+   * dueño de la cuenta»: al abrir una nueva, quien la escribe sale ya marcado
+   * como responsable. Es un RELLENO, no una regla: se quita con un clic en el
+   * desplegable, y quien apunta lo de otra persona pone a quien toque. Sin
+   * ficha de equipo (`yoSoy` a null) se queda «Sin asignar», como siempre.
+   */
   const [assigneeIds, setAssigneeIds] = useState(() => {
     if (Array.isArray(inc?.assignees) && inc.assignees.length) return inc.assignees.map((a) => a.id);
-    return inc?.assignedToId ? [inc.assignedToId] : [];
+    if (inc?.assignedToId) return [inc.assignedToId];
+    return mode === "create" && !incidencia && yoSoy ? [yoSoy] : [];
   });
   const toggleAssignee = (id) =>
     setAssigneeIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   const [description, setDescription] = useState(inc?.description ?? "");
   const [resolution, setResolution] = useState(inc?.resolution ?? "");
   const [verification, setVerification] = useState(inc?.verification ?? "");
-  const [reportedById, setReportedById] = useState(inc?.reportedById ?? "");
+  // Quién la registra: relleno con quien está usando el CRM (ver el bloque de
+  // los responsables). En una que ya existe manda lo que diga la incidencia:
+  // abrir la de otra persona no puede cambiarle el autor sin querer.
+  const [reportedById, setReportedById] = useState(
+    inc?.reportedById ?? (mode === "create" && !incidencia && yoSoy ? yoSoy : ""),
+  );
   // La FALTA (03/09/2026, AV-0038): solo la llevan las incidencias que abre
   // sola la agenda. `null` = incidencia de las de siempre, sin ese bloque.
   const [falta, setFalta] = useState(inc?.falta ?? null);
@@ -583,8 +598,11 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
               />
             </div>
             <div>
-              {/* Quién la registra sale relleno con quien está usando el CRM,
-                  pero recepción apunta cosas que le cuenta otra persona. */}
+              {/* Quién la registra sale relleno con el NOMBRE de quien está
+                  usando el CRM (18/09/2026, AV-0169), pero recepción apunta
+                  cosas que le cuenta otra persona y se puede cambiar. La opción
+                  neutra solo se ve cuando esa cuenta no tiene ficha de equipo:
+                  entonces quien la rellena es el servidor. */}
               <label className="text-[10px] uppercase tracking-wider text-neutral-400">Quién la registra</label>
               <Select value={reportedById} onChange={setReportedById}
                 options={[{ value: "", label: inc?.reportedBy?.name ?? "Yo" }, ...therapists.map((t) => ({ value: t.id, label: t.name }))]}

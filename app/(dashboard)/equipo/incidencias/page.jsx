@@ -1,16 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import Select from "@/components/ui/Select.jsx";
+import MultiSelect from "@/components/ui/MultiSelect.jsx";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import IncidenciaModal from "../_components/IncidenciaModal.jsx";
 import { INCIDENCIA_CATEGORIES } from "@/lib/clinica/incidencias.js";
 import { AYUDA_VISTO } from "@/lib/clinica/vistoIncidencia.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
+/*
+ * ── LAS PESTAÑAS SE SUMAN (18/09/2026, AV-198 de Aumenta) ───────────────────
+ * Rosa, por el Buzón: «poder filtrar más de un tipo de incidencia (ej: faltas,
+ * pendientes y en proceso)». Dejan de ser pestañas excluyentes y pasan a ser
+ * marcas: ninguna marcada = todas, y las que se marquen se SUMAN. «Todas» es la
+ * que las quita. El servidor recibe un `status` por cada una (y `faltas=1`) y
+ * las junta con O — ver `lib/clinica/filtroIncidencias.js`.
+ */
 const STATUS_TABS = [
-  { key: "", label: "Todas" },
   { key: "pending", label: "Pendientes" },
   { key: "in_progress", label: "En proceso" },
   { key: "resolved", label: "Resueltas" },
@@ -34,23 +41,34 @@ const fmt = (d) => (d ? new Date(d).toLocaleDateString("es-ES", { day: "2-digit"
 export default function IncidenciasPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [statusTab, setStatusTab] = useState("");
-  const [category, setCategory] = useState("");
+  const [pestanas, setPestanas] = useState([]); // [] = todas (ver STATUS_TABS)
+  /*
+   * ── LOS TRES FILTROS SON DE VARIOS (18/09/2026, AV-0169 de Aumenta) ──────
+   * «Que el filtro sea múltiple y no solo de una opción». Contrato de
+   * `MultiSelect`: `null` = todos (que NO es tenerlos todos marcados), `[a,b]`
+   * = solo esos, `[]` no existe. El servidor los recibe repetidos
+   * (`?category=a&category=b`) y los junta con O.
+   */
+  const [categorias, setCategorias] = useState(null);
   // Quién la registró y quién es responsable (31/08/2026, Rodrigo): con los
   // dos combinados salen «todas las mías», «todas las de X» y «las que le
   // mandé yo a X». Las opciones son la misma lista de equipo que usa el
   // formulario, que ya viene en la respuesta.
-  const [registroId, setRegistroId] = useState("");
+  const [registradaPor, setRegistradaPor] = useState(null);
+  const [responsables, setResponsables] = useState(null);
   /*
-   * ── SE ABRE EN LAS MÍAS (01/09/2026, Rodrigo) ────────────────────────────
+   * ── SE ABRE EN LAS MÍAS (01/09/2026, Rodrigo; rehecho el 18/09/2026) ──────
    *
-   * `null` no es «cualquiera»: es «las que me atañen a mí», que es como se
-   * abre la pantalla. Se manda `mine=1` y el servidor resuelve quién soy —el
-   * navegador no lo sabe: /api/auth/me da el usuario, no su ficha de equipo—,
-   * y de vuelta llega `yoSoy` para que el desplegable enseñe mi nombre en vez
-   * de un hueco. Elegir «Cualquier responsable» pone "" y quita el filtro.
+   * Un interruptor aparte del filtro de responsable, porque no son lo mismo.
+   * Rosa, por el Buzón (AV-198): «que aparecieran por defecto en cada usuario
+   * las que ha registrado y debe resolver ese usuario, aunque luego puedas
+   * filtrar otras» — o sea las DOS cosas, y el filtro de responsable solo sabía
+   * de una: a dirección no le salían las que ella misma había apuntado para
+   * otra persona. Se manda `mine=1` y quién soy lo resuelve el servidor —el
+   * navegador no lo sabe: /api/auth/me da el usuario, no su ficha de equipo—.
+   * Quien no es dirección no lo ve: su alcance YA es ese.
    */
-  const [responsableId, setResponsableId] = useState(null);
+  const [soloMias, setSoloMias] = useState(true);
   // Buscador por texto (02/09/2026, AV-0011): asunto, descripción o nombre del
   // paciente. Se manda al servidor con 300 ms de calma para no consultar a
   // cada tecla.
@@ -68,6 +86,7 @@ export default function IncidenciasPage() {
    * el botón no le sale nunca.
    */
   const [verVistas, setVerVistas] = useState(false);
+  const [panelFiltros, setPanelFiltros] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [modal, setModal] = useState(null); // { mode, incidencia }
   const [errorMsg, setErrorMsg] = useState(null);
@@ -85,32 +104,48 @@ export default function IncidenciasPage() {
   // lo que se exporta es exactamente lo que se está viendo.
   const paramsActuales = () => {
     const params = new URLSearchParams();
-    if (statusTab === "faltas") params.set("faltas", "1");
-    else if (statusTab) params.set("status", statusTab);
-    if (category) params.set("category", category);
-    if (registroId) params.set("reportedById", registroId);
+    for (const p of pestanas) {
+      if (p === "faltas") params.set("faltas", "1");
+      else params.append("status", p);
+    }
+    for (const c of categorias ?? []) params.append("category", c);
+    for (const r of registradaPor ?? []) params.append("reportedById", r);
+    if (soloMias) params.set("mine", "1");
     // `assignedToId` filtra por la tabla de responsables, así que encuentra
     // también a quien es segundo responsable (ver el GET del endpoint).
-    if (responsableId === null) params.set("mine", "1");
-    else if (responsableId) params.set("assignedToId", responsableId);
+    for (const r of responsables ?? []) params.append("assignedToId", r);
     if (qBuscada) params.set("q", qBuscada);
     if (verVistas) params.set("vistas", "1");
     return params;
   };
   const exportUrl = `/api/clinica/incidencias/export?${paramsActuales()}`;
 
+  /*
+   * ── MANDA LA ÚLTIMA QUE SE PIDIÓ, NO LA ÚLTIMA QUE LLEGA (18/09/2026) ─────
+   * Visto al probar los tipos: se marcan dos seguidos y la lista se queda con
+   * las de antes. Aquí salen varias peticiones a la vez —cada filtro lanza la
+   * suya, y el refresco de fondo al volver a la pestaña lanza otra— y sin esto
+   * gana la que conteste más tarde, que puede ser la más vieja: los botones
+   * dicen una cosa y la lista enseña otra. Cada petición coge un número y solo
+   * la última pinta.
+   */
+  const ultimaPeticion = useRef(0);
   const load = ({ silencioso = false } = {}) => {
     if (!silencioso) setLoading(true);
     setErrorMsg(null);
     const params = paramsActuales();
+    const mia = ++ultimaPeticion.current;
     fetch(`/api/clinica/incidencias?${params}`, { cache: "no-store" })
       .then((r) => r.json())
-      .then((j) => { if (j.ok) setData(j.data); else setErrorMsg(j.error); })
-      .catch((e) => setErrorMsg(e.message))
-      .finally(() => setLoading(false));
+      .then((j) => {
+        if (mia !== ultimaPeticion.current) return; // llegó tarde: ya hay otra en camino
+        if (j.ok) setData(j.data); else setErrorMsg(j.error);
+      })
+      .catch((e) => { if (mia === ultimaPeticion.current) setErrorMsg(e.message); })
+      .finally(() => { if (mia === ultimaPeticion.current) setLoading(false); });
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { load(); }, [statusTab, category, registroId, responsableId, qBuscada, verVistas]);
+  useEffect(() => { load(); }, [pestanas, categorias, registradaPor, responsables, soloMias, qBuscada, verVistas]);
 
   // Deep-link desde la campana (02/09/2026): `?incidencia=<id>` abre ESA ficha
   // fresca del servidor, no la copia del listado. Se lee de window.location y
@@ -137,7 +172,7 @@ export default function IncidenciasPage() {
       window.removeEventListener("focus", alVolver);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusTab, category, registroId, responsableId, qBuscada, verVistas]);
+  }, [pestanas, categorias, registradaPor, responsables, soloMias, qBuscada, verVistas]);
 
   const rows = data?.incidencias ?? [];
   // ¿Se está filtrando por responsable? Con `null` («las mías») solo si el
@@ -146,13 +181,36 @@ export default function IncidenciasPage() {
   // Quien no es dirección solo ve las suyas (02/09/2026, Aumenta): para ella no
   // hay filtro de responsable que valga, el alcance ya es «las mías».
   const soloLasMias = data?.alcance === "mias";
-  const filtrandoPorResponsable = soloLasMias
-    ? false
-    : responsableId === null ? Boolean(data?.yoSoy) : Boolean(responsableId);
+  // «Solo las mías» solo tiene sentido para quien las ve todas: a una terapeuta
+  // el servidor ya le da las suyas y el interruptor no haría nada.
+  const puedeVerTodas = !soloLasMias;
+  const misMarcado = puedeVerTodas && soloMias && Boolean(data?.yoSoy);
+  /*
+   * ── UN SOLO BOTÓN EN VEZ DE CUATRO CONTROLES (18/09/2026, AV-0169) ────────
+   * Aumenta: «se quejan de que hay mucho filtro y es muy confuso». Arriba se
+   * quedan las pestañas de estado y el buscador, que son los de todos los días;
+   * los tres desplegables y el interruptor de las vistas se recogen en este
+   * panel, que dice en el botón cuántos hay puestos y se quita de en medio con
+   * «Quitar filtros». Panel plegable en el flujo de la página, no un cajón
+   * flotante: no tapa nada y en móvil baja el contenido en vez de taparlo.
+   */
+  const filtrosPuestos =
+    (categorias?.length ?? 0) +
+    (puedeVerTodas ? (registradaPor?.length ?? 0) + (responsables?.length ?? 0) + (misMarcado ? 1 : 0) : 0) +
+    (verVistas ? 1 : 0);
+  const quitarFiltros = () => {
+    setCategorias(null);
+    setRegistradaPor(null);
+    setResponsables(null);
+    setSoloMias(false);
+    setVerVistas(false);
+  };
+  const alternarPestana = (k) => setPestanas((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
+
   const counts = data?.counts ?? { pending: 0, in_progress: 0, resolved: 0, faltas: 0 };
   // Las faltas no suman en «Todas»: son otra lista (ver STATUS_TABS).
   const totalCount = counts.pending + counts.in_progress + counts.resolved;
-  const tabCount = (k) => (k === "" ? totalCount : counts[k] ?? 0);
+  const tabCount = (k) => counts[k] ?? 0;
 
   return (
     <div className={`${anchoPantalla("listado")} space-y-5`}>
@@ -165,15 +223,21 @@ export default function IncidenciasPage() {
           <div className="eyebrow">Equipo · Incidencias</div>
           <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mt-1">
             Incidencias
-            <HelpTooltip title="Pestañas" className="ml-2">
-              Agrupan por estado, y la etiqueta de la derecha de cada línea dice cómo acabó.
-              «Parcial» y «No resuelta» están dentro de «En proceso»: no tienen pestaña propia.
+            <HelpTooltip title="Los tipos" className="ml-2">
+              Agrupan por estado y se SUMAN: puedes ver a la vez pendientes, en proceso y faltas.
+              Sin ninguno marcado salen todas. La etiqueta de la derecha de cada línea dice cómo
+              acabó: «Parcial» y «No resuelta» están dentro de «En proceso», no tienen tipo propio.
             </HelpTooltip>
           </h1>
+          {/* Decir SIEMPRE qué se está viendo (18/09/2026, AV-198): la pantalla se
+              abre acotada a quien mira, y sin esta línea parecía que había menos
+              incidencias de las que hay. Con el porqué al lado del remedio. */}
           <p className="text-xs text-neutral-400 mt-1">
             {soloLasMias
               ? "Ves las incidencias que registraste tú o que tienes asignadas. Dirección las ve todas."
-              : "Registro y seguimiento de incidencias del equipo."}
+              : misMarcado
+                ? "Ves las que registraste tú o tienes asignadas. Quita «Solo las mías» en Filtros para verlas todas."
+                : "Registro y seguimiento de incidencias del equipo."}
           </p>
         </div>
         <div className="flex items-center gap-2 self-start lg:self-auto">
@@ -204,60 +268,155 @@ export default function IncidenciasPage() {
 
       {/* Filtros */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-        <div className="flex flex-wrap gap-1.5">
-          {STATUS_TABS.map((t) => (
-            <button key={t.key} onClick={() => setStatusTab(t.key)}
-              className={`text-[11px] font-medium px-3 py-1.5 rounded-lg transition-colors ${statusTab === t.key ? "text-white" : "bg-white border border-neutral-200 text-neutral-600 hover:border-neutral-300"}`}
-              style={statusTab === t.key ? { background: "var(--color-primary, #1B3A2D)" } : undefined}>
-              {t.label} <span className="opacity-70">· {tabCount(t.key)}</span>
-            </button>
-          ))}
+        {/* Los tipos se marcan y se suman (18/09/2026, AV-198). «Todas» no es uno
+            más: es el que los quita, y se ve marcado cuando no hay ninguno. */}
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Tipos de incidencia">
+          <button
+            onClick={() => setPestanas([])}
+            aria-pressed={pestanas.length === 0}
+            className={`text-[11px] font-medium px-3 py-1.5 rounded-lg transition-colors ${pestanas.length === 0 ? "text-white" : "bg-white border border-neutral-200 text-neutral-600 hover:border-neutral-300"}`}
+            style={pestanas.length === 0 ? { background: "var(--color-primary, #1B3A2D)" } : undefined}
+          >
+            Todas <span className="opacity-70">· {totalCount}</span>
+          </button>
+          {STATUS_TABS.map((t) => {
+            const marcada = pestanas.includes(t.key);
+            return (
+              <button key={t.key} onClick={() => alternarPestana(t.key)} aria-pressed={marcada}
+                className={`text-[11px] font-medium px-3 py-1.5 rounded-lg transition-colors ${marcada ? "text-white" : "bg-white border border-neutral-200 text-neutral-600 hover:border-neutral-300"}`}
+                style={marcada ? { background: "var(--color-primary, #1B3A2D)" } : undefined}>
+                {t.label} <span className="opacity-70">· {tabCount(t.key)}</span>
+              </button>
+            );
+          })}
         </div>
-        {/* Cada persona sale con su NOMBRE a secas (01/09/2026, Rodrigo):
-            repetir «Registrada por X» / «Responsable: X» en cada línea de los
-            dos desplegables era ruido. Cuál es cuál lo dice la opción neutra
-            de cada uno, que es la que se ve mientras no hay filtro puesto. */}
-        <div className="sm:ml-auto flex flex-wrap gap-2">
+        <div className="sm:ml-auto flex items-center gap-2">
           <input
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Buscar por asunto, paciente o palabra…"
             aria-label="Buscar incidencias por asunto, paciente o palabra"
-            className="text-xs border border-neutral-200 rounded-lg px-3 py-2 bg-white hover:border-neutral-300 focus:outline-none focus:border-neutral-400 w-56"
+            className="text-xs border border-neutral-200 rounded-lg px-3 py-2 bg-white hover:border-neutral-300 focus:outline-none focus:border-neutral-400 flex-1 sm:flex-none sm:w-56"
           />
-          {/* Los dos filtros por persona solo tienen sentido para quien ve las
-              de todo el equipo: a una terapeuta el servidor ya le da las suyas. */}
-          {!soloLasMias && (
-            <>
-              <Select value={registroId} onChange={setRegistroId} aria-label="Filtrar por quién registró la incidencia"
-                options={[{ value: "", label: "Registrada por cualquiera" }, ...(data?.therapists ?? []).map((t) => ({ value: t.id, label: t.name }))]}
-                className="text-xs border border-neutral-200 rounded-lg px-3 py-2 bg-white hover:border-neutral-300 cursor-pointer" />
-              <Select value={responsableId ?? data?.yoSoy ?? ""} onChange={setResponsableId} aria-label="Filtrar por responsable"
-                options={[{ value: "", label: "Cualquier responsable" }, ...(data?.therapists ?? []).map((t) => ({ value: t.id, label: t.name }))]}
-                className="text-xs border border-neutral-200 rounded-lg px-3 py-2 bg-white hover:border-neutral-300 cursor-pointer" />
-            </>
-          )}
-          <Select value={category} onChange={setCategory}
-            options={[{ value: "", label: "Todas las categorías" }, ...INCIDENCIA_CATEGORIES.map((c) => ({ value: c.key, label: c.label }))]}
-            className="text-xs border border-neutral-200 rounded-lg px-3 py-2 bg-white hover:border-neutral-300 cursor-pointer" />
-          {/* Solo sale si hay alguna dada por vista: a quien no usa el botón
-              no le aparece un interruptor que no le dice nada. */}
-          {data?.vistasTotales > 0 && (
-            <label className="flex items-center gap-2 text-[11px] text-neutral-500 px-1 cursor-pointer select-none" title={AYUDA_VISTO}>
-              <input type="checkbox" checked={verVistas} onChange={(e) => setVerVistas(e.target.checked)} />
-              Ver las {data.vistasTotales} que ya diste por vistas
-            </label>
-          )}
+          <button
+            type="button"
+            onClick={() => setPanelFiltros((v) => !v)}
+            aria-expanded={panelFiltros}
+            aria-controls="panel-filtros-incidencias"
+            className={`shrink-0 inline-flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border transition-colors ${filtrosPuestos ? "border-[var(--color-primary,#1B3A2D)] text-[var(--color-primary,#1B3A2D)] bg-white" : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300"}`}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-3.5 h-3.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 5h18M6 12h12M10 19h4" />
+            </svg>
+            Filtros
+            {filtrosPuestos > 0 && (
+              <span className="inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full text-[10px] text-white" style={{ background: "var(--color-primary, #1B3A2D)" }}>
+                {filtrosPuestos}
+              </span>
+            )}
+          </button>
         </div>
       </div>
+
+      {/* El panel: los tres desplegables de varios y las dadas por vistas.
+          Plegado por defecto — se abre con el botón de arriba. Va en el flujo
+          de la página y no flotando: no tapa la lista y en móvil la empuja
+          hacia abajo en vez de taparla. */}
+      {panelFiltros && (
+        <div id="panel-filtros-incidencias" className="bg-white border border-neutral-100 rounded-xl p-3 lg:p-4 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {/* Cada persona sale con su NOMBRE a secas (01/09/2026, Rodrigo):
+                repetir «Registrada por X» / «Responsable: X» en cada línea de
+                los dos desplegables era ruido. Cuál es cuál lo dice el rótulo
+                de encima. Los dos filtros por persona solo tienen sentido para
+                quien ve las de todo el equipo: a una terapeuta el servidor ya
+                le da las suyas. */}
+            {!soloLasMias && (
+              <>
+                <div>
+                  <label className="text-[10px] uppercase tracking-wider text-neutral-400">Registrada por</label>
+                  <MultiSelect
+                    value={registradaPor}
+                    onChange={setRegistradaPor}
+                    options={(data?.therapists ?? []).map((t) => ({ value: t.id, label: t.name }))}
+                    etiquetaTodos="Cualquiera"
+                    resumen={(n) => `${n} personas`}
+                    searchable
+                    aria-label="Filtrar por quién registró la incidencia"
+                    className="mt-1 w-full text-xs border border-neutral-200 rounded-lg px-3 py-2 bg-white hover:border-neutral-300 cursor-pointer"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase tracking-wider text-neutral-400">Responsable</label>
+                  <MultiSelect
+                    value={responsables === "mias" ? (data?.yoSoy ? [data.yoSoy] : null) : responsables}
+                    onChange={setResponsables}
+                    options={(data?.therapists ?? []).map((t) => ({ value: t.id, label: t.name }))}
+                    etiquetaTodos="Cualquiera"
+                    resumen={(n) => `${n} personas`}
+                    searchable
+                    aria-label="Filtrar por responsable"
+                    className="mt-1 w-full text-xs border border-neutral-200 rounded-lg px-3 py-2 bg-white hover:border-neutral-300 cursor-pointer"
+                  />
+                </div>
+              </>
+            )}
+            <div>
+              <label className="text-[10px] uppercase tracking-wider text-neutral-400">Categoría</label>
+              <MultiSelect
+                value={categorias}
+                onChange={setCategorias}
+                options={INCIDENCIA_CATEGORIES.map((c) => ({ value: c.key, label: c.label }))}
+                etiquetaTodos="Todas"
+                resumen={(n) => `${n} categorías`}
+                aria-label="Filtrar por categoría"
+                className="mt-1 w-full text-xs border border-neutral-200 rounded-lg px-3 py-2 bg-white hover:border-neutral-300 cursor-pointer"
+              />
+            </div>
+          </div>
+          {/* Lo primero del panel, porque es lo que más acota la lista. */}
+          {puedeVerTodas && (
+            <label className="flex items-start gap-2 text-[11px] text-neutral-600 cursor-pointer select-none border-t border-neutral-100 pt-3">
+              <input type="checkbox" className="mt-0.5" checked={soloMias} onChange={(e) => setSoloMias(e.target.checked)} />
+              <span>
+                Solo las mías
+                <span className="block text-neutral-400">
+                  Las que registré yo o tengo asignadas.
+                  {!data?.yoSoy && " Esta cuenta no tiene ficha de equipo, así que ahora mismo no acota nada."}
+                </span>
+              </span>
+            </label>
+          )}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+            {/* Solo sale si hay alguna dada por vista: a quien no usa el botón
+                no le aparece un interruptor que no le dice nada. */}
+            {data?.vistasTotales > 0 ? (
+              <label className="flex items-center gap-2 text-[11px] text-neutral-500 cursor-pointer select-none" title={AYUDA_VISTO}>
+                <input type="checkbox" checked={verVistas} onChange={(e) => setVerVistas(e.target.checked)} />
+                Ver las {data.vistasTotales} que ya diste por vistas
+              </label>
+            ) : (
+              <span />
+            )}
+            <button
+              type="button"
+              onClick={quitarFiltros}
+              disabled={filtrosPuestos === 0}
+              className="text-[11px] font-medium text-neutral-500 hover:text-[var(--color-primary,#1B3A2D)] disabled:text-neutral-300 disabled:cursor-default transition-colors"
+            >
+              Quitar filtros
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Lista */}
       <div className="bg-white border border-neutral-100 rounded-xl overflow-hidden">
         {loading ? (
           <p className="px-4 py-10 text-center text-neutral-400 text-sm">Cargando…</p>
         ) : rows.length === 0 ? (
-          <p className="px-4 py-10 text-center text-neutral-400 text-sm">No hay incidencias{statusTab || category || registroId || filtrandoPorResponsable || qBuscada ? " con estos filtros" : ""}.</p>
+          <p className="px-4 py-10 text-center text-neutral-400 text-sm">No hay incidencias{pestanas.length || filtrosPuestos || qBuscada ? " con estos filtros" : ""}.</p>
         ) : (
           <ul className="divide-y divide-neutral-100">
             {rows.map((r) => (

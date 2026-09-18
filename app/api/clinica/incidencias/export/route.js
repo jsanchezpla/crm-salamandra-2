@@ -18,7 +18,7 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { forbidden, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { xlsxResponse, fmtDateEs } from "../../../../../lib/billing/exportXlsx.js";
-import { includesDeIncidencias, whereDeIncidencias } from "../../../../../lib/clinica/filtroIncidencias.js";
+import { includesDeIncidencias, listaDeParametro, whereDeIncidencias } from "../../../../../lib/clinica/filtroIncidencias.js";
 import { serializeIncidencia, INCIDENCIA_CATEGORIES } from "../../../../../lib/clinica/incidencias.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -30,8 +30,24 @@ const PESTANAS = {
   resolved: "Resueltas",
 };
 
+/** «Pendientes, En proceso y Faltas» — lo que se ve en pantalla, para la hoja. */
+function etiquetaPestana(estados, conFaltas) {
+  const partes = estados.map((e) => PESTANAS[e] ?? e);
+  if (conFaltas) partes.push("Faltas");
+  return partes.length ? partes.join(", ") : "Todas";
+}
+
 function nombreDe(lista, id) {
   return lista.find((x) => x.id === id)?.name ?? "—";
+}
+
+/**
+ * La hoja «Filtros aplicados» con los filtros de VARIOS valores (18/09/2026,
+ * AV-0169): «Olga, Rosa» y no el primero a secas, para que el fichero siga
+ * explicándose solo dentro de un mes.
+ */
+function nombresDe(lista, ids) {
+  return ids.length ? ids.map((id) => nombreDe(lista, id)).join(", ") : "Cualquiera";
 }
 
 export const GET = withTenant(async (request, _rc, ctx) => {
@@ -42,7 +58,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     const { Incidencia } = M;
     const sp = new URL(request.url).searchParams;
 
-    const { where, yoSoy, verVistas, esAdmin } = await whereDeIncidencias({ request, sp, M, ctx });
+    const { where, yoSoy, verVistas, esAdmin, conFaltas, estados } = await whereDeIncidencias({ request, sp, M, ctx });
 
     const rows = await Incidencia.findAll({
       where,
@@ -62,7 +78,12 @@ export const GET = withTenant(async (request, _rc, ctx) => {
      * ponen las fechas de los tres primeros comentarios de la incidencia, que
      * es donde se apunta cada llamada a la familia.
      */
-    const soloFaltas = sp.get("faltas") === "1";
+    /*
+     * Las columnas de faltas solo cuando se piden SOLO faltas (18/09/2026,
+     * AV-198): mezcladas con otros estados, la hoja tiene que ser la normal —
+     * una incidencia de las de siempre no tiene fecha de recuperación.
+     */
+    const soloFaltas = conFaltas && estados.length === 0;
     const citas = new Map();
     if (soloFaltas && M.Booking) {
       const ids = rows.map((r) => r.falta?.bookingId).filter((x) => x && UUID_RE.test(x));
@@ -136,9 +157,13 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     const equipo = (
       await M.TeamMember.findAll({ attributes: ["id", "displayName"], raw: true })
     ).map((t) => ({ id: t.id, name: t.displayName }));
-    const categoria = sp.get("category");
-    const etiquetaCategoria = INCIDENCIA_CATEGORIES.find((c) => c.key === categoria)?.label ?? categoria;
-    const responsable = sp.get("mine") === "1" && esAdmin ? yoSoy : sp.get("assignedToId");
+    const categorias = listaDeParametro(sp, "category");
+    const etiquetaCategoria = categorias.length
+      ? categorias.map((c) => INCIDENCIA_CATEGORIES.find((x) => x.key === c)?.label ?? c).join(", ")
+      : "Todas";
+    const registradaPor = listaDeParametro(sp, "reportedById");
+    const responsables =
+      sp.get("mine") === "1" && esAdmin ? (yoSoy ? [yoSoy] : []) : listaDeParametro(sp, "assignedToId");
 
     return await xlsxResponse({
       filename: `incidencias-${ctx.tenant.slug}.xlsx`,
@@ -174,10 +199,10 @@ export const GET = withTenant(async (request, _rc, ctx) => {
       ],
       rows: soloFaltas ? filasDeFaltas : filas,
       filters: [
-        { label: "Pestaña", value: sp.get("faltas") === "1" ? "Faltas" : PESTANAS[sp.get("status") ?? ""] ?? sp.get("status") },
-        { label: "Categoría", value: etiquetaCategoria || "Todas" },
-        { label: "Responsable", value: responsable ? nombreDe(equipo, responsable) : "Cualquiera" },
-        { label: "Registrada por", value: sp.get("reportedById") ? nombreDe(equipo, sp.get("reportedById")) : "Cualquiera" },
+        { label: "Pestaña", value: etiquetaPestana(estados, conFaltas) },
+        { label: "Categoría", value: etiquetaCategoria },
+        { label: "Responsable", value: nombresDe(equipo, responsables) },
+        { label: "Registrada por", value: nombresDe(equipo, registradaPor) },
         { label: "Texto buscado", value: (sp.get("q") || "").trim() || "—" },
         { label: "Incluye las dadas por vistas", value: verVistas ? "Sí" : "No" },
         { label: "Alcance", value: esAdmin ? "Todas (dirección)" : "Las que registró o tiene asignadas quien exporta" },
