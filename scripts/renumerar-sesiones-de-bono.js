@@ -20,21 +20,27 @@
  * Este script es solo para las citas que YA se crearon mal. Son pocas —4 en
  * producción, en 3 bonos— pero son las que lee quien avisa a las familias.
  *
- * ── QUÉ RENUMERA, Y POR QUÉ TAN POCO ───────────────────────────────────────
- * SOLO las citas de un bono con `sesiones_previas > 0` cuyo número esté dentro
- * del tramo que el bono ya traía gastado (`session_number <= sesiones_previas`).
- * Ese número es imposible de todas todas: nombra una sesión que se dio en
- * Organízate años antes de que el CRM existiera. Las demás no se tocan aunque
- * parezcan raras, porque la regla de la casa es que un número de sesión no se
- * recicla: lo que la profesional apuntó como «sesión 3» tiene que seguir siendo
- * la 3 dentro de un año (`models/tenant/Booking.model.js`).
+ * ── QUÉ RENUMERA ───────────────────────────────────────────────────────────
+ * Solo los bonos con `sesiones_previas > 0` que están ROTOS, y de ésos, TODAS
+ * sus citas. Un bono está roto si tiene alguna cita con un número imposible
+ * —`session_number <= sesiones_previas`, o sea un número que nombra una sesión
+ * dada en Organízate años antes de que el CRM existiera— o dos citas con el
+ * mismo número. Se renumeran por orden de fecha a partir de `previas + 1`.
  *
- * Se renumeran CORRIDAS hacia arriba, respetando el orden entre ellas: la más
- * antigua pasa a ser `previas + 1`, la siguiente `previas + 2`… Así un bono con
- * dos citas mal puestas no acaba con dos sesiones del mismo número.
+ * ⚠️ La primera versión (18/09/2026) movía SOLO la cita imposible y contaba
+ * `previas + ROW_NUMBER()` entre las malas, ignorando las que ya estaban por
+ * encima. En producción dejó un bono con DOS citas numeradas 2: llegó con 1
+ * gastada y tenía citas 1 y 2, y la 1 se convirtió en otra 2. Esta versión lo
+ * arregla en la misma pasada — por eso los duplicados también cuentan como
+ * «roto».
  *
- * Idempotente: en cuanto una cita queda por encima de las previas, deja de
- * entrar en el WHERE. Relanzarlo no mueve nada.
+ * Un bono con previas cuyas citas ya están bien no se toca, aunque tenga
+ * huecos: un número cancelado no se recicla a propósito, y lo que la
+ * profesional apuntó como «sesión 3» sigue siendo la 3 dentro de un año
+ * (`models/tenant/Booking.model.js`).
+ *
+ * Idempotente: un bono sano deja de estar roto y la segunda pasada no lo
+ * selecciona. Relanzarlo no mueve nada.
  *
  * ── LO QUE NO HACE ─────────────────────────────────────────────────────────
  * No toca `sesiones_previas` (el dato está bien), no toca el estado de ningún
@@ -85,26 +91,57 @@ async function unTenant({ id: tenantId, slug }) {
   if (existe.n < 2) return null;
 
   /*
-   * Las citas imposibles, con el número que les toca.
+   * ── POR QUÉ SE RENUMERA EL BONO ENTERO Y NO SOLO LA CITA IMPOSIBLE ────────
+   * La primera versión de esto (18/09/2026) movía SOLO las filas con
+   * `session_number <= sesiones_previas` y les daba `previas + ROW_NUMBER()`
+   * contando únicamente entre ellas. Se comió las filas que YA estaban por
+   * encima de las previas: un bono que llegó con 1 gastada y tenía dos citas,
+   * numeradas 1 y 2, se quedó con DOS citas numeradas 2. Pasó en producción,
+   * en un bono, y lo arregla esta misma pasada.
    *
-   * `fila` las ordena DENTRO de cada bono por el número que llevan y, a igualdad,
-   * por la fecha de la cita: así dos citas mal puestas del mismo bono salen
-   * corridas (previas+1, previas+2) y no las dos con el mismo número.
+   * La regla buena: si un bono con previas está ROTO —tiene alguna cita con un
+   * número imposible, o dos citas con el mismo número—, se renumeran TODAS sus
+   * citas por orden de fecha a partir de `previas + 1`. Renumerar el bono
+   * entero es lo único que respeta a la vez las dos cosas que importan: que
+   * ningún número sea imposible y que el orden de las sesiones siga al orden de
+   * las citas.
+   *
+   * Se tocan SOLO los bonos rotos. Uno con previas cuyas citas ya están bien
+   * —aunque tengan huecos, que los hay a propósito: un número cancelado no se
+   * recicla— no entra aquí y no se le mueve nada.
+   *
+   * Idempotente: en cuanto un bono queda sano deja de estar ROTO, así que la
+   * segunda pasada no lo selecciona. Y dentro del propio SELECT se descartan
+   * las filas cuyo número ya coincide con el que les toca.
+   *
+   * Las citas sin número (`session_number` NULL) no se numeran ni cuentan para
+   * el orden: no son sesiones apuntadas, y ponerles número aquí sería inventar.
    */
-  const MALAS = `
-    SELECT b.id,
-           b.session_number AS num,
-           sp.id   AS pack_id,
-           sp.sesiones_previas AS previas,
-           sp.total_sessions   AS tope,
-           sp.sesiones_previas + ROW_NUMBER() OVER (
-             PARTITION BY sp.id ORDER BY b.session_number, b.scheduled_at, b.id
-           ) AS nuevo
-      FROM ${esquema}.bookings b
-      JOIN ${esquema}.session_packs sp ON sp.id = b.pack_id
+  const ROTOS = `
+    SELECT sp.id, sp.sesiones_previas, sp.total_sessions
+      FROM ${esquema}.session_packs sp
      WHERE sp.sesiones_previas > 0
-       AND b.session_number IS NOT NULL
-       AND b.session_number <= sp.sesiones_previas`;
+       AND EXISTS (
+         SELECT 1 FROM ${esquema}.bookings b
+          WHERE b.pack_id = sp.id AND b.session_number IS NOT NULL
+            AND ( b.session_number <= sp.sesiones_previas
+                  OR EXISTS (SELECT 1 FROM ${esquema}.bookings b2
+                              WHERE b2.pack_id = sp.id AND b2.id <> b.id
+                                AND b2.session_number = b.session_number) ))`;
+
+  const MALAS = `
+    WITH rotos AS (${ROTOS}), deseado AS (
+      SELECT b.id,
+             b.session_number AS num,
+             r.sesiones_previas AS previas,
+             r.total_sessions   AS tope,
+             r.sesiones_previas + ROW_NUMBER() OVER (
+               PARTITION BY r.id ORDER BY b.scheduled_at, b.id
+             ) AS nuevo
+        FROM rotos r
+        JOIN ${esquema}.bookings b ON b.pack_id = r.id AND b.session_number IS NOT NULL
+    )
+    SELECT id, num, previas, tope, nuevo FROM deseado WHERE num IS DISTINCT FROM nuevo`;
 
   const malas = await q(MALAS);
   const [enganchadas] = await q(
@@ -118,7 +155,7 @@ async function unTenant({ id: tenantId, slug }) {
     return { slug, citas: enganchadas.n, malas: 0, renumeradas: 0, bonos: 0 };
   }
 
-  const bonos = new Set(malas.map((m) => String(m.pack_id))).size;
+  const bonos = new Set(malas.map((m) => `${m.previas}/${m.tope}`)).size;
   console.log(`\n▶ ${slug}`);
   console.log(`  citas enganchadas a un bono               ${n(enganchadas.n)}`);
   console.log(`  · mal numeradas                           ${n(malas.length)}   en ${bonos} bonos`);
