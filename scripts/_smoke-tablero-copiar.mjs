@@ -9,6 +9,12 @@
  * capturas, el INDICADOR que pidió Rodrigo: cuántas son, cómo se llaman y la
  * orden que las baja al repo por la ficha. Sin capturas, ni una palabra de
  * ellas.
+ *
+ * Desde el 18/09/2026 fija también la línea que dice CON QUÉ se vuelve a abrir
+ * la tarea (`/incidencia AV-0169`). Es lo que hace que pegarla en un chat nuevo
+ * no sea un callejón sin salida, así que importa que se prefiera el `AV-####`
+ * —llega al aviso Y a la tarea— y que no se escriba ninguna orden cuando no
+ * hay con qué llamarla.
  */
 
 import { describe, it } from "node:test";
@@ -33,6 +39,7 @@ describe("tareaComoTexto", () => {
       [
         "Buzón - Fallo: No se guarda la cita",
         "Cliente: aumenta",
+        "Para abrirla entera: /incidencia k7m2p9",
         "",
         "**Lo que nos cuentan.** Cambio la hora y vuelve a la de antes.\n\n*Dónde*: `/citas`.",
         "",
@@ -73,5 +80,39 @@ describe("tareaComoTexto", () => {
     const sinFicha = tareaComoTexto(tarea({ id: null, capturas: [{ id: "a", nombre: "x.png", bytes: 10 }] }));
     assert.doesNotMatch(sinFicha, /registro\.mjs/);
     assert.match(sinFicha, /Para verlas: \/admin\/tablero/);
+  });
+});
+
+describe("con qué se vuelve a abrir la tarea", () => {
+  const conAviso = { ref: "AV-0169", slug: "aumenta", cliente: "Aumenta" };
+
+  it("prefiere el AV al de la ficha, y dice la ficha entre paréntesis", () => {
+    // El AV llega a los dos lados —el hilo del Buzón y su tarea—; la ficha
+    // sola llega solo a la tarea. Por eso manda el AV.
+    const texto = tareaComoTexto(tarea({ aviso: conAviso }));
+    assert.match(texto, /Para abrirla entera: \/incidencia AV-0169 {3}\(ficha k7m2p9\)/);
+  });
+
+  it("sin aviso, se abre por la ficha y sin paréntesis", () => {
+    const texto = tareaComoTexto(tarea({ aviso: null }));
+    assert.match(texto, /Para abrirla entera: \/incidencia k7m2p9$/m);
+    assert.doesNotMatch(texto, /ficha k7m2p9\)/);
+  });
+
+  it("sin ficha pero con aviso, se abre por el AV", () => {
+    const texto = tareaComoTexto(tarea({ id: null, aviso: conAviso }));
+    assert.match(texto, /Para abrirla entera: \/incidencia AV-0169$/m);
+  });
+
+  it("sin ninguno de los dos no se inventa una orden que no va a funcionar", () => {
+    const texto = tareaComoTexto(tarea({ id: null, aviso: null }));
+    assert.doesNotMatch(texto, /incidencia/);
+  });
+
+  it("la línea va arriba, con la identidad, y no dentro del cuerpo", () => {
+    const lineas = tareaComoTexto(tarea({ aviso: conAviso })).split("\n");
+    assert.equal(lineas[0], "Buzón - Fallo: No se guarda la cita");
+    assert.equal(lineas[1], "Cliente: aumenta");
+    assert.match(lineas[2], /^Para abrirla entera:/);
   });
 });

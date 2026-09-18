@@ -340,16 +340,24 @@ React las usa como clave. `subir` frena. Cambia una de las dos.
 
 ### 4.6 La ficha: `<!--id:k7m2p9-->` (24/08/2026)
 
-Una línea suelta dentro del cuerpo, que **el tablero no enseña** —se saca del
-cuerpo al trocear— y que en el markdown crudo no estorba. Es el identificador
-estable de la tarea: sobrevive a que le cambien el título, a que se mueva de
-sección y a que se cierre y pase a `resuelto`.
+Una línea suelta dentro del cuerpo. **El tablero no la pinta dentro del
+texto** —se saca del cuerpo al trocear, porque el cuerpo se enseña tal cual y un
+comentario de HTML se leería con sus signos— y en el markdown crudo no estorba.
+Es el identificador estable de la tarea: sobrevive a que le cambien el título, a
+que se mueva de sección y a que se cierre y pase a `resuelto`.
 
-**Existe por las capturas, y solo por ellas.** Todo lo demás (tick, reparto,
-solución) casa por título normalizado, y esa herida está asumida: una fila
-huérfana no casa con nada y no molesta. Un FICHERO huérfano sí molesta —queda en
-disco, no lo alcanza nadie, nadie lo va a borrar— y encima puede llevar datos de
-un paciente dentro.
+**Desde el 18/09/2026 SÍ se ve, y se copia de un clic** (Jorge): al abrir la
+tarea en `/admin/tablero` sale su ficha en una chapa, y al lado —si la tarea
+salió del Buzón— el enlace a su hilo. El motivo es que la ficha es lo que se le
+pega a una conversación nueva: `/incidencia s55hv5` la abre entera, con el hilo
+del cliente delante. Un identificador estable que no se puede leer no sirve de
+nada. El botón «Copiar» lo dice también, en su segunda línea.
+
+**Nació por las capturas, y durante un mes fue solo por ellas.** Todo lo demás
+(tick, reparto, solución) casa por título normalizado, y esa herida está
+asumida: una fila huérfana no casa con nada y no molesta. Un FICHERO huérfano sí
+molesta —queda en disco, no lo alcanza nadie, nadie lo va a borrar— y encima
+puede llevar datos de un paciente dentro.
 
 Tres cosas que hay que saber:
 
@@ -360,7 +368,9 @@ Tres cosas que hay que saber:
   Dos tareas con la misma ficha enseñarían cada una las capturas de la otra;
   `subir` lo frena como error, pero el error se comete al copiar.
 - Las tareas escritas antes del 24/08/2026 no la llevan y no pasa nada. Todo lo
-  de siempre sigue funcionando por título.
+  de siempre sigue funcionando por título — pero esas son las que no se pueden
+  abrir con `/incidencia <ficha>`: si la tarea vino del Buzón se la llama por su
+  `AV-####`, y si no, se la gana reescribiéndola desde la pantalla.
 
 ### 4.7 Las capturas (24/08/2026)
 

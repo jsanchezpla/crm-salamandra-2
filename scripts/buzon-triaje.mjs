@@ -58,6 +58,7 @@ const { referencia, serializarAviso } = await desde("lib/buzon/buzon.js");
 const { leerParaSalamandra, anadirMensaje, cambiar, listarParaSalamandra } =
   await desde("lib/buzon/buzonStore.js");
 const { avisarEnSuCrm } = await desde("lib/buzon/avisarEnSuCrm.js");
+const { comoBuscarElAviso, interpretar } = await desde("lib/incidencias/identificador.js");
 const { auditar } = await desde("lib/utils/auditoria.js");
 
 const ACCION = process.env.TRIAJE_ACCION || "listar";
@@ -131,6 +132,142 @@ function resumenDelAviso(a) {
     // adivinar.
     capturas: a.adjuntos.map((x) => x.nombre),
   };
+}
+
+/*
+ * ── `ver`: UN caso entero, de una sola consulta (18/09/2026) ────────────────
+ *
+ * Es la puerta de la skill `/incidencia`. Hasta hoy, para ponerse al día de un
+ * aviso concreto había que usar `listar`, que **ignora TRIAJE_REF** y vuelca los
+ * ~300 avisos enteros: el filtrado lo hacía el modelo ya dentro del contexto. O
+ * sea que abrir un caso costaba el buzón entero, y una conversación nueva
+ * empezaba con el contexto medio gastado antes de mirar nada.
+ *
+ * Aquí se junta lo que estaba en dos sitios y nunca se había juntado:
+ *   · el aviso con su hilo y sus capturas (Buzón);
+ *   · su tarea del Registro, en qué sección está y si sigue abierta (tablero).
+ *
+ * ── CÓMO SE CASAN, Y EN QUÉ ORDEN ──────────────────────────────────────────
+ * Manda la FICHA (`BuzonAviso.registroFicha`, el vínculo real desde el
+ * 02/09/2026). Si el aviso no la tiene —los anteriores al botón, que se
+ * apuntaron a mano con /mailbox— se cae a buscar la cita `AV-####` dentro del
+ * texto, que es exactamente lo que ya hace `sincronizarConRegistro` para
+ * decidir si un aviso sigue vivo. Sin ninguna de las dos, se dice que no hay
+ * tarea; no se adivina por parecido de título.
+ *
+ * Solo LEE. No marca, no contesta y no publica nada.
+ */
+if (ACCION === "ver") {
+  const { trocearTodo } = await desde("lib/tablero/parser.js");
+  const { ultimaVersion } = await desde("lib/tablero/documentos.js");
+  const { claveDeTarea } = await desde("lib/tablero/estado.js");
+
+  const q = interpretar(REF);
+  if (q.tipo === "texto") {
+    console.error(
+      REF
+        ? `«${REF}» no es una referencia (AV-0007), ni una ficha (s55hv5), ni un UUID.`
+        : "Falta TRIAJE_REF (p. ej. AV-0007, o la ficha s55hv5)."
+    );
+    await salir(1);
+  }
+
+  const { BuzonAviso, TableroEstado, TableroAdjunto } = getMasterModels();
+  const fila = await BuzonAviso.findOne({ where: comoBuscarElAviso(REF) });
+
+  // Una ficha puede no tener aviso detrás: hay tareas del Registro que nadie
+  // mandó desde el Buzón. Eso no es un error — es media respuesta.
+  const aviso = fila ? serializarAviso(await leerParaSalamandra(fila.id, { marcarLeido: false }), { para: "salamandra" }) : null;
+  if (!aviso && q.tipo !== "ficha") {
+    console.error(`No existe ningún aviso ${REF}.`);
+    await salir(1);
+  }
+
+  const ficha = q.tipo === "ficha" ? q.ficha : (aviso?.registroFicha ?? null);
+  const numero = aviso?.numero ?? (q.tipo === "aviso" ? q.numero : null);
+  // La misma regex que `citaLaReferencia`: el `(?!\d)` impide que AV-0017
+  // case dentro de AV-0170.
+  const cita = numero == null ? null : new RegExp(`${referencia(numero)}(?!\d)`);
+
+  const docs = {};
+  for (const nombre of ["backlog", "resuelto"]) {
+    const doc = await ultimaVersion(getMasterModels(), nombre);
+    docs[nombre] = doc ? { version: doc.version, contenido: doc.contenido } : null;
+  }
+
+  let tarea = null;
+  for (const nombre of ["backlog", "resuelto"]) {
+    if (!docs[nombre] || tarea) continue;
+    for (const seccion of trocearTodo(docs[nombre].contenido).secciones) {
+      if (seccion.esManual || tarea) continue;
+      for (const t of seccion.tareas) {
+        // La ficha manda; la cita es la red para las tareas de antes del botón.
+        const suya = ficha ? t.id === ficha : cita ? cita.test(t.cuerpo) : false;
+        if (!suya) continue;
+        tarea = {
+          documento: nombre,
+          abierta: nombre === "backlog",
+          version: docs[nombre].version,
+          seccion: seccion.titulo,
+          ficha: t.id,
+          titulo: t.titulo,
+          quien: t.quien,
+          linea: t.linea,
+          cuerpo: t.cuerpo,
+          casadaPor: ficha && t.id === ficha ? "ficha" : "cita AV",
+        };
+        break;
+      }
+    }
+  }
+
+  // El tick, el reparto y la solución que se escribieron desde el móvil: viven
+  // encima del texto, en otra tabla, casados por título normalizado.
+  let estado = null;
+  if (tarea) {
+    const e = await TableroEstado.findOne({ where: { clave: claveDeTarea(tarea.titulo) } });
+    if (e) {
+      estado = {
+        asignadoA: e.asignadoA ?? null,
+        marcada: e.resuelta ?? null,
+        tocadaPor: e.tocadaPor ?? null,
+        solucion: e.solucion ?? null,
+        apuntadaEn: e.apuntadaEn ?? null,
+      };
+    }
+  }
+
+  // Las capturas del tablero cuelgan de la ficha. Aquí van solo los nombres:
+  // para VERLAS, `node scripts/registro.mjs capturas <ficha>`.
+  const capturas = tarea?.ficha
+    ? (await TableroAdjunto.findAll({ where: { ficha: tarea.ficha }, order: [["createdAt", "ASC"]] })).map((a) => ({
+        nombre: a.nombre,
+        bytes: a.bytes,
+      }))
+    : [];
+
+  console.log(
+    JSON.stringify(
+      {
+        buscadoComo: q.tipo,
+        aviso: aviso ? resumenDelAviso(aviso) : null,
+        avisoFicha: aviso?.registroFicha ?? null,
+        avisoEnviadoAlRegistro: aviso?.registroEnviadoAt ?? null,
+        tarea,
+        estado,
+        capturasDelTablero: capturas,
+        // Para que quien lea esto sepa qué NO le estamos contando.
+        nota: tarea
+          ? null
+          : ficha || cita
+            ? "No hay tarea en el Registro para este caso: ni por ficha ni por cita AV-####. O no se apuntó nunca, o se borró."
+            : "Sin ficha y sin número: no hay por dónde casarlo con el Registro.",
+      },
+      null,
+      1
+    )
+  );
+  await salir(0);
 }
 
 if (ACCION === "listar") {
@@ -335,5 +472,5 @@ if (ACCION === "escribir") {
   await salir(0);
 }
 
-console.error(`No sé qué es «${ACCION}». Usa listar, marcar, responder o escribir.`);
+console.error(`No sé qué es «${ACCION}». Usa listar, ver, marcar, responder o escribir.`);
 await salir(2);

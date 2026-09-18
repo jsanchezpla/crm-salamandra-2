@@ -12,7 +12,7 @@ import { candadoTablero as candado } from "../../../../lib/tablero/candado.js";
 // fuera a propósito, lleva scripts dentro), y dos copias de una lista blanca
 // acaban siendo dos listas distintas, con la vieja aceptando lo que la nueva ya
 // rechaza. Es una función pura sobre una extensión; no arrastra nada del Buzón.
-import { tipoParaVerEnPantalla } from "../../../../lib/buzon/buzon.js";
+import { estadoActual, referencia, tipoParaVerEnPantalla } from "../../../../lib/buzon/buzon.js";
 
 /**
  * El Registro: lo que falta y lo que ya está.
@@ -185,12 +185,82 @@ async function capturasGuardadas() {
   }
 }
 
+/**
+ * Los avisos del Buzón que dieron lugar a una tarea, por ficha (18/09/2026).
+ *
+ * ── LA VUELTA QUE FALTABA ──────────────────────────────────────────────────
+ * El vínculo aviso→tarea existe en base desde el 02/09/2026
+ * (`BuzonAviso.registroFicha`) y lo usa `sincronizarConRegistro` para mover el
+ * aviso de pestaña cuando su tarea se cierra. La vuelta —mirar una tarea y
+ * saber de qué aviso salió— no existía: estaba solo escrita en prosa dentro del
+ * cuerpo («**De dónde sale.** AV-0169 de Aumenta…»), o sea legible por una
+ * persona y por nadie más. Quien estaba en el tablero y quería leer el hilo
+ * entero tenía que buscar el AV a mano en /admin/buzon.
+ *
+ * ⚠️ POR QUÉ LA CAÍDA NO ES «BUSCAR AV-#### EN EL CUERPO». Hay tareas que CITAN
+ * un aviso sin venir de él: la del arqueo dice «AV-0157 es la tercera vez que
+ * Aumenta escribe que la caja no cuadra» y no salió del Buzón. Con una búsqueda
+ * a lo bruto, esa tarea enseñaría una chapa que lleva a un hilo que no es el
+ * suyo — y una chapa que miente se sigue una vez y no se vuelve a mirar. Así
+ * que la caída mira SOLO el párrafo «**De dónde sale.**», que es exactamente lo
+ * que escribe `tareaDesdeAviso` y solo lo escribe cuando la tarea nace del
+ * Buzón.
+ *
+ * Nunca lanza, como sus dos hermanas: si la tabla todavía no existe, el
+ * Registro se pinta como siempre.
+ */
+const DE_DONDE_SALE = /^\*\*De dónde sale\.\*\*\s*(.*)$/m;
+const UN_AV = /AV-(\d{1,9})(?!\d)/;
+
+async function avisosGuardados() {
+  try {
+    const { BuzonAviso } = getMasterModels();
+    const filas = await BuzonAviso.findAll({
+      attributes: ["id", "numero", "tenantSlug", "tenantNombre", "usuarioNombre", "estado", "bloquea", "registroFicha"],
+    });
+    const porFicha = new Map();
+    const porNumero = new Map();
+    for (const a of filas) {
+      const chapa = {
+        id: a.id,
+        ref: referencia(a.numero),
+        slug: a.tenantSlug,
+        cliente: a.tenantNombre ?? a.tenantSlug,
+        quien: a.usuarioNombre ?? null,
+        estado: estadoActual(a.estado),
+        bloquea: !!a.bloquea,
+      };
+      if (a.numero != null) porNumero.set(a.numero, chapa);
+      if (a.registroFicha) porFicha.set(a.registroFicha, chapa);
+    }
+    return { porFicha, porNumero };
+  } catch (err) {
+    process.stderr.write(`[tablero] sin avisos del buzón: ${err.message}\n`);
+    return { porFicha: new Map(), porNumero: new Map() };
+  }
+}
+
+/** De qué aviso salió ESTA tarea, o `null`. La ficha manda; el párrafo es la red. */
+function avisoDeLaTarea(tarea, avisos) {
+  if (tarea.id && avisos.porFicha.has(tarea.id)) return avisos.porFicha.get(tarea.id);
+  const linea = DE_DONDE_SALE.exec(tarea.cuerpo ?? "");
+  if (!linea) return null;
+  const av = UN_AV.exec(linea[1]);
+  if (!av) return null;
+  return avisos.porNumero.get(Number(av[1])) ?? null;
+}
+
 /** Le pega a cada tarea las suyas, dejando el resto del reparto como estaba. */
-function conCapturas(secciones, capturas) {
+function conCapturas(secciones, capturas, avisos) {
   if (secciones === null) return null;
   return secciones.map((s) => ({
     ...s,
-    tareas: s.tareas.map((t) => ({ ...t, capturas: (t.id && capturas.get(t.id)) || [] })),
+    tareas: s.tareas.map((t) => ({
+      ...t,
+      capturas: (t.id && capturas.get(t.id)) || [],
+      // De qué aviso del Buzón salió, si salió de alguno.
+      aviso: avisoDeLaTarea(t, avisos),
+    })),
   }));
 }
 
@@ -199,11 +269,12 @@ export const GET = withTenant(async (_request, _ctx, ctx) => {
     const veto = candado(ctx);
     if (veto) return veto;
 
-    const [backlog, resuelto, estados, capturas] = await Promise.all([
+    const [backlog, resuelto, estados, capturas, avisos] = await Promise.all([
       leer("backlog"),
       leer("resuelto"),
       estadosGuardados(),
       capturasGuardadas(),
+      avisosGuardados(),
     ]);
 
     const repartidas = repartirPorEstado(
@@ -213,8 +284,8 @@ export const GET = withTenant(async (_request, _ctx, ctx) => {
     );
 
     return ok({
-      pendiente: conCapturas(repartidas.pendiente, capturas),
-      resuelto: conCapturas(repartidas.resuelto, capturas),
+      pendiente: conCapturas(repartidas.pendiente, capturas, avisos),
+      resuelto: conCapturas(repartidas.resuelto, capturas, avisos),
       responsables: RESPONSABLES,
       // De dónde salió cada documento (versión, fecha, quién, o el fichero de
       // respaldo). La pantalla lo pinta: un Registro leído del fichero en

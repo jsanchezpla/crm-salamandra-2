@@ -10,6 +10,11 @@ Los clientes nos escriben desde **Ayuda**, dentro de su CRM, y eso cae en
 lo convierte en una de tres cosas: una tarea del Registro, una respuesta al
 cliente diciéndole que ya está arreglado, o una pregunta para Jorge o Rodrigo.
 
+**Para UN aviso concreto y hasta el final, `/incidencia AV-0007`**
+(18/09/2026). Esta tría la bandeja: mira muchos y los apunta. Aquella abre uno
+solo —trae también su tarea del Registro y sus capturas de una sola consulta— y
+lo lleva hasta el arreglo, el despliegue y el cierre.
+
 **Lo lanza una persona**, siempre. No hay versión automática, y es a propósito:
 cada aviso exige decidir si el fallo es real, de quién es y qué prioridad tiene.
 La campana del panel ya avisa de cuándo hace falta lanzarla. Apuntar en el

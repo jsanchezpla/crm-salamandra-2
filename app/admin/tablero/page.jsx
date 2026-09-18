@@ -482,6 +482,10 @@ export default function TableroPage() {
   const [borrador, setBorrador] = useState("");
   // La clave de la que se acaba de copiar, para poder decirlo. Se borra sola.
   const [copiada, setCopiada] = useState(null);
+  // La ficha que se acaba de copiar. Va aparte de `copiada` porque son dos
+  // botones distintos en la misma tarjeta: con un solo estado, copiar la ficha
+  // pondría «Copiado ✓» también en el botón de copiar la tarea entera.
+  const [fichaCopiada, setFichaCopiada] = useState(null);
   // La tarea cuyo tick está esperando confirmación: `{ tarea, resuelta }`, donde
   // `resuelta` es de qué lado venía. Null = no hay modal abierto.
   const [confirmando, setConfirmando] = useState(null);
@@ -573,6 +577,24 @@ export default function TableroPage() {
       // que decirlo: un botón que no hace nada y no se queja es peor que no
       // tenerlo.
       setFallo("El navegador no ha dejado copiar. Abre la tarea y cópiala a mano.");
+    }
+  }
+
+  /**
+   * La ficha al portapapeles. Es lo que se le pega a una conversación nueva
+   * (`/incidencia s55hv5`), así que se copia SOLA: con el título delante
+   * habría que borrarlo a mano cada vez.
+   */
+  async function copiarFicha(t) {
+    try {
+      await navigator.clipboard.writeText(t.id);
+      setFichaCopiada(t.clave);
+      setFallo(null);
+      setTimeout(() => setFichaCopiada((c) => (c === t.clave ? null : c)), 2000);
+    } catch {
+      // Mismo motivo que en `copiar`: el portapapeles necesita HTTPS y permiso,
+      // y un botón que no hace nada y no se queja es peor que no tenerlo.
+      setFallo("El navegador no ha dejado copiar. La ficha es " + t.id + ".");
     }
   }
 
@@ -958,6 +980,44 @@ export default function TableroPage() {
                         </span>
                       )}
                       {/*
+                        DE QUÉ AVISO DEL BUZÓN SALIÓ (18/09/2026, Jorge).
+
+                        Hasta hoy esto solo estaba escrito en prosa dentro del
+                        cuerpo —«**De dónde sale.** AV-0169 de Aumenta…»—, o sea
+                        que había que ABRIR la tarea y leerla para saber si
+                        detrás había un cliente esperando respuesta. En la fila
+                        cerrada, que es donde se decide qué se toca hoy, eso no
+                        se veía.
+
+                        Lo sirve el endpoint desde `registro_ficha`, no de leer
+                        el texto (`avisoDeLaTarea`), así que no miente.
+
+                        VA SIN ENLACE, Y NO ES UN OLVIDO: esto está dentro de un
+                        `<summary>`, donde un clic abre y cierra el desplegable.
+                        Un `<a>` aquí haría las dos cosas a la vez —navegar y
+                        plegar la tarea— o exigiría cancelar el gesto propio del
+                        elemento, que es justo cómo se rompe el teclado. El
+                        enlace de verdad está al abrirla, debajo del cuerpo.
+                      */}
+                      {t.aviso && (
+                        <span
+                          className="ml-2 text-[11px] px-1.5 py-0.5 rounded whitespace-nowrap tabular-nums"
+                          style={{
+                            color: t.aviso.bloquea ? "var(--rojo, #b91c1c)" : "var(--dim)",
+                            border: `1px solid color-mix(in srgb, ${
+                              t.aviso.bloquea ? "var(--rojo, #b91c1c)" : "var(--tenue)"
+                            } 35%, transparent)`,
+                          }}
+                          title={
+                            `${t.aviso.ref} · ${t.aviso.cliente}` +
+                            (t.aviso.quien ? ` · lo escribió ${t.aviso.quien}` : "") +
+                            (t.aviso.bloquea ? " · dice que le impide trabajar" : "")
+                          }
+                        >
+                          {t.aviso.ref}
+                        </span>
+                      )}
+                      {/*
                         CUÁNDO SE APUNTÓ (26/08/2026, Jorge).
 
                         Va SIN cajita, a diferencia de la prioridad y del
@@ -996,6 +1056,51 @@ export default function TableroPage() {
                   >
                     {t.cuerpo}
                   </div>
+                  {/*
+                    CON QUÉ SE LLAMA A ESTA TAREA, Y DE DÓNDE VINO (18/09/2026).
+
+                    La ficha existe desde el 24/08/2026 y hasta hoy no se veía
+                    en ninguna pantalla: el troceador la SACA del cuerpo (un
+                    comentario de HTML se leería con sus signos, porque el
+                    cuerpo se pinta como texto plano) y solo la conocían el
+                    endpoint de capturas y `registro.mjs`. O sea que el único
+                    identificador estable de una tarea —el que no cambia cuando
+                    se reescribe el título— era invisible para quien la mira.
+
+                    Aquí se enseña y se copia de un clic, porque es lo que hay
+                    que pegarle a una conversación nueva: `/incidencia s55hv5`.
+                    Y al lado, el enlace al hilo del Buzón: leer lo que escribió
+                    la persona, entero y con sus respuestas, deja de ser una
+                    búsqueda a mano en otra pantalla.
+                  */}
+                  {(t.id || t.aviso) && (
+                    <div className="mt-2 ml-[15px] flex flex-wrap items-center gap-2 text-[11px]">
+                      {t.id && (
+                        <button
+                          type="button"
+                          onClick={() => copiarFicha(t)}
+                          className="px-1.5 py-0.5 rounded font-mono tracking-tight transition-colors"
+                          style={{
+                            color: "var(--dim)",
+                            border: "1px solid color-mix(in srgb, var(--tenue) 35%, transparent)",
+                          }}
+                          title="Copiar la ficha. Es el identificador que no cambia aunque se reescriba el título."
+                        >
+                          {fichaCopiada === t.clave ? "copiada ✓" : t.id}
+                        </button>
+                      )}
+                      {t.aviso && (
+                        <a
+                          href={`/admin/buzon?aviso=${t.aviso.id}`}
+                          className="px-1.5 py-0.5 rounded underline underline-offset-2"
+                          style={{ color: "var(--dim)" }}
+                        >
+                          Abrir {t.aviso.ref} en el Buzón
+                          {t.aviso.quien ? ` · lo escribió ${t.aviso.quien}` : ""}
+                        </a>
+                      )}
+                    </div>
+                  )}
                   {/* Las capturas, justo debajo del cuerpo: son la prueba de lo
                       que dice el texto, no un anexo. Van antes que la solución
                       por lo mismo — primero qué pasa, después qué se hace.

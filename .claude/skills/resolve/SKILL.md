@@ -8,6 +8,11 @@ description: Baja por el backlog del Registro de arriba a abajo resolviéndolo d
 Coge el backlog del Registro y lo vacía: **una tarea entera cada vez**, hasta el
 final o hasta que la pares.
 
+**Para UN caso suelto, `/incidencia`** (18/09/2026). Si lo que hay es una
+incidencia concreta —te dan un `AV-0169` o una ficha— esa la abre entera de una
+consulta, con el hilo del Buzón delante, y además puede contestarle al cliente,
+que esta no hace nunca. Aquí se baja la lista; allí se resuelve un caso.
+
 **La mayoría son bugs de programación, y esos se arreglan enteros y sin
 preguntar**: reproducir, arreglar, probar, commitear, desplegar, verificar en
 producción y cerrar. Ese es el camino normal y es el que hay que recorrer, no
