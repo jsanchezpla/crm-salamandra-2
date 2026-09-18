@@ -2374,6 +2374,21 @@ solo tiene la agenda de 2026 en adelante, así que contándolas saldrían todos
 enteros. Es un SUMANDO que se escribe una vez; lo de aquí en adelante se sigue
 contando desde las citas. `estadoPack` lo suma a `gastadas`.
 
+⚠️ **Y `siguienteNumeroSesion` también lo suma, desde el 18/09/2026.** No lo
+hacía, y es la mitad que se olvidó el 09/09: un bono que llegó con 4 de 5
+gastadas numeraba su quinta cita como la «1», y la rejilla escribía «Bono 1/5»
+de la última sesión que le quedaba a esa familia (Olga: «pueden ser la cita 5/5
+en organizate y aparecer como 1/5 en nuestro crm»). El DINERO nunca estuvo en
+juego —quien decide si quedan sesiones libres es `estadoPack`, y ese sí las
+sumaba: medido en producción el 18/09/2026, CERO bonos de los 243 habían pasado
+de su tope, y los 232 de Organízate tienen las previas exactamente iguales a lo
+que dice su nota, sin una sola cita anterior a 2026—. Lo que estaba mal era el
+RÓTULO, que es el que lee quien avisa a las familias. Se toma el MAYOR de los
+dos suelos (previas y el número más alto ya escrito), nunca la suma. Las citas
+que ya nacieron mal —3 en producción, en 3 bonos— las corrige
+`scripts/renumerar-sesiones-de-bono.js` (en seco por defecto, idempotente,
+auditado); no toca las previas, ni el estado, ni el dinero.
+
 **`event_types.informe_tipo`** (`migrate-event-types-informe.js`, ANTES del
 despliegue): qué informe clínico sale de un tipo de cita, un valor de
 `REPORT_TYPES` (`lib/clinica/serialize.js`). Con él puesto, la ficha de la cita
