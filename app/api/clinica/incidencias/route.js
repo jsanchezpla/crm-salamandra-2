@@ -12,6 +12,7 @@ import {
   isValidStatus,
   isValidPriority,
   responsablesDe,
+  responsablesQueExisten,
   sincronizarResponsables,
   isValidVerification,
   statusDeVerificacion,
@@ -149,7 +150,13 @@ export const POST = withTenant(async (request, _rc, ctx) => {
   const date = body.date && /^\d{4}-\d{2}-\d{2}$/.test(body.date) ? body.date : madridToday();
 
   const patientId = body.patientId && UUID_RE.test(body.patientId) ? body.patientId : null;
-  const responsables = responsablesDe(body);
+  /*
+   * Los responsables se comprueban ANTES de crear la fila (18/09/2026): las dos
+   * columnas de equipo tienen clave ajena, así que un id de una ficha que ya no
+   * está reventaba el INSERT y salía «Error interno del servidor». La pivote ya
+   * lo filtraba, pero corre después. Ver `responsablesQueExisten`.
+   */
+  const responsables = await responsablesQueExisten(responsablesDe(body), M);
   const assignedToId = responsables[0] ?? null;
 
   // clientId: foto del paciente (si se indica y tiene ficha de cliente).
@@ -164,6 +171,9 @@ export const POST = withTenant(async (request, _rc, ctx) => {
   let reportedById = await resolveCurrentTeamMemberId(request, M);
   if (body.reportedById !== undefined) {
     reportedById = body.reportedById && UUID_RE.test(body.reportedById) ? body.reportedById : null;
+    // Por lo mismo que los responsables: una ficha que ya no existe deja la
+    // incidencia sin autor, pero no tumba el alta (18/09/2026).
+    if (reportedById) reportedById = (await responsablesQueExisten([reportedById], M))[0] ?? null;
   }
 
   // La verificación manda sobre el estado: ver lib/clinica/incidencias.js.
