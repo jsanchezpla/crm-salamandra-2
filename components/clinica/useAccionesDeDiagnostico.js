@@ -126,7 +126,10 @@ export function useAccionesDeDiagnostico({ cobroEntrevista = null, reemplazar, r
       }
       const ok = await confirmar({
         titulo: `¿Seguir con el diagnóstico de ${exp.paciente?.nombre ?? "este paciente"}?`,
-        texto: `${frase}\n\nDesde entonces «Añadir horas» apunta citas contra ese bono hasta las ${formatoHoras(exp.horasMax)} h del producto.`,
+        // El aviso de orden (18/09/2026): si la entrevista no se ha mandado a
+        // cobro todavía, el producto nace entero y quien decide tiene que
+        // saberlo ANTES, no al ver la fila de 350 € en Cobros.
+        texto: `${frase}${exp.avisoAlSeguir ? `\n\n${exp.avisoAlSeguir}` : ""}\n\nDesde entonces «Añadir horas» apunta citas contra ese bono hasta las ${formatoHoras(exp.horasMax)} h del producto.`,
         confirmar: "Seguir con el diagnóstico",
       });
       if (!ok) return;
@@ -140,6 +143,39 @@ export function useAccionesDeDiagnostico({ cobroEntrevista = null, reemplazar, r
       });
     },
     [confirmar, llamar, recargar, flash]
+  );
+
+  /*
+   * ── MANDAR A COBRO UNA FASE (18/09/2026, Rodrigo) ────────────────────────
+   * El diagnóstico se factura en dos: la entrevista inicial (50 €) y lo que
+   * queda del producto (300 € / 600 €). Las dos fases, su importe y si se
+   * pueden generar hoy vienen en `e.cobros` de la fila (`fasesDeCobro`, el
+   * servidor): aquí solo se confirma y se llama.
+   */
+  const generarCobro = useCallback(
+    async (exp, clave) => {
+      const fase = exp.cobros?.[clave];
+      if (!fase) return;
+      if (!fase.puedeGenerar) {
+        await avisar({ titulo: "No se puede mandar a cobro", texto: fase.motivo ?? "Esta fase ya no admite un cobro nuevo" });
+        return;
+      }
+      const esEntrevista = clave === "entrevista";
+      const detalle = esEntrevista
+        ? "El expediente NO cambia de estado: cobrar la entrevista no decide si la familia sigue. Cuando sigáis, el diagnóstico se apuntará ya sin estos 50 € (el precio del producto menos la entrevista)."
+        : "Sale en Cobros a nombre de la familia, pendiente de cobrar.";
+      const ok = await confirmar({
+        titulo: `¿Mandar a cobro ${esEntrevista ? "la entrevista inicial" : fase.titulo}?`,
+        texto: `Nace un cobro pendiente de ${euros(fase.importe)} para la familia de ${exp.paciente?.nombre ?? "este paciente"}, que aparecerá en Cobros.\n\n${detalle}`,
+        confirmar: "Mandar a cobro",
+      });
+      if (!ok) return;
+      return llamar(exp, `/api/clinica/diagnosticos/${exp.id}/cobrar`, { method: "POST", body: JSON.stringify({ fase: clave }) }, async (d) => {
+        await recargar?.();
+        flash(`Cobro pendiente de ${euros(d.cobro?.importe)} apuntado en Cobros${d.avisos?.length ? ` · ${d.avisos.join(" ")}` : ""}`);
+      });
+    },
+    [avisar, confirmar, llamar, recargar, flash]
   );
 
   const desbloquear = useCallback(
@@ -219,6 +255,7 @@ export function useAccionesDeDiagnostico({ cobroEntrevista = null, reemplazar, r
   return {
     parar,
     seguir,
+    generarCobro,
     desbloquear,
     cerrar,
     borrar,

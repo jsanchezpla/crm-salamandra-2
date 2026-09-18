@@ -49,7 +49,9 @@ describe("urlDeAltaDesdeDiagnostico", () => {
       urlDeAltaDesdeDiagnostico({ diagnosticoId: ID, tramo: "horas", patientId: PACIENTE }),
       `/citas?nueva=1&diagnostico=${ID}&tramo=horas&paciente=${PACIENTE}`
     );
-    assert.doesNotMatch(urlDeAltaDesdeDiagnostico({ diagnosticoId: ID, tramo: "horas", duracion: 45 }), /duracion/);
+    // 45 min SÍ vale desde el 18/09/2026 (los cuartos de hora); 50 y 510, no.
+    assert.match(urlDeAltaDesdeDiagnostico({ diagnosticoId: ID, tramo: "horas", duracion: 45 }), /duracion=45/);
+    assert.doesNotMatch(urlDeAltaDesdeDiagnostico({ diagnosticoId: ID, tramo: "horas", duracion: 50 }), /duracion/);
     assert.doesNotMatch(urlDeAltaDesdeDiagnostico({ diagnosticoId: ID, tramo: "horas", duracion: 510 }), /duracion/);
   });
 
@@ -107,6 +109,12 @@ describe("leerAltaDesdeDiagnostico", () => {
 
   it("sin paciente, patientId es null; una duración que no vale sale como null (la agenda pone la del tipo)", () => {
     assert.deepEqual(leerAltaDesdeDiagnostico(`?diagnostico=${ID}&tramo=horas&duracion=45`), {
+      diagnosticoId: ID,
+      tramo: "horas",
+      patientId: null,
+      duracion: 45,
+    });
+    assert.deepEqual(leerAltaDesdeDiagnostico(`?diagnostico=${ID}&tramo=horas&duracion=50`), {
       diagnosticoId: ID,
       tramo: "horas",
       patientId: null,

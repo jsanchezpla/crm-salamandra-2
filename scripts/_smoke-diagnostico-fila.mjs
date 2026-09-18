@@ -187,7 +187,7 @@ describe("filaDeExpediente", () => {
 
   it("el dinero y el cobro pendiente", () => {
     assert.deepEqual(fila.cobroPendiente, { id: "p1", importe: 350, status: "pending" });
-    assert.deepEqual(fila.dinero, { pendiente: 350, cobrado: 0, devuelto: 0, entrevista: null });
+    assert.deepEqual(fila.dinero, { pendiente: 350, cobrado: 0, devuelto: 0, entrevista: null, producto: null });
     assert.equal(fila.packId, "pk-1");
   });
 

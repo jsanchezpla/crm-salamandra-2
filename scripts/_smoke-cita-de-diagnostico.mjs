@@ -50,7 +50,7 @@ describe("leerCitaDeDiagnostico: lo que el alta dice del expediente", () => {
     assert.equal(leerCitaDeDiagnostico({}), null);
     assert.equal(leerCitaDeDiagnostico({ diagnosticoId: null }), null);
     assert.equal(leerCitaDeDiagnostico({ diagnosticoId: "" }), null);
-    assert.equal(leerCitaDeDiagnostico({ duration: 45 }), null, "una duración suelta no es un error, es ruido");
+    assert.equal(leerCitaDeDiagnostico({ duration: 50 }), null, "una duración suelta no es un error, es ruido");
     assert.equal(leerCitaDeDiagnostico(null), null);
   });
 
@@ -80,10 +80,11 @@ describe("leerCitaDeDiagnostico: lo que el alta dice del expediente", () => {
     });
   });
 
-  it("la duración va de media en media hora, entre 30 y 480; «60» como texto vale, 45 no", () => {
+  it("la duración va de cuarto en cuarto de hora, entre 15 y 480; «60» como texto vale, 50 no", () => {
     assert.equal(leerCitaDeDiagnostico({ diagnosticoId: ID, diagnosticoTramo: "horas", duration: "60" }).duracion, 60);
     assert.equal(leerCitaDeDiagnostico({ diagnosticoId: ID, diagnosticoTramo: "horas", duration: 480 }).duracion, 480);
-    for (const mala of [45, 0, 15, 510, -30, "abc", 60.5]) {
+    assert.equal(leerCitaDeDiagnostico({ diagnosticoId: ID, diagnosticoTramo: "horas", duration: 45 }).duracion, 45);
+    for (const mala of [50, 0, 10, 510, -30, "abc", 60.5]) {
       assert.deepEqual(
         leerCitaDeDiagnostico({ diagnosticoId: ID, diagnosticoTramo: "horas", duration: mala }),
         { error: MENSAJES.duracionInvalida },
@@ -106,7 +107,8 @@ describe("duracionDeCitaDeDiagnostico", () => {
   it("las horas duran lo pedido, o la duración del tipo, o 60 si el tipo no dice nada útil", () => {
     assert.equal(duracionDeCitaDeDiagnostico({ tramo: "horas", duracion: 120, porDefecto: 60 }), 120);
     assert.equal(duracionDeCitaDeDiagnostico({ tramo: "horas", porDefecto: 45 }), 45);
-    assert.equal(duracionDeCitaDeDiagnostico({ tramo: "horas", duracion: 45, porDefecto: 50 }), 50, "45 no vale: cae al tipo");
+    assert.equal(duracionDeCitaDeDiagnostico({ tramo: "horas", duracion: 45, porDefecto: 60 }), 45, "45 vale desde el 18/09/2026");
+    assert.equal(duracionDeCitaDeDiagnostico({ tramo: "horas", duracion: 50, porDefecto: 45 }), 45, "50 no vale: cae al tipo");
     assert.equal(duracionDeCitaDeDiagnostico({ tramo: "horas", porDefecto: 0 }), 60);
     assert.equal(duracionDeCitaDeDiagnostico({ tramo: "horas" }), 60);
   });

@@ -285,7 +285,13 @@ describe("filasDe: cobroAlSeguir con la entrevista descontada, dinero.entrevista
       extras: new Map([[EXPEDIENTE, { registros: [{ id: "s1", sessionDate: enHoras(-5), status: "registered" }] }]]),
     });
     assert.deepEqual(fila.cobroAlSeguir, { importe: 300, descuento: 50, texto: "Diagnóstico Simple (descontada la entrevista inicial de 50 €)" });
-    assert.deepEqual(fila.dinero, { pendiente: 0, cobrado: 50, devuelto: 0, entrevista: { id: "p-ent", importe: 50, status: "completed" } });
+    assert.deepEqual(fila.dinero, {
+      pendiente: 0,
+      cobrado: 50,
+      devuelto: 0,
+      entrevista: { id: "p-ent", importe: 50, status: "completed" },
+      producto: null,
+    });
     assert.equal(fila.entrevistaPaymentId, "p-ent");
     assert.equal(fila.paciente.nombre, "Lea García");
     assert.equal(fila.terapeuta.nombre, "Isa");

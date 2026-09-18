@@ -403,11 +403,15 @@ describe("horasDe: la barra se cuenta desde las citas con la regla de los bonos"
     assert.equal(formatoHoras(undefined), "0");
   });
 
-  it("duracionLimpia: múltiplos de 30 entre 30 y 480; lo demás, null", () => {
+  it("duracionLimpia: múltiplos de 15 entre 15 y 480; lo demás, null", () => {
     assert.equal(duracionLimpia(60), 60);
     assert.equal(duracionLimpia("90"), 90);
     assert.equal(duracionLimpia(480), 480);
-    assert.equal(duracionLimpia(45), null);
+    // 45 min es un tipo de cita de verdad («INFORME PARA DIAGNOSTICO»):
+    // desde el 18/09/2026 se puede apuntar contra el expediente.
+    assert.equal(duracionLimpia(45), 45);
+    assert.equal(duracionLimpia(15), 15);
+    assert.equal(duracionLimpia(50), null);
     assert.equal(duracionLimpia(0), null);
     assert.equal(duracionLimpia(510), null);
     assert.equal(duracionLimpia(null), null);

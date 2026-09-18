@@ -83,6 +83,34 @@ function Vacio({ children }) {
   return <p className="px-4 py-8 text-center text-xs text-neutral-400">{children}</p>;
 }
 
+/**
+ * Una fase del cobro (18/09/2026): la entrevista inicial y el producto. Lo
+ * que vale, en qué anda y el botón de mandarla a cobro — o, apagado, por qué
+ * no se puede (la frase la da el servidor, `fasesDeCobro`).
+ */
+function FaseDeCobro({ fase, ocupado, onCobrar }) {
+  if (!fase) return null;
+  const cobrado = fase.estadoCobro === "cobrado";
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs">
+      <span className="text-neutral-600">{fase.titulo}</span>
+      <span className="tabular text-neutral-800">{fase.importe === null ? "— sin precio" : euros(fase.importe)}</span>
+      {fase.rotuloCobro && (
+        <span className={`text-[11px] px-2 py-0.5 rounded-full ${cobrado ? "bg-emerald-50 text-emerald-700" : fase.estadoCobro === "pendiente" ? "bg-amber-50 text-amber-700" : "bg-neutral-100 text-neutral-500"}`}>
+          {fase.rotuloCobro}
+        </span>
+      )}
+      {fase.puedeGenerar ? (
+        <button type="button" disabled={ocupado} onClick={onCobrar} className={btnPrimario} style={{ background: "var(--color-primary, #1B3A2D)" }}>
+          Mandar a cobro
+        </button>
+      ) : (
+        !fase.rotuloCobro && <span className="text-[11px] text-neutral-400">{fase.motivo}</span>
+      )}
+    </div>
+  );
+}
+
 export default function ExpedienteDiagnostico({ id }) {
   const router = useRouter();
   const [expediente, setExpediente] = useState(null);
@@ -315,6 +343,15 @@ export default function ExpedienteDiagnostico({ id }) {
             <div className="text-xs text-neutral-600 whitespace-pre-line">{e.notes || <span className="text-neutral-300">—</span>}</div>
           </div>
         </div>
+        {/* ── El cobro por fases (18/09/2026) ───────────────────────────── */}
+        {e.cobros && (
+          <div className="pt-3 border-t border-neutral-100 space-y-2">
+            <div className="text-[11px] uppercase tracking-wide text-neutral-400">Cobro por fases</div>
+            <FaseDeCobro fase={e.cobros.entrevista} ocupado={ocupado} onCobrar={() => acciones.generarCobro(e, "entrevista")} />
+            <FaseDeCobro fase={e.cobros.producto} ocupado={ocupado} onCobrar={() => acciones.generarCobro(e, "producto")} />
+          </div>
+        )}
+
         <div className="flex flex-wrap items-center gap-1.5 pt-3 border-t border-neutral-100">
           <BotonesDeDiagnostico
             expediente={e}
