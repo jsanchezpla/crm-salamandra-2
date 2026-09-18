@@ -35,9 +35,17 @@ set -e
 # trabajando a la vez alguien acaba cayendo dentro. Esto no se arregla
 # mirando el reloj: se arregla no dejando entrar al segundo.
 #
-# El cerrojo es de fichero y lo suelta el núcleo cuando muere el proceso, así
-# que un despliegue cortado con Ctrl-C, o con la sesión SSH caída, NO lo deja
-# echado. No hay que ir a mano a quitar ningún fichero.
+# QUIÉN SUELTA EL CERROJO, medido en el VPS el 18/09/2026 y no supuesto: lo
+# suelta el núcleo cuando se cierra el ÚLTIMO descriptor que lo tiene abierto,
+# y los hijos heredan el fd 9. O sea que matar el script con Ctrl-C o con
+# kill -9 NO lo suelta mientras siga vivo su `npm run build` o su
+# `docker compose`: el cerrojo dura lo que dure el trabajo de verdad.
+#
+# Eso es lo que queremos —si el build sigue corriendo, el segundo despliegue
+# tampoco debe entrar— pero conviene saberlo para no buscar un fichero
+# encallado que no existe. No hay que borrar nada a mano: en cuanto muere el
+# último hijo, el cerrojo se libera solo. Para ver qué lo tiene:
+#   fuser /var/lock/crm-deploy.lock
 CERROJO=/var/lock/crm-deploy.lock
 QUIEN=/var/lock/crm-deploy.quien
 exec 9>>"$CERROJO"          # >> y no >: abrir truncando borraría el aviso de
@@ -47,6 +55,9 @@ if ! flock -n 9; then
   echo "  ⛔ HAY OTRO DESPLIEGUE EN MARCHA. Este no arranca."
   echo ""
   echo "     $(cat "$QUIEN" 2>/dev/null || echo '(sin datos de quién lo tiene)')"
+  echo ""
+  echo "     Qué lo tiene ocupado ahora mismo:"
+  echo "       fuser -v $CERROJO"
   echo ""
   echo "     Espera a que termine y vuelve a lanzarlo. Dos a la vez se pisan"
   echo "     el .next/, que es compartido, y la imagen puede salir de un"
