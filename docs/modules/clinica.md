@@ -2878,3 +2878,33 @@ Y el ZIP: `word/media/logo.png` es un **Buffer**, así que la ruta ya no hace
 `Buffer.from(contenido, "utf8")` a ciegas. Prueba:
 `scripts/_smoke-informe-word.mjs` (18 comprobaciones; las de la marca fijan que
 con logo entren las tres piezas y sin logo ninguna).
+
+## Un diagnóstico abierto por error se puede borrar (18/09/2026, AV-0202, Rodrigo)
+
+Isabel: «¿y cómo borro o elimino si lo hago mal? ¿O hago pruebas como con
+Aumentín?». La API tenía cerrar, parar, seguir y unir, y ningún borrado: un
+expediente abierto por equivocación se quedaba en la lista para siempre —y
+«parar» significa otra cosa, que la familia decidió no continuar—.
+
+`DELETE /api/clinica/diagnosticos/[id]`, con la regla en
+`lib/clinica/alcanceDiagnostico.js` (`puedeBorrarDiagnostico` /
+`motivoParaNoBorrarDiagnostico`, prueba en `_smoke-borrar-diagnostico.mjs`):
+
+- **Se borra lo que todavía no ha salido de sí mismo.** Con bono (`packId`),
+  con cobro de la entrevista (`entrevistaPaymentId`) o con informe unido
+  (`informeId`), no: ahí ya hay sesiones que se descuentan, dinero apuntado o
+  un documento que alguien ha leído. El 409 dice cuál de las tres cosas es y
+  qué hacer en su lugar.
+- **Lo borra dirección (quien decide bonos) o SU terapeuta**, no cualquiera: un
+  expediente lleva el motivo de consulta de un menor.
+- ⚠️ **Lo clínico no se borra.** Los registros de sesión atados se SUELTAN
+  (`diagnostico_id` a NULL) y siguen en la historia del paciente; la respuesta
+  dice cuántos, y el aviso de la pantalla lo cuenta ANTES de borrar. Se sueltan
+  antes del `destroy`: si algo fallara después quedan registros sin expediente
+  —que se leen igual— y no al revés.
+- El botón «Borrar» sale en la lista y en la ficha cuando `acciones.borrar`
+  (`accionesDe`, que mira esas tres columnas); el permiso de quien lo pulsa lo
+  comprueba el endpoint, porque `accionesDe` es pura y no sabe quién mira. En
+  la ficha, al borrar se vuelve a `/clinica/diagnósticos`: esa pantalla ya no
+  existe.
+- Auditado como `diagnostico.borrado`, con el recuento de registros soltados.

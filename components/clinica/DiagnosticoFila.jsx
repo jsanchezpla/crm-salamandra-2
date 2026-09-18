@@ -59,6 +59,7 @@ export function BotonesDeDiagnostico({
   onSeguir,
   onDesbloquear,
   onCerrar,
+  onBorrar,
 }) {
   const a = e.acciones ?? {};
   const puedeIrAAgenda = !motivoSinAgenda;
@@ -106,6 +107,19 @@ export function BotonesDeDiagnostico({
           Cerrar
         </button>
       )}
+      {/* Borrar el abierto por error (18/09/2026, AV-0202). Solo sale mientras
+          no haya bono, cobro ni informe: en cuanto los hay, «Cerrar». */}
+      {a.borrar && onBorrar && (
+        <button
+          type="button"
+          disabled={ocupado}
+          onClick={() => onBorrar(e)}
+          className={`${btn} text-neutral-300 hover:text-red-600`}
+          title="Borrar este diagnóstico. Los registros de sesión no se borran."
+        >
+          Borrar
+        </button>
+      )}
       {conEnlaces && e.urls?.expediente && (
         <Link href={e.urls.expediente} className={`${btn} text-[var(--color-primary,#1B3A2D)] hover:underline`} title="La ficha del expediente: registros de diagnóstico, citas e informe">
           Expediente
@@ -130,6 +144,7 @@ export default function DiagnosticoFila({
   onSeguir,
   onDesbloquear,
   onCerrar,
+  onBorrar,
 }) {
   return (
     <tr className={`border-b border-neutral-50 transition-colors ${e.abierto ? "hover:bg-neutral-50/50" : "text-neutral-400"}`}>
@@ -194,6 +209,7 @@ export default function DiagnosticoFila({
             onSeguir={onSeguir}
             onDesbloquear={onDesbloquear}
             onCerrar={onCerrar}
+            onBorrar={onBorrar}
           />
         </div>
       </td>

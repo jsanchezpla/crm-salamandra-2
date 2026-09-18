@@ -188,11 +188,40 @@ export function useAccionesDeDiagnostico({ cobroEntrevista = null, reemplazar, r
     [confirmar, llamar, recargar, flash]
   );
 
+  /*
+   * Borrar el expediente abierto por error (18/09/2026, AV-0202 de Aumenta).
+   * Isabel: «¿y cómo borro o elimino si lo hago mal?». El aviso dice lo que se
+   * lleva por delante y lo que NO: los registros de sesión se quedan.
+   */
+  const borrar = useCallback(
+    async (exp) => {
+      const ok = await confirmar({
+        titulo: `¿Borrar el diagnóstico de ${exp.paciente?.nombre ?? "este paciente"}?`,
+        texto:
+          "El expediente desaparece de la lista y no se puede deshacer. " +
+          "Los registros de sesión que cuelguen de él NO se borran: se quedan en la historia del paciente, sueltos. " +
+          "Si lo que quieres es dejarlo aparcado, usa «Cerrar».",
+        confirmar: "Borrar el diagnóstico",
+      });
+      if (!ok) return;
+      return llamar(exp, `/api/clinica/diagnosticos/${exp.id}`, { method: "DELETE" }, async (d) => {
+        await recargar?.();
+        flash(
+          d.registrosSoltados > 0
+            ? `Diagnóstico borrado · ${d.registrosSoltados} registro${d.registrosSoltados === 1 ? "" : "s"} de sesión se ${d.registrosSoltados === 1 ? "queda" : "quedan"} en la ficha del paciente`
+            : "Diagnóstico borrado"
+        );
+      });
+    },
+    [confirmar, llamar, recargar, flash]
+  );
+
   return {
     parar,
     seguir,
     desbloquear,
     cerrar,
+    borrar,
     cambiarTerapeuta,
     ocupadoId,
     errorMsg,
