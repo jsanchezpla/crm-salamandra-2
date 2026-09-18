@@ -23,6 +23,7 @@ import Link from "next/link";
 import Select from "@/components/ui/Select.jsx";
 import { useDialogo } from "@/components/ui/Dialogo.jsx";
 import { fechaAlCobrar } from "@/lib/billing/fechaAlCobrar.js";
+import { preguntaAlEliminarCobroDeCuota, COBRO_Y_CUOTA } from "@/lib/billing/eliminarCobro.js";
 import { fmtMoney } from "./Kpi.jsx";
 
 const inputCls =
@@ -72,7 +73,7 @@ export default function CobroDrawer({ cobroId, resumen, onClose, onCambiado }) {
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
-  const { confirmar, dialogo } = useDialogo();
+  const { confirmar, elegir, dialogo } = useDialogo();
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -150,22 +151,47 @@ export default function CobroDrawer({ cobroId, resumen, onClose, onCambiado }) {
     }
   }
 
+  /*
+   * Un cobro de cuota se pregunta distinto (18/09/2026): borrarlo solo deja la
+   * cuota viva y la cuota lo vuelve a generar. La pregunta —la misma que hace
+   * la pantalla de Cobros— vive en `lib/billing/eliminarCobro.js`.
+   */
   async function borrar() {
     const quien = resumen?.patientName || resumen?.clientName || cobro?.client?.name;
-    const ok = await confirmar({
-      titulo: "Borrar el cobro",
-      texto:
-        `Se borrará el cobro${quien ? ` de ${quien}` : ""} de ${fmtMoney(cobro?.amount)}. ` +
-        "El dinero deja de contar en la caja de ese día y, si iba contra una factura, la factura vuelve a quedar pendiente. " +
-        "Queda registrado en Actividad, pero no se puede deshacer.",
-      confirmar: "Borrar el cobro",
-      tono: "peligro",
-    });
-    if (!ok) return;
+    let conCuota = false;
+    if (cobro?.cuotaId) {
+      // Los números de la pregunta los cuenta el servidor (ver la ruta
+      // `[id]/cuota`); si no llega, se pregunta con lo que se sabe seguro.
+      const cuota = await fetch(`/api/billing/payments/${cobroId}/cuota`, { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => j?.data ?? null)
+        .catch(() => null);
+      const respuesta = await elegir(
+        preguntaAlEliminarCobroDeCuota({
+          quien: quien || "",
+          importe: fmtMoney(cobro?.amount),
+          factura: cobro?.invoice?.number ?? "",
+          cuota,
+        })
+      );
+      if (!respuesta) return;
+      conCuota = respuesta === COBRO_Y_CUOTA;
+    } else {
+      const ok = await confirmar({
+        titulo: "Borrar el cobro",
+        texto:
+          `Se borrará el cobro${quien ? ` de ${quien}` : ""} de ${fmtMoney(cobro?.amount)}. ` +
+          "El dinero deja de contar en la caja de ese día y, si iba contra una factura, la factura vuelve a quedar pendiente. " +
+          "Queda registrado en Actividad, pero no se puede deshacer.",
+        confirmar: "Borrar el cobro",
+        tono: "peligro",
+      });
+      if (!ok) return;
+    }
     setGuardando(true);
     setErrorMsg(null);
     try {
-      const r = await fetch(`/api/billing/payments/${cobroId}`, { method: "DELETE" });
+      const r = await fetch(`/api/billing/payments/${cobroId}${conCuota ? "?cuota=1" : ""}`, { method: "DELETE" });
       if (!r.ok && r.status !== 204) {
         const j = await r.json().catch(() => ({}));
         throw new Error(j.error || "No se pudo borrar");

@@ -18,6 +18,7 @@ import { cuotasQueEntran, conceptosDeCuotas, importePactado, tramosDeCuotas } fr
 import { restoDelMes, generadoDelMes, restoQueSeQuedaPendiente, cobrosDeOtroServicio } from "../../../../lib/billing/restoDelMes.js";
 import { explicaCobro } from "../../../../lib/billing/motivoDelCobro.js";
 import { etiquetaDeMoroso, filtrarMorosos, repartirMorosos, resumenDeMorosidad } from "../../../../lib/billing/morosidad.js";
+import { preguntaAlEliminarCobroDeCuota, COBRO_Y_CUOTA } from "../../../../lib/billing/eliminarCobro.js";
 import { exigeMetodo } from "../../../../lib/billing/caja.js";
 import { repartirConOrganizacion } from "../../../../lib/clients/organizaciones.js";
 
@@ -61,7 +62,7 @@ export default function CobrosPage() {
   // Eliminar un cobro no tiene vuelta atrás: se pregunta con el diálogo del
   // CRM, no con el del navegador (que Chrome deja silenciar y devuelve `false`
   // siempre — ver components/ui/Dialogo.jsx).
-  const { confirmar, dialogo } = useDialogo();
+  const { confirmar, elegir, avisar, dialogo } = useDialogo();
 
   const [unpaidInvoices, setUnpaidInvoices] = useState([]);
   const [showForm, setShowForm] = useState(false);
@@ -1149,6 +1150,14 @@ export default function CobrosPage() {
    * Un cobro apuntado por error que se dejara como «devuelto» ensuciaría el
    * arqueo y la morosidad de un mes que estaba bien.
    *
+   * ── Y SI EL COBRO LO GENERA UNA CUOTA, SE PREGUNTA QUÉ SE BORRA ──────────
+   * (18/09/2026, AV-0190 de Aumenta: «quieren saber que si al eliminar el cobro se borra
+   * la cuota — quieren tener la opción de eliminar también la cuota»). Borrar
+   * solo el cobro dejaba la cuota viva, y la cuota lo vuelve a generar: la
+   * pregunta ya no es sí/no, son las dos opciones con sus consecuencias
+   * escritas. La pregunta vive en `lib/billing/eliminarCobro.js`, que la
+   * comparte con el cajón de caja.
+   *
    * El endpoint ya lo audita (`payment.deleted`, con el importe de antes) y
    * recalcula el estado de la factura; aquí solo hace falta preguntar primero,
    * que esto no tiene vuelta atrás.
@@ -1156,29 +1165,54 @@ export default function CobrosPage() {
   async function eliminarCobro() {
     if (!editing) return;
     const quien = editing.clientName ? ` de ${editing.clientName}` : "";
-    const ok = await confirmar({
-      titulo: "Eliminar el cobro",
-      texto:
-        `Se borrará el cobro${quien} de ${fmtMoney(editing.amount)}` +
-        (editing.invoice?.number ? `, y la factura ${editing.invoice.number} volverá a quedar pendiente` : "") +
-        ". Queda apuntado en el registro de actividad, pero el cobro no se puede recuperar.\n\n" +
-        "Si el dinero SÍ entró y se ha devuelto, no lo elimines: cambia el estado a «Devuelto».",
-      confirmar: "Eliminar",
-      tono: "peligro",
-    });
-    if (!ok) return;
+    let conCuota = false;
+    if (editing.cuotaId) {
+      // Con las filas delante: cuántos cobros más se lleva la cuota y cuántos
+      // son de meses que aún no han llegado. Si no llega, se pregunta igual.
+      const cuota = await fetch(`/api/billing/payments/${editing.id}/cuota`, { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => j?.data ?? null)
+        .catch(() => null);
+      const respuesta = await elegir(
+        preguntaAlEliminarCobroDeCuota({
+          quien: editing.clientName ?? "",
+          importe: fmtMoney(editing.amount),
+          factura: editing.invoice?.number ?? "",
+          cuota,
+        })
+      );
+      if (!respuesta) return;
+      conCuota = respuesta === COBRO_Y_CUOTA;
+    } else {
+      const ok = await confirmar({
+        titulo: "Eliminar el cobro",
+        texto:
+          `Se borrará el cobro${quien} de ${fmtMoney(editing.amount)}` +
+          (editing.invoice?.number ? `, y la factura ${editing.invoice.number} volverá a quedar pendiente` : "") +
+          ". Queda apuntado en el registro de actividad, pero el cobro no se puede recuperar.\n\n" +
+          "Si el dinero SÍ entró y se ha devuelto, no lo elimines: cambia el estado a «Devuelto».",
+        confirmar: "Eliminar",
+        tono: "peligro",
+      });
+      if (!ok) return;
+    }
     setSaving(true);
     setFormError(null);
     try {
-      const res = await fetch(`/api/billing/payments/${editing.id}`, { method: "DELETE" });
-      // El DELETE responde 204 sin cuerpo: no hay JSON que leer.
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        throw new Error(json.error || "No se pudo eliminar el cobro");
-      }
+      const res = await fetch(`/api/billing/payments/${editing.id}${conCuota ? "?cuota=1" : ""}`, { method: "DELETE" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || "No se pudo eliminar el cobro");
       setEditing(null);
       load();
       loadMorosidad();
+      // El cobro ya está borrado: que la cuota no se haya podido quitar no es
+      // un error del borrado, pero hay que decirlo o la familia sigue cobrando.
+      if (conCuota && json.data?.cuota && !json.data.cuota.borrada) {
+        avisar({
+          titulo: "El cobro se ha borrado, la cuota no",
+          texto: `${json.data.cuota.motivo || "No se pudo borrar la cuota"}. Búscala en Cuotas y bórrala o dale de baja desde allí.`,
+        });
+      }
     } catch (err) {
       setFormError(err.message);
     } finally {
