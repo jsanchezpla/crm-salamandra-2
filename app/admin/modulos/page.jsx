@@ -46,6 +46,124 @@ function Marca({ texto, titulo, fuerte = false }) {
   );
 }
 
+/**
+ * Abre la ficha de un módulo y la trae a la vista. DOM imperativo a propósito:
+ * los desplegables son `<details>` nativos (el patrón del back-office: uno que
+ * no necesita JavaScript no se puede romper), así que abrirlos no necesita
+ * estado de React — solo poner `open` en el suyo y en los de arriba.
+ */
+function abrirFicha(clave) {
+  const el = document.getElementById(`ficha-${clave}`);
+  if (!el) return;
+  for (let p = el; p; p = p.parentElement?.closest("details")) p.open = true;
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+/**
+ * La ficha de un módulo. Lo que se ve CERRADO es nombre, clave, qué hace y a
+ * cuántos clientes se les ha vendido: si para saber qué hace cada módulo
+ * hubiera que abrir veintinueve desplegables, esta sección no serviría de nada.
+ * Dentro va el detalle: pantallas, avisos, qué necesita, qué se le dice al
+ * cliente y quién lo tiene.
+ */
+function FichaModulo({ m, onCliente }) {
+  const n = m.activoEn.length;
+  return (
+    <details id={`ficha-${m.clave}`} style={{ borderTop: "1px solid var(--line-suave)" }}>
+      <summary className="cursor-pointer px-4 py-2.5 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+        <span className="text-[13px] font-semibold">{m.nombre}</span>
+        <code className="text-[11px]" style={{ color: "var(--tenue)" }}>{m.clave}</code>
+        <span className="text-[12px] flex-1 min-w-[12rem]" style={{ color: "var(--dim)" }}>
+          {m.hace}
+        </span>
+        <span
+          className="text-[11px] tabular-nums whitespace-nowrap"
+          style={{ color: n > 0 ? "var(--ok)" : "var(--tenue)" }}
+        >
+          {n > 0 ? `activo en ${n}` : "no lo tiene nadie"}
+        </span>
+      </summary>
+
+      <div className="px-4 pb-4 pt-1 text-[12px] leading-relaxed space-y-3" style={{ color: "var(--dim)" }}>
+        {m.trae.length > 0 && (
+          <div>
+            <Etiqueta>qué trae</Etiqueta>
+            <ul className="mt-1.5 space-y-1">
+              {m.trae.map((t) => (
+                <li key={t.donde + t.que} className="flex flex-wrap gap-x-2">
+                  <span style={{ color: "var(--text)" }}>{t.que}</span>
+                  <code className="text-[11px]" style={{ color: "var(--tenue)" }}>{t.donde}</code>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {m.ojo.length > 0 && (
+          <div>
+            <Etiqueta tono="alerta">a tener en cuenta</Etiqueta>
+            <ul className="mt-1.5 space-y-1">
+              {m.ojo.map((aviso) => (
+                <li key={aviso}>· {aviso}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-x-6 gap-y-2">
+          {m.necesita && (
+            <div>
+              {/* «Necesita» solo cuando es obligatorio de verdad: lo demás son
+                  módulos con los que se lleva, y decir que Citas «necesita»
+                  Pacientes sería mentir en una venta. */}
+              <Etiqueta tono={m.necesitaEsObligatorio ? "alerta" : "dim"}>
+                {m.necesitaEsObligatorio ? "no funciona sin" : "se apoya en"}
+              </Etiqueta>
+              <div className="mt-1">
+                {m.necesita}{" "}
+                <a href="/admin/integraciones" className="underline" style={{ color: "var(--tenue)" }}>
+                  el porqué, en Integraciones
+                </a>
+              </div>
+            </div>
+          )}
+          {m.doc && (
+            <div>
+              <Etiqueta>doc</Etiqueta>
+              {/* Texto, no enlace: la imagen de Docker no lleva docs/. */}
+              <div className="mt-1" style={{ color: "var(--tenue)" }}>{m.doc}</div>
+            </div>
+          )}
+        </div>
+
+        <div>
+          <Etiqueta>lo que se le dice al cliente</Etiqueta>
+          <div className="mt-1 italic">{m.desc}</div>
+        </div>
+
+        {n > 0 && (
+          <div>
+            <Etiqueta>lo tienen</Etiqueta>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {m.activoEn.map((slug) => (
+                <button
+                  key={slug}
+                  type="button"
+                  onClick={() => onCliente(slug)}
+                  className="text-[11px] px-1.5 py-0.5 rounded"
+                  style={{ color: "var(--tenue)", border: "1px solid var(--line)" }}
+                >
+                  {slug}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </details>
+  );
+}
+
 function Etiqueta({ children, tono = "dim" }) {
   const color = tono === "alerta" ? "var(--alerta)" : tono === "ok" ? "var(--ok)" : "var(--tenue)";
   return (
@@ -79,6 +197,14 @@ export default function ModulosPage() {
   }, []);
 
   const clientes = datos?.clientes ?? [];
+  const catalogo = datos?.catalogo ?? null;
+  const totalModulos = catalogo ? catalogo.grupos.reduce((n, g) => n + g.modulos.length, 0) : 0;
+
+  /** Desde la ficha, «lo tienen: aumenta» filtra la tabla de arriba y sube. */
+  const verCliente = (slug) => {
+    setFiltro(slug);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   // Filtro por módulo: responde a «¿quién tiene esto?», que es media razón de
   // ser de la pantalla. Casa también contra el nombre y el slug del cliente.
@@ -201,8 +327,28 @@ export default function ModulosPage() {
                   )}
                 </td>
 
+                {/* Cada clave abre su ficha, que es donde está escrito qué hace
+                    (18/09/2026). Antes esto era un `join(" · ")` mudo: para
+                    saber qué era `productos_avanzado` había que abrir docs/. */}
                 <td className="px-4 py-3.5 text-[12px] leading-relaxed" style={{ color: "var(--dim)" }}>
-                  {c.modulos.length ? c.modulos.join(" · ") : <span style={{ color: "var(--tenue)" }}>ninguno</span>}
+                  {c.modulos.length ? (
+                    c.modulos.map((clave, i) => (
+                      <span key={clave}>
+                        {i > 0 && " · "}
+                        <button
+                          type="button"
+                          onClick={() => abrirFicha(clave)}
+                          title={`Qué hace ${clave}`}
+                          className="underline decoration-dotted underline-offset-2"
+                          style={{ color: "inherit" }}
+                        >
+                          {clave}
+                        </button>
+                      </span>
+                    ))
+                  ) : (
+                    <span style={{ color: "var(--tenue)" }}>ninguno</span>
+                  )}
                 </td>
 
                 <td className="px-4 py-3.5">
@@ -275,6 +421,67 @@ export default function ModulosPage() {
           mentiría en una semana. Está escrito entero en CLAUDE.md, regla #16.
         </p>
       </section>
+
+      {/* QUÉ HACE CADA MÓDULO (18/09/2026, Jorge: «que se explique qué hace cada
+          módulo»). Va PLEGADA: de normal ocupa una línea, porque la pregunta
+          que trae a alguien a esta pantalla sigue siendo comparativa y la tabla
+          manda. Se llega a ella pulsando una clave de la tabla, que abre la
+          ficha y baja sola. Al final, y no antes de «la escalera», porque la
+          escalera es la leyenda de la columna «a medida». */}
+      {catalogo && (
+        <details className="mt-6 rounded-lg" style={{ background: "var(--panel)", border: "1px solid var(--line)" }}>
+          <summary className="cursor-pointer px-4 py-4 flex flex-wrap items-baseline gap-x-3">
+            <Etiqueta>qué hace cada módulo</Etiqueta>
+            <span className="text-[12px]" style={{ color: "var(--dim)" }}>
+              {totalModulos} módulos en el catálogo — para cuando una clave de la tabla no dice nada
+            </span>
+          </summary>
+
+          <div className="pb-2">
+            {catalogo.grupos.map((g) => (
+              <div key={g.grupo}>
+                <div className="px-4 pt-4 pb-1">
+                  <Etiqueta>{g.grupo}</Etiqueta>
+                </div>
+                {g.modulos.map((m) => (
+                  <FichaModulo key={m.clave} m={m} onCliente={verCliente} />
+                ))}
+              </div>
+            ))}
+
+            {catalogo.sinFicha.length > 0 && (
+              <div>
+                <div className="px-4 pt-5 pb-1">
+                  <Etiqueta>fuera del catálogo</Etiqueta>
+                </div>
+                <p className="px-4 pb-2 text-[12px]" style={{ color: "var(--tenue)" }}>
+                  Claves encendidas en la base que no se venden. Salen para que nadie las tome por un
+                  fallo.
+                </p>
+                {catalogo.sinFicha.map((s) => (
+                  <div
+                    key={s.clave}
+                    className="px-4 py-2.5 text-[12px] flex flex-wrap items-baseline gap-x-2.5"
+                    style={{ borderTop: "1px solid var(--line-suave)", color: "var(--dim)" }}
+                  >
+                    <code className="text-[11px]" style={{ color: "var(--tenue)" }}>{s.clave}</code>
+                    <span className="flex-1 min-w-[12rem]">
+                      {s.porQue ?? (
+                        <span style={{ color: "var(--alerta)" }}>
+                          Sin explicar: apúntala en FUERA_DEL_CATALOGO o dale su ficha.
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-[11px] tabular-nums" style={{ color: "var(--tenue)" }}>
+                      en {s.activoEn.length}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </details>
+      )}
     </main>
   );
 }

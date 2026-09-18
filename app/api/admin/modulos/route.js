@@ -3,6 +3,9 @@ import { ok, forbidden, serverError } from "../../../../lib/utils/apiResponse.js
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
 import { isDemoTenant } from "../../../../lib/demo/isDemo.js";
 import { whereClientesVisibles } from "../../../../lib/provisioning/clientesVisibles.js";
+import { CATALOGO, CLAVES_VALIDAS, moduloPorClave } from "../../../../lib/provisioning/catalogo.js";
+import { textoNecesita, seVendeSolo } from "../../../../lib/provisioning/dependencias.js";
+import { FICHAS, FUERA_DEL_CATALOGO } from "../../../../lib/provisioning/queHaceCadaModulo.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
@@ -36,6 +39,11 @@ const ADMIN_ROLES = new Set(["admin", "superadmin"]);
  * NO devuelve el CONTENIDO de esas personalizaciones, solo si las hay: dentro
  * puede haber configuración sensible del cliente, y para saber a quién hay que
  * mantener basta con saber que existe.
+ *
+ * DESDE EL 18/09/2026 DEVUELVE TAMBIÉN EL CATÁLOGO, con la ficha interna de
+ * cada módulo (`lib/provisioning/queHaceCadaModulo.js`) y quién lo tiene
+ * encendido. Las claves crudas de la tabla no dicen qué es `productos_avanzado`
+ * a nadie que no lleve el CLAUDE.md en la cabeza.
  *
  * Mismos tres candados que el resto del back-office: módulo `provisioning` (que
  * solo tiene nuestro tenant), rol admin leído fresco de la base, y nunca desde
@@ -132,8 +140,59 @@ export const GET = withTenant(async (_request, _ctx, ctx) => {
     // se escribió esto) y a CUÁNTOS clientes afectan (4). Contar solo clientes
     // escondía que Laura tiene dos.
     const pantallasPropias = clientes.reduce((n, c) => n + c.aMedida.filter((m) => m.pantalla).length, 0);
+
+    // ── QUÉ HACE CADA MÓDULO (18/09/2026, Jorge) ─────────────────────────
+    // La pantalla enseñaba las claves crudas y no había forma de saber qué era
+    // `productos_avanzado` sin abrir docs/. El texto vive en
+    // `lib/provisioning/queHaceCadaModulo.js`; aquí se le pega quién lo tiene.
+    //
+    // Se arma AQUÍ y no en el navegador por dos razones: `activoEn` se calcula
+    // con los clientes que esta ruta ya tiene cargados, y `dependencias.js` son
+    // 43 KB de matriz con rutas de código que no pintan nada en el bundle.
+    // Solo los ENCENDIDOS entran en el índice: la pregunta es «¿quién lo usa?».
+    const activoEn = new Map();
+    for (const c of clientes) {
+      for (const clave of c.modulos) {
+        if (!activoEn.has(clave)) activoEn.set(clave, []);
+        activoEn.get(clave).push(c.slug);
+      }
+    }
+
+    const nombreDe = (k) => moduloPorClave(k)?.nombre ?? k;
+    const catalogo = {
+      grupos: CATALOGO.map((g) => ({
+        grupo: g.grupo,
+        modulos: g.modulos.map((m) => {
+          const ficha = FICHAS[m.key] ?? {};
+          const necesita = textoNecesita(m.key, nombreDe);
+          return {
+            clave: m.key,
+            nombre: m.nombre,
+            desc: m.desc, // lo que se le dice al CLIENTE; la ficha es lo de dentro
+            hace: ficha.hace ?? null,
+            trae: ficha.trae ?? [],
+            ojo: ficha.ojo ?? [],
+            doc: ficha.doc ?? null,
+            necesita: necesita && necesita !== "—" ? necesita : null,
+            // `textoNecesita` mezcla obligatorias y parciales, y leído a secas
+            // «Citas necesita Pacientes» es falso: se apoya en él. La pantalla
+            // rotula una cosa u otra según esto.
+            necesitaEsObligatorio: !seVendeSolo(m.key),
+            activoEn: activoEn.get(m.key) ?? [],
+          };
+        }),
+      })),
+      // Claves vivas en tenant_modules que no se venden. Sin esto salen como
+      // «desconocidas» y parece un fallo cada vez (`provisioning` es la nuestra).
+      sinFicha: [...activoEn.keys()]
+        .filter((k) => !CLAVES_VALIDAS.has(k))
+        .sort()
+        .map((k) => ({ clave: k, porQue: FUERA_DEL_CATALOGO[k] ?? null, activoEn: activoEn.get(k) })),
+    };
+
     return ok({
       clientes,
+      catalogo,
       totales: {
         clientes: clientes.length,
         pantallasPropias,
