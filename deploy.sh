@@ -65,7 +65,7 @@ if ! flock -n 9; then
   echo ""
   exit 1
 fi
-printf 'Lo tiene el pid %s desde las %s%s\n' "$" "$(date '+%H:%M:%S del %d/%m')" \
+printf 'Lo tiene el pid %s desde las %s%s\n' "$$" "$(date '+%H:%M:%S del %d/%m')" \
   "${SSH_CLIENT:+ (ssh desde ${SSH_CLIENT%% *})}" > "$QUIEN"
 
 # ─── El build, con el rojo dicho por su nombre ───────────────────────────────
