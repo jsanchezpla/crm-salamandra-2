@@ -30,6 +30,7 @@ import {
   esTipoDeBono,
   repartirTiposDeBono,
   tiposParaElegirBono,
+  tiposQueSePuedenDar,
 } from "../lib/billing/tiposDeBono.js";
 
 test("las sesiones se leen con cualquiera de sus tres nombres", () => {
@@ -86,6 +87,25 @@ test("el desplegable enseña los de bono, y todos cuando se pide", () => {
   ];
   assert.deepEqual(tiposParaElegirBono(catalogo).map((t) => t.id), ["b"]);
   assert.deepEqual(tiposParaElegirBono(catalogo, { todos: true }).map((t) => t.id), ["a", "b"]);
+});
+
+test("un tipo borrado del catálogo no se puede volver a dar", () => {
+  const filas = [
+    { id: "a", name: "PSICOLOGIA 45", sesionesDelTipo: 5, enElCatalogo: true },
+    { id: "b", name: "(tipo de bono borrado del catálogo)", sesionesDelTipo: null, bonos: 2, enElCatalogo: false },
+  ];
+  assert.deepEqual(tiposQueSePuedenDar(filas).map((t) => t.id), ["a"]);
+  // Pero SIGUE siendo un tipo de bono: la lista y su filtro tienen que poder
+  // enseñarlo, que ahí es dinero que hay que ver.
+  assert.equal(esTipoDeBono(filas[1]), true);
+});
+
+test("quien no dice si está en el catálogo se queda", () => {
+  // Los tipos crudos de /api/citas/event-types no traen el campo; no saber no
+  // es lo mismo que estar borrado, y filtrarlos dejaría el cajón vacío.
+  const crudos = [{ id: "a", sessionsCount: 5 }, { id: "b", sessionsCount: 1 }];
+  assert.deepEqual(tiposQueSePuedenDar(crudos).map((t) => t.id), ["a", "b"]);
+  assert.deepEqual(tiposQueSePuedenDar([]), []);
 });
 
 test("un centro sin ningún tipo de bono ve el catálogo entero, no una lista vacía", () => {

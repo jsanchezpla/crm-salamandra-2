@@ -2542,6 +2542,15 @@ La regla vive en **`lib/billing/tiposDeBono.js`** (`esTipoDeBono`,
 Y un centro **sin un solo tipo de bono** ve el catálogo entero —si no, el
 desplegable saldría vacío y no habría forma de dar el primero—.
 
+**Y lo borrado del catálogo no se vuelve a dar** (`tiposQueSePuedenDar`): la
+puerta de los grupos inventa una fila «(tipo de bono borrado del catálogo)»
+(`enElCatalogo: false`) por cada tipo que tiene bonos y ya no existe, y hace
+bien —es dinero que hay que poder ver y filtrar—, pero en el desplegable del
+alta esa fila solo es una trampa. Por eso el filtro NO vive dentro de
+`repartirTiposDeBono`: son dos preguntas distintas, «¿lleva bono?» y «¿se puede
+dar?». Quien no trae el campo (los tipos crudos de `/api/citas/event-types`) se
+queda: no saber no es estar borrado.
+
 Lo usan los dos cajones de alta (`DrawerBono.jsx` y el de la ficha del cliente,
 `components/clients/ClientBonosSection.jsx`) y el filtro por tipo de
 `/facturacion/bonos`, que antes llevaba la misma regla copiada a mano. No lo usa

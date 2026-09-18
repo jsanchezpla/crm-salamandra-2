@@ -31,7 +31,7 @@ import Select from "../ui/Select.jsx";
 import SelectorDestinatarios from "./SelectorDestinatarios.jsx";
 import { eurosToCents, centsToEuros } from "../../lib/payments/money.js";
 import { rotuloDelBono, parteDelCobro, SESIONES_MAX } from "../../lib/billing/bonos.js";
-import { repartirTiposDeBono } from "../../lib/billing/tiposDeBono.js";
+import { repartirTiposDeBono, tiposQueSePuedenDar } from "../../lib/billing/tiposDeBono.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -109,7 +109,10 @@ export default function DrawerBono({
   // Los de bono delante, el resto detrás. Sin un solo tipo de bono (un centro
   // que aún no le ha puesto sesiones a nada) se enseña el catálogo entero: un
   // desplegable vacío parece roto y dejaría sin dar el primer bono.
-  const { deBono, resto, hayResto } = useMemo(() => repartirTiposDeBono(tipos), [tipos]);
+  // Un tipo borrado del catálogo se ve en la lista y en su filtro, pero no se
+  // vuelve a dar: en el alta esa fila solo es una trampa.
+  const dables = useMemo(() => tiposQueSePuedenDar(tipos), [tipos]);
+  const { deBono, resto, hayResto } = useMemo(() => repartirTiposDeBono(dables), [dables]);
   /*
    * Y si el tipo YA elegido no está entre los de bono, se enseña todo: el
    * desplegable se quedaría en «Elige…» con un valor puesto detrás, que es
@@ -119,7 +122,7 @@ export default function DrawerBono({
   const elegidoFuera =
     !!eventTypeId && !deBono.some((t) => String(t.id) === String(eventTypeId));
   const mostrandoTodos = verTodosLosTipos || elegidoFuera || deBono.length === 0;
-  const tiposVisibles = mostrandoTodos ? tipos : deBono;
+  const tiposVisibles = mostrandoTodos ? dables : deBono;
 
   // Los hermanos, para poder decir de quién es el bono (AV-0055). Solo en la
   // edición: en el alta el paciente lo trae el selector de destinatarios.
@@ -324,7 +327,7 @@ export default function DrawerBono({
               <p className="text-[11px] text-neutral-400 mt-1">
                 {mostrandoTodos ? (
                   <>
-                    Salen los {tipos.length} tipos de cita del centro.{" "}
+                    Salen los {dables.length} tipos de cita del centro.{" "}
                     <button
                       type="button"
                       onClick={() => setVerTodosLosTipos(false)}
