@@ -3,7 +3,7 @@ import { fmtDate } from "@/lib/utils/format.js";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { hoyVigente } from "@/lib/billing/cuotas.js";
-import { fondoSugerido } from "@/lib/billing/caja.js";
+import { fondoSugerido, avisoDeCajaSinContar } from "@/lib/billing/caja.js";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import MovimientosCaja from "../_components/MovimientosCaja.jsx";
 import ResumenCaja from "../_components/ResumenCaja.jsx";
@@ -34,6 +34,8 @@ export default function ArqueoPage() {
   // El último cierre de esta caja, para proponer el fondo del siguiente
   // (07/09/2026, AV-0067). Viene del servidor al margen del filtro de fechas.
   const [ultimoCierre, setUltimoCierre] = useState(null);
+  // Cuántos cierres tiene esta caja y cuántos se hicieron contando de verdad.
+  const [conteos, setConteos] = useState(null);
   const [resumen, setResumen] = useState({ total: 0, conDescuadre: 0, totalDescuadre: 0 });
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
@@ -107,6 +109,7 @@ export default function ArqueoPage() {
       if (!j.ok) throw new Error(j.error || "No se pudieron cargar los cierres");
       setCierres(j.data?.cierres ?? []);
       setUltimoCierre(j.data?.ultimoCierre ?? null);
+      setConteos(j.data?.conteos ?? null);
       setResumen({
         total: j.data?.total ?? 0,
         conDescuadre: j.data?.conDescuadre ?? 0,
@@ -159,6 +162,12 @@ export default function ArqueoPage() {
    * sin cierre anterior se deja vacía y se dice por qué.
    */
   const fondoDeAyer = fondoSugerido(ultimoCierre);
+  /*
+   * Mientras nadie haya cerrado contando el dinero, el cajón se arrastra desde
+   * el primer día con efectivo y la pantalla no lo decía en ningún sitio
+   * (18/09/2026). La regla, con su porqué, en `lib/billing/caja.js`.
+   */
+  const sinContarNunca = avisoDeCajaSinContar(conteos);
   /*
    * El que vale para el día que se está cerrando: el servidor busca el último
    * cierre anterior a ESA fecha (cerrando un día atrasado, el fondo bueno no es
@@ -326,6 +335,13 @@ export default function ArqueoPage() {
 
       {errorMsg && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-700">{errorMsg}</div>
+      )}
+
+      {/* No bloquea nada: se va sola en cuanto alguien cierre un día contando. */}
+      {sinContarNunca && !loading && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-800">
+          {sinContarNunca.texto}
+        </div>
       )}
 
       {cajas.length > 0 && (

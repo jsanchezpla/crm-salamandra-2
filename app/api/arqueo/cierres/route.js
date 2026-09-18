@@ -265,8 +265,26 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
    * propuesta desaparecería justo cuando alguien mira una semana concreta.
    * Van solo los dos campos que hacen falta.
    */
+  /*
+   * Y si esa caja NUNCA se ha cerrado contando el dinero (18/09/2026): la
+   * pantalla lo dice en una línea, porque hasta entonces el cajón se arrastra
+   * desde el primer día con efectivo y eso no se ve por ningún lado. La regla
+   * de qué conteo vale es la misma de `fondoSugerido`: lo cerró alguien o se
+   * contó algo. Dos `count`, sin traer las 828 filas.
+   */
+  let conteos = null;
   let ultimoCierre = null;
   if (cajaId) {
+    const [total, deVerdad] = await Promise.all([
+      CashClose.count({ where: { cashPointId: cajaId } }),
+      CashClose.count({
+        where: {
+          cashPointId: cajaId,
+          [Op.or]: [{ closedById: { [Op.ne]: null } }, { countedAmount: { [Op.gt]: 0 } }],
+        },
+      }),
+    ]);
+    conteos = { total, deVerdad };
     const ultimo = await CashClose.findOne({
       where: { cashPointId: cajaId },
       order: [["closeDate", "DESC"], ["createdAt", "DESC"]],
@@ -290,6 +308,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     conDescuadre: cierres.filter((c) => Number(c.difference) !== 0).length,
     totalDescuadre: +totalDescuadre.toFixed(2),
     ultimoCierre,
+    conteos,
   });
 });
 

@@ -30,7 +30,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { fondoSugerido } from "../lib/billing/caja.js";
+import { fondoSugerido, avisoDeCajaSinContar } from "../lib/billing/caja.js";
 
 const lee = (r) => readFileSync(new URL(r, import.meta.url), "utf8");
 
@@ -106,7 +106,7 @@ describe("de dónde saca la pantalla ese número", () => {
   });
 
   it("la pantalla lo usa para rellenar el fondo, no para decidir sola", () => {
-    assert.match(pagina, /import \{ fondoSugerido \} from "@\/lib\/billing\/caja\.js";/);
+    assert.match(pagina, /import \{ fondoSugerido[^}]*\} from "@\/lib\/billing\/caja\.js";/);
     assert.match(pagina, /const fondoDeAyer = fondoSugerido\(ultimoCierre\);/);
     const abrir = pagina.slice(pagina.indexOf("function abrirCierre"), pagina.indexOf("useEffect(() => {", pagina.indexOf("function abrirCierre")));
     assert.match(abrir, /openingAmount: fondoDeAyer \? String\(fondoDeAyer\.importe\) : ""/);
@@ -167,5 +167,39 @@ describe("el fondo en blanco no puede colarse como cero", () => {
   it("y la pantalla no deja cerrar con la casilla vacía", () => {
     const campo = pagina.slice(pagina.indexOf('<span className="text-[12px] text-neutral-500">Fondo inicial'), pagina.indexOf("Dinero contado"));
     assert.match(campo, /<input\s+required/, "el campo del fondo tiene que ser obligatorio");
+  });
+});
+
+/*
+ * ── Y QUE LA CAJA LO DIGA MIENTRAS NADIE HA CONTADO (18/09/2026) ───────────
+ *
+ * Tarea del Registro, de Rodrigo: AV-0157 es la TERCERA vez que Aumenta
+ * escribe que la caja no cuadra, y la explicación siempre es la misma —sus 828
+ * cierres vinieron importados a cero y sin autor, así que el cajón se arrastra
+ * desde el primer día con efectivo—. Eso no estaba dicho en ninguna pantalla.
+ */
+describe("la caja que nunca se ha cerrado contando el dinero", () => {
+  it("con cierres importados lo dice, y dice que son importados", () => {
+    const a = avisoDeCajaSinContar({ total: 828, deVerdad: 0 });
+    assert.ok(a, "una caja con 828 cascarones tiene que avisar");
+    assert.match(a.texto, /nunca contando el dinero/);
+    assert.match(a.texto, /importados/);
+    assert.equal(a.importados, 828);
+  });
+
+  it("sin ningún cierre también, y sin hablar de importados", () => {
+    const a = avisoDeCajaSinContar({ total: 0, deVerdad: 0 });
+    assert.ok(a);
+    assert.doesNotMatch(a.texto, /importados/);
+  });
+
+  it("y en cuanto hay UNO de verdad, se calla", () => {
+    assert.equal(avisoDeCajaSinContar({ total: 829, deVerdad: 1 }), null);
+    assert.equal(avisoDeCajaSinContar(), null, "sin datos no se inventa un aviso");
+  });
+
+  it("la pantalla lo pinta y el servidor manda el recuento", () => {
+    assert.match(lee("../app/(dashboard)/facturacion/arqueo/page.jsx"), /avisoDeCajaSinContar\(/);
+    assert.match(lee("../app/api/arqueo/cierres/route.js"), /conteos = \{ total, deVerdad \}/);
   });
 });
