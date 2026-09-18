@@ -40,8 +40,12 @@ test("el drawer nace con la terapeuta, no avisa del propio bloqueo y lo quita al
   assert.match(src, /teamMemberId: inicial\.teamMemberId \?\? ""/);
   assert.match(src, /\.\.\.\(desdeBloqueo \? \{ permitirBloqueo: true \} : \{\}\)/);
   assert.match(src, /\/api\/citas\/bloqueos\?id=\$\{encodeURIComponent\(desdeBloqueo\.id\)\}`, \{ method: "DELETE" \}/);
-  // El borrado va DESPUÉS de crear la cita y ANTES de avisar al padre.
-  const iCrear = src.indexOf('if (!j.ok) throw new Error(j.error || "Error creando cita")');
+  // El borrado va DESPUÉS de crear la cita y ANTES de avisar al padre, y solo
+  // si la cita llegó a crearse: desde el 18/09/2026 (AV-0167) una serie puede
+  // seguir adelante sin su primera cita, y entonces el hueco se queda donde
+  // estaba.
+  assert.match(src, /if \(primeraCreada && desdeBloqueo\?\.id\)/);
+  const iCrear = src.indexOf('if (primeraCreada && !j.ok) throw new Error(j.error || "Error creando cita")');
   const iBorrar = src.indexOf("method: \"DELETE\" });\n          const jb");
   const iCreated = src.indexOf("onCreated();", iBorrar);
   assert.ok(iCrear > 0 && iBorrar > iCrear && iCreated > iBorrar, "orden: crear → quitar bloqueo → onCreated");

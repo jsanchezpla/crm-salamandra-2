@@ -54,10 +54,8 @@ async function horasDeLasCitas(Booking) {
       attributes: [
         [fn("min", literal(`extract(hour from ${inicioLocal}) * 60 + extract(minute from ${inicioLocal})`)), "desde"],
         [fn("max", literal(`extract(epoch from (${finLocal} - date_trunc('day', ${inicioLocal}))) / 60`)), "hasta"],
-        // ¿Hay alguna en sábado o domingo de las dos últimas semanas en adelante?
-        // Entonces no se esconde el fin de semana. Solo lo reciente y lo que
-        // viene: un taller de un sábado de hace diez meses no puede anular el
-        // ajuste de lunes a viernes que el centro ha pedido.
+        // ¿Trabaja este centro algún fin de semana? Lo lee quien solo quiere
+        // saber eso; QUÉ semanas se abren lo dicen las fechas de `diasDeFinDeSemana`.
         [literal(`bool_or(extract(dow from ${inicioLocal}) in (0, 6)) FILTER (WHERE "Booking"."scheduled_at" >= NOW() - INTERVAL '14 days')`), "finDeSemana"],
       ],
       where: {
@@ -75,8 +73,43 @@ async function horasDeLasCitas(Booking) {
     const desde = Math.max(6 * 60, Math.round(Number(fila.desde)));
     const hasta = Math.min(23 * 60 + 30, Math.round(Number(fila.hasta)));
     if (!(hasta > desde)) return null;
-    return { desde: aHoraFc(desde), hasta: aHoraFc(hasta), finDeSemana: fila.finDeSemana === true };
+    return {
+      desde: aHoraFc(desde),
+      hasta: aHoraFc(hasta),
+      finDeSemana: fila.finDeSemana === true,
+      dias: await diasDeFinDeSemana(Booking),
+    };
   } catch {
     return null;
+  }
+}
+
+/**
+ * Las FECHAS («YYYY-MM-DD», hora de Madrid) de sábado o domingo que tienen
+ * cita, en la misma ventana que la rejilla. El calendario abre el fin de
+ * semana solo en esas semanas (18/09/2026, AV-0173; la regla, en
+ * lib/citas/vistaAgenda.js).
+ *
+ * Son días distintos, no citas: dos años de fines de semana caben en unos
+ * doscientos textos aunque el centro abra todos los sábados. Best-effort: si
+ * falla, se contesta sin fechas y manda el ajuste del centro.
+ */
+async function diasDeFinDeSemana(Booking) {
+  try {
+    const { literal, Op } = Booking.sequelize.Sequelize;
+    const ahora = Date.now();
+    const local = `("Booking"."scheduled_at" AT TIME ZONE 'Europe/Madrid')`;
+    const filas = await Booking.findAll({
+      attributes: [[literal(`DISTINCT to_char(${local}, 'YYYY-MM-DD')`), "dia"]],
+      where: {
+        scheduledAt: { [Op.between]: [new Date(ahora - 365 * 86400000), new Date(ahora + 425 * 86400000)] },
+        status: { [Op.ne]: "cancelled" },
+        [Op.and]: literal(`extract(dow from ${local}) in (0, 6)`),
+      },
+      raw: true,
+    });
+    return filas.map((f) => f.dia).filter(Boolean);
+  } catch {
+    return [];
   }
 }

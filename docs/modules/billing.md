@@ -1308,10 +1308,28 @@ conceptos que la componen, importe, método, día de cobro, alta y baja.
   filas. Con un número escrito manda ese número: es el precio pactado con esa
   familia y no se mueve aunque suba la tarifa.
 - **Alta EN GRUPO**: el POST acepta `destinatarios: [{clientId, patientId}]` y
-  crea una cuota por cada uno con los mismos datos. Quien ya tiene cuota activa
-  para ese mismo paciente se salta con su motivo (`permitirDuplicadas: true` lo
-  fuerza): un lote de 40 familias no puede convertirse en 40 cuotas repetidas
-  por un doble clic.
+  crea una cuota por cada uno con los mismos datos. Quien REPITE se salta con su
+  motivo (`permitirDuplicadas: true` lo fuerza): un lote de 40 familias no puede
+  convertirse en 40 cuotas repetidas por un doble clic.
+- **El listado sale POR SERVICIO** (18/09/2026, AV-0194: «que salgan
+  ordenadas, todas las de TO juntas, todas las de logo juntas»). El GET de
+  `/api/billing/cuotas` devuelve las filas ordenadas por el NOMBRE de sus
+  conceptos y, dentro de cada servicio, por paciente (o por la familia cuando
+  la cuota es de toda la casa). Antes salían como las devolvía Postgres, o sea
+  sin orden. Una cuota de dos terapias hace grupo propio («Logopedia 45x1 +
+  T.O. 45x1»): meterla en uno de los dos montones sería elegir por el centro.
+  Las de importe suelto van al final. `ordenarCuotasPorServicio` en
+  `lib/billing/tiposDeCuota.js`, con su prueba.
+- **Repetir es volver a cobrar LO MISMO, no cobrar otra cosa** (18/09/2026,
+  AV-0195 y la tarea «Mensaje cuota activa»). Hasta ese día bastaba con tener
+  CUALQUIER cuota viva para quedarse fuera del alta, y eso dejaba sin segunda
+  terapia a quien ya pagaba una: en producción chocaban las **284** parejas
+  cliente+paciente con cuota viva, y de las 7 que llevan varias **ninguna**
+  comparte concepto (son dos terapias, o sea lo legítimo). Ahora choca la cuota
+  viva que lleve ALGUNO de los conceptos que llegan —y el importe suelto solo
+  con otro importe suelto—, y el motivo la nombra: «ya tiene esta cuota activa
+  (Cuota T.O. 60x1)». La regla vive en `lib/billing/cuotaDuplicada.js` con
+  `scripts/_smoke-cuota-duplicada.mjs`.
 - **Baja ≠ borrado.** `PATCH { endDate, active:false }` apaga la cuota desde una
   fecha y CONSERVA la fila (los cobros que salieron de ella siguen explicando
   por qué se cobró lo que se cobró). `DELETE` es para el alta equivocada de hace
@@ -1921,7 +1939,7 @@ pasan por `withTenant` y validan `hasModule("billing")`.
 | `POST /invoices/[id]/cancel` | issued/sent → cancelled (`409` si tiene cobros). | Módulo `billing` (nunca por rol; `lib/auth/permisos.js`). |
 | `POST /invoices/[id]/rectify` | Crea factura R- (anulación total o por diferencias con `correctBase`), marca la original como `rectified` solo en la anulación total. | Módulo `billing` (nunca por rol; `lib/auth/permisos.js`). |
 | `GET /invoices/[id]/pdf` | Descarga el PDF (`lib/billing/invoicePdf.js`, pdfkit) de una factura emitida. `409` si es borrador. Con `?previa=1` (07/09/2026) sale **en pantalla** (`inline`) en vez de descargarse, y es la ÚNICA puerta del borrador: el mismo documento con «VISTA PREVIA» cruzando cada página (`buildInvoicePreviewPdfBuffer`). Una factura ya emitida vista con `?previa=1` NO se marca: es el documento de verdad. | — |
-| `POST /invoices/bulk-pdf?from=&to=` | ZIP en streaming con los PDF de todas las emitidas del rango. `404` si no hay ninguna. Lo usa el botón «Descargar facturas» de `components/billing/ExportButtons.jsx`. | — |
+| `POST /invoices/bulk-pdf?from=&to=[&paciente=0]` | ZIP en streaming con los PDF de todas las emitidas del rango. `404` si no hay ninguna. Lo usa el botón «Descargar facturas» de `components/billing/ExportButtons.jsx`, que desde el 18/09/2026 (AV-0175) lleva la casilla «Con el nombre del paciente»: `paciente=0` lo quita de TODO el lote, igual que en la descarga de una sola. La casilla vivía solo en la factura suelta, así que quien bajaba el mes entero no tenía forma de quitarlo («no todo el mundo lo quiere»). Que las dos puertas lean el mismo parámetro lo fija `scripts/_smoke-pdf-factura-informe.mjs`. | — |
 | `GET /invoices/bulk-issue?mes=AAAA-MM` | Vista previa de la Facturación del mes: el lote agrupado por pagador, los sin NIF apartados, el estado del emisor y la fecha mínima de la serie. Con `&previa=<grupoId>` (`&fecha=` opcional) devuelve **el PDF de esa factura** en vez del JSON, armado con las mismas `lineasDeCuota` + `calculateInvoice` que la emitirá el POST, sin guardarla ni gastar número (07/09/2026). | `422` si el mes no es `AAAA-MM`; `404` si ese grupo ya no está en el lote. |
 | `POST /invoices/bulk-issue` | Emite el lote (`{ mes, issueDate?, exclude? }`): una factura por pagador, cobros enganchados en la misma transacción, nace `paid`. Ver «Facturación del mes». | `422` sin emisor fiscal o con fecha fuera de orden. |
 
