@@ -9,7 +9,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { edadDe, fechaNacimientoCorta } from "../lib/clinica/edad.js";
+import { edadDe, edadParaGuardar, fechaNacimientoCorta } from "../lib/clinica/edad.js";
 import { edadDe as edadDeIa } from "../lib/clinica/objetivosIa.js";
 import { serializePatient } from "../lib/clinica/serialize.js";
 
@@ -37,6 +37,25 @@ describe("edadDe: la fecha manda, la edad escrita es el respaldo", () => {
   });
   it("objetivosIa.js sigue dando la MISMA función (nada de dos edades)", () => {
     assert.equal(edadDeIa, edadDe);
+  });
+});
+
+describe("edadParaGuardar: con fecha no se guarda edad (AV-0178)", () => {
+  it("con fecha de nacimiento, null: la fecha manda y la edad envejece", () => {
+    assert.equal(edadParaGuardar({ birthDate: "2018-09-03", age: 7 }), null);
+    assert.equal(edadParaGuardar({ birthDate: "2018-09-03", age: "" }), null);
+  });
+  it("sin fecha, se respeta lo escrito", () => {
+    assert.equal(edadParaGuardar({ birthDate: "", age: 6 }), 6);
+    assert.equal(edadParaGuardar({ birthDate: null, age: "6" }), 6);
+    assert.equal(edadParaGuardar({ age: 0 }), 0);
+  });
+  it("sin nada escrito, null: nadie tiene cero años por no rellenar la casilla", () => {
+    assert.equal(edadParaGuardar({ age: "" }), null);
+    assert.equal(edadParaGuardar({}), null);
+    assert.equal(edadParaGuardar(), null);
+    assert.equal(edadParaGuardar({ age: "x" }), null);
+    assert.equal(edadParaGuardar({ age: 999 }), null);
   });
 });
 

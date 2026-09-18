@@ -7,6 +7,7 @@ import { logClinicaAudit, auditSummary } from "../../../../lib/clinica/audit.js"
 import { limpiarContentSections, CLAVE_PLANTILLA } from "../../../../lib/clinica/plantillas.js";
 import { estadoDeLasCitas } from "../../../../lib/clinica/borradorDeCita.js";
 import { limpiarTitulo } from "../../../../lib/clinica/registroDeDiagnostico.js";
+import { duracionDeLaSesion } from "../../../../lib/clinica/duracionDeLaSesion.js";
 
 function gate(ctx) {
   return ctx.hasModule("clinica") || ctx.hasModule("pacientes");
@@ -65,6 +66,32 @@ async function diagnosticoDelRegistro(tenantModels, { patientId, bookingId, pedi
   if (!expediente) return { error: "Ese diagnóstico no existe" };
   if (String(expediente.patientId) !== String(patientId)) return { error: "Ese diagnóstico no es de este paciente" };
   return { diagnosticoId: expediente.id };
+}
+
+/**
+ * ── CUÁNTO DURÓ, si el formulario no lo dice (18/09/2026) ───────────────────
+ *
+ * Aparte de `diagnosticoDelRegistro` y con su propia consulta, aunque lea la
+ * MISMA fila. Se intentó meterlo allí para ahorrarla y el precio era reescribir
+ * el `if` que comprueba la cita contra el paciente — el candado que puso la
+ * revisión del 12/09/2026 y que `_smoke-registros-del-expediente.mjs` vigila
+ * por texto. Una consulta indexada de más es más barata que tocar un candado de
+ * datos de salud para ganarla.
+ *
+ * La cita tiene que ser DE ESTE PACIENTE, por lo mismo: una cita ajena pegada a
+ * mano no decide cuánto duró la sesión de este niño. Devuelve minutos o null.
+ */
+async function duracionDeLaCita(tenantModels, { patientId, bookingId }) {
+  const { Booking } = tenantModels;
+  if (!bookingId || !Booking) return null;
+  try {
+    const cita = await Booking.findByPk(bookingId, { attributes: ["id", "patientId", "duration"] });
+    if (!cita || String(cita.patientId ?? "") !== String(patientId)) return null;
+    return cita.duration ?? null;
+  } catch (err) {
+    if (!sinTablaOColumna(err)) throw err;
+    return null;
+  }
 }
 
 export const GET = withTenant(async (request, _rc, ctx) => {
@@ -146,7 +173,15 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     patientId: body.patientId,
     therapistId,
     sessionDate: body.sessionDate ? new Date(body.sessionDate) : new Date(),
-    duration: body.duration != null && body.duration !== "" ? Number(body.duration) : null,
+    // Cuánto duró: lo que escriba la terapeuta y, si no lo escribe, lo que ya
+    // sabe la CITA de la que sale el registro. Nunca un número por defecto
+    // (`lib/clinica/duracionDeLaSesion.js`): el «45 min» que Olga veía en la
+    // ficha de sus pacientes salió de un relleno así en el volcado, y acabó
+    // impreso en 22.996 registros.
+    duration: duracionDeLaSesion({
+      pedida: body.duration,
+      cita: { duration: await duracionDeLaCita(ctx.tenantModels, { patientId: body.patientId, bookingId }) },
+    }),
     objectives: Array.isArray(body.objectives) ? body.objectives : [],
     activities: body.activities?.trim() || null,
     performance: body.performance?.trim() || null,

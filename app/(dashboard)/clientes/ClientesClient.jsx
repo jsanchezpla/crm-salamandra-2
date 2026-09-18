@@ -10,7 +10,12 @@ import ProgenitoresDelAlta, { PROGENITOR_VACIO } from "../../../components/clien
 import FacturacionDelAlta from "../../../components/clients/FacturacionDelAlta.jsx";
 import ClientPatientsSection from "../../../components/clients/ClientPatientsSection.jsx";
 import { CAMPOS_FISCALES } from "../../../lib/clients/camposFiscales.js";
-import { camposCliente, PERFIL_COMERCIAL } from "../../../lib/clients/formularioAlta.js";
+import {
+  camposCliente,
+  esNombreDeAlgunPaciente,
+  hayPacienteQueEsElTitular,
+  PERFIL_COMERCIAL,
+} from "../../../lib/clients/formularioAlta.js";
 import { textosDelAlta, hayPacienteConNombre } from "../../../lib/clients/altaPorPaciente.js";
 import { VOCABULARIO_CLIENTE } from "../../../lib/clients/vocabulario.js";
 import { CATEGORIAS, rotuloCategoria } from "../../../lib/booking/categorias.js";
@@ -81,7 +86,6 @@ export default function ClientesClient({
   abrirAlta = false,
 }) {
   const router = useRouter();
-  const textosAlta = textosDelAlta({ porPaciente: altaPorPaciente, singular: vocab.singular });
   const mounted = useMounted();
   const [clients, setClients] = useState([]);
   const [total, setTotal] = useState(0);
@@ -142,11 +146,13 @@ export default function ClientesClient({
   useEffect(() => {
     if (abrirAlta) setNewClientOpen(true);
   }, [abrirAlta]);
-  const CAMPOS_ALTA = camposCliente(perfil, { conPacientes, conCategoria, titularEsProgenitor: altaPorPaciente });
-  const ALTA_VACIA = Object.fromEntries(CAMPOS_ALTA.map((c) => [c.key, ""]));
+  const CAMPOS_FAMILIA = camposCliente(perfil, { conPacientes, conCategoria, titularEsProgenitor: altaPorPaciente });
+  const ALTA_VACIA = Object.fromEntries(CAMPOS_FAMILIA.map((c) => [c.key, ""]));
   // La ficha edita lo mismo que se pregunta en el alta: si no, el código
-  // postal que acaba de teclear recepción no se podría corregir nunca.
-  const CAMPOS_EDICION = CAMPOS_ALTA.map((c) => ({ ...c, label: c.label.replace(" *", "") }));
+  // postal que acaba de teclear recepción no se podría corregir nunca. Va por
+  // el molde de siempre: una ficha ya creada no sabe si aquel día se marcó la
+  // casilla de «abre su propia ficha», y las claves tienen que ser las mismas.
+  const CAMPOS_EDICION = CAMPOS_FAMILIA.map((c) => ({ ...c, label: c.label.replace(" *", "") }));
   const [newClientForm, setNewClientForm] = useState(ALTA_VACIA);
   /*
    * Un bloque de paciente y uno de progenitor PINTADOS de entrada donde hay
@@ -158,6 +164,19 @@ export default function ClientesClient({
    * descartan en silencio la fila que se quede sin tocar.
    */
   const [nuevosPacientes, setNuevosPacientes] = useState(conPacientes ? [{ ...PACIENTE_VACIO }] : []);
+  /*
+   * ¿Han marcado que el paciente es mayor de edad y abre su propia ficha?
+   * (18/09/2026, AV-0201 de Aumenta.) Cambia tres cosas de la misma pantalla:
+   * el rótulo del nombre —que si no diría «padre, madre o tutor»—, la
+   * cabecera del bloque de contacto y el aviso de qué falta por teclear. La
+   * marca vive en el paciente (`relationship`), que es lo que se guarda: la
+   * pantalla no lleva un estado propio que pueda decir otra cosa.
+   */
+  const pacienteEsElTitular = altaPorPaciente && conPacientes && hayPacienteQueEsElTitular(nuevosPacientes);
+  const CAMPOS_ALTA = pacienteEsElTitular
+    ? camposCliente(perfil, { conPacientes, conCategoria, titularEsElPaciente: true })
+    : CAMPOS_FAMILIA;
+  const textosAlta = textosDelAlta({ porPaciente: altaPorPaciente, singular: vocab.singular, pacienteEsElTitular });
   const [nuevosProgenitores, setNuevosProgenitores] = useState(conPacientes ? [{ ...PROGENITOR_VACIO }] : []);
   const FACTURACION_VACIA = { fiscalName: "", fiscalTaxId: "" };
   const [datosFactura, setDatosFactura] = useState(FACTURACION_VACIA);
@@ -1027,6 +1046,19 @@ export default function ClientesClient({
                     if (newClientError) setNewClientError(null);
                   }}
                   nombreCliente={newClientForm.name}
+                  /* Marcada la casilla, el nombre del titular ES el del
+                     paciente y lo sigue mientras se teclea. Al desmarcarla se
+                     borra SOLO si nadie lo ha tocado desde que se copió: lo
+                     que ha escrito una persona no se tira por un clic. */
+                  onTitularEsElPaciente={(nombre) => {
+                    setNewClientForm((f) => {
+                      if (nombre === null) {
+                        return esNombreDeAlgunPaciente(nuevosPacientes, f.name) ? { ...f, name: "" } : f;
+                      }
+                      return { ...f, name: nombre, parentescoTitular: "" };
+                    });
+                    if (newClientError) setNewClientError(null);
+                  }}
                 />
               )}
               {altaPorPaciente && textosAlta.cabeceraFamilia && (

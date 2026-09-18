@@ -1308,10 +1308,38 @@ conceptos que la componen, importe, método, día de cobro, alta y baja.
   filas. Con un número escrito manda ese número: es el precio pactado con esa
   familia y no se mueve aunque suba la tarifa.
 - **Alta EN GRUPO**: el POST acepta `destinatarios: [{clientId, patientId}]` y
-  crea una cuota por cada uno con los mismos datos. Quien ya tiene cuota activa
-  para ese mismo paciente se salta con su motivo (`permitirDuplicadas: true` lo
-  fuerza): un lote de 40 familias no puede convertirse en 40 cuotas repetidas
-  por un doble clic.
+  crea una cuota por cada uno con los mismos datos. Quien REPITE se salta con su
+  motivo (`permitirDuplicadas: true` lo fuerza): un lote de 40 familias no puede
+  convertirse en 40 cuotas repetidas por un doble clic.
+- **El listado sale POR SERVICIO** (18/09/2026, AV-0194: «que salgan
+  ordenadas, todas las de TO juntas, todas las de logo juntas»). El GET de
+  `/api/billing/cuotas` devuelve las filas ordenadas por el NOMBRE de sus
+  conceptos y, dentro de cada servicio, por paciente (o por la familia cuando
+  la cuota es de toda la casa). Antes salían como las devolvía Postgres, o sea
+  sin orden. Una cuota de dos terapias hace grupo propio («Logopedia 45x1 +
+  T.O. 45x1»): meterla en uno de los dos montones sería elegir por el centro.
+  Las de importe suelto van al final. `ordenarCuotasPorServicio` en
+  `lib/billing/tiposDeCuota.js`, con su prueba.
+- **Repetir es volver a cobrar LO MISMO, no cobrar otra cosa** (18/09/2026,
+  AV-0195 y la tarea «Mensaje cuota activa»). Hasta ese día bastaba con tener
+  CUALQUIER cuota viva para quedarse fuera del alta, y eso dejaba sin segunda
+  terapia a quien ya pagaba una: en producción chocaban las **284** parejas
+  cliente+paciente con cuota viva, y de las 7 que llevan varias **ninguna**
+  comparte concepto (son dos terapias, o sea lo legítimo). Ahora choca la cuota
+  viva que lleve ALGUNO de los conceptos que llegan —y el importe suelto solo
+  con otro importe suelto—, y el motivo la nombra: «ya tiene esta cuota activa
+  (Cuota T.O. 60x1)». La regla vive en `lib/billing/cuotaDuplicada.js` con
+  `scripts/_smoke-cuota-duplicada.mjs`.
+- **El importe del cajón «Añadir» de un tipo de cuota VIENE PUESTO** con el
+  precio del catálogo (18/09/2026, la otra mitad de la tarea «Mensaje cuota
+  activa»: «también les parece raro tener que poner el importe al mes manual
+  cuando añaden el paciente a la cuota»). Un hueco en blanco se lee como un
+  campo obligatorio, aunque vacío significara lo contrario. Se enseña el número
+  y, **si no se toca, al servidor va `amount: null`** — la cuota sigue atada al
+  catálogo y una subida de tarifa se aplica sola, que es como están 290 de las
+  291 cuotas activas de Aumenta. Solo un número distinto se guarda como precio
+  pactado con esa familia. En el cajón grande de `/facturacion/cuotas` no hace
+  falta: allí el total de los conceptos ya se ve calculado en el pie.
 - **Baja ≠ borrado.** `PATCH { endDate, active:false }` apaga la cuota desde una
   fecha y CONSERVA la fila (los cobros que salieron de ella siguen explicando
   por qué se cobró lo que se cobró). `DELETE` es para el alta equivocada de hace
@@ -1921,7 +1949,7 @@ pasan por `withTenant` y validan `hasModule("billing")`.
 | `POST /invoices/[id]/cancel` | issued/sent → cancelled (`409` si tiene cobros). | Módulo `billing` (nunca por rol; `lib/auth/permisos.js`). |
 | `POST /invoices/[id]/rectify` | Crea factura R- (anulación total o por diferencias con `correctBase`), marca la original como `rectified` solo en la anulación total. | Módulo `billing` (nunca por rol; `lib/auth/permisos.js`). |
 | `GET /invoices/[id]/pdf` | Descarga el PDF (`lib/billing/invoicePdf.js`, pdfkit) de una factura emitida. `409` si es borrador. Con `?previa=1` (07/09/2026) sale **en pantalla** (`inline`) en vez de descargarse, y es la ÚNICA puerta del borrador: el mismo documento con «VISTA PREVIA» cruzando cada página (`buildInvoicePreviewPdfBuffer`). Una factura ya emitida vista con `?previa=1` NO se marca: es el documento de verdad. | — |
-| `POST /invoices/bulk-pdf?from=&to=` | ZIP en streaming con los PDF de todas las emitidas del rango. `404` si no hay ninguna. Lo usa el botón «Descargar facturas» de `components/billing/ExportButtons.jsx`. | — |
+| `POST /invoices/bulk-pdf?from=&to=[&paciente=0]` | ZIP en streaming con los PDF de todas las emitidas del rango. `404` si no hay ninguna. Lo usa el botón «Descargar facturas» de `components/billing/ExportButtons.jsx`, que desde el 18/09/2026 (AV-0175) lleva la casilla «Con el nombre del paciente»: `paciente=0` lo quita de TODO el lote, igual que en la descarga de una sola. La casilla vivía solo en la factura suelta, así que quien bajaba el mes entero no tenía forma de quitarlo («no todo el mundo lo quiere»). Que las dos puertas lean el mismo parámetro lo fija `scripts/_smoke-pdf-factura-informe.mjs`. | — |
 | `GET /invoices/bulk-issue?mes=AAAA-MM` | Vista previa de la Facturación del mes: el lote agrupado por pagador, los sin NIF apartados, el estado del emisor y la fecha mínima de la serie. Con `&previa=<grupoId>` (`&fecha=` opcional) devuelve **el PDF de esa factura** en vez del JSON, armado con las mismas `lineasDeCuota` + `calculateInvoice` que la emitirá el POST, sin guardarla ni gastar número (07/09/2026). | `422` si el mes no es `AAAA-MM`; `404` si ese grupo ya no está en el lote. |
 | `POST /invoices/bulk-issue` | Emite el lote (`{ mes, issueDate?, exclude? }`): una factura por pagador, cobros enganchados en la misma transacción, nace `paid`. Ver «Facturación del mes». | `422` sin emisor fiscal o con fecha fuera de orden. |
 
@@ -2499,6 +2527,36 @@ hizo nacer una vez un bono de 150 € con un pendiente de 15.000 €.
 dicho lo que vale» (sale en «sin importe» y no suma), `0` es un bono regalado a
 propósito. Ninguno de los dos crea cobro.
 
+### Qué tipos salen al dar un bono (18/09/2026, Aumenta)
+
+«Al crear un bono, al elegir el tipo de bono, que solo salgan las citas con bono
+y no todas.» El desplegable se llenaba con el catálogo entero porque
+`/api/billing/bonos/tipos?todos=1` no lo recorta: en Aumenta son **72 tipos de
+cita de los que solo 5 tienen que ver con bonos** (2 packs del catálogo y 3
+sueltos con bonos ya dados; medido en producción el 18/09/2026). Buscar entre 72
+lo que está en 5 es como se da un bono del tipo equivocado.
+
+La regla vive en **`lib/billing/tiposDeBono.js`** (`esTipoDeBono`,
+`repartirTiposDeBono`, `tiposParaElegirBono`), con su prueba
+`scripts/_smoke-tipos-de-bono.mjs`. Un tipo lleva bono si:
+
+- el catálogo lo declara pack (`sessionsCount > 1`), aunque no lo haya comprado
+  nadie todavía: es un bono que el centro vende; **o**
+- ya tiene bonos dados, vivos o cerrados, aunque hoy sea una cita suelta. Pasa de
+  verdad (los tres de Aumenta): se vende un bono de 4 sesiones sobre un tipo
+  normal, o se pasa el tipo a suelto después. Esconderlos sería esconder dinero,
+  y al corregir uno no se encontraría su tipo.
+
+**El resto no se borra, se guarda detrás de un clic** («Ver los N restantes» /
+«Ver solo los de bono»): dar un bono sobre un tipo suelto sigue siendo legítimo.
+Y un centro **sin un solo tipo de bono** ve el catálogo entero —si no, el
+desplegable saldría vacío y no habría forma de dar el primero—.
+
+Lo usan los dos cajones de alta (`DrawerBono.jsx` y el de la ficha del cliente,
+`components/clients/ClientBonosSection.jsx`) y el filtro por tipo de
+`/facturacion/bonos`, que antes llevaba la misma regla copiada a mano. No lo usa
+la edición ni «Añadir al grupo»: allí el tipo ya está decidido.
+
 ### Qué le pasa a su cobro cuando el bono cambia
 
 `PATCH /api/billing/bonos/[id]` mantiene al día el pendiente, y lo dice en la
@@ -2523,10 +2581,10 @@ respuesta (un ajuste de dinero silencioso es el que nadie revisa):
 | --- | --- |
 | **Pantallas** | `/facturacion/bonos` (todos, con filtros por tipo, estado y «sin cobrar»; cuadro de agotados y anulados abajo), `/facturacion/bonos/tipos` (los grupos), `/facturacion/bonos/tipos/[id]` (quién lo lleva + los que pasaron, y «Añadir al grupo»). Desde el 12/09/2026 un bono SIN TOPE (`total` a null: el de un expediente de diagnóstico, ver «Diagnóstico» en `clinica.md`) se rotula «sin tope · diagnóstico» con enlace a `/clinica/diagnosticos`, que es donde se ve su barra de horas, y NO tiene «Renovar» ni «Volver a darlo»: copiarían `totalSessions` null y la API lo resolvería a las sesiones del tipo, o sea que nacería un bono CON tope |
 | **Endpoints** | `GET/POST /api/billing/bonos` · `GET/PATCH /api/billing/bonos/[id]` · `POST /api/billing/bonos/[id]/renovar` · `GET /api/billing/bonos/tipos` (`?todos=1` para el desplegable del alta) · `GET /api/billing/bonos/tipos/[id]`. Todos gateados por `billing`, y el que escribe también por `puedeDarBonos` (`lib/citas/quienDaBonos.js`: dirección o quien lleve Facturación) |
-| **Lib** | `lib/billing/bonos.js` (puro: estado, validación, grupos, renovación, totales; desde el 12/09/2026 `bonoSinTope` —`total` null explícito—, con el que `estadoDelBono` da siempre `vivo` y `rotuloDelBono` «Sin tope · N usadas») · `lib/billing/bonosConSesiones.js` (servidor: los bonos con sus sesiones y su cobro) · `lib/billing/altaDeBono.js` (el bono y su cobro en la misma transacción; desde el 12/09/2026 acepta `totalSessions: null`, `diagnosticoId` y `cobro: { conceptId, texto, invoiceText }`, que `cobroPendienteDeBono` de `cobroDelBono.js` admite igual, para que el pendiente de un diagnóstico se llame como su producto —«Diagnóstico Simple»— y no «Bono «DIAGNÓSTICO»»; sin ellos es el alta de siempre) |
+| **Lib** | `lib/billing/bonos.js` (puro: estado, validación, grupos, renovación, totales; desde el 12/09/2026 `bonoSinTope` —`total` null explícito—, con el que `estadoDelBono` da siempre `vivo` y `rotuloDelBono` «Sin tope · N usadas») · `lib/billing/bonosConSesiones.js` (servidor: los bonos con sus sesiones y su cobro) · `lib/billing/altaDeBono.js` (el bono y su cobro en la misma transacción; desde el 12/09/2026 acepta `totalSessions: null`, `diagnosticoId` y `cobro: { conceptId, texto, invoiceText }`, que `cobroPendienteDeBono` de `cobroDelBono.js` admite igual, para que el pendiente de un diagnóstico se llame como su producto —«Diagnóstico Simple»— y no «Bono «DIAGNÓSTICO»»; sin ellos es el alta de siempre) · `lib/billing/tiposDeBono.js` (puro: qué tipos de cita llevan bono y cuáles son citas sueltas, para los desplegables del alta y el filtro; ver «Qué tipos salen al dar un bono») |
 | **Componentes** | `components/billing/DrawerBono.jsx` (alta, alta en un grupo y edición) · `components/billing/useAccionesDeBono.js` (anular, reactivar, renovar, con sus avisos) |
 | **Migración** | Del submódulo, **ninguna**: la tabla y sus columnas ya estaban (`migrate-cobro-de-bono`, `traer-bonos-de-organizate`). El 12/09/2026 `migrate-diagnosticos` (bloque `citas`, ANTES del despliegue) le añade `session_packs.diagnostico_id` y deja `total_sessions` NULLABLE (NULL = sin tope); los bonos que había siguen con su número |
-| **Pruebas** | `scripts/_smoke-bonos.mjs` (`node:test`, ligera, en `npm test`) |
+| **Pruebas** | `scripts/_smoke-bonos.mjs` y `scripts/_smoke-tipos-de-bono.mjs` (`node:test`, ligeras, en `npm test`) |
 | **Auditoría** | `bono.created`, `bono.updated`, `bono.anulado`, `bono.renovado` (prefijo `bono` → Facturación en `lib/actividad/etiquetas.js`). No hay `bono.deleted`: un bono no se borra, se anula |
 
 ## Lo que paga una universidad o una empresa (15/09/2026, AV-0153)
@@ -2584,3 +2642,42 @@ apuntes.
   que el endpoint YA entendía y la pantalla no ofrecía, la casilla de
   descuadres y un «Quitar filtros»; con algo puesto, la tabla vacía dice que no
   hay ninguno que case y no que nunca se haya cerrado la caja.
+
+## Los 69 € del cuadre de caja de Aumenta (18/09/2026)
+
+Aumenta, por teléfono el 17/09: «no entienden dónde cuadra los 69 € en la caja,
+revisarla bien con Organízate». **Medido contra producción: la caja está bien y
+los 69 € son reales.** Es esto:
+
+- El saldo de caja que traía Organízate entró como un apunte de ENTRADA el
+  01/09/2026. El 11/09 se apuntó con **92,81 €**; el 15/09, a petición de
+  Rodrigo, se corrigió a **161,81 €**, que es el saldo del cierre del
+  31/08/2026.
+- La diferencia entre las dos cifras es exactamente **69,00 €**: lo que el cajón
+  se movió del 1 al 4 de septiembre. Comprobado en producción:
+  **3.631,00 € cobrados en efectivo − 3.700,00 € de salidas = −69,00 €**. Es
+  decir, 92,81 € era el saldo de Organízate DESPUÉS de esos cuatro días, que ya
+  estaban en el CRM como cobros y como apuntes de salida: apuntarlo así los
+  restaba dos veces.
+- Y el cajón cuadra a la cifra: el único cierre real de Aumenta (16/09/2026)
+  contó 161,42 € contra 161,42 € esperados, descuadre 0. Los 828 cierres
+  anteriores son los cascarones importados de Organízate, a cero y sin autor.
+
+**Nada de esto era un fallo del cálculo; lo era la pantalla.** Dos arreglos:
+
+- **La razón de un apunte se lee donde se lee el apunte.** La explicación de la
+  corrección estaba escrita en las observaciones del apunte, y esa columna solo
+  existía en «Entradas y salidas»: en «Efectivo en caja» y en «Resumen por día»
+  el apunte enseñaba solo su concepto, así que los 161,81 € aparecían sin motivo
+  justo en las dos pantallas donde se cuadra. Ahora la observación va debajo del
+  concepto en las tres (`notes` viaja en los `apuntes` de
+  `construirResumenCaja`).
+- **«Se partía de» ya no llama conteo a lo que nadie contó.** La tarjeta y el
+  pie de «Efectivo en caja» decían siempre «contado al cerrar el …»; desde
+  AV-0157 el saldo puede venir de que no hay ningún arqueo válido y entonces la
+  fecha llega a `null`, así que se leía «contado al cerrar el » con el hueco
+  vacío. En Aumenta es el caso NORMAL. Lo decide `origenDelSaldoInicial`
+  (`lib/billing/caja.js`, prueba en `_smoke-caja.mjs`) con tres respuestas —de
+  un cierre contado, arrastrado desde el principio sin que nadie lo contara, o
+  sin nada anterior— y lo leen la tarjeta y el pie, para que la misma cifra no
+  tenga dos explicaciones.

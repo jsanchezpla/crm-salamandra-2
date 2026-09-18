@@ -556,23 +556,66 @@ export function NuevaCitaDrawer({
        * prudencia, es no dejar trabajar.
        */
       let insistio = false;
-      // 409 = el día está cerrado, o alguien está de vacaciones. No se impone:
-      // se pregunta, y si insiste (una urgencia en el puente) se reenvía.
+      /*
+       * ── LOS DOS 409, QUE NO SON LO MISMO (18/09/2026, AV-0167 de Aumenta) ─
+       * Olga: «intento crear una cita semanal […] y me dice que hay otra cita
+       * en ese hueco y no me deja crear la cita para poder programarla hasta
+       * el 30/06/2027».
+       *
+       *   · BLOQUEO o festivo (`motivo: "bloqueo"`): el centro cerrado o
+       *     alguien de vacaciones. Se AVISA y se puede insistir; es lo de
+       *     siempre.
+       *   · OTRA CITA (`motivo: "solape"`): no hay permiso que valga —encima
+       *     de una cita no cabe otra—, así que «Crearla igualmente» reenviaba
+       *     y volvía a fallar. De ahí la tarea «Crear cita igualmente… no hace
+       *     nada»: no es que no hiciera nada, es que no podía.
+       *
+       * Y lo que de verdad dejaba sin trabajo: al cortar aquí, una serie de
+       * cuarenta semanas se perdía ENTERA porque la primera chocaba. Las
+       * repeticiones sí saben saltarse las que chocan, así que se ofrece
+       * seguir con ellas.
+       */
+      let primeraCreada = true;
       if (res.status === 409 && !j.ok) {
-        const crearIgualmente = await confirmar({
-          titulo: "Ese hueco está bloqueado",
-          texto: j.error,
-          confirmar: "Crearla igualmente",
-        });
-        if (!crearIgualmente) {
+        // Los clientes viejos (y un 409 de otro sitio) no mandan `motivo`: se
+        // deduce del texto, que es el que ya dice «Solapa con otra cita».
+        const esSolape = j.motivo === "solape" || /^Solapa con otra cita/i.test(String(j.error ?? ""));
+        if (esSolape && !repeticion) {
+          await avisar({
+            titulo: "Ahí ya hay otra cita",
+            texto: `${j.error}\n\nEsa hora está ocupada en su agenda: ponla a otra hora, o mueve primero la que hay.`,
+          });
           setSaving(false);
           return;
         }
-        insistio = true;
-        res = await enviar(true);
-        j = await res.json();
+        if (esSolape) {
+          const cuantas = repeticion.fechas.length;
+          const seguir = await confirmar({
+            titulo: "Ahí ya hay otra cita",
+            texto: `${j.error}\n\nEsa primera no se puede crear. ¿Sigo con las otras ${cuantas} y te digo cuáles entran?`,
+            confirmar: cuantas === 1 ? "Probar con la otra" : `Probar con las otras ${cuantas}`,
+          });
+          if (!seguir) {
+            setSaving(false);
+            return;
+          }
+          primeraCreada = false;
+        } else {
+          const crearIgualmente = await confirmar({
+            titulo: "Ese hueco está bloqueado",
+            texto: j.error,
+            confirmar: "Crearla igualmente",
+          });
+          if (!crearIgualmente) {
+            setSaving(false);
+            return;
+          }
+          insistio = true;
+          res = await enviar(true);
+          j = await res.json();
+        }
       }
-      if (!j.ok) throw new Error(j.error || "Error creando cita");
+      if (primeraCreada && !j.ok) throw new Error(j.error || "Error creando cita");
       /*
        * Si el paciente NO ha recibido el correo, se dice aquí y ahora
        * (07/08/2026, Rodrigo). Antes esta cita no mandaba ningún correo; ahora
@@ -589,7 +632,7 @@ export function NuevaCitaDrawer({
        * ha llegado el correo» sería inventarse un problema.
        */
       // …y tampoco si no se pidió el correo (03/09/2026): callada a propósito.
-      if (avisarCorreo && j.data && j.data.emailEnviado === false && j.data.emailMotivo !== "taller") {
+      if (primeraCreada && avisarCorreo && j.data && j.data.emailEnviado === false && j.data.emailMotivo !== "taller") {
         const porQue = {
           sin_email: "no tiene correo en su ficha",
           sin_consentimiento: "ha pedido no recibir correos",
@@ -615,6 +658,10 @@ export function NuevaCitaDrawer({
       if (repeticion) {
         const chocadas = [];
         let creadas = 0;
+        // Si la primera no llegó a crearse (chocaba con otra cita), el correo a
+        // la familia lo lleva la primera que SÍ entre: si no, se quedaría toda
+        // la serie sin avisar a nadie (18/09/2026, AV-0167).
+        let sinAvisarAun = !primeraCreada && avisarCorreo;
         // Lo que ya se decidió arriba, para toda la serie (10/09/2026, AV-0105).
         const perdones = {
           ...(insistio ? { permitirFestivo: true, permitirBloqueo: true } : {}),
@@ -625,10 +672,10 @@ export function NuevaCitaDrawer({
             const r = await fetch("/api/citas/bookings", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ ...cuerpoCita, ...perdones, scheduledAt: f.toISOString(), omitirCorreo: true }),
+              body: JSON.stringify({ ...cuerpoCita, ...perdones, scheduledAt: f.toISOString(), omitirCorreo: !sinAvisarAun }),
             });
             const jr = await r.json();
-            if (jr.ok) creadas += 1;
+            if (jr.ok) { creadas += 1; sinAvisarAun = false; }
             else chocadas.push({ fecha: f, motivo: jr.error || "no se pudo crear" });
           } catch {
             chocadas.push({ fecha: f, motivo: "no se pudo crear" });
@@ -637,11 +684,14 @@ export function NuevaCitaDrawer({
         const dia = (f) => f.toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit" });
         const lineas = chocadas.slice(0, 8).map((c) => `· ${dia(c.fecha)}: ${c.motivo}`);
         if (chocadas.length > 8) lineas.push(`· … y ${chocadas.length - 8} más`);
-        if (chocadas.length || repeticion.sinDia) {
+        const total = creadas + (primeraCreada ? 1 : 0);
+        if (chocadas.length || repeticion.sinDia || !primeraCreada) {
           await avisar({
-            titulo: "Repetición creada, con huecos",
+            titulo: total ? "Repetición creada, con huecos" : "No se ha podido crear ninguna",
             texto:
-              `Creadas ${creadas + 1} citas (la de hoy y ${creadas} repeticiones).` +
+              (primeraCreada
+                ? `Creadas ${total} citas (la de hoy y ${creadas} repeticiones).`
+                : `La primera no cabía, así que no se ha creado. De las demás han entrado ${creadas}.`) +
               (chocadas.length ? `\n\nEstas NO se han creado:\n${lineas.join("\n")}` : "") +
               (repeticion.sinDia ? `\n\n${repeticion.sinDia} ${repeticion.sinDia === 1 ? "mes no tiene" : "meses no tienen"} ese día del mes y se ${repeticion.sinDia === 1 ? "salta" : "saltan"}.` : ""),
           });
@@ -654,7 +704,7 @@ export function NuevaCitaDrawer({
        * otra) se dice y no se deshace nada — quitarlo a mano desde Citas →
        * Bloqueos es un gesto; una cita perdida, no.
        */
-      if (desdeBloqueo?.id) {
+      if (primeraCreada && desdeBloqueo?.id) {
         try {
           const rb = await fetch(`/api/citas/bloqueos?id=${encodeURIComponent(desdeBloqueo.id)}`, { method: "DELETE" });
           const jb = await rb.json().catch(() => null);

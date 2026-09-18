@@ -5,6 +5,7 @@ import { serializeSession } from "../../../../../lib/clinica/serialize.js";
 import { logClinicaAudit, auditSummary } from "../../../../../lib/clinica/audit.js";
 import { limpiarContentSections } from "../../../../../lib/clinica/plantillas.js";
 import { limpiarTitulo } from "../../../../../lib/clinica/registroDeDiagnostico.js";
+import { minutosDeSesion } from "../../../../../lib/clinica/duracionDeLaSesion.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function gate(ctx) {
@@ -72,6 +73,11 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
   const updates = {};
   for (const k of PATCH_FIELDS) if (k in body) updates[k] = body[k];
   if ("objectives" in updates && !Array.isArray(updates.objectives)) updates.objectives = [];
+  // La duración se corrige desde el registro (18/09/2026), y pasa por la misma
+  // criba que el alta: minutos con sentido o null. Vaciar el campo BORRA la
+  // duración a propósito —«no lo sé» es una respuesta— y por eso null se
+  // guarda tal cual en vez de saltarse el cambio.
+  if ("duration" in updates) updates.duration = minutosDeSesion(updates.duration);
   // ── El texto del que salió el registro se escribe UNA vez ────────────────
   // Es la prueba de dónde vino una nota clínica: la transcripción de un audio
   // que ya no existe, o lo que se apuntó a mano. Dejar que un PATCH la
