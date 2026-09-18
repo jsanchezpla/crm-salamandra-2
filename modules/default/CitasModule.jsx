@@ -21,6 +21,7 @@ import ModalFestivos from "@/components/citas/ModalFestivos.jsx";
 import { COLOR_BLOQUEO_POR_DEFECTO, colorTextoSobre } from "@/lib/citas/coloresBloqueo.js";
 import { SIN_PROFESIONAL, COLOR_CITA_POR_DEFECTO, duenoSugeridoDelBloqueo } from "@/lib/citas/filtros.js";
 import { diasOcultosEn } from "@/lib/citas/vistaAgenda.js";
+import { laCajaEnseñaLaAnotacion } from "@/lib/citas/anotacionEnLaAgenda.js";
 import { filtroAlAbrirLaAgenda } from "@/lib/citas/filtroInicialAgenda.js";
 import {
   memoriaDelNavegador,
@@ -1681,6 +1682,43 @@ export default function CitasModule({
             // listener muere con el elemento, no hay que soltarlo a mano).
             eventDidMount={(info) => {
               info.el.addEventListener("contextmenu", (e) => handleEventContextMenu(e, info));
+              /*
+               * La ANOTACIÓN de la cita, debajo del nombre (18/09/2026, AV-0211
+               * de Aumenta): «queremos que se vea las anotaciones realizadas».
+               *
+               * Se añade al montar el evento y NO con un `eventContent` propio,
+               * que es la otra manera: `eventContent` sustituye el pintado de
+               * fábrica ENTERO —hora, título, punto de color, el «+N más» del
+               * mes, la fila de la lista— en las cinco vistas y en todos los
+               * clientes. Aquí solo se cuelga una línea de la caja y lo demás
+               * sigue siendo el de la librería.
+               *
+               * `textContent` y no `innerHTML`: es texto que escribe una persona.
+               * El alto lo cuida el CSS (`.cita-anotacion` en globals.css), que
+               * la esconde en las cajas de una línea —media hora en la agenda
+               * compacta— para no empujar el nombre fuera.
+               */
+              const anotacion = info.event.extendedProps?.anotacion;
+              if (!anotacion) return;
+              // En mes y en lista la caja es una línea: ahí solo el emergente.
+              info.el.title = info.el.title ? `${info.el.title}\n${anotacion}` : anotacion;
+              if (!laCajaEnseñaLaAnotacion(info.view?.type)) return;
+              /*
+               * DENTRO del marco (`.fc-event-main-frame`) y no del `-main` que
+               * lo envuelve. El marco es un flex en columna con `height: 100%`
+               * y el contenedor del título lleva `flex-grow: 1`, así que se
+               * come el alto entero: una línea colgada FUERA empieza justo
+               * donde la caja acaba y se la lleva el recorte. Comprobado en
+               * pantalla el 18/09/2026 — se veía perfecta en el DOM y no se
+               * leía nada. Como hermano del título, el contenedor encoge
+               * (`flex-shrink: 1`, `min-height: 0`) y la anotación entra.
+               */
+              const marco = info.el.querySelector(".fc-event-main-frame");
+              if (!marco) return;
+              const linea = document.createElement("div");
+              linea.className = "cita-anotacion";
+              linea.textContent = anotacion;
+              marco.appendChild(linea);
             }}
             selectable={true}
             selectMirror={true}

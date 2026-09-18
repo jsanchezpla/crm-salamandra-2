@@ -9,6 +9,7 @@ import { colorCitasDe, colorDeCita } from "../../../../../lib/citas/colorCitas.j
 import { colorTextoSobre } from "../../../../../lib/citas/coloresBloqueo.js";
 import { nombreDeLaCita, includeDelPaciente } from "../../../../../lib/citas/nombreEnLaAgenda.js";
 import { esDeBono, etiquetaDeSesion, colorConBono } from "../../../../../lib/citas/marcaDeBono.js";
+import { anotacionParaLaAgenda } from "../../../../../lib/citas/anotacionEnLaAgenda.js";
 
 const STATUS_COLOR_DIM = {
   cancelled: "#9ca3af",
@@ -232,6 +233,19 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
           tallerGrupoId: b.tallerGrupoId ?? null,
           tallerAsistentes: cuenta?.total ?? null,
           tallerVinieron: cuenta?.vinieron ?? null,
+          /*
+           * La anotación de la cita, para leerla SIN abrirla (18/09/2026,
+           * AV-0211 de Aumenta): «queremos que se vea las anotaciones
+           * realizadas». Se guardaba bien desde siempre; lo que no hacía este
+           * endpoint era mandarla.
+           *
+           * Va ya acortada a una línea desde el servidor, y no el `notes`
+           * entero: `bookings.notes` es campo libre en un centro clínico, así
+           * que por el cable viaja el recado que cabe en la caja y punto. Lo
+           * demás sigue al abrir la cita. La regla, en
+           * lib/citas/anotacionEnLaAgenda.js con su prueba.
+           */
+          anotacion: anotacionParaLaAgenda(b.notes),
         },
       };
     });

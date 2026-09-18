@@ -2014,6 +2014,36 @@ hasta el arreglo — a Laura también. En el log de nginx: 8 el 10/09 y 22 el 14
 - Lo fija `_smoke-nombre-en-la-agenda.mjs` (ligera): el include vacío con los
   módulos de nutri_laura, y que la ruta no vuelva a montar `model: Patient` a mano.
 
+### La anotación de la cita, en la rejilla (18/09/2026, AV-0211)
+
+Olga, de Aumenta: «ya se puede escribir cuando creamos la cita, pero queremos
+que se vean las anotaciones realizadas». El dato nunca faltó —`bookings.notes`
+se guardaba bien y se leía abriendo la cita—; lo que no hacía
+`GET /api/citas/bookings/calendar` era mandarlo, así que para leer un recado
+había que abrir la cita una a una.
+
+- La regla vive en `lib/citas/anotacionEnLaAgenda.js` con su prueba
+  (`_smoke-citas-anotacion.mjs`, ligera): `anotacionParaLaAgenda(notes)` la
+  aplana a UNA línea y la corta a 60 por palabra entera, **en el servidor** —
+  `notes` es campo libre en un centro clínico, así que por el cable viaja el
+  recado que cabe en la caja y no el texto entero. El resto sigue al abrir la
+  cita. `laCajaEnseñaLaAnotacion(vista)` dice dónde se pinta.
+- **Dónde se ve**: en semana, día y tres días, en una segunda línea debajo del
+  nombre (`.cita-anotacion` en `app/globals.css`). En **mes y lista**, no: ahí
+  la caja es de una línea y ya la ocupa el nombre — se lee pasando el ratón,
+  que es el `title` que cuelga `eventDidMount` en las cinco vistas. Tampoco se
+  pinta en las cajas cortas (`fc-timegrid-event-short`), por lo mismo.
+- Se cuelga en `eventDidMount` y **no con un `eventContent` propio**: ese
+  sustituiría el pintado de fábrica entero (hora, título, el «+N más» del mes,
+  la fila de la lista) en las cinco vistas y en todos los clientes.
+  `textContent`, nunca `innerHTML`: lo escribe una persona.
+- **Medido en producción el 18/09/2026** (solo lectura, sin leer ninguna): 423
+  citas anotadas de 14.566 en Aumenta, 47 caracteres de media, 142 la más
+  larga, ninguna con salto de línea y 3 por encima de 60. Por eso cabe.
+- **A tener en cuenta**: la agenda de Aumenta la ve todo el equipo desde el
+  01/08/2026. En esa rejilla ya se leen el nombre del paciente y la terapia, así
+  que la anotación no descubre a nadie nuevo — pero se escribe sabiéndolo.
+
 ### Override nutri_laura — **Histórico (hasta 22/07/2026)**
 
 `modules/overrides/nutri-laura/CitasModule.jsx` **ya no existe**. Fue la

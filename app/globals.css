@@ -554,6 +554,34 @@ body {
 }
 .fc .fc-daygrid-dot-event .fc-event-title { text-overflow: ellipsis; }
 
+/* La anotación de la cita, debajo del nombre (18/09/2026, AV-0211 de Aumenta).
+   La línea la cuelga CitasModule al montar el evento; esto es lo que impide que
+   estire la caja: más pequeña, algo apagada sobre el color del fondo, en una
+   sola línea y cortada con «…» si no cabe.
+
+   `overflow: hidden` en la caja es la red de verdad: una cita de media hora en
+   la agenda compacta mide poco más que su propia línea de texto, y sin esto la
+   anotación empujaría el nombre fuera — justo lo que se pasó todo agosto
+   arreglando (citas pegadas, `eventMinHeight`, el nombre cortado).
+
+   Y en las cajas cortas —las que la librería marca `fc-timegrid-event-short`,
+   que son la mayoría en Aumenta— no se pinta: ahí solo cabe el nombre, y la
+   anotación se lee pasando el ratón (el `title` que pone CitasModule). */
+.fc .fc-timegrid-event .fc-event-main { overflow: hidden; }
+.cita-anotacion {
+  /* `0 0 auto`: la línea pide su alto y no lo cede. Sin esto, el contenedor
+     del título (`flex-grow: 1`) se queda con todo y la anotación se sale. */
+  flex: 0 0 auto;
+  font-weight: 400;
+  font-size: 0.65rem;
+  line-height: 1.2;
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fc .fc-timegrid-event-short .cita-anotacion { display: none; }
+
 /* El botón «Meses» (la columna de meses tipo Organízate, 31/08/2026) se
    enciende con la marca mientras la columna está desplegada, igual que el
    botón de la vista puesta: se ve de un vistazo por qué el calendario está
