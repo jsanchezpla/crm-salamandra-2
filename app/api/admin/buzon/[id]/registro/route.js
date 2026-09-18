@@ -35,7 +35,11 @@ import {
   COMANDO_MIGRACION,
 } from "../../../../../../lib/buzon/buzonStore.js";
 import { candadoBuzon } from "../../../../../../lib/buzon/candadoBackoffice.js";
-import { tareaDesdeAviso, yaEstaEnElRegistro } from "../../../../../../lib/buzon/alRegistro.js";
+import {
+  tareaDesdeAviso,
+  yaEstaEnElRegistro,
+  avisosDeLaTarea,
+} from "../../../../../../lib/buzon/alRegistro.js";
 import { copiarCapturasAlRegistro } from "../../../../../../lib/buzon/capturasAlRegistro.js";
 import {
   prepararPublicacion,
@@ -162,7 +166,12 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       seccion: tarea.seccion,
       titulo: tarea.titulo,
       capturas: { copiadas: capturas.copiadas, quedan: capturas.quedan },
-      avisos: [...(plan.avisos ?? []), ...(capturas.error ? [capturas.error] : [])],
+      // Solo lo de ESTA tarea: `plan.avisos` repasa el backlog entero y el
+      // panel del Buzón los enseña como un fallo del envío (18/09/2026).
+      avisos: [
+        ...avisosDeLaTarea(plan.avisos, tarea.titulo),
+        ...(capturas.error ? [capturas.error] : []),
+      ],
       aviso: serializarAviso(aviso, { para: "salamandra" }),
     });
   } catch (err) {
