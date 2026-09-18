@@ -184,6 +184,31 @@ esperar(
   "cancelar la 2 NO libera el número: la siguiente es la 3"
 );
 
+/*
+ * Las sesiones que el bono ya traía gastadas de fuera (18/09/2026, Aumenta:
+ * «pueden ser la cita 5/5 en organizate y aparecer como 1/5 en nuestro crm»).
+ * `estadoPack` las sumaba desde el 09/09/2026 y la numeración no, así que la
+ * última sesión de un bono agotándose se rotulaba «1/5». En producción eran 3
+ * bonos y 4 citas.
+ */
+esperar(
+  siguienteNumeroSesion([], 4) === 5,
+  "un bono que llegó con 4 gastadas empieza por la 5, no por la 1"
+);
+esperar(
+  siguienteNumeroSesion([{ status: "completed", sessionNumber: 5 }], 4) === 6,
+  "con previas Y citas manda el mayor: tras la 5 va la 6, no la 5 otra vez"
+);
+esperar(
+  siguienteNumeroSesion([{ status: "completed", sessionNumber: 7 }], 4) === 8,
+  "las previas no se SUMAN a los números ya escritos: tras la 7 va la 8"
+);
+esperar(siguienteNumeroSesion([], 0) === 1, "sin previas, la primera sigue siendo la 1");
+esperar(
+  siguienteNumeroSesion(citas) === 6 && siguienteNumeroSesion(citas, undefined) === 6,
+  "sin pasar previas, la cuenta es la de siempre"
+);
+
 esperar(
   etiquetaSesion({ sessionNumber: 3, pack: { totalSessions: 10 } })?.etiqueta === "3/10",
   "en el calendario se ve «3/10»"
