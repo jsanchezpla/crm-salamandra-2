@@ -354,7 +354,10 @@ switch (orden) {
     if (opciones.confirm) args.push("--confirm");
     const r = ejecutar(args);
     const codigo = volcar(r);
-    if (codigo === 0 && opciones.confirm) apuntarVersiones(estadoRemoto());
+    // Solo la del documento restaurado: la del otro sigue siendo la que bajamos.
+    // (Y tras restaurar conviene `bajar` otra vez: la copia de trabajo local ya
+    // no es la versión que hay publicada.)
+    if (codigo === 0 && opciones.confirm) apuntarVersiones(estadoRemoto(), [nombre]);
     process.exit(codigo);
   }
   case "capturas":
