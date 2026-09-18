@@ -110,6 +110,10 @@ export const GET = withTenant(async (request, rc, ctx) => {
     sessionsCount: Number(agg?.cnt ?? 0),
     lastSession: agg?.last ?? null,
     therapists: terapeutasEfectivos(p, equipo[id]),
+    // Los datos de la familia viajan siempre (el include ya gatea por el
+    // CENTRO); lo que depende del USUARIO es poder ABRIR la ficha del cliente.
+    // Sin `clients` en su `moduleAccess`, el nombre se pinta sin enlace.
+    puedeAbrirLaFicha: ctx.hasModule("clients"),
   }));
 });
 

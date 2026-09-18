@@ -24,6 +24,7 @@ import PropuestaIA from "@/components/clinica/PropuestaIA.jsx";
 import { REPORT_TYPES_NUEVOS, REPORT_TYPE_LABEL, nombreDelInforme } from "@/lib/clinica/serialize.js";
 import { edadDe, edadParaGuardar, fechaNacimientoCorta as fmtFechaNacimiento } from "@/lib/clinica/edad.js";
 import { PARENTESCOS } from "@/lib/clients/formularioAlta.js";
+import { domicilioEnUnaLinea } from "@/lib/clients/familiaEnLaFicha.js";
 import {
   aFormulario,
   apartadosConPlantillas,
@@ -1127,13 +1128,25 @@ export default function PacienteFichaPage() {
               />
             </div>
             <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
-              <div className="eyebrow mb-3">Contacto (pagador)</div>
+              {/*
+                LA FAMILIA (18/09/2026, AV-181 de Aumenta). Antes era solo
+                «Contacto (pagador)». Las 13 terapeutas no tienen Clientes en su
+                menú, así que esta tarjeta es TODO lo que ven de la familia: se
+                le añaden los datos de trabajo —domicilio y motivo— que hasta hoy
+                había que pedirle a recepción. Qué entra y qué no (el dinero, no)
+                lo decide `lib/clients/familiaEnLaFicha.js`, no este JSX.
+              */}
+              <div className="eyebrow mb-3">La familia</div>
               {patient.client ? (
                 <div className="space-y-2">
                   <div className="text-xs">
-                    <a href={`/clientes/${patient.client.id}`} className="font-medium text-neutral-800 hover:underline">
-                      {patient.client.name}
-                    </a>
+                    {patient.client.puedeAbrirse ? (
+                      <a href={`/clientes/${patient.client.id}`} className="font-medium text-neutral-800 hover:underline">
+                        {patient.client.name}
+                      </a>
+                    ) : (
+                      <span className="font-medium text-neutral-800">{patient.client.name}</span>
+                    )}
                     {patient.client.separated && (
                       <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100">
                         padres separados
@@ -1153,6 +1166,22 @@ export default function PacienteFichaPage() {
                     </ul>
                   ) : (
                     <p className="text-[11px] text-neutral-400">Sin contactos registrados en el cliente.</p>
+                  )}
+                  {patient.client.familia?.hayAlgo && (
+                    <div className="pt-2 border-t border-neutral-100 space-y-1.5 text-[11px]">
+                      {domicilioEnUnaLinea(patient.client.familia) && (
+                        <div>
+                          <span className="text-neutral-400">Domicilio</span>
+                          <div className="text-neutral-700">{domicilioEnUnaLinea(patient.client.familia)}</div>
+                        </div>
+                      )}
+                      {patient.client.familia.motivo && (
+                        <div>
+                          <span className="text-neutral-400">Motivo de consulta (familia)</span>
+                          <div className="text-neutral-700 whitespace-pre-wrap">{patient.client.familia.motivo}</div>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               ) : (
