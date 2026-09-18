@@ -5,6 +5,7 @@ import { logBillingAudit, datosPeticion } from "../../../../lib/billing/audit.js
 import { limpiarBono, bonoVivoIgual, SESIONES_MAX } from "../../../../lib/billing/bonos.js";
 import { bonosConSesiones } from "../../../../lib/billing/bonosConSesiones.js";
 import { crearBonoConSuCobro } from "../../../../lib/billing/altaDeBono.js";
+import { deduceElPacienteUnico } from "../../../../lib/billing/pacienteDelBono.js";
 import { esPack } from "../../../../lib/citas/packs.js";
 import { puedeDarBonos, MOTIVO_SIN_PERMISO } from "../../../../lib/citas/quienDaBonos.js";
 
@@ -175,6 +176,18 @@ export const POST = withTenant(async (request, _ctx, ctx) => {
       }
 
       if (!clientId) { omitidos.push({ ...destino, motivo: "sin ficha no hay a quién cobrarle el bono" }); continue; }
+
+      /*
+       * Y SI NO SE DIJO DE QUIÉN ES, PERO SOLO PUEDE SER DE UNO (18/09/2026,
+       * AV-0159). Con un único paciente en la familia el bono se guarda ya a su
+       * nombre en vez de quedarse «de la familia», que es lo que hacía que la
+       * lista pareciera meter a tres niños sin relación en la misma familia. Con
+       * varios hermanos no se toca: ahí hay algo que elegir y lo elige el centro.
+       */
+      if (!patientId) {
+        const unico = await deduceElPacienteUnico({ tenantModels, clientId });
+        if (unico) { patientId = unico.id; nombre = unico.nombre; }
+      }
 
       const ficha = Client ? await Client.findByPk(clientId, { attributes: ["id", "name", "email", "portalEmail"] }) : null;
       if (!ficha) { omitidos.push({ ...destino, motivo: "la ficha no existe" }); continue; }

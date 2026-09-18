@@ -79,7 +79,17 @@ export default function DrawerBono({
   const [sinImporte, setSinImporte] = useState(editando ? !bono?.amount : false);
   const [fecha, setFecha] = useState(bono?.compradoEl ? String(bono.compradoEl).slice(0, 10) : hoyIso());
   const [nota, setNota] = useState(bono?.notes ?? "");
-  const [patientId, setPatientId] = useState(bono?.patientId ?? "");
+  /*
+   * De quién es, SEGÚN LA FILA (18/09/2026, AV-0159).
+   *
+   * La lista trae `patientId` ya resuelto: si el bono no dice de quién es y la
+   * familia tiene un solo paciente, viene el de ese niño para poder enseñar su
+   * nombre. Pero eso es una lectura, no un dato guardado, y aquí no se hereda:
+   * si se heredara, corregir el importe de uno de esos bonos escribiría de paso
+   * el paciente en la base sin que nadie lo haya pedido. Se deja en blanco y el
+   * PATCH lo manda en blanco, que es lo que hay hoy en la columna.
+   */
+  const [patientId, setPatientId] = useState(bono?.pacienteDeducido ? "" : bono?.patientId ?? "");
   /*
    * QUIÉN DA LAS SESIONES (18/09/2026, AV-0183 de Aumenta: «no aparece el
    * terapeuta al que se le asigna»).

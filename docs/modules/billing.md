@@ -2785,6 +2785,48 @@ así que lo que se añade es la columna, no un texto.
   nada al servidor) y el buscador encuentra también por su nombre. La API acepta
   `GET /api/billing/bonos?terapeuta=<id>` y `?terapeuta=sin`.
 
+### Un bono de una familia con un solo hijo sale a nombre de ese hijo (18/09/2026, AV-0159)
+
+Rosa, de Aumenta: «EN BONOS DE VALERIA DONOSO SALEN DOS PACIENTES COMO FAMILIA
+SAHARA CASTAÑO Y MADELEINE FERNANDEZ QUE NO TIENEN NADA QUE VER CON ESTA
+PACIENTE». Se le contestó que eran tres familias distintas y que la lista va por
+fecha, y volvió al día siguiente: «ES QUE NO SON FAMILIA, ESE ES EL PROBLEMA.
+SON INDEPENDIENTES… Y PARA FUTUROS PACIENTES DE UNA MISMA FAMILIA TIENEN QUE
+APARECER INDEPENDIENTES».
+
+Lo que veía: tres filas con la columna **Paciente** en blanco («*de la familia*»,
+en cursiva) y la columna **Familia** con el nombre de un niño —en Aumenta muchas
+fichas de un solo hijo se llaman como él—. Ordenadas por fecha caían seguidas, y
+se leen como tres pacientes metidos en una misma unidad familiar.
+
+Medido en producción el 18/09/2026: **244 bonos, 3 sin `patient_id`**, y los tres
+de familias con **un único paciente**. Las 82 familias con varios hijos no tienen
+ni un bono suelto. Así que ahí «de la familia» no distinguía nada: el único que
+puede gastar ese bono es ese niño.
+
+- **Lo que ya hay se arregla al PINTAR, no tocando la base.**
+  `bonosConSesiones.js` resuelve el paciente de un bono que no lo dice cuando su
+  familia tiene uno solo, y devuelve `patientId` ya resuelto más
+  `pacienteDeducido: true`. `session_packs.patient_id` se queda como está: no
+  hubo backfill sobre datos de un cliente en uso.
+- **Con dos hermanos o más no se deduce nada** y el bono sigue saliendo «de la
+  familia». Ahí sí hay algo que elegir, y lo elige el centro. Es la mitad de la
+  regla que importa, y es la mitad que fija la prueba.
+- **Que no vuelva a pasar: lo preguntan las dos puertas del alta.** El cajón de
+  la ficha ya preseleccionaba al hijo único desde el 08/09, pero eso era una
+  regla de formulario; ahora está en el servidor, que es por donde pasan las dos
+  (`POST /api/billing/bonos` y `POST /api/citas/packs`). Lo que entró por la de
+  atrás es justo lo que Rosa vio.
+- **Editar un bono deducido no lo escribe de tapadillo.** `DrawerBono` mira
+  `pacienteDeducido` y manda el paciente en blanco: corregir el importe de uno de
+  esos tres no puede guardar de paso un dato que nadie ha pedido. Renovarlo sí lo
+  hereda —es una fila nueva y un acto explícito—.
+- Sin módulo asistencial no cambia nada: `nutri_laura` tiene 20 bonos y ninguna
+  tabla `patients` (sus pacientes SON las fichas), y la regla se cae sola.
+
+Regla y prueba: `lib/billing/pacienteDelBono.js` +
+`scripts/_smoke-paciente-del-bono.mjs` (`node:test`, ligera, en `npm test`).
+
 ### Piezas
 
 | | |

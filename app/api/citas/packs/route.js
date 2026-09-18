@@ -4,6 +4,7 @@ import { created, ok, error, forbidden, serverError } from "../../../../lib/util
 import { cobroPendienteDeBono } from "../../../../lib/billing/cobroDelBono.js";
 import { logCitasAudit } from "../../../../lib/citas/audit.js";
 import { esPack, bonosDeCliente } from "../../../../lib/citas/packs.js";
+import { deduceElPacienteUnico } from "../../../../lib/billing/pacienteDelBono.js";
 import { bonosSinDinero, veElDineroDeLaFicha } from "../../../../lib/clients/quienVeElDinero.js";
 import { puedeDarBonos, MOTIVO_SIN_PERMISO } from "../../../../lib/citas/quienDaBonos.js";
 
@@ -247,6 +248,19 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       // Sin ficha en el cuerpo, la del paciente: el bono se ata a las dos.
       if (!clientId && paciente.clientId) clientId = paciente.clientId;
       patientId = paciente.id;
+    }
+
+    /*
+     * ── Y SI NO SE DIJO, PERO SOLO PUEDE SER DE UNO (18/09/2026, AV-0159) ───
+     * Rosa: «ES QUE NO SON FAMILIA, ESE ES EL PROBLEMA. SON INDEPENDIENTES».
+     * Tenía razón: los tres bonos que le salían «de la familia» eran de tres
+     * familias con UN SOLO paciente, donde eso no distingue nada de nada. Desde
+     * aquí se guarda ya a su nombre. Con varios hermanos sigue sin tocarse: ahí
+     * sí hay algo que elegir y lo elige el centro
+     * (`lib/billing/pacienteDelBono.js`, con su prueba).
+     */
+    if (!patientId && clientId) {
+      patientId = (await deduceElPacienteUnico({ tenantModels, clientId }))?.id ?? null;
     }
 
     // ── Avisos, no cortes ───────────────────────────────────────────────────
