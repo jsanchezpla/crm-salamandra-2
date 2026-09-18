@@ -24,6 +24,7 @@ import {
   yaEstaEnElRegistro,
   capturasQueViajan,
   lineaDeCapturas,
+  avisosDeLaTarea,
 } from "../lib/buzon/alRegistro.js";
 import {
   ESTADOS,
@@ -34,7 +35,7 @@ import {
   serializarAviso,
 } from "../lib/buzon/buzon.js";
 import { crearTarea, localizar, MAX_TITULO, SIN_COMPROBAR } from "../lib/tablero/editor.js";
-import { trocearTodo, SECCIONES_BACKLOG } from "../lib/tablero/parser.js";
+import { trocearTodo, comprobar, SECCIONES_BACKLOG } from "../lib/tablero/parser.js";
 
 const HOY = new Date("2026-09-02T18:30:00.000Z");
 
@@ -261,5 +262,44 @@ describe("los dos estados del Buzón (02/09/2026)", () => {
       esperando: { salamandra: "nuevo", cliente: "nuevo" },
       archivado: { salamandra: "nuevo", cliente: "nuevo" },
     });
+  });
+});
+
+describe("el panel del Buzón solo enseña lo de la tarea que se acaba de enviar (18/09/2026)", () => {
+  // Una tarea vieja mal escrita en «Media»: sin cliente detrás del «·», sin
+  // *Se comprueba* y sin sello. Es lo que había en el Registro de verdad.
+  const VIEJA = "La sesión del CRM y del panel de admin se cierra sola al poco rato";
+  const CON_VIEJA = BACKLOG.replace(
+    "## Media\n",
+    `## Media\n\n### ${VIEJA}\n\n**Lo que pasa.** La sesión caduca a los 15 minutos.\n`
+  );
+
+  it("el aviso de otra tarea del documento NO viaja al panel", () => {
+    const t = tareaDesdeAviso(aviso(), { hoy: HOY });
+    const { texto } = crearTarea(CON_VIEJA, t);
+    const { avisos } = comprobar(texto, "backlog");
+    // El documento sí tiene un aviso, y es de la tarea vieja.
+    assert.equal(avisos.length, 1);
+    assert.ok(avisos[0].startsWith(`«${VIEJA}»`), avisos[0]);
+    // Pero lo que se le enseña a quien acaba de enviar el aviso: nada.
+    assert.deepEqual(avisosDeLaTarea(avisos, t.titulo), []);
+  });
+
+  it("lo que le falta a LA tarea enviada sí se dice (un centro que no está en SLUGS)", () => {
+    const t = tareaDesdeAviso(aviso({ tenantSlug: "centro_nuevo" }), { hoy: HOY });
+    const { texto } = crearTarea(CON_VIEJA, t);
+    const mios = avisosDeLaTarea(comprobar(texto, "backlog").avisos, t.titulo);
+    assert.equal(mios.length, 1);
+    assert.ok(mios[0].includes("cliente reconocido"), mios[0]);
+  });
+
+  it("no confunde una tarea cuyo título empieza igual, ni revienta con entradas raras", () => {
+    const corto = "Buzón - Fallo: horarios";
+    const largo = `${corto} de verano`;
+    const avisos = [`«${largo}» (línea 9) sin *Se comprueba*.`];
+    assert.deepEqual(avisosDeLaTarea(avisos, corto), []);
+    assert.deepEqual(avisosDeLaTarea(avisos, largo), avisos);
+    assert.deepEqual(avisosDeLaTarea(undefined, corto), []);
+    assert.deepEqual(avisosDeLaTarea(avisos, ""), []);
   });
 });
