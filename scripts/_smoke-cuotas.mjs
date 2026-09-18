@@ -48,9 +48,12 @@ import {
   cuotaDeBaja,
   bajaTrasMeses,
   mesesDeTramo,
+  mesDeFecha,
+  tramoDeMeses,
   cuadrarBajaYActiva,
   hoyVigente,
 } from "../lib/billing/cuotas.js";
+import { mesesDelCurso } from "../lib/billing/cursoEscolar.js";
 import { prorrateoDeCuota } from "../lib/billing/prorrateo.js";
 
 const CLIENTE = "11111111-1111-1111-1111-111111111111";
@@ -481,6 +484,55 @@ describe("mesesDeTramo: cuántos meses cubre, para poder decirlo en la pantalla"
   it("sin fecha de baja no hay número: es indefinida", () => {
     assert.equal(mesesDeTramo("2026-09-01", null), null);
     assert.equal(mesesDeTramo("2026-09-01", "2026-08-31"), null);
+  });
+});
+
+/*
+ * ── «O LOS MESES»: DE SEPTIEMBRE A JUNIO (18/09/2026, Aumenta) ─────────────
+ * «Poner número de meses O PONER LOS MESES para crear cuotas nuevas». Lo
+ * primero ya lo hacía `bajaTrasMeses`; esto es lo segundo, y lo que se prueba
+ * es lo que DEVUELVE: las dos fechas, el día del alta que se respeta y los
+ * casos en los que no hay tramo y la pantalla no debe escribir nada.
+ */
+describe("tramoDeMeses: el tramo dicho por meses", () => {
+  it("de septiembre a junio son el 1 y el último día", () => {
+    assert.deepEqual(tramoDeMeses("2026-09", "2027-06"), {
+      startDate: "2026-09-01",
+      endDate: "2027-06-30",
+    });
+  });
+  it("febrero acaba cuando acaba, también en bisiesto", () => {
+    assert.equal(tramoDeMeses("2026-01", "2026-02").endDate, "2026-02-28");
+    assert.equal(tramoDeMeses("2028-01", "2028-02").endDate, "2028-02-29");
+  });
+  it("respeta el día del alta si sigue siendo de ese mes (el prorrateo es dinero)", () => {
+    assert.equal(tramoDeMeses("2026-09", "2027-06", { altaActual: "2026-09-15" }).startDate, "2026-09-15");
+  });
+  it("y lo deja en el día 1 cuando el alta era de OTRO mes", () => {
+    assert.equal(tramoDeMeses("2026-10", "2027-06", { altaActual: "2026-09-15" }).startDate, "2026-10-01");
+  });
+  it("sin mes de fin, indefinida (que es un tramo legítimo)", () => {
+    assert.deepEqual(tramoDeMeses("2026-09", null), { startDate: "2026-09-01", endDate: null });
+    assert.deepEqual(tramoDeMeses("2026-09", ""), { startDate: "2026-09-01", endDate: null });
+  });
+  it("no hay tramo al revés ni con basura: null, y la pantalla no escribe nada", () => {
+    assert.equal(tramoDeMeses("2026-09", "2026-08"), null);
+    assert.equal(tramoDeMeses("", "2026-06"), null);
+    assert.equal(tramoDeMeses("2026-13", "2027-06"), null);
+    assert.equal(tramoDeMeses("2026-09", "2027-13"), null);
+  });
+  it("el curso entero cuadra con los meses que dice cursoEscolar", () => {
+    const meses = mesesDelCurso(2026);
+    const tramo = tramoDeMeses(meses[0], meses[meses.length - 1]);
+    assert.deepEqual(tramo, { startDate: "2026-09-01", endDate: "2027-06-30" });
+    // Y los diez meses del curso son los que se cobran: el número que sale en
+    // pantalla lo dice `mesesDeTramo`, que es el inverso.
+    assert.equal(mesesDeTramo(tramo.startDate, tramo.endDate), 10);
+  });
+  it("mesDeFecha: el mes de una fecha, y null si no la hay", () => {
+    assert.equal(mesDeFecha("2026-09-15"), "2026-09");
+    assert.equal(mesDeFecha(null), null);
+    assert.equal(mesDeFecha(""), null);
   });
 });
 

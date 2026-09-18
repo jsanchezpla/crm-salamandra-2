@@ -22,7 +22,8 @@ import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
 import SelectorDestinatarios from "@/components/billing/SelectorDestinatarios.jsx";
 import { useDialogo } from "@/components/ui/Dialogo.jsx";
 import { fmtMoney, fmtDate } from "../_components/Kpi.jsx";
-import { cuotaDeBaja, bajaTrasMeses, mesesDeTramo, mesVigente, hoyVigente, mesLegible } from "../../../../lib/billing/cuotas.js";
+import { cuotaDeBaja, bajaTrasMeses, mesesDeTramo, mesVigente, hoyVigente, mesLegible, mesDeFecha, tramoDeMeses } from "../../../../lib/billing/cuotas.js";
+import { cursoVigente, mesesDelCurso, rotuloCurso } from "../../../../lib/billing/cursoEscolar.js";
 import { ivaPorDefecto } from "../../../../lib/billing/ivaPorDefecto.js";
 import { cuotaCasaCon, rotuloPacienteDeCuota } from "../../../../lib/billing/cuotaPacientes.js";
 import { admiteBajaDePaciente } from "../../../../lib/billing/bajaDePaciente.js";
@@ -55,6 +56,13 @@ const DURACIONES = [
   { meses: 9, label: "9 meses" },
   { meses: 12, label: "1 año" },
 ];
+
+/*
+ * Y «los meses» tal cual los firma el centro (18/09/2026, Aumenta): el CURSO,
+ * de septiembre a junio. El vigente y el siguiente —en junio ya se está
+ * montando el que viene—; el resto se teclea en los dos campos de mes.
+ */
+const CURSOS = [cursoVigente(), cursoVigente() + 1];
 
 // El día y el mes de MADRID, no los de UTC: a las 00:30 del día 1 `toISOString`
 // todavía dice el mes pasado, y una cuota nacía con la fecha de ayer.
@@ -902,6 +910,58 @@ function rotuloDeMeses(meses) {
   return `de ${mesLegible(lista[0])} a ${mesLegible(lista[lista.length - 1])}`;
 }
 
+/*
+ * ── EL ALTA EN GRUPO VA POR LOTES (18/09/2026, Aumenta) ─────────────────────
+ *
+ * El POST acepta 500 destinatarios de una tacada, pero cada cuota nueva arrastra
+ * sus cobros de TODOS los meses firmados (`sincronizarCobrosDelTramo`, hasta 24),
+ * y cada mes es su propia transacción. 300 pacientes × 10 meses son 3.000
+ * transacciones en UNA petición: nginx la corta a los 60 s y nadie sabe cuántas
+ * cuotas quedaron puestas.
+ *
+ * Así que se manda de `TAM_LOTE` en `TAM_LOTE` y se va contando. Cada lote es
+ * una petición corta, se ve avanzar, y si uno falla lo anterior ya está hecho:
+ * volver a darle es seguro porque el propio POST se salta a quien ya tiene
+ * cuota activa. Esa es toda la idempotencia que hace falta aquí.
+ */
+const TAM_LOTE = 25;
+/** A partir de aquí, el alta en grupo se confirma antes de crear nada. */
+const AVISAR_DESDE = 20;
+
+async function altaPorLotes(cuerpo, destinatarios, onProgreso) {
+  const total = { creadas: 0, cuotas: [], omitidas: [], cobros: { creados: 0, actualizados: 0, sinImporte: 0, intocables: 0, meses: [] } };
+  const limpios = destinatarios.map((d) => ({ clientId: d.clientId, patientId: d.patientId }));
+
+  for (let i = 0; i < limpios.length; i += TAM_LOTE) {
+    const lote = limpios.slice(i, i + TAM_LOTE);
+    onProgreso?.({ hechos: i, de: limpios.length });
+    const r = await fetch("/api/billing/cuotas", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...cuerpo, destinatarios: lote }),
+    });
+    const j = await r.json();
+    if (!j.ok) {
+      // Lo ya creado NO se deshace: son cuotas buenas. Se dice dónde se paró.
+      throw new Error(
+        `${j.error || "No se pudo guardar"}${total.creadas ? ` (se habían creado ya ${total.creadas} cuotas; volver a darle no las duplica)` : ""}`
+      );
+    }
+    total.creadas += j.data?.creadas ?? 0;
+    total.cuotas.push(...(j.data?.cuotas ?? []));
+    total.omitidas.push(...(j.data?.omitidas ?? []));
+    const c = j.data?.cobros;
+    if (c) {
+      total.cobros.creados += c.creados ?? 0;
+      total.cobros.actualizados += c.actualizados ?? 0;
+      total.cobros.sinImporte += c.sinImporte ?? 0;
+      total.cobros.intocables += c.intocables ?? 0;
+      total.cobros.meses = [...new Set([...total.cobros.meses, ...(c.meses ?? [])])].sort();
+    }
+  }
+  onProgreso?.({ hechos: limpios.length, de: limpios.length });
+  return total;
+}
+
 function colaDelLote(cobros) {
   if (!cobros) return "";
   const cuando = rotuloDeMeses(cobros.meses);
@@ -963,8 +1023,12 @@ function DrawerCuota({ conceptos, cuota = null, inicial = null, ivaSugerido = 21
     return () => { vivo = false; };
   }, [editando, cuota?.clientId]);
   const [guardando, setGuardando] = useState(false);
+  // Por dónde va el alta en grupo: con 300 pacientes hay varios lotes y un
+  // botón que solo dice «Guardando...» invita a pulsarlo otra vez.
+  const [progreso, setProgreso] = useState(null);
   const [error, setError] = useState(null);
   const [resultado, setResultado] = useState(null);
+  const { confirmar, dialogo } = useDialogo();
   // El buscador del catálogo de cuotas (04/09/2026): 46 conceptos no caben en
   // un cajón de 176 px.
   const [buscaCatalogo, setBuscaCatalogo] = useState("");
@@ -987,11 +1051,42 @@ function DrawerCuota({ conceptos, cuota = null, inicial = null, ivaSugerido = 21
     }));
   }
 
+  /**
+   * «De septiembre a junio» → las dos fechas (18/09/2026). La cuenta vive en
+   * `tramoDeMeses`, que respeta el día del alta cuando sigue siendo de ese mes:
+   * quien empezó el 15 no quiere que le regalen quince días de prorrateo.
+   */
+  function ponerMeses(desde, hasta) {
+    setForm((f) => {
+      const tramo = tramoDeMeses(desde, hasta, { altaActual: f.startDate });
+      if (!tramo) return f;
+      return { ...f, startDate: tramo.startDate, endDate: tramo.endDate ?? "" };
+    });
+  }
+
   async function guardar() {
     setError(null);
     if (!editando && destinatarios.length === 0) {
       setError("Elige al menos un paciente o una familia");
       return;
+    }
+    /*
+     * UN LOTE GRANDE SE FIRMA (18/09/2026). Dar de alta la misma cuota a 200
+     * pacientes crea 200 cuotas Y sus cobros pendientes de cada mes firmado:
+     * es la operación más cara de esta pantalla y no hay un «deshacer» de 200
+     * filas. Se dice el número antes, con los meses puestos.
+     */
+    if (!editando && destinatarios.length > AVISAR_DESDE) {
+      const meses = mesesDeTramo(form.startDate, form.endDate);
+      const seguro = await confirmar({
+        titulo: `Dar de alta ${destinatarios.length} cuotas`,
+        texto: meses
+          ? `Se crean ${destinatarios.length} cuotas de ${meses} ${meses === 1 ? "mes" : "meses"} y sus cobros pendientes (hasta ${destinatarios.length * Math.min(meses, 24)} cobros). Quien ya tenga una cuota activa se salta.`
+          : `Se crean ${destinatarios.length} cuotas indefinidas y el cobro pendiente de este mes de cada una. Quien ya tenga una cuota activa se salta.`,
+        confirmar: "Dar de alta",
+        cancelar: "Volver",
+      });
+      if (!seguro) return;
     }
     setGuardando(true);
     try {
@@ -1007,29 +1102,30 @@ function DrawerCuota({ conceptos, cuota = null, inicial = null, ivaSugerido = 21
         payerClientId: form.payerClientId || null,
         ...(editando ? { patientId: form.patientId || null } : {}),
       };
-      const r = editando
-        ? await fetch(`/api/billing/cuotas/${cuota.id}`, {
-            method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cuerpo),
-          })
-        : await fetch("/api/billing/cuotas", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ...cuerpo, destinatarios: destinatarios.map((d) => ({ clientId: d.clientId, patientId: d.patientId })) }),
-          });
-      const j = await r.json();
-      if (!j.ok) throw new Error(j.error || "No se pudo guardar");
+      if (editando) {
+        const r = await fetch(`/api/billing/cuotas/${cuota.id}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cuerpo),
+        });
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error || "No se pudo guardar");
+        onDone(`Cuota actualizada${colaDelLote(j.data?.cobros)}`);
+        return;
+      }
 
-      if (editando) { onDone(`Cuota actualizada${colaDelLote(j.data?.cobros)}`); return; }
+      const total = await altaPorLotes(cuerpo, destinatarios, setProgreso);
+
       // En grupo puede haber saltadas (ya tenían cuota): se enseñan antes de
       // cerrar, que si no nadie se entera de que faltan.
-      if (j.data?.omitidas?.length) setResultado(j.data);
+      if (total.omitidas.length) setResultado(total);
       // Y se dice qué ha pasado con el cobro: desde el 05/09/2026 (AV-0048) la
       // cuota nueva llega SOLA a Cobros, así que lo que hay que contar ya no es
       // lo que falta por hacer, sino lo que se ha hecho.
-      else onDone(`${j.data.creadas} ${j.data.creadas === 1 ? "cuota creada" : "cuotas creadas"}${colaDelLote(j.data?.cobros)}`);
+      else onDone(`${total.creadas} ${total.creadas === 1 ? "cuota creada" : "cuotas creadas"}${colaDelLote(total.cobros)}`);
     } catch (e) {
       setError(e.message);
     } finally {
       setGuardando(false);
+      setProgreso(null);
     }
   }
 
@@ -1281,7 +1377,9 @@ function DrawerCuota({ conceptos, cuota = null, inicial = null, ivaSugerido = 21
               </div>
             </div>
             {/* «Durante N meses»: escribe la fecha de baja para no contarla a
-                mano (01/09/2026, Rodrigo). Volver a pulsar el mismo la quita. */}
+                mano (01/09/2026, Rodrigo). Volver a pulsar el mismo la quita.
+                Y desde el 18/09/2026 (Aumenta) la N se puede teclear: 4, 5 o 10
+                meses no estaban, y el centro los firma igual. */}
             <div className="-mt-3 flex flex-wrap items-center gap-1.5">
               <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mr-1">Durante</span>
               {DURACIONES.map((d) => {
@@ -1297,10 +1395,57 @@ function DrawerCuota({ conceptos, cuota = null, inicial = null, ivaSugerido = 21
                   </button>
                 );
               })}
+              <span className="inline-flex items-center gap-1 pl-1">
+                {/* Sin estado propio: lo que vale es el TRAMO, y el número se
+                    lee de él (`mesesDeTramo` es el inverso exacto). Con estado
+                    aparte, pulsar «6 meses» dejaría escrito un 3 de antes. */}
+                <input type="number" min="1" max="60" value={mesesDeTramo(form.startDate, form.endDate) ?? ""}
+                  onChange={(e) => {
+                    const fecha = bajaTrasMeses(form.startDate, e.target.value);
+                    setForm((fo) => ({ ...fo, endDate: e.target.value === "" ? "" : fecha || fo.endDate }));
+                  }}
+                  disabled={!form.startDate}
+                  title={form.startDate ? "Los meses que sean" : "Pon antes la fecha de alta"}
+                  placeholder="N"
+                  className="w-14 rounded-lg px-2 py-1 text-[11px] text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 disabled:opacity-40" />
+                <span className="text-[11px] text-neutral-400">meses</span>
+              </span>
               {form.endDate && (
                 <button type="button" onClick={() => setForm((fo) => ({ ...fo, endDate: "" }))}
                   className="px-2 py-1 text-[11px] text-neutral-400 hover:text-rose-600">quitar fin</button>
               )}
+            </div>
+
+            {/* …O LOS MESES, que es la otra mitad de la misma pregunta
+                (18/09/2026, Aumenta: «poner número de meses o poner los meses»).
+                El centro firma «de septiembre a junio», no «diez meses»: aquí se
+                dice tal cual y las fechas las escribe `tramoDeMeses`. */}
+            <div className="-mt-2 flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mr-1">O los meses</span>
+              <input type="month" value={mesDeFecha(form.startDate) ?? ""}
+                onChange={(e) => ponerMeses(e.target.value, mesDeFecha(form.endDate))}
+                title="Desde qué mes"
+                className="rounded-lg px-2 py-1 text-[11px] text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400" />
+              <span className="text-[11px] text-neutral-400">a</span>
+              <input type="month" value={mesDeFecha(form.endDate) ?? ""}
+                onChange={(e) => ponerMeses(mesDeFecha(form.startDate), e.target.value)}
+                title="Hasta qué mes (vacío = indefinida)"
+                className="rounded-lg px-2 py-1 text-[11px] text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400" />
+              {/* El curso (sep–jun) es la unidad con la que se firma de verdad;
+                  julio y agosto no son de ningún curso (`cursoEscolar.js`). */}
+              {CURSOS.map((c) => {
+                const meses = mesesDelCurso(c);
+                const puesto = mesDeFecha(form.startDate) === meses[0] && mesDeFecha(form.endDate) === meses[meses.length - 1];
+                return (
+                  <button key={c} type="button"
+                    onClick={() => ponerMeses(meses[0], meses[meses.length - 1])}
+                    title={`De septiembre de ${c} a junio de ${c + 1}`}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] border transition ${puesto ? "border-transparent text-white" : "bg-white border-neutral-200 text-neutral-500 hover:border-neutral-400"}`}
+                    style={puesto ? { background: "var(--color-primary, #1B3A2D)" } : undefined}>
+                    Curso {rotuloCurso(c)}
+                  </button>
+                );
+              })}
             </div>
             <p className="text-[10px] text-neutral-400 -mt-2">
               {form.endDate
@@ -1328,13 +1473,18 @@ function DrawerCuota({ conceptos, cuota = null, inicial = null, ivaSugerido = 21
                 <button type="button" onClick={guardar} disabled={guardando || !form.startDate}
                   className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white disabled:opacity-50"
                   style={{ background: "var(--color-primary, #1B3A2D)" }}>
-                  {guardando ? "Guardando..." : editando ? "Guardar" : "Dar de alta"}
+                  {guardando
+                    ? progreso ? `Creando ${progreso.hechos} de ${progreso.de}…` : "Guardando..."
+                    : editando ? "Guardar" : "Dar de alta"}
                 </button>
               </div>
             </div>
           </div>
         )}
       </aside>
+      {/* El diálogo del drawer es suyo: el de la página está fuera de este
+          árbol y un `confirmar` sin su `dialogo` no pinta nada. */}
+      {dialogo}
     </>
   );
 }
