@@ -1203,9 +1203,16 @@ export function CitaDetalleModal({
                     {openBooking.bono && (
                       <span className="text-neutral-500">
                         {" · "}
-                        {openBooking.bono.restantes > 0
-                          ? `le quedan ${openBooking.bono.restantes}`
-                          : "no le quedan sesiones libres"}
+                        {/* SIN TOPE (18/09/2026, AV-0184): el bono de un
+                            diagnóstico no tiene sesiones que queden —sus horas
+                            las acota el expediente—, y `null > 0` haría decir
+                            aquí «no le quedan sesiones libres», que es
+                            exactamente lo contrario de lo que pasa. */}
+                        {openBooking.bono.sinTope
+                          ? "sin tope · diagnóstico"
+                          : openBooking.bono.restantes > 0
+                            ? `le quedan ${openBooking.bono.restantes}`
+                            : "no le quedan sesiones libres"}
                         {openBooking.bono.reservadas > 0 && ` (${openBooking.bono.reservadas} reservada${openBooking.bono.reservadas === 1 ? "" : "s"})`}
                       </span>
                     )}

@@ -37,6 +37,7 @@ import {
   duracionDeCitaDeDiagnostico,
   cabeEnElExpediente,
   cobroDeLaCitaDeEntrevista,
+  mensajeDelBonoDelExpediente,
   MENSAJES as MENSAJES_DIAGNOSTICO,
 } from "../../../../lib/clinica/citaDeDiagnostico.js";
 import { TRAMO_ENTREVISTA, TRAMO_HORAS } from "../../../../lib/citas/altaDesdeDiagnostico.js";
@@ -544,7 +545,13 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
           patientId: patRes.patientId,
           eventTypeId,
         });
-        if (elegido.error) return error(elegido.error, 422);
+        /*
+         * La frase la traduce el diagnóstico (18/09/2026): aquí el bono no lo
+         * eligió nadie de una lista, lo puso el expediente, así que «Ese bono
+         * está anulado o agotado» mandaría a quien apunta la cita a buscar algo
+         * que no sabe que existe (`lib/clinica/citaDeDiagnostico.js`).
+         */
+        if (elegido.error) return error(mensajeDelBonoDelExpediente(elegido), 422);
         enBono = elegido;
       }
     } else if (Object.prototype.hasOwnProperty.call(body, "packId")) {

@@ -33,6 +33,7 @@ import {
   duracionDeCitaDeDiagnostico,
   admiteCita,
   esDelPaciente,
+  mensajeDelBonoDelExpediente,
   cobroDeLaCitaDeEntrevista,
   ATRIBUTOS_DE_HORAS,
 } from "../lib/clinica/citaDeDiagnostico.js";
@@ -136,6 +137,40 @@ describe("admiteCita: cuándo el expediente deja apuntar una cita", () => {
     });
     assert.equal(mensajeCerrado("cerrado"), "Este diagnóstico está en «Cerrado»: no admite más citas");
     assert.deepEqual(admiteCita(null, "horas"), { ok: false, error: MENSAJES.noExiste });
+  });
+});
+
+/*
+ * LA FRASE CUANDO EL BONO DEL EXPEDIENTE NO SIRVE (18/09/2026, AV de Aumenta).
+ *
+ * El 17/09/2026 se anularon desde Facturación los dos bonos de diagnóstico de
+ * Aumenta. Desde entonces apuntar una hora a esos expedientes se rechazaba con
+ * «Ese bono está anulado o agotado» —la frase de `elegirPack`, escrita para
+ * quien acaba de elegir un bono de una lista—, que a quien apunta una cita de
+ * diagnóstico no le dice ni de qué bono habla ni dónde se arregla.
+ */
+describe("mensajeDelBonoDelExpediente: la frase del bono que puso el expediente", () => {
+  it("el bono anulado manda a Facturación → Bonos, no a buscar un bono", () => {
+    const frase = mensajeDelBonoDelExpediente({ error: "Ese bono está anulado o agotado", codigo: "no_activo" });
+    assert.equal(frase, MENSAJES.bonoNoActivo);
+    assert.match(frase, /diagnóstico/);
+    assert.match(frase, /Facturación/);
+  });
+
+  it("el bono que ya no existe también tiene su frase", () => {
+    assert.equal(mensajeDelBonoDelExpediente({ error: "Ese bono no existe", codigo: "no_existe" }), MENSAJES.bonoPerdido);
+  });
+
+  /*
+   * Lo que no es del bono se deja tal cual: ahí el problema es del expediente
+   * —apunta a la familia o al tipo equivocados— y la frase original ya lo dice
+   * mejor que cualquier traducción.
+   */
+  it("lo demás pasa sin tocar, y sin código también", () => {
+    const otro = { error: "Ese bono es de otro tipo de cita («PSICOLOGIA 45»)", codigo: "otro_tipo" };
+    assert.equal(mensajeDelBonoDelExpediente(otro), otro.error);
+    assert.equal(mensajeDelBonoDelExpediente({ error: "Cualquier cosa" }), "Cualquier cosa");
+    assert.equal(mensajeDelBonoDelExpediente({}), undefined);
   });
 });
 

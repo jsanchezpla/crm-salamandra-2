@@ -589,6 +589,32 @@ en cualquier cliente con `citas` (en la ficha por defecto, dentro de la pestaña
 Y una diferencia con lo que había: la tarjeta **se pinta aunque no haya ningún
 bono**, porque es donde está el botón de darlo. Antes, sin bonos, no salía nada.
 
+#### El bono de un diagnóstico, en la ficha (18/09/2026, AV-0184 de Aumenta)
+
+Isabel: «cuando nos vamos a bonos nos aparecen los Diagnósticos en Bonos». Y sí:
+al pulsar «Seguir con el diagnóstico» nace un bono **sin tope**
+(`total_sessions` NULL) que la familia no compró, y esta tarjeta **no se había
+enterado del null**. Como `null > 0` es falso, un diagnóstico recién abierto
+salía en la ficha rotulado **«Agotado»**, con la barra vacía y sin una palabra
+que dijera de qué era. El 17/09/2026 se fueron a Facturación y anularon los dos
+que había, con sus cobros de 650 € y 350 €; los dos expedientes quedaron
+`en_curso` apuntando a un bono muerto, sin poder apuntarles más horas.
+
+La tarjeta ahora, con `bonoSinTope` y `esBonoDeDiagnostico`
+(`lib/billing/bonos.js`, los mismos que usa `/facturacion/bonos`):
+
+- rotula **«N h · sin tope»** en vez de «Agotado»;
+- escribe **«· diagnóstico»** junto al nombre, con enlace a
+  `/clinica/diagnosticos/[id]`, que es donde vive su barra de HORAS;
+- **no pinta la barra** de sesiones: sobre un total que no existe sale siempre
+  vacía, que es otra forma de decir «agotado»;
+- y **«Quitar bono» avisa** de lo que se lleva por delante
+  (`avisosDeAnulacion`), igual que «Anular» en Facturación — las dos escriben en
+  la misma columna y tenían que avisar igual.
+
+`bonosDeCliente` (`lib/citas/packs.js`) devuelve `diagnosticoId` para que la
+tarjeta pueda saberlo sin adivinarlo por el nombre del tipo.
+
 Es la única puerta del CRM que abre derecho a citas sin un cobro detrás que
 mirar, así que queda marcado `session_packs.origin = 'manual'` con el nombre de
 quien lo creó (`created_by`) y se audita (`citas.pack_manual_created`). Un bono

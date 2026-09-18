@@ -44,6 +44,8 @@ import {
   bonoVivoIgual,
   renovacionDe,
   avisosDeRenovacion,
+  avisosDeAnulacion,
+  esBonoDeDiagnostico,
   totalesDeBonos,
   resumenPorTipoDeBono,
   contarGente,
@@ -276,6 +278,40 @@ describe("el orden y los textos", () => {
     assert.equal(esNotaAutomaticaDeBono("Lo paga la abuela, no la madre"), false);
     // La de una cuota no es de un bono: cada una tiene la suya.
     assert.equal(esNotaAutomaticaDeBono("Cuota septiembre 2026"), false);
+  });
+
+  /*
+   * EL BONO DE UN DIAGNÓSTICO (18/09/2026, AV de Aumenta: «a veces salen en
+   * bonos sesiones que no tienen bonos como la de diagnóstico»).
+   *
+   * El 17/09/2026 se anularon en producción los dos que había, con sus cobros
+   * de 650 € y 350 €, tomándolos por filas sueltas que sobraban: la pantalla no
+   * decía qué eran. Lo que se fija aquí es que se reconocen por `diagnosticoId`
+   * —lo que los ata al expediente— y no por «no tiene tope», y que anularlos
+   * avisa de lo que se llevan por delante sin llegar a prohibirlo.
+   */
+  it("reconoce el bono de un diagnóstico por su expediente, no por el tope", () => {
+    assert.equal(esBonoDeDiagnostico({ diagnosticoId: "e8e75d8d" }), true);
+    // Sin tope pero sin expediente NO es un diagnóstico: el tope es la forma
+    // que tiene hoy, no lo que lo define.
+    assert.equal(esBonoDeDiagnostico({ total: null }), false);
+    assert.equal(esBonoDeDiagnostico({ diagnosticoId: null }), false);
+    assert.equal(esBonoDeDiagnostico({}), false);
+    assert.equal(esBonoDeDiagnostico(null), false);
+  });
+
+  it("al anular el bono de un diagnóstico avisa de lo que se lleva, y ofrece la vuelta", () => {
+    const avisos = avisosDeAnulacion({ diagnosticoId: "e8e75d8d", total: null });
+    assert.equal(avisos.length, 2);
+    assert.match(avisos[0], /más horas/);
+    assert.match(avisos[0], /Seguir con el diagnóstico/);
+    // La salida tiene que estar dicha: anular por error es legítimo.
+    assert.match(avisos[1], /Reactivar/);
+  });
+
+  it("un bono normal se anula sin avisos de más", () => {
+    assert.deepEqual(avisosDeAnulacion(bono({ total: 10, gastadas: 3 })), []);
+    assert.deepEqual(avisosDeAnulacion(null), []);
   });
 
   it("dice qué ha pasado con el cobro, y calla cuando no ha pasado nada", () => {
