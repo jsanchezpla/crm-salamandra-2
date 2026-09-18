@@ -18,6 +18,65 @@
 
 set -e
 
+# ─── UN SOLO DESPLIEGUE A LA VEZ (18/09/2026) ────────────────────────────────
+# El 18/09 arrancaron DOS despliegues con medio minuto de diferencia (11:50:0x
+# y 11:50:33) sobre el mismo /opt/crm-salamandra. Aquí no hay dos copias de
+# nada: el `git pull`, `node_modules/` y sobre todo `.next/` son UNO, y
+# compartido. Dos `next build` a la vez se pisan los ficheros de dentro de
+# `.next/`, y entonces pasa lo que se vio: uno sale en ROJO y el otro —que no
+# ha fallado, así que `set -e` no tiene nada que parar— sigue adelante y hace
+# `docker compose up --build` copiando un `.next/` que el primero está
+# reescribiendo. La imagen se hornea de una foto a medias. Visto desde fuera:
+# «el build salió rojo y aun así recreó la imagen».
+#
+# Aquella vez acabó bien de chiripa —el segundo despliegue volvió a construir
+# encima y la imagen final casó con el disco—, pero la ventana entre el build
+# y el `COPY .next` del Dockerfile es de segundos, y con varias sesiones
+# trabajando a la vez alguien acaba cayendo dentro. Esto no se arregla
+# mirando el reloj: se arregla no dejando entrar al segundo.
+#
+# El cerrojo es de fichero y lo suelta el núcleo cuando muere el proceso, así
+# que un despliegue cortado con Ctrl-C, o con la sesión SSH caída, NO lo deja
+# echado. No hay que ir a mano a quitar ningún fichero.
+CERROJO=/var/lock/crm-deploy.lock
+QUIEN=/var/lock/crm-deploy.quien
+exec 9>>"$CERROJO"          # >> y no >: abrir truncando borraría el aviso de
+                            # quién lo tiene ANTES de saber siquiera si entro.
+if ! flock -n 9; then
+  echo ""
+  echo "  ⛔ HAY OTRO DESPLIEGUE EN MARCHA. Este no arranca."
+  echo ""
+  echo "     $(cat "$QUIEN" 2>/dev/null || echo '(sin datos de quién lo tiene)')"
+  echo ""
+  echo "     Espera a que termine y vuelve a lanzarlo. Dos a la vez se pisan"
+  echo "     el .next/, que es compartido, y la imagen puede salir de un"
+  echo "     build a medio escribir."
+  echo ""
+  exit 1
+fi
+printf 'Lo tiene el pid %s desde las %s%s\n' "$" "$(date '+%H:%M:%S del %d/%m')" \
+  "${SSH_CLIENT:+ (ssh desde ${SSH_CLIENT%% *})}" > "$QUIEN"
+
+# ─── El build, con el rojo dicho por su nombre ───────────────────────────────
+# `set -e` ya pararía, pero sin decir por qué: el despliegue se corta y la
+# última línea que se lee es el error de Next, que puede estar doscientas
+# líneas más arriba. Esto lo dice claro y, sobre todo, dice lo que NO ha
+# pasado: que la imagen no se ha tocado y producción sigue como estaba.
+construir() {
+  set +e
+  npm run build
+  local codigo=$?
+  set -e
+  if [ "$codigo" -ne 0 ]; then
+    echo ""
+    echo "  ✖ EL BUILD HA FALLADO (código $codigo). LA IMAGEN NO SE HA TOCADO."
+    echo "    Producción sigue corriendo la de antes, que funciona."
+    echo "    Arregla el build, commitea y vuelve a lanzar el despliegue."
+    echo ""
+    exit 1
+  fi
+}
+
 FULL=false
 if [ "$1" == "--full" ]; then
   FULL=true
@@ -56,16 +115,51 @@ if [ "$FULL" = true ] || [ -n "$DEPS_CHANGED" ]; then
   echo "→ Dependencias cambiadas — instalando y reconstruyendo todo..."
   # npm ci con devDeps porque son necesarias para next build (Tailwind, etc.)
   npm ci
-  npm run build
+  construir
   docker compose down
   docker compose up -d --build
 else
   echo "→ Solo código — build en VPS + rebuild rápido de imagen..."
   # node_modules ya está en el VPS del deploy anterior
-  npm run build
+  construir
   # Solo reconstruye la imagen del servicio app; Docker cachea todo excepto
   # las capas que cambiaron (básicamente solo COPY .next)
   docker compose up -d --build --no-deps app
+fi
+
+# ─── ¿LLEVA LA IMAGEN EL BUILD QUE ACABAMOS DE HACER? (18/09/2026) ───────────
+# El cerrojo de arriba impide que dos despliegues se pisen, pero no cuesta
+# nada comprobar el resultado, y es la única forma de saber que producción
+# corre lo que creemos. `next build` escribe en `.next/BUILD_ID` un
+# identificador distinto cada vez: si el de dentro del contenedor no es el que
+# hay en disco, la imagen no salió de este build y el despliegue ha mentido.
+#
+# Se reintenta porque el contenedor acaba de arrancar y puede tardar un par de
+# segundos en aceptar `docker exec`.
+echo "→ Comprobando que producción corre este build..."
+ESPERADO=$(cat .next/BUILD_ID 2>/dev/null || echo "")
+DENTRO=""
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  DENTRO=$(docker exec crm-salamandra-app-1 cat .next/BUILD_ID 2>/dev/null || echo "")
+  [ -n "$DENTRO" ] && break
+  sleep 2
+done
+
+if [ -z "$ESPERADO" ] || [ -z "$DENTRO" ]; then
+  echo "  ⚠  No he podido comprobarlo (¿contenedor levantando?). Míralo a mano:"
+  echo "     docker exec crm-salamandra-app-1 cat .next/BUILD_ID"
+elif [ "$ESPERADO" != "$DENTRO" ]; then
+  echo ""
+  echo "  ✖ LA IMAGEN NO LLEVA ESTE BUILD."
+  echo "      en disco:     $ESPERADO"
+  echo "      en producción: $DENTRO"
+  echo ""
+  echo "    Producción está corriendo otra cosa. Vuelve a lanzar el despliegue"
+  echo "    y, si se repite, mira si hay otro corriendo a la vez."
+  echo ""
+  exit 1
+else
+  echo "  ✓ Producción corre el build $ESPERADO (commit $(git rev-parse --short HEAD))."
 fi
 
 # ─── La caché de compilación de Docker (02/09/2026) ──────────────────────────
