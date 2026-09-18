@@ -12,7 +12,7 @@ import BuscadorPaciente from "../../../components/citas/BuscadorPaciente.jsx";
 import SelectorPaciente from "../../../components/citas/SelectorPaciente.jsx";
 import { datosAlElegirFicha } from "../../../lib/clients/contactoDeFicha.js";
 import { repasarContactoDeCita, avisoDeContacto } from "../../../lib/citas/contactoCita.js";
-import { CADENCIAS, fechasDeRepeticion, repeticionDeBloqueo } from "../../../lib/citas/recurrencia.js";
+import { CADENCIAS, TOPE_REPETICIONES, fechasDeRepeticion, repeticionDeBloqueo } from "../../../lib/citas/recurrencia.js";
 import { cobroDelTipo, normalizarCobro, euros } from "../../../lib/citas/dineroDeLaCita.js";
 import { packsParaPaciente } from "../../../lib/citas/bonoDelPaciente.js";
 import { TRAMO_ENTREVISTA, duracionLimpia } from "../../../lib/citas/altaDesdeDiagnostico.js";
@@ -556,23 +556,66 @@ export function NuevaCitaDrawer({
        * prudencia, es no dejar trabajar.
        */
       let insistio = false;
-      // 409 = el día está cerrado, o alguien está de vacaciones. No se impone:
-      // se pregunta, y si insiste (una urgencia en el puente) se reenvía.
+      /*
+       * ── LOS DOS 409, QUE NO SON LO MISMO (18/09/2026, AV-0167 de Aumenta) ─
+       * Olga: «intento crear una cita semanal […] y me dice que hay otra cita
+       * en ese hueco y no me deja crear la cita para poder programarla hasta
+       * el 30/06/2027».
+       *
+       *   · BLOQUEO o festivo (`motivo: "bloqueo"`): el centro cerrado o
+       *     alguien de vacaciones. Se AVISA y se puede insistir; es lo de
+       *     siempre.
+       *   · OTRA CITA (`motivo: "solape"`): no hay permiso que valga —encima
+       *     de una cita no cabe otra—, así que «Crearla igualmente» reenviaba
+       *     y volvía a fallar. De ahí la tarea «Crear cita igualmente… no hace
+       *     nada»: no es que no hiciera nada, es que no podía.
+       *
+       * Y lo que de verdad dejaba sin trabajo: al cortar aquí, una serie de
+       * cuarenta semanas se perdía ENTERA porque la primera chocaba. Las
+       * repeticiones sí saben saltarse las que chocan, así que se ofrece
+       * seguir con ellas.
+       */
+      let primeraCreada = true;
       if (res.status === 409 && !j.ok) {
-        const crearIgualmente = await confirmar({
-          titulo: "Ese hueco está bloqueado",
-          texto: j.error,
-          confirmar: "Crearla igualmente",
-        });
-        if (!crearIgualmente) {
+        // Los clientes viejos (y un 409 de otro sitio) no mandan `motivo`: se
+        // deduce del texto, que es el que ya dice «Solapa con otra cita».
+        const esSolape = j.motivo === "solape" || /^Solapa con otra cita/i.test(String(j.error ?? ""));
+        if (esSolape && !repeticion) {
+          await avisar({
+            titulo: "Ahí ya hay otra cita",
+            texto: `${j.error}\n\nEsa hora está ocupada en su agenda: ponla a otra hora, o mueve primero la que hay.`,
+          });
           setSaving(false);
           return;
         }
-        insistio = true;
-        res = await enviar(true);
-        j = await res.json();
+        if (esSolape) {
+          const cuantas = repeticion.fechas.length;
+          const seguir = await confirmar({
+            titulo: "Ahí ya hay otra cita",
+            texto: `${j.error}\n\nEsa primera no se puede crear. ¿Sigo con las otras ${cuantas} y te digo cuáles entran?`,
+            confirmar: cuantas === 1 ? "Probar con la otra" : `Probar con las otras ${cuantas}`,
+          });
+          if (!seguir) {
+            setSaving(false);
+            return;
+          }
+          primeraCreada = false;
+        } else {
+          const crearIgualmente = await confirmar({
+            titulo: "Ese hueco está bloqueado",
+            texto: j.error,
+            confirmar: "Crearla igualmente",
+          });
+          if (!crearIgualmente) {
+            setSaving(false);
+            return;
+          }
+          insistio = true;
+          res = await enviar(true);
+          j = await res.json();
+        }
       }
-      if (!j.ok) throw new Error(j.error || "Error creando cita");
+      if (primeraCreada && !j.ok) throw new Error(j.error || "Error creando cita");
       /*
        * Si el paciente NO ha recibido el correo, se dice aquí y ahora
        * (07/08/2026, Rodrigo). Antes esta cita no mandaba ningún correo; ahora
@@ -589,7 +632,7 @@ export function NuevaCitaDrawer({
        * ha llegado el correo» sería inventarse un problema.
        */
       // …y tampoco si no se pidió el correo (03/09/2026): callada a propósito.
-      if (avisarCorreo && j.data && j.data.emailEnviado === false && j.data.emailMotivo !== "taller") {
+      if (primeraCreada && avisarCorreo && j.data && j.data.emailEnviado === false && j.data.emailMotivo !== "taller") {
         const porQue = {
           sin_email: "no tiene correo en su ficha",
           sin_consentimiento: "ha pedido no recibir correos",
@@ -615,6 +658,10 @@ export function NuevaCitaDrawer({
       if (repeticion) {
         const chocadas = [];
         let creadas = 0;
+        // Si la primera no llegó a crearse (chocaba con otra cita), el correo a
+        // la familia lo lleva la primera que SÍ entre: si no, se quedaría toda
+        // la serie sin avisar a nadie (18/09/2026, AV-0167).
+        let sinAvisarAun = !primeraCreada && avisarCorreo;
         // Lo que ya se decidió arriba, para toda la serie (10/09/2026, AV-0105).
         const perdones = {
           ...(insistio ? { permitirFestivo: true, permitirBloqueo: true } : {}),
@@ -625,10 +672,10 @@ export function NuevaCitaDrawer({
             const r = await fetch("/api/citas/bookings", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ ...cuerpoCita, ...perdones, scheduledAt: f.toISOString(), omitirCorreo: true }),
+              body: JSON.stringify({ ...cuerpoCita, ...perdones, scheduledAt: f.toISOString(), omitirCorreo: !sinAvisarAun }),
             });
             const jr = await r.json();
-            if (jr.ok) creadas += 1;
+            if (jr.ok) { creadas += 1; sinAvisarAun = false; }
             else chocadas.push({ fecha: f, motivo: jr.error || "no se pudo crear" });
           } catch {
             chocadas.push({ fecha: f, motivo: "no se pudo crear" });
@@ -637,11 +684,14 @@ export function NuevaCitaDrawer({
         const dia = (f) => f.toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit" });
         const lineas = chocadas.slice(0, 8).map((c) => `· ${dia(c.fecha)}: ${c.motivo}`);
         if (chocadas.length > 8) lineas.push(`· … y ${chocadas.length - 8} más`);
-        if (chocadas.length || repeticion.sinDia) {
+        const total = creadas + (primeraCreada ? 1 : 0);
+        if (chocadas.length || repeticion.sinDia || !primeraCreada) {
           await avisar({
-            titulo: "Repetición creada, con huecos",
+            titulo: total ? "Repetición creada, con huecos" : "No se ha podido crear ninguna",
             texto:
-              `Creadas ${creadas + 1} citas (la de hoy y ${creadas} repeticiones).` +
+              (primeraCreada
+                ? `Creadas ${total} citas (la de hoy y ${creadas} repeticiones).`
+                : `La primera no cabía, así que no se ha creado. De las demás han entrado ${creadas}.`) +
               (chocadas.length ? `\n\nEstas NO se han creado:\n${lineas.join("\n")}` : "") +
               (repeticion.sinDia ? `\n\n${repeticion.sinDia} ${repeticion.sinDia === 1 ? "mes no tiene" : "meses no tienen"} ese día del mes y se ${repeticion.sinDia === 1 ? "salta" : "saltan"}.` : ""),
           });
@@ -654,7 +704,7 @@ export function NuevaCitaDrawer({
        * otra) se dice y no se deshace nada — quitarlo a mano desde Citas →
        * Bloqueos es un gesto; una cita perdida, no.
        */
-      if (desdeBloqueo?.id) {
+      if (primeraCreada && desdeBloqueo?.id) {
         try {
           const rb = await fetch(`/api/citas/bloqueos?id=${encodeURIComponent(desdeBloqueo.id)}`, { method: "DELETE" });
           const jb = await rb.json().catch(() => null);
@@ -1385,6 +1435,9 @@ function sumarMinutos(hhmm, minutos) {
   return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }
 
+/** "2026-09-23" → "23/09", para contar fechas en una frase. */
+const corto = (d) => String(d ?? "").split("-").reverse().slice(0, 2).join("/");
+
 
 /**
  * BloqueoRapido — el mismo drawer, con el formulario de un BLOQUEO dentro
@@ -1398,8 +1451,17 @@ function sumarMinutos(hhmm, minutos) {
  * citas que ya hubiera dentro no se tocan (se avisa cuántas hay).
  */
 function BloqueoRapido({ inicial, categorias, esAdmin, puedeElegirPersona = esAdmin, miFicha, teamMembers, avisar, confirmar, onModo, onClose, onCreated }) {
+  /*
+   * De quién es, de entrada: la profesional cuya agenda se está mirando si el
+   * filtro deja solo una (18/09/2026, Aumenta), y si no, quien mira. Lo decide
+   * `duenoSugeridoDelBloqueo` en `lib/citas/filtros.js`, que es donde está
+   * escrito por qué con dos agendas en pantalla no se adivina.
+   */
+  const sugerido = inicial.duenoSugerido && teamMembers.some((m) => m.id === inicial.duenoSugerido)
+    ? inicial.duenoSugerido
+    : null;
   const [form, setForm] = useState(() => ({
-    teamMemberId: miFicha?.id ?? "",
+    teamMemberId: sugerido ?? miFicha?.id ?? "",
     categoryKey: "",
     label: "",
     date: inicial.date || "",
@@ -1414,6 +1476,22 @@ function BloqueoRapido({ inicial, categorias, esAdmin, puedeElegirPersona = esAd
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(null);
   const pon = (campo, valor) => setForm((f) => ({ ...f, [campo]: valor }));
+
+  /*
+   * CUÁNTOS BLOQUEOS SALEN, mientras se escribe (18/09/2026). Es la misma
+   * cuenta que se ejecutará al guardar, así que el número de la pantalla y el
+   * de la pregunta no pueden discrepar. Sin repetición, `null` y no se pinta.
+   */
+  const previsto = useMemo(() => {
+    if (!form.repetir || !form.repetirHasta || !form.date || !form.time) return null;
+    const { tramos, sinDia } = repeticionDeBloqueo({ ...form, endDate: form.endDate || form.date });
+    return {
+      total: tramos.length + 1,
+      ultimo: tramos.at(-1)?.startDate || form.date,
+      sinDia,
+      tope: tramos.length >= TOPE_REPETICIONES,
+    };
+  }, [form]);
 
   async function guardar() {
     setErr(null);
@@ -1434,6 +1512,28 @@ function BloqueoRapido({ inicial, categorias, esAdmin, puedeElegirPersona = esAd
         setErr("Con ese «hasta» no sale ninguna repetición (¿la fecha es anterior al bloqueo?)");
         return;
       }
+      /*
+       * CUÁNTOS SE VAN A CREAR, ANTES DE CREARLOS (18/09/2026, Aumenta: «se
+       * crean más bloqueos sin querer de los que se piden al no saber utilizar
+       * bien la herramienta»). El número sale de la misma cuenta que se va a
+       * ejecutar, no de una estimación, y hay que decir que sí para que se
+       * ejecute: es la única parada entre un «hasta» mal tecleado y doce
+       * huecos cerrados que luego se quitan de uno en uno.
+       */
+      const total = repeticion.tramos.length + 1;
+      const ultimo = repeticion.tramos.at(-1)?.startDate || form.date;
+      const quien = puedeElegirPersona
+        ? (teamMembers.find((m) => m.id === form.teamMemberId)?.displayName || "todo el centro")
+        : (miFicha?.displayName || "ti");
+      const ok = await confirmar({
+        titulo: `Se van a crear ${total} bloqueos`,
+        texto:
+          `El del ${corto(form.date)} y ${total - 1} ${total - 1 === 1 ? "repetición" : "repeticiones"}, ` +
+          `la última el ${corto(ultimo)}. Todos de ${form.time} a ${form.endTime || "23:59"} y a nombre de ${quien}.` +
+          `\n\nSe crean sueltos: para deshacerlos hay que quitarlos uno a uno desde Citas → Bloqueos.`,
+        confirmar: `Crear los ${total}`,
+      });
+      if (!ok) return;
     }
     setSaving(true);
     try {
@@ -1500,7 +1600,6 @@ function BloqueoRapido({ inicial, categorias, esAdmin, puedeElegirPersona = esAd
             chocados.push({ dia: t.startDate, motivo: "no se pudo crear" });
           }
         }
-        const corto = (d) => d.split("-").reverse().slice(0, 2).join("/");
         const lineas = chocados.slice(0, 8).map((c) => `· ${corto(c.dia)}: ${c.motivo}`);
         if (chocados.length > 8) lineas.push(`· … y ${chocados.length - 8} más`);
         if (chocados.length || repeticion.sinDia) {
@@ -1571,6 +1670,13 @@ function BloqueoRapido({ inicial, categorias, esAdmin, puedeElegirPersona = esAd
             ) : (
               <p className={`${inputCls} bg-neutral-50 text-neutral-600`}>{miFicha?.displayName || "Tus ausencias"}</p>
             )}
+            {/* Se dice de dónde sale la sugerencia: un desplegable que se pone
+                solo sin explicar por qué se lee como un error de la pantalla. */}
+            {puedeElegirPersona && sugerido && form.teamMemberId === sugerido && (
+              <p className="text-[10px] text-neutral-400 mt-1">
+                Puesta porque estás viendo su agenda. Cámbiala si el bloqueo es de otra persona.
+              </p>
+            )}
           </div>
 
           {categorias.length > 0 && (
@@ -1608,41 +1714,81 @@ function BloqueoRapido({ inicial, categorias, esAdmin, puedeElegirPersona = esAd
               <input type="time" value={form.endTime} onChange={(e) => pon("endTime", e.target.value)} className={inputCls} />
             </div>
           </div>
+          {/* «Termina» es CUÁNTO DURA el tramo, y ahí es donde se metía la
+              fecha de fin de curso (08/09/2026: dos agendas cerradas hasta
+              junio). Se dice delante, no en la letra pequeña del final. */}
           <p className="text-[10px] text-neutral-400">
-            Con «Termina» vacío se bloquea hasta el final del día. Para gestionarlos todos, Citas → Bloqueos.
+            «Termina» es cuándo acaba <strong className="font-semibold text-neutral-500">este</strong> tramo,
+            normalmente el mismo día. Vacío, se bloquea hasta el final del día. Para cerrar el mismo hueco
+            varias semanas está «Repetir», aquí abajo.
           </p>
 
-          {/* Repetir el hueco (09/09/2026, AV-0090). «Termina» es lo que dura el
-              tramo; esto es hasta cuándo se repite: dos cosas que se confundían. */}
-          <div className="grid grid-cols-2 gap-2">
+          {/* ── REPETIR ──────────────────────────────────────────────────────
+              Nació el 09/09/2026 (AV-0090) como dos campos sueltos debajo de
+              «Termina», y se confundía con él: la misma pantalla pedía dos
+              fechas de fin que significan cosas distintas. Ahora va en su
+              propia caja, con su título y con la CUENTA de lo que va a crear
+              delante — que es lo que pidió Aumenta el 18/09/2026 («se crean
+              más bloqueos sin querer de los que se piden»). */}
+          <div className="rounded-md border border-neutral-200 bg-neutral-50/60 px-3 py-2.5 space-y-2">
             <div>
-              <label className={rotulo}>Repetir</label>
-              <select value={form.repetir} onChange={(e) => pon("repetir", e.target.value)} className={inputCls}>
-                <option value="">No se repite</option>
-                {CADENCIAS.map((c) => (
-                  <option key={c.value} value={c.value}>{c.label}</option>
-                ))}
-              </select>
+              <p className="text-[11px] font-semibold text-neutral-700">Repetir el bloqueo</p>
+              <p className="text-[10px] text-neutral-500 mt-0.5">
+                Cierra el mismo hueco, a la misma hora, en los días siguientes. Déjalo en «No se repite»
+                para bloquear solo este rato.
+              </p>
             </div>
-            {form.repetir && (
+            <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className={rotulo}>Hasta el día (incluido)</label>
-                <input
-                  type="date"
-                  value={form.repetirHasta}
-                  min={form.date || undefined}
-                  onChange={(e) => pon("repetirHasta", e.target.value)}
-                  className={inputCls}
-                />
+                <label className={rotulo}>Cada cuánto</label>
+                <select value={form.repetir} onChange={(e) => pon("repetir", e.target.value)} className={inputCls}>
+                  <option value="">No se repite</option>
+                  {CADENCIAS.map((c) => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                </select>
               </div>
+              {form.repetir && (
+                <div>
+                  <label className={rotulo}>Hasta el día (incluido)</label>
+                  <input
+                    type="date"
+                    value={form.repetirHasta}
+                    min={form.date || undefined}
+                    onChange={(e) => pon("repetirHasta", e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+              )}
+            </div>
+            {form.repetir && !form.repetirHasta && (
+              <p className="text-[10px] text-neutral-500">
+                Di hasta qué día se repite: hasta entonces no se crea ninguna repetición.
+              </p>
+            )}
+            {/* La cuenta, en cuanto hay con qué hacerla. Es el número exacto
+                que se va a crear, no una estimación: sale de la misma función. */}
+            {previsto && (
+              <p className="text-[11px] text-neutral-700 bg-white border border-neutral-200 rounded px-2 py-1.5">
+                Se crearán <strong className="font-semibold">{previsto.total} bloqueos</strong>: el
+                del {corto(form.date)} y {previsto.total - 1}{" "}
+                {previsto.total - 1 === 1 ? "repetición" : "repeticiones"}, la última
+                el {corto(previsto.ultimo)}.
+                {previsto.sinDia > 0 && (
+                  <>
+                    {" "}
+                    {previsto.sinDia} {previsto.sinDia === 1 ? "mes no tiene" : "meses no tienen"} ese día
+                    y se {previsto.sinDia === 1 ? "salta" : "saltan"}.
+                  </>
+                )}
+                {previsto.tope && <> Son las {TOPE_REPETICIONES} repeticiones como mucho que se crean de una vez.</>}
+                <span className="block text-neutral-500 mt-0.5">
+                  Sueltos: cada uno se mueve o se quita por su cuenta, desde Citas → Bloqueos. Los que
+                  choquen con algo no se crean y se avisa.
+                </span>
+              </p>
             )}
           </div>
-          {form.repetir && (
-            <p className="text-[10px] text-neutral-400 -mt-2">
-              Se crean bloqueos sueltos, uno por semana: cada uno se mueve o se quita solo. Los que
-              choquen con algo no se crean y se avisa.
-            </p>
-          )}
         </div>
 
         <div className="px-5 py-3 border-t border-neutral-100 flex justify-end gap-2 shrink-0">

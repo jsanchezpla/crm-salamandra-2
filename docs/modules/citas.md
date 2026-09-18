@@ -18,7 +18,7 @@
 | **Scripts** | Activación: `node scripts/enable-module.js <slug> citas` (corre las 18 migraciones de `MODULES.citas` —desde el 12/09/2026 con `migrate-diagnosticos` (`bookings.diagnostico_id` + `diagnostico_tramo`, `session_packs.diagnostico_id` y `session_packs.total_sessions` DROP NOT NULL; por TABLA, idempotente, y **antes del despliegue** por lo mismo que las cuatro de abajo), y desde el 01/09/2026 con `migrate-citas-categorias-bloqueo` (`team_blocks.category_key`) `migrate-citas-bloqueo-taller` (`team_blocks.taller_id`) y `migrate-reuniones-acta` (`team_blocks.acta_sections/acta_transcript/acta_updated_at`, el acta de la reunión de equipo) y `migrate-talleres-grupos` (`bookings.taller_grupo_id` + `event_types.taller_grupo_id`, los talleres como citas — el resto de lo que crea va en el bloque `clinica`); las CUATRO **van antes del despliegue**: el modelo declara esas columnas y sin ellas toda lectura de la agenda da 42703— en `scripts/_module-migrations.js`, más las CORE que tocan citas —`migrate-sprint-aumenta-2026-07`, `migrate-contrato-estructurado`, `migrate-payments-sprint-1`…—; sin seed de fábrica) · Comprobar (solo lectura): `comprobar-citas.js` (¿le funcionan las citas a este cliente?), `comprobar-stripe.js`, `inspeccionar-cita-cobro.js`, `check-links.js` (citas sin ficha) · Configurar: `configure-portal-citas.js <slug>` (enciende el portal; sustituye a `configure-nutri-laura-citas-portal.js`, que sigue en disco), `_hechos/configure-nutri-laura-widget-auth.js`, `configure-stripe-tenant.js`, `seed-contrato-tunutrilaura.js` (clausulado de Laura en `contract_templates`) · Cron (systemd en el VPS, cada hora): `enviar-recordatorios.js` (`scripts/deploy/crm-recordatorios.timer`) y `vigilar-retenciones.js` (`crm-retenciones.timer`) · Mantenimiento (ensayan por defecto): `borrar-citas-por-nombre.js`, `_hechos/borrar-tipos-cita-ejemplo.js`, `reasignar-ausencias-sin-persona.js` · Desarrollo: `dev-mint-wpsso.js`, `dev-precio-cita.js`, `dev-cita-retenida.js` · Ya ejecutados (importación de Aumenta, 08/2026): `_hechos/import-aumenta-tipos-cita.js`, `import-aumenta-citas.js` |
 | **Pruebas** | Es el módulo con más: los 55 `scripts/_smoke-*.mjs` que nombra esta fila (contados el 21/08/2026; todos existen). Entran en `npm test` (sin base ni servidor; `scripts/pruebas.mjs` lo deduce sola, o van marcadas `// @prueba ligera`): `_smoke-citas-dinero` (`node:test`, 19/08/2026: lo que devuelve `lib/citas/dinero.js`, la primera escrita así), `_smoke-citas-auditoria` (`node:test`, 13/09/2026, ligera: ningún campo privado sale en el resumen, el diff de una edición, la huella que devuelve `borrarCitaDeVerdad` ni la red de `logCitasAudit`; la red no toca a otras entidades; derivas contra `Booking.model.js` —cada columna decidida en una de las tres listas— y contra los alias de Booking en `tenantDb.js`; y ninguna llamada de auditoría con `entity: "Booking"` usa `toJSON(`), `_smoke-alta-desde-diagnostico` (`node:test`, 12/09/2026, ligera, 10 casos: el contrato de la URL con Diagnósticos, ida y vuelta —la entrevista siempre a 60 min, una duración que no es múltiplo de 30 se omite, sin `diagnostico` + `tramo` válidos se devuelve null, y `URLSearchParams`, cadena y objeto plano se leen igual—; la parte del SERVIDOR —qué rechaza el POST y con qué frase, y la plantilla del registro— está en `_smoke-cita-de-diagnostico`, que se documenta en `clinica.md`), `_smoke-categorias-bloqueo` (`node:test`, 01/09/2026, ligera: las CATEGORÍAS de bloqueo — la compatibilidad primero (sin categorías guardadas la lista es vacía, NO las de fábrica, y un bloqueo se pinta como siempre: persona → centro → negro), que el color de la categoría gana al de la persona, que renombrar CONSERVA la clave (o los bloqueos ya guardados se quedan huérfanos), que una clave que el centro no tiene dada de alta no se guarda aunque la mande el navegador, que borrar una categoría no rompe el bloqueo que la usaba, y que Productividad deja de adivinar por texto cuando hay categoría pero sigue leyéndolo cuando no —las otras cuatro de fábrica NO cuentan como internas a propósito, para no mover cifras que Aumenta lleva meses mirando—), `_smoke-actas-reunion` (`node:test`, 01/09/2026, ligera: el ACTA de una reunión de equipo — lo primero que fija es que **las notas internas no se cuelan en el acta repartible** (un apartado de plantilla que pida esa clave se descarta, y la foto que se guarda va sin el bloque interno), que solo los bloqueos `reunion_equipo` llevan acta, que sin apartados usables se cae a los CINCO de fábrica y nunca a una lista vacía —que dejaría un acta con solo notas internas—, que guardar en blanco es borrar y que la foto de apartados NO cuenta como contenido, que `limpiarActa` solo deja pasar las claves de los bloques (lo que mande de más el navegador no llega al JSONB), y que el prompt lleva las claves exactas, prohíbe inventarse acuerdos y prohíbe la historia clínica en el cuerpo del acta), `_smoke-citas-asistencia` (`node:test`, 01/09/2026, ligera: la PRESUNCIÓN de asistencia — que solo alcanza a `confirmed` (una `pending` pasada de hora no es una asistencia, es una cita que nadie aceptó) y solo cuando la cita ha TERMINADO, no cuando ha empezado; que `esPresunta` separa lo supuesto de lo comprobado, que es lo que deja que la ficha diga «se da por asistida» en vez de un «Completada» que nadie pulsó; que sin `duration` usable se suponen 60 minutos y una fila sin fecha no revienta; y que las tres funciones dejan la fila INTACTA — si un día alguien las hace escribir, la prueba se pone roja), `_smoke-resultado-cita` (`node:test`, 01/09/2026, ligera: los cuatro resultados de una cita — que **una falta nunca sale sin `noShowJustified`** (omitirlo la convertiría en injustificada en silencio: incidencia, aviso a administración y sin recuperar), que el motivo en blanco viaja como `null` y no como cadena vacía, que la presunción de asistencia se respeta al pintar el resultado, y que los botones no salen en una cita que aún no ha empezado ni en una cancelada), `_smoke-incidencia-por-falta` (`node:test`, 01/09/2026, ligera: que **de fábrica está apagado** —sin lista puesta, ningún tenant abre incidencias—, que la lista se limpia (repetidos, espacios, lo que no es UUID), que el título dice qué, a quién y cuándo y cabe en los 200 de la columna, y que las dos faltas abren incidencia con prioridad distinta), `_smoke-citas-validation` (`node:test`: `lib/citas/validation.js`, lo que entra por el widget y los tipos de cita), `_smoke-clients-comunicaciones` (`node:test`, en clients: `citaPuedeAvisar` con un `Client` de mentira), `_smoke-citas-portal-meses` (`node:test`: `lib/citas/portalMeses.js`, qué meses ve la familia en el portal, con un `Payment` de mentira), `_smoke-citas-slots` (`node:test`, 19/08/2026: lo que devuelve `lib/citas/slots.js` —los huecos de la agenda pública avanzan de `duration` en `duration`, los descansos se restan POR DENTRO del bloque, la antelación mínima se mide desde `now`, una cita tapa medio-abierto `[inicio, fin)`, un festivo no da huecos, `dayHasAnySlot` dice lo mismo que el generador; el offset de Madrid (+01:00 invierno / +02:00 verano, también los días del cambio de hora) se resuelve con `Intl` y la prueba lanza la misma lib en procesos hijos con TZ=UTC, Tokio, Los Ángeles y Kiritimati exigiendo la MISMA huella: nada depende de la zona del proceso; y desde el 19/08 una duración que no es un entero ≥ 1 devuelve vacío en vez de colgar Node—), `_smoke-formularios-fields-preguntas` (`node:test`, 19/08/2026, de formularios: su mitad de `lib/citas/preguntasCita.js` —cuatro tipos de pregunta y no más, `normalizarPreguntas` desde el panel o JSONB sin guardar nada roto, `validarRespuestas` de quien reserva, `paquetePreguntas` que va a `bookings.form_answers`—), `_smoke-citas-tipos-visibilidad` (`node:test`, 20/08/2026: `lib/citas/tiposVisibles.js` y `lib/citas/visibilidad.js` con modelos de mentira —el público solo ve los tipos no ocultos y la «Supervisión profesional» solo quien viene marcado como profesional; un bono VIVO destapa su tipo oculto y solo el suyo, contándose desde sus propias citas: las futuras descuentan, cancelar con 24 h o más devuelve la sesión, cancelar tarde la gasta y la falta justificada no; `puedeReservar` es la puerta de verdad de `/book` aunque el id se mande a mano, y todos los rechazos dicen la MISMA frase para no chivar el catálogo; `soloConPago` exige un true booleano y la valoración inicial se salta la caja; y en la agenda dirección ve todo, el equipo solo lo suyo más las citas sin asignar salvo `agendaCompartida`, con `esSuya` y `soloLoSuyo` obligadas a decir EXACTAMENTE lo mismo—), `_smoke-citas-portal-contrato` (`node:test`, 20/08/2026: `lib/citas/portalContract.js` con modelos falsos —sin contrato subido ni plantilla activa el portal NO se bloquea (el fallo del 31/07); las plantillas estructuradas mandan sobre el PDF estándar, que queda solo como descarga, y la firma «simple» de antes no vale al activarlas: se vuelve a pedir firma; a la menor el consentimiento parental le sale PRIMERO y en los huecos de ficha gana la definición del documento que NO es solo de menores; con dos tutores firmantes no está completo hasta que firman los dos; quien entra con el correo de la ficha es el titular aunque figure como tutor sin firma (el callejón del 06/08); el contrato en papel completa cualquier camino y una tabla sin migrar (42P01) no tumba el portal—), `_smoke-citas-cancelacion-aviso` (`node:test`, 20/08/2026: cuándo se CALLA el «tu cita ha sido cancelada» —`porQueNoSeAvisa` devuelve qué puerta lo paró: sin correo, cita pasada o plantilla fuera de `CORREOS_TRANSACCIONALES`, y la falta de correo se mira antes que la fecha—; que el correo se monte en UN solo sitio desde que se fundieron las dos copias (el panel delega en `emailCancelacionAlCliente` y no deja etiqueta de log propia); y que la sesión de un bono siga diciendo «tu programa sigue activo»), `_smoke-plantillas-citas-reserva` (`node:test`, 21/08/2026, ligera, 99 comprobaciones: los cinco correos del ciclo de una cita —`lib/email/templates/citas/booking{Received,Confirmed,Rejected,Cancelled,Rescheduled}.js`—: que el asunto es el suyo y distinto de los otros cuatro, que el HTML y el texto plano cuentan lo mismo, que los condicionales aparecen cuando toca y **CALLAN** cuando no (`esBono` → «tu programa sigue activo» en cancelación y rechazo; `retenido` solo si es un entero de céntimos positivo; `cobro` «cobrada»/«sin_cobrar»/silencio; las DOS fechas del cambio de día, la vieja antes que la nueva), que los importes salen en euros desde céntimos (3500 → 35,00 €) y que ni un nombre, ni un servicio, ni un motivo, ni una dirección salen del HTML sin escapar —mientras el texto plano se queda crudo a propósito—; seis bordes conocidos quedan fijados tal como están hoy con un `it` marcado `// SOSPECHOSO`), `_smoke-plantillas-citas-resto` (`node:test`, 21/08/2026, ligera, 86 comprobaciones: lo que DEVUELVEN las otras cinco plantillas de `lib/email/templates/citas/` —`bookingMeetLink`, `bookingReminder`, `pedirTarjeta`, `avisoCliente` y `solicitudAceptada`—: el asunto, que el html y el texto plano digan lo mismo, y los condicionales que se rompen solos (el recordatorio reparte el enlace de cancelación en las tres modalidades cuando el centro deja anular y no promete nada cuando no lo deja; `solicitudAceptada` con `reservaCerrada` cambia de asunto y NO reparte el enlace de reserva aunque se lo pasen; `pedirTarjeta` convierte céntimos en euros y distingue «rechazada» de «caducada»); ahí vive el arreglo del 21/08/2026 —el `href` del botón de pago iba crudo dentro del atributo y ahora va escapado—, y nueve comportamientos raros pero reales quedan fijados con un `it` marcado `// SOSPECHOSO`), `_smoke-puerta-identidad`, `-puerta-contrato`, `-puerta-descartada`*, `-puerta-profesional`*, `-paciente-borrado`*, `-aviso-admision`, `-tipos-ocultos`, `-tipos-visibles`, `-tipos-profesionales`, `-preguntas-cita`, `-packs-sesiones`, `-fraccionado`, `-pedir-otra-tarjeta`, `-no-se-devuelve`, `-ausencias`, `-descansos`, `-horario-profesional`, `-bienvenida`, `-menor-firma`, `-checkpoint2-emails` (* = marcadas a mano). Necesitan base de datos —y casi todas `npm run dev`— (`npm run test:todo`): `-puerta-formulario`, `-puerta-valoracion`, `-valoracion-inicial`, `-bloqueos-quien-ve`, `-citas-sin-profesional`, `-avisos-cliente`, `-enlace-videollamada`, `-dinero-solo-direccion`, `-ocupa-hueco`, `-packs-reserva`, `-formulario-cita`, `-contrato-estructurado`, `-campana`, `-checkpoint2-e2e`, y las de cobro `-autorizacion`, `-book-autorizacion`, `-confirmar-cobrar`, `-cancelar-retencion`, `-carreras-cobro`, `-pedir-tarjeta`, `-webhook-retencion`, `-vigilar-retenciones`, `-fraccionado-reloj`, `-retencion-viva-o-muerta` (falsea Stripe con `_fake-stripe-loader.mjs`) |
 | **Decisiones** | `../decisions/2026-07-23-conexion-cliente-equipo.md` (`bookings.client_id`: la cita enlaza con la ficha por FK, ya no solo por correo) · `../decisions/2026-07-28-repaso-de-seguridad.md` (rol fresco de BD en el informe de ocupación; guard de la demo en lo que manda correo) · `../decisions/2026-09-13-la-auditoria-de-una-cita-no-lleva-al-paciente.md` (qué de una cita llega a la auditoría de master: resumen por lista blanca, lo privado de una edición solo por nombre, la huella del borrado sin nombre) |
-| **En este doc** | Toda cita con su cobro (04/09/2026) · La cita de un diagnóstico (12/09/2026) · Puerta de identidad · Puerta de admisión · Puerta de contratos y valoración inicial · Tipos de cita ocultos y asignados a dedo · Categorías de bloqueo (01/09/2026) · Repetir un bloqueo el resto de semanas (09/09/2026) · Estados y transiciones · Endpoints · Contrato del Centro en el portal · UI |
+| **En este doc** | Toda cita con su cobro (04/09/2026) · La cita de un diagnóstico (12/09/2026) · Puerta de identidad · Puerta de admisión · Puerta de contratos y valoración inicial · Tipos de cita ocultos y asignados a dedo · Categorías de bloqueo (01/09/2026) · Repetir un bloqueo el resto de semanas (09/09/2026; la caja aparte, la cuenta previa y el dueño sugerido, 18/09/2026) · Estados y transiciones · Endpoints · Contrato del Centro en el portal · UI |
 
 ## Resumen
 
@@ -2146,6 +2146,17 @@ Rodrigo el mismo día:
 - Las dos cosas las cuenta `GET /api/citas/vista` (`vistaDe()` en
   `lib/citas/vistaAgenda.js`, prueba `_smoke-vista-agenda.mjs`) y el
   calendario las aplica como `hiddenDays`, `slotMinTime` y `slotMaxTime`.
+- **El fin de semana se abre POR SEMANAS, no para siempre (18/09/2026,
+  AV-0173)**. Hasta hoy, una sola cita en sábado o domingo anulaba el ajuste
+  `lv` y todas las semanas salían con siete columnas: en Aumenta la única cita
+  de fin de semana de sus doce mil era una de prueba del 12/09, y le estrechó
+  la agenda a veinte personas. Ahora `vistaDe()` devuelve `hiddenDays` según el
+  ajuste y, aparte, `finesDeSemanaConCita` (las FECHAS de sábado o domingo con
+  cita, en la misma ventana que la rejilla); el calendario decide tramo a tramo
+  con `diasOcultosEn(vista, desde, hasta)` —el `hasta` es exclusivo, como el
+  `currentEnd` de FullCalendar—, así que la semana que tiene una cita el sábado
+  la enseña y las demás siguen en lunes a viernes. Ninguna cita se queda
+  invisible, que era lo que protegía la regla vieja.
 - **«Ajustar»** (botón de la botonera): encoge las franjas (`.agenda-compacta`
   en `app/globals.css`) y con `expandRows` la jornada entera cabe en la
   pantalla sin desplazarse; se recuerda en `localStorage`.
@@ -2436,3 +2447,80 @@ repetidas: sin concepto de serie, cada uno se mueve o se quita solo. Van con
 todos duran lo mismo. Lo que choca no para el resto: se cuenta y se dice al
 final («Creados 12 bloqueos… estos NO se han creado»). Pruebas: las cinco
 últimas de `_smoke-recurrencia-citas.mjs`.
+
+### Y aun así se liaban (18/09/2026, Aumenta)
+
+> «Tienen mucho lío a la hora de crear bloqueos, se lían con la parte de
+> Repetir… se crean más bloqueos sin querer de los que se piden al no saber
+> utilizar bien la herramienta.»
+
+«Repetir» estaba resuelto pero no se entendía: dos campos sueltos debajo de
+«Termina», o sea **dos fechas de fin en la misma pantalla que significan cosas
+distintas**. Tres cambios en `BloqueoRapido`, todos de pantalla:
+
+- **«Repetir» vive en su propia caja**, con título y con una frase que dice qué
+  hace; el aviso de «Termina» pasa a decir que es cuándo acaba ESTE tramo y que
+  para varias semanas está «Repetir», y va donde se lee, no en la última línea.
+- **La cuenta, delante y en vivo**: «Se crearán 12 bloqueos: el del 23/09 y 11
+  repeticiones, la última el 09/12». Sale de `repeticionDeBloqueo`, la MISMA
+  función que luego se ejecuta, así que el número de la pantalla y el que se
+  crea no pueden discrepar.
+- **Y hay que decir que sí**: antes de crear nada se pregunta con el número, la
+  hora, de quién son y que se deshacen de uno en uno. Es la única parada entre
+  un «hasta» con el año mal tecleado y una agenda cerrada hasta junio.
+
+### Un bloqueo nace de quien tiene la agenda abierta (18/09/2026, Aumenta)
+
+> «Si se está en el horario de una terapeuta que se ponga automáticamente como
+> la dueña (en el desplegable "Quién") del bloqueo.»
+
+El bloqueo rápido nacía siempre a nombre de QUIEN MIRA, y en Aumenta la agenda
+la coloca administración, que no atiende a nadie: cada tramo cerrado mirando la
+agenda de una terapeuta se guardaba en la de administración —un hueco que
+seguía ofreciéndose y un bloqueo en una agenda vacía— salvo que se acordaran de
+bajar el desplegable.
+
+La pista es el FILTRO por profesional: `duenoSugeridoDelBloqueo` (en
+`lib/citas/filtros.js`, con la otra mitad de la regla) devuelve la ficha **solo
+cuando en pantalla hay exactamente una**; con dos, con ninguna o con «Sin
+asignar» de por medio no se adivina y se deja a quien mira, como hasta hoy. El
+calendario la manda en `inicial.duenoSugerido` y el drawer lo dice debajo del
+desplegable («Puesta porque estás viendo su agenda»): un campo que se rellena
+solo sin explicar por qué se lee como un error de la pantalla. **Es una
+sugerencia, no una valla**: el servidor impone los permisos igual. Pruebas: las
+seis últimas de `_smoke-citas-filtro-profesional.mjs`.
+
+
+## Los dos «ese hueco está ocupado», y la serie que no se pierde entera (18/09/2026, AV-0167 de Aumenta)
+
+> «Estoy en octubre, en la agenda de Elena. Intento crear una cita semanal […] y
+> me dice que hay otra cita en ese hueco y no me deja crear la cita para poder
+> programarla hasta el 30/06/2027.»
+
+El POST de citas devuelve 409 por dos motivos que no se parecen en nada, y la
+pantalla los trataba igual:
+
+- **Un BLOQUEO o un festivo** (`motivo: "bloqueo"`): el centro cerrado o alguien
+  de vacaciones. Se avisa y se puede insistir (`permitirBloqueo`,
+  `permitirFestivo`); es lo de siempre y sigue igual.
+- **OTRA CITA en el mismo rato** (`motivo: "solape"`): encima de una cita no
+  cabe otra, y no hay permiso que lo cambie. El diálogo decía «Ese hueco está
+  bloqueado» y ofrecía **«Crearla igualmente»**, que reenviaba y volvía a
+  fallar — de ahí la tarea «Crear cita igualmente… no hace nada»: no es que no
+  hiciera nada, es que no podía hacer nada. Ahora se dice «Ahí ya hay otra
+  cita», con la hora y sin botón inútil.
+
+Y lo que de verdad dejaba sin trabajo: **una serie de cuarenta semanas se perdía
+entera porque la primera chocaba**. Las repeticiones sí saben saltarse las que
+chocan y contarlo al final; la primera cortaba el flujo. Cuando el choque es un
+solape y hay repetición, se pregunta «¿Sigo con las otras N?» y se crean las que
+caben. Si la primera no llegó a existir, **el correo a la familia lo manda la
+primera que sí entre** (`omitirCorreo` deja de ser fijo en el bucle), y el
+resumen lo dice: «La primera no cabía, así que no se ha creado. De las demás han
+entrado N».
+
+**Dónde**: `app/api/citas/bookings/route.js` (los dos `errorConDatos` con
+`motivo`) y `modules/default/citas/NuevaCitaDrawer.jsx` (`primeraCreada`). El
+`motivo` viaja aparte del texto a propósito: un cliente viejo que no lo mire
+sigue leyendo el mismo mensaje, y la pantalla cae al texto («Solapa con otra
+cita…») si no llega.

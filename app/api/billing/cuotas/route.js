@@ -3,8 +3,10 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { logBillingAudit, datosPeticion } from "../../../../lib/billing/audit.js";
 import { limpiarCuota, metodosValidos } from "../../../../lib/billing/cuotas.js";
+import { cuotaQueRepite, motivoDeRepetida } from "../../../../lib/billing/cuotaDuplicada.js";
 import { sincronizarCobrosDelTramo } from "../../../../lib/billing/cobrosDelTramo.js";
 import { cuotasConPacientes } from "../../../../lib/billing/cuotasConPacientes.js";
+import { ordenarCuotasPorServicio } from "../../../../lib/billing/tiposDeCuota.js";
 
 /**
  * GET/POST /api/billing/cuotas — las cuotas asignadas (01/09/2026).
@@ -53,7 +55,21 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
      */
     const filas = await cuotasConPacientes({ tenantModels, hasModule, where });
 
-    return ok({ cuotas: filas, total: filas.length });
+    /*
+     * Y ORDENADAS POR SERVICIO (18/09/2026, AV-0194 de Isabel: «que salgan
+     * ordenadas, todas las de TO juntas, todas las de logo juntas»).
+     *
+     * Hasta hoy la pantalla las pintaba como las devolvía Postgres, o sea en
+     * ningún orden: para ver quién va a logopedia había que leerse las 291.
+     * Se ordena aquí, en el servidor, para que la pantalla no tenga que saber
+     * nada del catálogo; el cómo —y por qué una cuota de dos terapias hace
+     * grupo propio— vive en `lib/billing/tiposDeCuota.js` con su prueba.
+     */
+    const { BillingConcept } = tenantModels;
+    const catalogo = BillingConcept ? await BillingConcept.findAll({ attributes: ["id", "name"] }) : [];
+    const cuotas = ordenarCuotasPorServicio(filas, new Map(catalogo.map((c) => [String(c.id), c.toJSON()])));
+
+    return ok({ cuotas, total: cuotas.length });
   } catch (err) {
     return serverError(err);
   }
@@ -62,8 +78,18 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
 export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
-    const { Cuota, Client } = tenantModels;
+    const { Cuota, Client, BillingConcept } = tenantModels;
     const body = await request.json();
+
+    // El catálogo solo se trae si alguien choca, y una sola vez para todo el
+    // lote: sirve para nombrar la cuota que repite, no para crear nada.
+    let catalogo = null;
+    const catalogoPorId = async () => {
+      if (catalogo) return catalogo;
+      const filas = await BillingConcept.findAll({ attributes: ["id", "name"] });
+      catalogo = new Map(filas.map((c) => [String(c.id), c.toJSON()]));
+      return catalogo;
+    };
 
     // Un destinatario suelto o una lista: la pantalla manda siempre la lista,
     // pero la forma de uno solo se acepta para no obligar a envolver.
@@ -103,14 +129,28 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       }
 
       if (!permitirDuplicadas) {
-        // Mismo pagador y mismo paciente con cuota viva = casi siempre un doble
-        // clic. Dos hijos son dos pacientes distintos, y esos sí pasan.
-        const yaTiene = await Cuota.findOne({
+        /*
+         * Repetir es volver a cobrar LO MISMO (18/09/2026, AV-0195).
+         *
+         * Hasta hoy bastaba con tener cualquier cuota viva para quedarse
+         * fuera, y eso dejaba sin alta a un niño que va a logopedia Y a
+         * terapia ocupacional: en producción chocaban las 284 parejas
+         * cliente+paciente con cuota, y de las 7 que tienen varias ninguna
+         * comparte concepto. La regla —y por qué— en
+         * `lib/billing/cuotaDuplicada.js`.
+         */
+        const vivas = await Cuota.findAll({
           where: { clientId: valores.clientId, patientId: valores.patientId ?? null, active: true },
-          attributes: ["id"],
+          attributes: ["id", "conceptIds"],
         });
-        if (yaTiene) {
-          omitidas.push({ ...destino, nombre: ficha.name, motivo: "ya tiene una cuota activa", cuotaId: yaTiene.id });
+        const repite = cuotaQueRepite(vivas.map((c) => c.toJSON()), valores.conceptIds);
+        if (repite) {
+          omitidas.push({
+            ...destino,
+            nombre: ficha.name,
+            motivo: motivoDeRepetida(repite, await catalogoPorId()),
+            cuotaId: repite.id,
+          });
           continue;
         }
       }
