@@ -325,6 +325,13 @@ export default function ExpedienteDiagnostico({ id }) {
             onSeguir={acciones.seguir}
             onDesbloquear={acciones.desbloquear}
             onCerrar={acciones.cerrar}
+            onBorrar={async (exp) => {
+              // AV-0202: al borrarlo esta ficha deja de existir, así que se
+              // vuelve a la lista en vez de recargar un expediente que ya no
+              // está.
+              const hecho = await acciones.borrar(exp);
+              if (hecho !== false) router.push("/clinica/diagnosticos");
+            }}
           />
           <span className="ml-auto"><LeyendaDeHoras /></span>
         </div>

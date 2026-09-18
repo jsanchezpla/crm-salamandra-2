@@ -6,6 +6,8 @@ import { productoDe, conceptoDeProducto, ROTULO_ESTADO } from "../../../../../li
 import { UUID_RE } from "../../../../../lib/clinica/diagnosticoFila.js";
 import { tablaAusente, catalogoDelCentro } from "../../../../../lib/clinica/diagnosticoDb.js";
 import { fichaDeExpediente } from "../../../../../lib/clinica/registrosDelExpediente.js";
+import { motivoParaNoBorrarDiagnostico } from "../../../../../lib/clinica/alcanceDiagnostico.js";
+import { resolveCurrentTeamMemberId } from "../../../../../lib/team/currentTeamMember.js";
 
 /**
  * GET/PATCH /api/clinica/diagnosticos/[id] — un expediente de diagnóstico y lo
@@ -28,6 +30,11 @@ import { fichaDeExpediente } from "../../../../../lib/clinica/registrosDelExpedi
  *         el precio del que se contrató, y cambiarlo sería reescribirlos).
  *         Devuelve la misma ficha entera que el GET: la pantalla del
  *         expediente la sustituye sin volver a pedirla.
+ *
+ * DELETE — borra un expediente abierto por error (18/09/2026, AV-0202). Solo
+ *          mientras no haya salido de sí mismo: sin bono, sin cobro y sin
+ *          informe. La regla, con su prueba, en `lib/clinica/alcanceDiagnostico.js`.
+ *          Los registros de sesión atados NO se borran: se sueltan.
  *
  * Parar, seguir, desbloquear y cerrar tienen su POST cada uno: son decisiones
  * y dejan su línea propia en la auditoría.
@@ -124,6 +131,65 @@ export const PATCH = withTenant(async (request, routeCtx, ctx) => {
     const puedeDecidir = puedeDarBonos({ role: request.headers.get("x-user-role") ?? "user", hasModule });
     const fila = await fichaDeExpediente({ tenant, tenantModels, expediente, puedeDecidir });
     return ok({ expediente: fila });
+  } catch (err) {
+    if (tablaAusente(err)) return notFound("Ese diagnóstico no existe");
+    return serverError(err);
+  }
+});
+
+/**
+ * DELETE /api/clinica/diagnosticos/[id] — borrar un expediente abierto por
+ * error (18/09/2026, AV-0202 de Aumenta; Rodrigo dijo que sí al borrado).
+ *
+ * Isabel: «¿y cómo borro o elimino si lo hago mal?». Hasta hoy no había forma:
+ * «parar» significa otra cosa —que la familia decidió no continuar— y dejaba el
+ * expediente en la lista para siempre.
+ *
+ * ⚠️ Lo clínico NO se borra. Los registros de sesión que colgaban del
+ * expediente se SUELTAN (`diagnosticoId` a NULL) y siguen en la historia del
+ * paciente: borrar un expediente no puede llevarse por delante lo que una
+ * profesional escribió de una sesión que sí ocurrió.
+ */
+export const DELETE = withTenant(async (request, routeCtx, ctx) => {
+  const { tenant, tenantModels, hasModule } = ctx;
+  if (!hasModule("clinica")) return forbidden();
+  try {
+    const { Diagnostico, ClinicSession } = tenantModels;
+    const { id } = (await routeCtx?.params) ?? {};
+    if (!Diagnostico || !UUID_RE.test(String(id ?? ""))) return notFound("Ese diagnóstico no existe");
+
+    const expediente = await Diagnostico.findByPk(id);
+    if (!expediente) return notFound("Ese diagnóstico no existe");
+
+    const puedeDecidir = puedeDarBonos({ role: request.headers.get("x-user-role") ?? "user", hasModule });
+    const teamMemberId = await resolveCurrentTeamMemberId(request, tenantModels);
+    const motivo = motivoParaNoBorrarDiagnostico({ puedeDecidir, fila: expediente, teamMemberId });
+    if (motivo) return error(motivo, 409);
+
+    // Los registros se sueltan ANTES: si el borrado fallara después, quedan
+    // registros sin expediente (que se leen igual) y no al revés.
+    let soltados = 0;
+    if (ClinicSession) {
+      const [, n] = await ClinicSession.update(
+        { diagnosticoId: null },
+        { where: { diagnosticoId: expediente.id } }
+      );
+      soltados = Number(n) || 0;
+    }
+
+    const antes = resumen(expediente, ["patientId", "productoKey", "status", "therapistId"]);
+    await expediente.destroy();
+
+    await auditar({
+      tenantId: tenant.id,
+      ...datosPeticion(request),
+      action: "diagnostico.borrado",
+      entity: "Diagnostico",
+      entityId: id,
+      before: { ...antes, registrosSoltados: soltados },
+    });
+
+    return ok({ borrado: true, registrosSoltados: soltados });
   } catch (err) {
     if (tablaAusente(err)) return notFound("Ese diagnóstico no existe");
     return serverError(err);

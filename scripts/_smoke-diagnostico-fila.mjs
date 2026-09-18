@@ -81,11 +81,27 @@ describe("filtroDeEstado", () => {
 describe("accionesDe", () => {
   it("en entrevista: abrir la entrevista para todos; parar y seguir solo para quien decide", () => {
     assert.deepEqual(accionesDe({ status: "entrevista", puedeDecidir: false }), {
-      abrirEntrevista: true, parar: false, seguir: false, anadirHoras: false, desbloquear: false, cerrar: true,
+      abrirEntrevista: true, parar: false, seguir: false, anadirHoras: false, desbloquear: false, cerrar: true, borrar: true,
     });
     assert.deepEqual(accionesDe({ status: "entrevista", puedeDecidir: true }), {
-      abrirEntrevista: true, parar: true, seguir: true, anadirHoras: false, desbloquear: true, cerrar: true,
+      abrirEntrevista: true, parar: true, seguir: true, anadirHoras: false, desbloquear: true, cerrar: true, borrar: true,
     });
+  });
+
+  /*
+   * Borrar el abierto por error (18/09/2026, AV-0202). El botón sale mientras
+   * el expediente no haya salido de sí mismo; QUIÉN puede pulsarlo lo decide el
+   * endpoint (`alcanceDiagnostico.js`), porque esta función no sabe quién mira.
+   */
+  it("borrar: mientras no haya bono, cobro ni informe", () => {
+    const recien = { status: "entrevista", puedeDecidir: true };
+    assert.equal(accionesDe(recien).borrar, true);
+    assert.equal(accionesDe({ ...recien, packId: "b1" }).borrar, false);
+    assert.equal(accionesDe({ ...recien, entrevistaPaymentId: "c1" }).borrar, false);
+    assert.equal(accionesDe({ ...recien, informeId: "i1" }).borrar, false);
+    // Y sigue saliendo en un expediente cerrado que no llegó a nada: es
+    // justamente el que se abrió por error y se paró sin más.
+    assert.equal(accionesDe({ status: "cerrado", puedeDecidir: true }).borrar, true);
   });
   it("en curso: añadir horas; desbloquear solo quien decide", () => {
     const a = accionesDe({ status: "en_curso", puedeDecidir: true });
@@ -96,7 +112,10 @@ describe("accionesDe", () => {
     assert.equal(accionesDe({ status: "en_curso", puedeDecidir: false }).desbloquear, false);
   });
   it("cerrado: nada; no continúa: solo cerrar", () => {
-    assert.deepEqual(Object.values(accionesDe({ status: "cerrado", puedeDecidir: true })), [false, false, false, false, false, false]);
+    // `borrar` va aparte: no depende del estado sino de si el expediente ha
+    // salido de sí mismo (AV-0202), así que se comprueba el resto.
+    const { borrar: _b, ...cerrado } = accionesDe({ status: "cerrado", puedeDecidir: true });
+    assert.deepEqual(Object.values(cerrado), [false, false, false, false, false, false]);
     const nc = accionesDe({ status: "no_continua", puedeDecidir: true });
     assert.equal(nc.cerrar, true);
     assert.equal(nc.desbloquear, false);

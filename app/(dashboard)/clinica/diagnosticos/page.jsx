@@ -262,6 +262,7 @@ export default function DiagnosticosPage() {
                   onSeguir={acciones.seguir}
                   onDesbloquear={acciones.desbloquear}
                   onCerrar={acciones.cerrar}
+                  onBorrar={acciones.borrar}
                 />
               ))}
             </tbody>
