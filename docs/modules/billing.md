@@ -1975,7 +1975,7 @@ con los mismos filtros que su pantalla; los pinta `ExportButtons.jsx`:
 | `/exports/by-employee?from=&to=` | La de «Por empleado» (`projectedSalaryCost` solo admin). |
 | `/exports/by-partner?from=&to=` | La de «Por socio». |
 | `/exports/expenses` | Gastos con los filtros de la pantalla (`type`, `category`, `employeeId`, `partnerId`, `clientId`, `supplierId`, `from`, `to`). Columnas: fecha, tipo, categoría, descripción, empleado, proveedor, base, IVA y total. |
-| `/exports/payments` | Cobros (`from`, `to`, `status`, `method`, `invoiceId`). |
+| `/exports/payments` | Cobros (`from`, `to`, `status`, `method`, `invoiceId`, `q`). Columnas: Paciente (solo donde hay pacientes) · Cliente · Factura · Método · Fecha · Estado · Importe. El 18/09/2026 (AV de Aumenta, «no aparecen los nombres de los pacientes») se le añadieron las dos columnas de nombre —el cliente llega por los dos caminos, el del cobro y el de su factura, y 216 de los 352 cobros de Aumenta no tienen factura— y el `q` del buscador, que era el único filtro de la pantalla que no viajaba: con un nombre escrito, la tabla enseñaba sus cobros y el Excel se bajaba todos. Misma búsqueda que el listado (`lib/billing/busquedaCobros.js`); lo vigila `scripts/_smoke-export-cobros.mjs`. |
 | `/exports/quotes` | Presupuestos (`status`, `clientId`, `q`). |
 | `/exports/recurring` | Recurrentes (`active`, `clientId`). |
 
