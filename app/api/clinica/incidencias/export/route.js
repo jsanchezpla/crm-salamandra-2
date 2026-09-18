@@ -43,7 +43,7 @@ function nombreDe(lista, id) {
 
 /**
  * La hoja «Filtros aplicados» con los filtros de VARIOS valores (18/09/2026,
- * AV-0169): «Olga, Rosa» y no el primero a secas, para que el fichero siga
+ * AV-198): «Olga, Rosa» y no el primero a secas, para que el fichero siga
  * explicándose solo dentro de un mes.
  */
 function nombresDe(lista, ids) {
