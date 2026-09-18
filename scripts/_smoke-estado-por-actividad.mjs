@@ -50,3 +50,14 @@ test("el `prospect` de la tienda no se reactiva solo", () => {
   assert.ok(!ESTADOS_QUE_SE_REACTIVAN.clients.includes("prospect"));
   assert.deepEqual(ESTADOS_QUE_SE_REACTIVAN.patients, ["paused", "discharged"]);
 });
+
+test("quien ESPERA PLAZA se queda en pausa, nunca de baja (AV-0177)", () => {
+  // Una familia que se apunta hoy a la cola no tiene citas ni ha pagado nada:
+  // por la regla de arriba nacería de Baja, y no se ha ido a ningún sitio.
+  assert.equal(estadoPorActividad({ esperandoPlaza: true }, cli), "paused");
+  assert.equal(estadoPorActividad({ esperandoPlaza: true }, pac), "paused");
+  // Y no tapa nada de lo de antes: con cita de este curso sigue activo, y quien
+  // ya no espera (su entrada se cerró) vuelve a la regla de siempre.
+  assert.equal(estadoPorActividad({ esperandoPlaza: true, ultimaCita: "2026-09-20" }, cli), "active");
+  assert.equal(estadoPorActividad({ esperandoPlaza: false }, pac), "discharged");
+});

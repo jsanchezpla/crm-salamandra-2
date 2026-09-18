@@ -25,6 +25,8 @@
  *   · Una ficha en `prospect` (el «No vino» que se quitó el 15/09/2026) se
  *     trata como las demás. No lo lances sobre un centro con tienda: allí
  *     `prospect` es «compró una vez» y la regla no aplica.
+ *   · Quien está en la COLA DE ADMISIÓN se queda En pausa y nunca de Baja
+ *     (18/09/2026, AV-0177): no tiene citas porque aún no le hemos dado hora.
  *
  * Ensayo por defecto: cuenta cuántos cambiarían, sin nombres. `--confirm`
  * escribe en UNA transacción, y ANTES deja en `RESPALDO_DIR` (defecto /tmp) un
@@ -107,6 +109,15 @@ async function main() {
   const conCuotas = await hay("billing_cuotas");
   const hoyTxt = hoy.toISOString().slice(0, 10);
 
+  // Las familias que ESPERAN PLAZA (AV-0177): su entrada sigue viva en la cola
+  // de admisión. Sin `clients_avanzado` la tabla puede no existir en el schema.
+  const esperando = new Set();
+  if (await hay("waitlist_entries")) {
+    const filas = await q(`SELECT DISTINCT client_id FROM ${S}.waitlist_entries WHERE status::text = 'active' AND client_id IS NOT NULL`);
+    for (const f of filas) esperando.add(String(f.client_id));
+  }
+  out(`  En la cola de admisión: ${esperando.size} familia(s) — se quedan En pausa, no de Baja.`);
+
   // Lo último a nombre de cada FAMILIA sin paciente concreto.
   const sinPac = (alias) => (conPacientes ? `AND ${alias}.patient_id IS NULL` : "");
   const familias = await q(`
@@ -150,6 +161,7 @@ async function main() {
         ultimaCita: unico ? mayor(p.cita, fam?.cita) : p.cita,
         ultimoDinero: unico ? mayor(p.dinero, fam?.dinero) : p.dinero,
         cuotaVigente: p.cuota || (unico && fam?.cuota),
+        esperandoPlaza: p.client_id ? esperando.has(String(p.client_id)) : false,
       },
       { baja: "discharged", hoy }
     );
@@ -167,7 +179,10 @@ async function main() {
 
   const cambiosFam = [];
   for (const f of familias) {
-    const propio = estadoPorActividad({ ultimaCita: f.cita, ultimoDinero: f.dinero, cuotaVigente: f.cuota }, { baja: "inactive", hoy });
+    const propio = estadoPorActividad(
+      { ultimaCita: f.cita, ultimoDinero: f.dinero, cuotaVigente: f.cuota, esperandoPlaza: esperando.has(String(f.id)) },
+      { baja: "inactive", hoy }
+    );
     const deHijos = (hijosDe.get(String(f.id)) ?? []).map((e) => (e === "discharged" ? "inactive" : e));
     const nuevo = elMasVivo([propio, ...deHijos], "inactive");
     if (nuevo !== f.status) cambiosFam.push({ id: f.id, de: f.status, a: nuevo });
