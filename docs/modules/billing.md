@@ -1330,6 +1330,16 @@ conceptos que la componen, importe, método, día de cobro, alta y baja.
   con otro importe suelto—, y el motivo la nombra: «ya tiene esta cuota activa
   (Cuota T.O. 60x1)». La regla vive en `lib/billing/cuotaDuplicada.js` con
   `scripts/_smoke-cuota-duplicada.mjs`.
+- **El importe del cajón «Añadir» de un tipo de cuota VIENE PUESTO** con el
+  precio del catálogo (18/09/2026, la otra mitad de la tarea «Mensaje cuota
+  activa»: «también les parece raro tener que poner el importe al mes manual
+  cuando añaden el paciente a la cuota»). Un hueco en blanco se lee como un
+  campo obligatorio, aunque vacío significara lo contrario. Se enseña el número
+  y, **si no se toca, al servidor va `amount: null`** — la cuota sigue atada al
+  catálogo y una subida de tarifa se aplica sola, que es como están 290 de las
+  291 cuotas activas de Aumenta. Solo un número distinto se guarda como precio
+  pactado con esa familia. En el cajón grande de `/facturacion/cuotas` no hace
+  falta: allí el total de los conceptos ya se ve calculado en el pie.
 - **Baja ≠ borrado.** `PATCH { endDate, active:false }` apaga la cuota desde una
   fecha y CONSERVA la fila (los cobros que salieron de ella siguen explicando
   por qué se cobró lo que se cobró). `DELETE` es para el alta equivocada de hace

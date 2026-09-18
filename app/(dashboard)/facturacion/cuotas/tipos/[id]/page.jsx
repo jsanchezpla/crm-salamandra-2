@@ -630,13 +630,20 @@ function Leyenda({ clase, texto }) {
 /* ── Añadir pacientes a esta cuota ────────────────────────────────────────── */
 
 function CajonAnadir({ tipo, onClose, onHecho }) {
+  const precio = Number(tipo.unitPrice) || 0;
   const [destinatarios, setDestinatarios] = useState([]);
   const [form, setForm] = useState({
     // Ninguno de salida: dar el alta no es decidir cómo se le cobra.
     method: "",
     dayOfMonth: "",
     startDate: hoyVigente(),
-    amount: "",
+    // El importe VIENE PUESTO, el del catálogo (18/09/2026, Aumenta: «les
+    // parece raro tener que poner el importe al mes manual cuando añaden el
+    // paciente a la cuota»). Es lo que se va a cobrar, así que se enseña en
+    // vez de dejar un hueco que parece obligatorio. Si se deja tal cual, al
+    // servidor va NULL —«lo que digan sus conceptos»— y una subida de tarifa
+    // se sigue aplicando sola; escribir otro número lo pacta con esa familia.
+    amount: precio ? String(precio) : "",
     notes: "",
   });
   const [guardando, setGuardando] = useState(false);
@@ -654,7 +661,9 @@ function CajonAnadir({ tipo, onClose, onHecho }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           conceptIds: [tipo.id],
-          amount: form.amount === "" ? null : Number(form.amount),
+          // Vacío o el precio del catálogo tal cual = null: la cuota sigue
+          // atada al catálogo. Solo un número distinto se guarda como pactado.
+          amount: form.amount === "" || Number(form.amount) === precio ? null : Number(form.amount),
           method: form.method || null,
           dayOfMonth: form.dayOfMonth === "" ? null : Number(form.dayOfMonth),
           startDate: form.startDate,
@@ -679,8 +688,6 @@ function CajonAnadir({ tipo, onClose, onHecho }) {
       setGuardando(false);
     }
   }
-
-  const precio = Number(tipo.unitPrice) || 0;
 
   return (
     <>
@@ -719,8 +726,9 @@ function CajonAnadir({ tipo, onClose, onHecho }) {
               className={inputCls}
             />
             <span className="mt-1 block text-[11px] text-neutral-400">
-              En blanco = el precio del catálogo, y una subida se aplica sola. Escríbelo solo si con
-              esta familia se pactó otro.
+              {precio
+                ? "Viene puesto el precio del catálogo: déjalo así y una subida de tarifa se aplicará sola. Cámbialo solo si con esta familia se pactó otro."
+                : "En blanco = el precio del catálogo, y una subida se aplica sola. Escríbelo solo si con esta familia se pactó otro."}
             </span>
           </label>
 
