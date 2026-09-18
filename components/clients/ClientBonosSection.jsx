@@ -32,7 +32,7 @@
  *   al revés que antes en la ficha de Laura, donde sin bonos no salía nada.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useDialogo } from "../ui/Dialogo.jsx";
 import DrawerBono from "../billing/DrawerBono.jsx";
@@ -41,6 +41,7 @@ import { eurosToCents, centsToEuros } from "../../lib/payments/money.js";
 import { puedeDarBonos } from "../../lib/citas/quienDaBonos.js";
 import { packsParaPaciente } from "../../lib/citas/bonoDelPaciente.js";
 import { bonoSinTope, esBonoDeDiagnostico, avisosDeAnulacion } from "../../lib/billing/bonos.js";
+import { repartirTiposDeBono } from "../../lib/billing/tiposDeBono.js";
 
 /**
  * El nombre del paciente de un bono, o «otro paciente» si ya no está en la
@@ -473,6 +474,8 @@ function DarBonoForm({ cliente, pacientes = [], patientFijo = null, onHecho }) {
    * es un agujero.
    */
   const [sinCobro, setSinCobro] = useState(false);
+  // Abrir el desplegable al catálogo entero (ver `tiposVisibles`, más abajo).
+  const [verTodosLosTipos, setVerTodosLosTipos] = useState(false);
   const [nota, setNota] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [err, setErr] = useState(null);
@@ -507,6 +510,10 @@ function DarBonoForm({ cliente, pacientes = [], patientFijo = null, onHecho }) {
               sesiones: Number(t.sesionesDelTipo) || 1,
               precio: Number.isInteger(t.precio) ? t.precio : null,
               oculto: t.oculto === true,
+              // Cuántos bonos lleva dados: con esto `esTipoDeBono` reconoce al
+              // tipo suelto sobre el que ya se vendió alguno (tres en Aumenta).
+              bonos: Number(t.bonos) || 0,
+              cerrados: Number(t.cerrados) || 0,
             })));
           }
           return;
@@ -530,6 +537,15 @@ function DarBonoForm({ cliente, pacientes = [], patientFijo = null, onHecho }) {
     })();
     return () => { vivo = false; };
   }, []);
+
+  /*
+   * Solo los tipos que llevan bono (18/09/2026, Aumenta: «que solo salgan las
+   * citas con bono y no todas»). El centro tiene 72 tipos de cita y 5 con bonos
+   * detrás; el resto sigue a un clic, porque un bono sobre un tipo suelto es
+   * legítimo. La regla, con su prueba, en `lib/billing/tiposDeBono.js`.
+   */
+  const { deBono, resto, hayResto } = useMemo(() => repartirTiposDeBono(tipos), [tipos]);
+  const tiposVisibles = verTodosLosTipos || deBono.length === 0 ? tipos : deBono;
 
   const tipoElegido = tipos.find((x) => String(x.id) === String(eventTypeId)) ?? null;
 
@@ -612,7 +628,7 @@ function DarBonoForm({ cliente, pacientes = [], patientFijo = null, onHecho }) {
         <label className="block text-[11px] font-medium text-gray-500 mb-1">Tipo de cita</label>
         <select value={eventTypeId} onChange={(e) => elegirTipo(e.target.value)} className={inputCls}>
           <option value="">Elige…</option>
-          {tipos.map((t) => (
+          {tiposVisibles.map((t) => (
             <option key={t.id} value={t.id}>
               {t.name}
               {t.sesiones > 1 ? ` · ${t.sesiones} sesiones` : ""}
@@ -621,6 +637,35 @@ function DarBonoForm({ cliente, pacientes = [], patientFijo = null, onHecho }) {
             </option>
           ))}
         </select>
+        {/* El resto del catálogo no se borra: se guarda detrás de un clic. */}
+        {hayResto && deBono.length > 0 && (
+          <p className="text-[11px] text-gray-400 mt-1">
+            {verTodosLosTipos ? (
+              <>
+                Salen los {tipos.length} tipos de cita del centro.{" "}
+                <button
+                  type="button"
+                  onClick={() => setVerTodosLosTipos(false)}
+                  className="underline hover:text-gray-600"
+                >
+                  Ver solo los de bono
+                </button>
+              </>
+            ) : (
+              <>
+                Salen los {deBono.length} tipos que llevan bono: los que el catálogo vende por
+                sesiones y los que ya tienen bonos dados.{" "}
+                <button
+                  type="button"
+                  onClick={() => setVerTodosLosTipos(true)}
+                  className="underline hover:text-gray-600"
+                >
+                  Ver los {resto.length} restantes
+                </button>
+              </>
+            )}
+          </p>
+        )}
         {/*
           * Cuando el tipo no lleva precio, decirlo AQUÍ y no dejar el importe en
           * blanco sin explicación: en Aumenta ninguno de los cuatro tipos con

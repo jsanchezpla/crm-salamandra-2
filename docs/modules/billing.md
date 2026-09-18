@@ -2517,6 +2517,36 @@ hizo nacer una vez un bono de 150 € con un pendiente de 15.000 €.
 dicho lo que vale» (sale en «sin importe» y no suma), `0` es un bono regalado a
 propósito. Ninguno de los dos crea cobro.
 
+### Qué tipos salen al dar un bono (18/09/2026, Aumenta)
+
+«Al crear un bono, al elegir el tipo de bono, que solo salgan las citas con bono
+y no todas.» El desplegable se llenaba con el catálogo entero porque
+`/api/billing/bonos/tipos?todos=1` no lo recorta: en Aumenta son **72 tipos de
+cita de los que solo 5 tienen que ver con bonos** (2 packs del catálogo y 3
+sueltos con bonos ya dados; medido en producción el 18/09/2026). Buscar entre 72
+lo que está en 5 es como se da un bono del tipo equivocado.
+
+La regla vive en **`lib/billing/tiposDeBono.js`** (`esTipoDeBono`,
+`repartirTiposDeBono`, `tiposParaElegirBono`), con su prueba
+`scripts/_smoke-tipos-de-bono.mjs`. Un tipo lleva bono si:
+
+- el catálogo lo declara pack (`sessionsCount > 1`), aunque no lo haya comprado
+  nadie todavía: es un bono que el centro vende; **o**
+- ya tiene bonos dados, vivos o cerrados, aunque hoy sea una cita suelta. Pasa de
+  verdad (los tres de Aumenta): se vende un bono de 4 sesiones sobre un tipo
+  normal, o se pasa el tipo a suelto después. Esconderlos sería esconder dinero,
+  y al corregir uno no se encontraría su tipo.
+
+**El resto no se borra, se guarda detrás de un clic** («Ver los N restantes» /
+«Ver solo los de bono»): dar un bono sobre un tipo suelto sigue siendo legítimo.
+Y un centro **sin un solo tipo de bono** ve el catálogo entero —si no, el
+desplegable saldría vacío y no habría forma de dar el primero—.
+
+Lo usan los dos cajones de alta (`DrawerBono.jsx` y el de la ficha del cliente,
+`components/clients/ClientBonosSection.jsx`) y el filtro por tipo de
+`/facturacion/bonos`, que antes llevaba la misma regla copiada a mano. No lo usa
+la edición ni «Añadir al grupo»: allí el tipo ya está decidido.
+
 ### Qué le pasa a su cobro cuando el bono cambia
 
 `PATCH /api/billing/bonos/[id]` mantiene al día el pendiente, y lo dice en la
@@ -2567,10 +2597,10 @@ avisan con la misma pieza.
 | --- | --- |
 | **Pantallas** | `/facturacion/bonos` (todos, con filtros por tipo, estado y «sin cobrar»; cuadro de agotados y anulados abajo), `/facturacion/bonos/tipos` (los grupos), `/facturacion/bonos/tipos/[id]` (quién lo lleva + los que pasaron, y «Añadir al grupo»). Desde el 12/09/2026 un bono SIN TOPE (`total` a null: el de un expediente de diagnóstico, ver «Diagnóstico» en `clinica.md`) se rotula «sin tope · diagnóstico» con enlace a `/clinica/diagnosticos`, que es donde se ve su barra de horas, y NO tiene «Renovar» ni «Volver a darlo»: copiarían `totalSessions` null y la API lo resolvería a las sesiones del tipo, o sea que nacería un bono CON tope |
 | **Endpoints** | `GET/POST /api/billing/bonos` · `GET/PATCH /api/billing/bonos/[id]` · `POST /api/billing/bonos/[id]/renovar` · `GET /api/billing/bonos/tipos` (`?todos=1` para el desplegable del alta) · `GET /api/billing/bonos/tipos/[id]`. Todos gateados por `billing`, y el que escribe también por `puedeDarBonos` (`lib/citas/quienDaBonos.js`: dirección o quien lleve Facturación) |
-| **Lib** | `lib/billing/bonos.js` (puro: estado, validación, grupos, renovación, totales; desde el 12/09/2026 `bonoSinTope` —`total` null explícito—, con el que `estadoDelBono` da siempre `vivo` y `rotuloDelBono` «Sin tope · N usadas») · `lib/billing/bonosConSesiones.js` (servidor: los bonos con sus sesiones y su cobro) · `lib/billing/altaDeBono.js` (el bono y su cobro en la misma transacción; desde el 12/09/2026 acepta `totalSessions: null`, `diagnosticoId` y `cobro: { conceptId, texto, invoiceText }`, que `cobroPendienteDeBono` de `cobroDelBono.js` admite igual, para que el pendiente de un diagnóstico se llame como su producto —«Diagnóstico Simple»— y no «Bono «DIAGNÓSTICO»»; sin ellos es el alta de siempre) |
+| **Lib** | `lib/billing/bonos.js` (puro: estado, validación, grupos, renovación, totales; desde el 12/09/2026 `bonoSinTope` —`total` null explícito—, con el que `estadoDelBono` da siempre `vivo` y `rotuloDelBono` «Sin tope · N usadas») · `lib/billing/bonosConSesiones.js` (servidor: los bonos con sus sesiones y su cobro) · `lib/billing/altaDeBono.js` (el bono y su cobro en la misma transacción; desde el 12/09/2026 acepta `totalSessions: null`, `diagnosticoId` y `cobro: { conceptId, texto, invoiceText }`, que `cobroPendienteDeBono` de `cobroDelBono.js` admite igual, para que el pendiente de un diagnóstico se llame como su producto —«Diagnóstico Simple»— y no «Bono «DIAGNÓSTICO»»; sin ellos es el alta de siempre) · `lib/billing/tiposDeBono.js` (puro: qué tipos de cita llevan bono y cuáles son citas sueltas, para los desplegables del alta y el filtro; ver «Qué tipos salen al dar un bono») |
 | **Componentes** | `components/billing/DrawerBono.jsx` (alta, alta en un grupo y edición) · `components/billing/useAccionesDeBono.js` (anular, reactivar, renovar, con sus avisos) |
 | **Migración** | Del submódulo, **ninguna**: la tabla y sus columnas ya estaban (`migrate-cobro-de-bono`, `traer-bonos-de-organizate`). El 12/09/2026 `migrate-diagnosticos` (bloque `citas`, ANTES del despliegue) le añade `session_packs.diagnostico_id` y deja `total_sessions` NULLABLE (NULL = sin tope); los bonos que había siguen con su número |
-| **Pruebas** | `scripts/_smoke-bonos.mjs` (`node:test`, ligera, en `npm test`) |
+| **Pruebas** | `scripts/_smoke-bonos.mjs` y `scripts/_smoke-tipos-de-bono.mjs` (`node:test`, ligeras, en `npm test`) |
 | **Auditoría** | `bono.created`, `bono.updated`, `bono.anulado`, `bono.renovado` (prefijo `bono` → Facturación en `lib/actividad/etiquetas.js`). No hay `bono.deleted`: un bono no se borra, se anula |
 
 ## Lo que paga una universidad o una empresa (15/09/2026, AV-0153)
