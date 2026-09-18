@@ -115,7 +115,18 @@ da sin cobrar nada; después, o la familia para (y se le cobra la entrevista,
   null como «sin tope» y no como 0. Hoy lo hacen `estadoPack`, `elegirPack`,
   `cobroDeBono`, `bonoSinTope`/`rotuloDelBono` y la pantalla de Bonos, que
   además no ofrece «Renovar» ni «Volver a darlo» sobre uno (copiaría el null y
-  nacería con tope).
+  nacería con tope). **18/09/2026 (AV-0184 de Aumenta):** esta lista se escribió
+  incompleta. `components/clients/ClientBonosSection.jsx` —la sección «Bonos de
+  sesiones» de la FICHA— no estaba en ella y seguía leyendo el null como 0, así
+  que rotulaba **«Agotado»** el diagnóstico recién abierto de cada familia. Se
+  vio en las fichas antes que en ninguna otra parte, se tomó por basura y se
+  anularon en producción los dos bonos que había, con sus cobros de 650 € y
+  350 €, dejando los dos expedientes `en_curso` apuntando a un bono muerto.
+  Arreglado en `citas.md` («El bono de un diagnóstico, en la ficha») y
+  `billing.md` («Anular el bono de un diagnóstico avisa…»): la ficha y
+  Facturación leen el mismo `bonoSinTope`/`esBonoDeDiagnostico` y avisan con la
+  misma pieza. La lección es la de siempre: «todo lo que lea un bono» hay que
+  BUSCARLO, no recordarlo.
 - La regla «qué cita gasta sesión» vive en `lib/citas/gastaSesion.js` y
   `packs.js` la re-exporta: si cambia la frontera de 24 h, cambia en bonos y
   en diagnósticos a la vez.

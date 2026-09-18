@@ -22,7 +22,7 @@
 import { useCallback, useState } from "react";
 
 import { useDialogo } from "../ui/Dialogo.jsx";
-import { avisosDeRenovacion, parteDelCobro } from "../../lib/billing/bonos.js";
+import { avisosDeAnulacion, avisosDeRenovacion, parteDelCobro } from "../../lib/billing/bonos.js";
 import { formatMoney } from "../../lib/payments/money.js";
 
 export function useAccionesDeBono({ recargar } = {}) {
@@ -63,7 +63,13 @@ export function useAccionesDeBono({ recargar } = {}) {
         : "";
       const seguro = await confirmar({
         titulo: "Anular el bono",
-        texto: `El bono de «${b.nombre}» de ${quien} deja de dar derecho a citas.${yaDadas} Si tiene un cobro pendiente se retira; lo ya cobrado se queda, que para devolverlo está «Devuelto» en Caja.`,
+        // Los avisos van en `lib/billing/bonos.js` (`avisosDeAnulacion`), no
+        // aquí: la ficha de un grupo anula con este mismo hook y tiene que
+        // decir lo mismo.
+        texto: [
+          `El bono de «${b.nombre}» de ${quien} deja de dar derecho a citas.${yaDadas} Si tiene un cobro pendiente se retira; lo ya cobrado se queda, que para devolverlo está «Devuelto» en Caja.`,
+          ...avisosDeAnulacion(b),
+        ].join(" "),
         confirmar: "Anular",
         cancelar: "Volver",
         tono: "peligro",

@@ -2668,6 +2668,32 @@ respuesta (un ajuste de dinero silencioso es el que nadie revisa):
 - El **tipo de bono no se cambia**: sería otro bono, y las citas ya enganchadas
   dejarían de cuadrar.
 
+### Anular el bono de un diagnóstico avisa, pero no se prohíbe (18/09/2026)
+
+El bono de un expediente de diagnóstico **no lo compró nadie**: lo crea el CRM al
+pulsar «Seguir con el diagnóstico», y en esta pantalla sale como una fila más. El
+17/09/2026 en Aumenta se anularon así los dos que había —con sus cobros de 650 €
+y 350 €—, tomándolos por filas sueltas que sobraban; los dos expedientes se
+quedaron `en_curso` apuntando a un bono muerto: sin poder apuntarles más horas
+(`elegirPack` corta) y sin poder volver a pulsar «Seguir» (409, «ya tiene su
+bono»).
+
+Así que ahora **«Anular» dice qué se lleva por delante** (`avisosDeAnulacion` en
+`lib/billing/bonos.js`, compartido por la lista y por la ficha de un grupo: las
+dos anulan con el mismo hook) y la fila enlaza **al expediente concreto**. Lo que
+NO se hace es prohibirlo: quien pulsó «Seguir» sin querer tiene que poder
+deshacerlo, y la salida es **«Reactivar»**, que devuelve el bono y vuelve a
+apuntar su pendiente.
+
+Se reconoce por `session_packs.diagnostico_id` (`esBonoDeDiagnostico`) y **no**
+por `bonoSinTope`: sin tope es la forma que tiene hoy ese bono, no lo que lo
+define.
+
+Donde de verdad lo vieron fue en **la ficha del cliente**, que rotulaba el bono
+sin tope como «Agotado»: ese arreglo está en `citas.md` («El bono de un
+diagnóstico, en la ficha»). Las dos pantallas anulan el mismo bono y ahora
+avisan con la misma pieza.
+
 ### Piezas
 
 | | |

@@ -75,6 +75,15 @@ export const GET = withTenant(async (request, _ctx, ctx) => {
     // El plan de cuotas es dinero: fuera para quien no lleve Facturación
     // (`lib/clients/quienVeElDinero.js`). Lo que pone el tipo de cita —el bono
     // y lo que le queda— se queda para todo el equipo.
+    /*
+     * `restantes > 0` deja fuera también los bonos SIN TOPE (`restantes` null,
+     * los de un diagnóstico), y eso está BIEN aunque hasta el 18/09/2026 fuera
+     * un accidente: esta lista es el desplegable de bonos del alta manual de
+     * una cita, y el bono de un diagnóstico no se elige a mano —lo pone el
+     * expediente (`lib/clinica/citaDeDiagnostico.js`)—. Ofrecerlo aquí dejaría
+     * colgar de él cualquier cita suelta, que es justo lo que la decisión del
+     * 12/09/2026 evita. Queda escrito para que nadie lo «arregle».
+     */
     const vivos = bonos.filter((b) => b.estado === "active" && b.restantes > 0);
     return ok({ bonos: veElDineroDeLaFicha(ctx) ? vivos : bonosSinDinero(vivos) });
   } catch (err) {

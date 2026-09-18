@@ -81,9 +81,13 @@ const dineroDelCobro = (euros) => formatMoney(Math.round((Number(euros) || 0) * 
 function RotuloSesiones({ bono: b }) {
   if (!bonoSinTope(b)) return <span className="tabular">{rotuloDelBono(b)}</span>;
   const usadas = Number(b.gastadas) || 0;
+  // Al expediente de ESTE bono si se sabe cuál es (18/09/2026); a la lista si
+  // no, que es lo que había: un bono sin tope anterior a `diagnostico_id` no
+  // tiene a dónde llevar, y quedarse sin enlace sería perder lo que ya daba.
+  const suExpediente = b.diagnosticoId ? `/clinica/diagnosticos/${b.diagnosticoId}` : "/clinica/diagnosticos";
   return (
     <span className="tabular">
-      <Link href="/clinica/diagnosticos" className="text-indigo-700 hover:underline">sin tope · diagnóstico</Link>
+      <Link href={suExpediente} className="text-indigo-700 hover:underline">sin tope · diagnóstico</Link>
       {estadoDelBono(b) === "anulado" ? " · anulado" : ` · ${usadas} usada${usadas === 1 ? "" : "s"}`}
     </span>
   );

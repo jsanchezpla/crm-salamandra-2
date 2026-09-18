@@ -40,6 +40,7 @@ import { eurosToCents, centsToEuros } from "../../lib/payments/money.js";
 
 import { puedeDarBonos } from "../../lib/citas/quienDaBonos.js";
 import { packsParaPaciente } from "../../lib/citas/bonoDelPaciente.js";
+import { bonoSinTope, esBonoDeDiagnostico, avisosDeAnulacion } from "../../lib/billing/bonos.js";
 import { repartirTiposDeBono } from "../../lib/billing/tiposDeBono.js";
 
 /**
@@ -197,7 +198,13 @@ export default function ClientBonosSection({ clientId, patientId = null, onCambi
     const quedan = b.restantes > 0 ? `Le quedan ${b.restantes} sesión(es) sin usar.\n\n` : "";
     const seguro = await confirmar({
       titulo: `Quitar el bono «${b.nombre}»`,
-      texto: `${quedan}Dejará de poder reservar con él. Las citas que ya tenga puestas no se tocan.`,
+      // El aviso del diagnóstico lo pone `lib/billing/bonos.js`, que es de
+      // donde lo saca también Facturación: quitarlo desde la ficha y anularlo
+      // desde Bonos escriben en la MISMA columna y tienen que avisar igual.
+      texto: [
+        `${quedan}Dejará de poder reservar con él. Las citas que ya tenga puestas no se tocan.`,
+        ...avisosDeAnulacion(b),
+      ].join(" "),
       confirmar: "Quitarlo",
       tono: "peligro",
     });
@@ -284,6 +291,19 @@ export default function ClientBonosSection({ clientId, patientId = null, onCambi
               <span className="text-sm text-gray-800">
                 {b.nombre}
                 {/*
+                  * Y que NO lo compró la familia: lo puso el CRM al «Seguir con
+                  * el diagnóstico» (18/09/2026, AV-0184). Sin esta línea es una
+                  * fila idéntica a un bono de psicología comprado a 150 €.
+                  */}
+                {esBonoDeDiagnostico(b) && (
+                  <a
+                    href={`/clinica/diagnosticos/${b.diagnosticoId}`}
+                    className="ml-1.5 text-[11px] text-indigo-700 hover:underline"
+                  >
+                    · diagnóstico
+                  </a>
+                )}
+                {/*
                   * De quién es dentro de la familia (08/09/2026, AV-0055). Sin
                   * paciente no se dice nada: «de toda la familia» es lo normal
                   * y repetirlo en cada línea sería ruido.
@@ -303,13 +323,28 @@ export default function ClientBonosSection({ clientId, patientId = null, onCambi
                   )
                 ) : null}
               </span>
-              <span
-                className={`text-sm font-semibold ${b.restantes > 0 ? "text-[var(--color-primary)]" : "text-gray-400"}`}
-              >
-                {b.restantes > 0
-                  ? `Le quedan ${b.restantes} de ${b.total}`
-                  : "Agotado"}
-              </span>
+              {/*
+                * SIN TOPE (18/09/2026, AV-0184 de Aumenta). El bono de un
+                * diagnóstico no tiene número de sesiones: sus horas las acota
+                * el expediente. Esta tarjeta no se había enterado y `null > 0`
+                * es falso, así que lo rotulaba **«Agotado»** — un diagnóstico
+                * recién abierto, en la ficha de la familia, marcado como
+                * agotado. De ahí el aviso de Isabel y de ahí que fueran a
+                * Facturación a anular los dos que había.
+                */}
+              {bonoSinTope(b) ? (
+                <span className="text-sm font-semibold text-indigo-700">
+                  {Number(b.gastadas) || 0} h · sin tope
+                </span>
+              ) : (
+                <span
+                  className={`text-sm font-semibold ${b.restantes > 0 ? "text-[var(--color-primary)]" : "text-gray-400"}`}
+                >
+                  {b.restantes > 0
+                    ? `Le quedan ${b.restantes} de ${b.total}`
+                    : "Agotado"}
+                </span>
+              )}
             </div>
             <div className="text-[11px] text-gray-500 mt-0.5 flex items-baseline justify-between gap-3">
               <span>
@@ -350,17 +385,22 @@ export default function ClientBonosSection({ clientId, patientId = null, onCambi
                 </span>
               )}
             </div>
-            {/* Barra de progreso: gastadas + reservadas sobre el total. */}
-            <div className="mt-2 h-1.5 rounded-full bg-gray-100 overflow-hidden flex">
-              <div
-                className="bg-[var(--color-primary)]"
-                style={{ width: `${b.total ? (b.gastadas / b.total) * 100 : 0}%` }}
-              />
-              <div
-                className="bg-[var(--color-primary)] opacity-40"
-                style={{ width: `${b.total ? (b.reservadas / b.total) * 100 : 0}%` }}
-              />
-            </div>
+            {/* Barra de progreso: gastadas + reservadas sobre el total. No se
+                pinta sin tope: una barra sobre un total que no existe sale
+                siempre vacía, que es otra forma de decir «agotado». La barra de
+                un diagnóstico son HORAS y vive en su expediente. */}
+            {!bonoSinTope(b) && (
+              <div className="mt-2 h-1.5 rounded-full bg-gray-100 overflow-hidden flex">
+                <div
+                  className="bg-[var(--color-primary)]"
+                  style={{ width: `${b.total ? (b.gastadas / b.total) * 100 : 0}%` }}
+                />
+                <div
+                  className="bg-[var(--color-primary)] opacity-40"
+                  style={{ width: `${b.total ? (b.reservadas / b.total) * 100 : 0}%` }}
+                />
+              </div>
+            )}
             {/* Una cuota que el banco rechazó (07/09/2026): se dice aquí, que es
                 donde Laura mira antes de llamar a nadie, con el motivo en
                 castellano y lo que va a hacer Stripe. El bono no cambia. */}
