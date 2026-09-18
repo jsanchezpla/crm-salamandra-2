@@ -230,6 +230,7 @@ export default function ConfiguracionPage() {
           quoteFooterText: settings.quoteFooterText,
           quoteLogoUrl: settings.quoteLogoUrl,
           stampUrl: settings.stampUrl,
+          printDueDate: settings.printDueDate !== false,
         }),
       });
       const j = await res.json();
@@ -375,6 +376,25 @@ export default function ConfiguracionPage() {
           </Field>
           <Field label="Texto al pie del presupuesto" full>
             <textarea disabled={!puedeFacturar} rows={2} placeholder="Vacío = el de las facturas" value={settings.quoteFooterText ?? ""} onChange={(e) => setField("quoteFooterText", e.target.value)} className={inputCls + " resize-y"} />
+          </Field>
+          {/* AV-0176 (18/09/2026): Aumenta no usa el vencimiento y lo ve en
+              todas sus facturas. Se apaga por centro, no para todos. */}
+          <Field label="Vencimiento en la factura" full>
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                disabled={!puedeFacturar}
+                checked={settings.printDueDate !== false}
+                onChange={(e) => setField("printDueDate", e.target.checked)}
+                className="mt-0.5 rounded border-gray-300 accent-[var(--color-primary)]"
+              />
+              <span className="min-w-0">
+                <span className="block text-xs text-gray-700">Imprimir la fecha de vencimiento</span>
+                <span className="block text-[11px] text-gray-400 leading-snug">
+                  Sale junto a la fecha de emisión. Quítalo si cobráis al contado y esa fecha no dice nada.
+                </span>
+              </span>
+            </label>
           </Field>
         </div>
       </Section>

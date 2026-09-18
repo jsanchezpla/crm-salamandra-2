@@ -133,6 +133,16 @@ export function defineTenantBillingSettings(sequelize) {
         allowNull: true,
         field: "stamp_url",
       },
+      // ¿El PDF imprime la fila «Vencimiento»? (18/09/2026, AV-0176 de Aumenta:
+      // «y quitar lo de Vencimiento»). El impreso es el de TODOS los clientes,
+      // así que no se quita para todos: se apaga en quien lo pida. NULL cuenta
+      // como encendido, que es como salió hasta hoy.
+      printDueDate: {
+        type: DataTypes.BOOLEAN,
+        allowNull: true,
+        defaultValue: true,
+        field: "print_due_date",
+      },
     },
     {
       tableName: "tenant_billing_settings",

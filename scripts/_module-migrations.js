@@ -691,6 +691,9 @@ export const MODULES = {
     "migrate-billing-irpf-partners",
     "migrate-billing-membretes",
     "migrate-billing-sello",
+    // ¿Se imprime el vencimiento? (18/09/2026, AV-0176): el modelo pide la
+    // columna por nombre, así que ANTES del despliegue.
+    "migrate-billing-vencimiento",
     "migrate-billing-conceptos",
     // De quién y de qué terapia es cada cobro (31/08/2026): sin estas dos
     // columnas el modelo pide patient_id/concept_id y todo GET de cobros da 42703.

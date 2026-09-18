@@ -7,7 +7,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import zlib from "node:zlib";
-import { buildInvoicePdfBuffer } from "../lib/billing/invoicePdf.js";
+import { buildInvoicePdfBuffer, imprimeVencimiento } from "../lib/billing/invoicePdf.js";
 
 /* ── lector compacto (véase _smoke-pdf-presupuesto.mjs) ── */
 const WIN1252 = { 0x80: "€" };
@@ -122,4 +122,30 @@ test("el sello se incrusta cuando se pasa, y uno corrupto no tumba el PDF", asyn
   assert.ok(conSello.length > sinSello.length, "el PDF con sello no creció");
   const corrupto = await buildInvoicePdfBuffer({ invoice: INVOICE, client: CLIENT, settings: SETTINGS, stamp: Buffer.from("no soy un png") });
   assert.equal(corrupto.subarray(0, 5).toString(), "%PDF-");
+});
+
+/*
+ * El vencimiento, por centro (18/09/2026, AV-0176 de Aumenta; Rodrigo). El
+ * impreso es el de TODOS los clientes, así que la fila no se quita para todos:
+ * se apaga en quien lo pida. Lo delicado es el valor que ya hay en la base, que
+ * es NULL: tiene que seguir imprimiéndose.
+ */
+test("imprimeVencimiento: solo un false explícito lo quita", () => {
+  assert.equal(imprimeVencimiento({ printDueDate: false }), false);
+  assert.equal(imprimeVencimiento({ printDueDate: true }), true);
+  assert.equal(imprimeVencimiento({ printDueDate: null }), true, "NULL es lo que hay en las filas de antes de la columna");
+  assert.equal(imprimeVencimiento({}), true);
+  assert.equal(imprimeVencimiento(undefined), true);
+});
+
+test("el PDF imprime el vencimiento salvo que el centro lo apague", async () => {
+  const deSerie = textoDe(await buildInvoicePdfBuffer({ invoice: INVOICE, client: CLIENT, settings: SETTINGS }));
+  assert.match(deSerie, /Vencimiento/);
+
+  const apagado = textoDe(
+    await buildInvoicePdfBuffer({ invoice: INVOICE, client: CLIENT, settings: { ...SETTINGS, printDueDate: false } })
+  );
+  assert.ok(!/Vencimiento/.test(apagado), "salió el vencimiento con el ajuste apagado");
+  // Y no se lleva por delante lo de al lado: la emisión sigue estando.
+  assert.match(apagado, /Fecha de emisión/);
 });

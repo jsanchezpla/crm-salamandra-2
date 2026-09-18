@@ -2774,3 +2774,29 @@ los 69 € son reales.** Es esto:
   un cierre contado, arrastrado desde el principio sin que nadie lo contara, o
   sin nada anterior— y lo leen la tarjeta y el pie, para que la misma cifra no
   tenga dos explicaciones.
+
+## El vencimiento se imprime o no, por centro (18/09/2026, AV-0176, Rodrigo)
+
+Isabel (Aumenta): «y quitar lo de Vencimiento». El PDF de factura imprimía
+siempre esa fila junto a la fecha de emisión, y el impreso es el de TODOS los
+clientes: quitarla para todos era decidir por los demás. Así que es un ajuste,
+en Configuración → Facturación → «Vencimiento en la factura».
+
+- Columna `print_due_date` en `tenant_billing_settings`
+  (`scripts/migrate-billing-vencimiento.js`), **nullable con DEFAULT true** y no
+  `NOT NULL DEFAULT`: lo segundo reescribe todas las filas y eso ya es tocar
+  datos. Nace NULL en lo que ya existe.
+- **NULL cuenta como encendido.** La regla tiene nombre y prueba:
+  `imprimeVencimiento(settings)` en `lib/billing/invoicePdf.js` — solo un
+  `false` explícito quita la fila, así que quien no toque nada sigue viendo su
+  factura igual que ayer.
+- **La migración va ANTES del despliegue** (el modelo pide la columna por
+  nombre) y está en `_module-migrations.js`, con `billing`.
+- Prueba: `scripts/_smoke-pdf-paciente-sello.mjs` — genera el PDF de verdad y
+  lee su texto: con el ajuste apagado no aparece «Vencimiento» y sí «Fecha de
+  emisión».
+
+Lo otro que pedía ese mismo aviso —«las facturas emitidas salen con borrador» y
+«no salen correlativas en el buscador»— no era código: el 18/09/2026 no había
+ni una factura en borrador en Aumenta (14.341 cobradas, 93 emitidas, 38
+rectificadas, 0 borradores) y lo que veía era el estado «Emitida».

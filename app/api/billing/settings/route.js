@@ -35,6 +35,8 @@ export const PUT = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
       "quoteFooterText", "quoteLogoUrl",
       // El sello del centro para el PDF (31/08/2026).
       "stampUrl",
+      // ¿Se imprime el vencimiento? (18/09/2026, AV-0176).
+      "printDueDate",
     ];
     const updates = {};
     for (const k of allowed) {
