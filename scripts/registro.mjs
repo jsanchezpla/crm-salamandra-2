@@ -169,10 +169,26 @@ function basesDe() {
   return leerVersiones()[DESTINO] ?? {};
 }
 
-function apuntarVersiones(estado) {
+/**
+ * Apunta qué versión tenemos delante, y SOLO de los documentos que de verdad
+ * hemos bajado o publicado (18/09/2026).
+ *
+ * Antes recorría los dos SIEMPRE, y eso desarmaba el freno de versión del otro:
+ * publicabas `backlog` y la base apuntada de `resuelto` pasaba a ser la que
+ * hubiera en producción en ese instante, aunque tu `resuelto.md` local siguiera
+ * siendo el de media hora antes. Al publicar `resuelto` la base ya coincidía, el
+ * freno no saltaba, y tu texto viejo se llevaba por delante lo que otro hubiera
+ * publicado en medio — sin decir nada. Con `bajar backlog` pasaba igual: marcaba
+ * `resuelto` como al día sin haberlo bajado.
+ *
+ * Y el flujo normal es justo ese, backlog y luego resuelto, así que la ventana no
+ * era rara: era la de todos los días. Se vio el 18/09/2026, cuando un ensayo dijo
+ * «513 → 513 tareas» habiendo bajado 512 y añadido una.
+ */
+function apuntarVersiones(estado, cuales = DOCUMENTOS) {
   const todo = leerVersiones();
   const v = todo[DESTINO] ?? {};
-  for (const n of DOCUMENTOS) {
+  for (const n of cuales) {
     if (estado[n]) v[n] = estado[n].version;
   }
   v.bajadoEn = new Date().toISOString();
@@ -214,7 +230,7 @@ function bajar() {
     out(`${n}: v${d.version} (${d.tareas} tareas) → ${path.relative(RAIZ, destino)}`);
     alguno = true;
   }
-  if (alguno) apuntarVersiones(estado);
+  if (alguno) apuntarVersiones(estado, cuales);
 }
 
 function subir() {
@@ -252,8 +268,9 @@ function subir() {
   const r = ejecutar(args, { input: texto });
   const codigo = volcar(r);
   if (codigo === 0 && opciones.confirm) {
-    // La versión que acabamos de publicar pasa a ser nuestra base.
-    apuntarVersiones(estadoRemoto());
+    // La versión que acabamos de publicar pasa a ser nuestra base — la de ESTE
+    // documento y solo la de este: la del otro sigue siendo la que bajamos.
+    apuntarVersiones(estadoRemoto(), [nombre]);
   }
   process.exit(codigo);
 }
