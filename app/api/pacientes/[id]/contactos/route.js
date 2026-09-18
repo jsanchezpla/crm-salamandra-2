@@ -1,6 +1,7 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, created, error, forbidden, notFound } from "../../../../../lib/utils/apiResponse.js";
 import { logClinicaAudit } from "../../../../../lib/clinica/audit.js";
+import { vetoDeContactoExterno } from "../../../../../lib/clinica/rotuloContactoExterno.js";
 
 /**
  * /api/pacientes/[id]/contactos — agenda de profesionales EXTERNOS del paciente.
@@ -11,7 +12,7 @@ import { logClinicaAudit } from "../../../../../lib/clinica/audit.js";
  * reescribía una y otra vez y su teléfono no vivía en ninguna parte.
  *
  *   GET  → la agenda del paciente
- *   POST → añade un contacto (solo el nombre es obligatorio)
+ *   POST → añade un contacto (hace falta el nombre O el cargo, no los dos)
  */
 
 const cap = (v, n) => (v == null ? null : String(v).trim().slice(0, n) || null);
@@ -81,8 +82,15 @@ export const POST = withTenant(async (request, routeContext, ctx) => {
     return error("Body inválido", 400);
   }
 
+  // Nombre O papel, que es la regla del modelo desde el 02/08/2026: «Tutora»
+  // sin nombre es alguien y entra igual; sin ninguno de los dos, no es nadie.
+  // El endpoint exigía el nombre y punto, y eso dejaba fuera justo el caso que
+  // trajo el volcado de Organízate (AV-0102: 104 contactos sin nombre y con su
+  // papel puesto). La regla, en lib/clinica/rotuloContactoExterno.js.
   const name = cap(body?.name, 200);
-  if (!name) return error("El nombre es obligatorio", 422);
+  const role = cap(body?.role, 200);
+  const veto = vetoDeContactoExterno({ name, role });
+  if (veto) return error(veto, 422);
 
   const fila = await ExternalContact.create({
     patientId: id,
@@ -90,7 +98,7 @@ export const POST = withTenant(async (request, routeContext, ctx) => {
     // salto paciente→cliente es frágil (clientId es nullable y a menudo vacío).
     clientId: paciente.clientId ?? null,
     name,
-    role: cap(body?.role, 200),
+    role,
     email: cap(body?.email, 255),
     phone: cap(body?.phone, 50),
     entity: cap(body?.entity, 200),

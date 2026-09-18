@@ -27,6 +27,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { rotuloDeContactoExterno } from "../../lib/clinica/rotuloContactoExterno.js";
 
 const TIPOS = [
   { key: "family", label: "Familia" },
@@ -221,7 +222,13 @@ export default function NuevaCoordinacionModal({ coordinacion = null, patientId 
                   <option value="">Sin especificar</option>
                   {contactos.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.name}{c.role ? ` · ${c.role}` : ""}
+                      {/* Sin nombre se lee por el papel o el centro; un «·»
+                          suelto en un desplegable no se puede ni elegir a
+                          ciegas. Ver lib/clinica/rotuloContactoExterno.js. */}
+                      {(() => {
+                        const r = rotuloDeContactoExterno(c);
+                        return r.detalle ? `${r.titulo} · ${r.detalle}` : r.titulo;
+                      })()}
                     </option>
                   ))}
                 </select>

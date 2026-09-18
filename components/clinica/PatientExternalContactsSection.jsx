@@ -23,6 +23,10 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import {
+  rotuloDeContactoExterno as rotulo,
+  vetoDeContactoExterno,
+} from "../../lib/clinica/rotuloContactoExterno.js";
 
 const NUEVO = { name: "", role: "", phone: "", email: "", entity: "" };
 
@@ -69,7 +73,10 @@ export default function PatientExternalContactsSection({ patientId }) {
 
   async function guardar(e) {
     e.preventDefault();
-    if (!form.name.trim()) return;
+    // Basta con el nombre O el papel, la regla del modelo desde el 02/08/2026.
+    // Exigir el nombre dejaba sin poder corregir a los que no lo tienen: había
+    // que inventarles uno para poder guardarles el teléfono (AV-0102).
+    if (vetoDeContactoExterno(form)) return;
     setGuardando(true);
     setError(null);
     try {
@@ -111,7 +118,9 @@ export default function PatientExternalContactsSection({ patientId }) {
   async function borrar(c) {
     // Se avisa de que las actas NO se pierden: es la duda razonable de
     // cualquiera antes de borrar algo que está enlazado a un historial.
-    if (!window.confirm(`¿Quitar a ${c.name} de la agenda?\n\nLas coordinaciones ya registradas se conservan; solo dejarán de tener contacto asociado.`)) return;
+    // Con el rótulo y no con `c.name`: sin nombre, la pregunta salía como
+    // «¿Quitar a  de la agenda?» y no se sabía a quién se estaba quitando.
+    if (!window.confirm(`¿Quitar a ${rotulo(c).titulo} de la agenda?\n\nLas coordinaciones ya registradas se conservan; solo dejarán de tener contacto asociado.`)) return;
     setOcupado(c.id);
     setError(null);
     try {
@@ -165,8 +174,14 @@ export default function PatientExternalContactsSection({ patientId }) {
       {abriendo && (
         <form onSubmit={guardar} className="border border-neutral-100 rounded-lg p-3 mb-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="sm:col-span-2">
-            <label className="block text-[10px] uppercase tracking-wider text-neutral-400 mb-1">Nombre *</label>
-            <input className={input} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} autoFocus />
+            <label className="block text-[10px] uppercase tracking-wider text-neutral-400 mb-1">Nombre</label>
+            <input
+              className={input}
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="Si no lo sabes, déjalo en blanco y pon el cargo"
+              autoFocus
+            />
           </div>
           <div className="sm:col-span-2">
             <label className="block text-[10px] uppercase tracking-wider text-neutral-400 mb-1">Cargo</label>
@@ -197,7 +212,7 @@ export default function PatientExternalContactsSection({ patientId }) {
           <div className="sm:col-span-2 flex justify-end">
             <button
               type="submit"
-              disabled={guardando || !form.name.trim()}
+              disabled={guardando || Boolean(vetoDeContactoExterno(form))}
               className="text-xs font-medium px-4 py-2 rounded-lg text-white disabled:opacity-40"
               style={{ background: "var(--color-primary, #1B3A2D)" }}
             >
@@ -218,9 +233,13 @@ export default function PatientExternalContactsSection({ patientId }) {
           {contactos.map((c) => (
             <li key={c.id} className="py-2.5 flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-sm text-neutral-800">
-                  {c.name}
-                  {c.role && <span className="text-neutral-500"> · {c.role}</span>}
+                {/* Sin nombre se tira del papel o del centro, y se pinta en
+                    cursiva para que se vea que es un hueco por rellenar y no el
+                    nombre de nadie. La regla, en lib/clinica/rotuloContactoExterno.js
+                    (AV-0102: 104 contactos del volcado están así). */}
+                <div className={`text-sm ${rotulo(c).anonimo ? "text-neutral-500 italic" : "text-neutral-800"}`}>
+                  {rotulo(c).titulo}
+                  {rotulo(c).detalle && <span className="text-neutral-500"> · {rotulo(c).detalle}</span>}
                 </div>
                 <div className="text-[11px] text-neutral-500 flex flex-wrap gap-x-3">
                   {c.entity && <span>{c.entity}</span>}

@@ -1851,6 +1851,27 @@ Los cuatro de siempre, en detalle abajo: `ClinicSession`, `Coordination`,
 paciente; las actas apuntan ahí con `externalContactId`). `Patient` se
 describe en `pacientes.md`.
 
+**Un contacto externo puede no tener nombre, y se lee igual** (18/09/2026,
+AV-0102). El nombre dejó de ser obligatorio el 02/08/2026 al traer las actas de
+Organízate, donde los asistentes se escribían a mano: consta «Orientadora
+Lidia», pero también «Tutora» a secas. La regla del modelo es **nombre O papel,
+nunca los dos vacíos**, y hasta hoy no la aplicaba nadie más:
+
+- El POST exigía el nombre y el PATCH no lo dejaba vaciar, así que los **104
+  contactos de Aumenta que llegaron sin nombre y con su papel puesto** no se
+  podían ni corregir: para guardarles un teléfono había que inventarles uno.
+  Los dos endpoints usan ahora `vetoDeContactoExterno`.
+- Las pantallas pintaban `{name} · {role}` a pelo: sin nombre salía un punto
+  medio suelto o un hueco, y un contacto que dice «la PT del IES África»
+  parecía un registro roto. `rotuloDeContactoExterno` decide qué se enseña —el
+  nombre, y si no lo hay el papel, y si no el centro, y si no «Contacto sin
+  nombre»— y marca `anonimo` para pintarlo en cursiva. Lo usan los tres sitios
+  que lo enseñan: la agenda de la ficha, el desplegable de contacto de
+  referencia del alta de coordinación y los asistentes de `ActaCoordinacion`
+  (donde 124 asistentes de Aumenta solo tienen el enlace y ningún nombre).
+
+`lib/clinica/rotuloContactoExterno.js`, con `scripts/_smoke-rotulo-contacto-externo.mjs`.
+
 ### ClinicSession
 
 Tabla: `clinic_sessions`. Registro estructurado de una sesión clínica.

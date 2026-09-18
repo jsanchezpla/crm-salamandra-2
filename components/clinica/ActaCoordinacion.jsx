@@ -27,13 +27,24 @@
  */
 
 import Link from "next/link";
+import { rotuloDeContactoExterno } from "../../lib/clinica/rotuloContactoExterno.js";
 
 function fmtDate(iso) {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-const persona = (p) => [p.name, p.role].filter(Boolean).join(" · ");
+/**
+ * Cómo se nombra a un asistente del acta. Sin nombre se tira del papel, que es
+ * la misma regla que la agenda de contactos del paciente
+ * (lib/clinica/rotuloContactoExterno.js): en Aumenta hay 124 asistentes que
+ * solo tienen el enlace al contacto y ningún nombre escrito, y con el
+ * `join(" · ")` de antes salían como una cadena vacía dentro de «De fuera:».
+ */
+const persona = (p) => {
+  const r = rotuloDeContactoExterno(p);
+  return r.detalle ? `${r.titulo} · ${r.detalle}` : r.titulo;
+};
 
 export default function ActaCoordinacion({ acta: c, mostrarPaciente = false, onEditar = null }) {
   return (
