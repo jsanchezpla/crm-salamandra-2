@@ -3,6 +3,7 @@ import { withTenant } from "@/lib/tenant/withTenant.js";
 import { forbidden, notFound, error, serverError } from "@/lib/utils/apiResponse.js";
 import { contentDisposition } from "@/lib/documents/helpers.js";
 import { ficherosDelDocx, reportWordFilename } from "@/lib/clinica/reportWord.js";
+import { imagenLocal } from "@/lib/pdf/imagenLocal.js";
 import { includesDelInforme, nombreDePaciente } from "@/lib/clinica/argumentosDelPdf.js";
 
 /**
@@ -44,7 +45,11 @@ function empaquetar(ficheros) {
     archive.on("data", (t) => trozos.push(t));
     archive.on("error", reject);
     archive.on("end", () => resolve(Buffer.concat(trozos)));
-    for (const f of ficheros) archive.append(Buffer.from(f.contenido, "utf8"), { name: f.nombre });
+    for (const f of ficheros) {
+      // El logo ya viene como Buffer; los XML son texto.
+      const cuerpo = Buffer.isBuffer(f.contenido) ? f.contenido : Buffer.from(f.contenido, "utf8");
+      archive.append(cuerpo, { name: f.nombre });
+    }
     archive.finalize();
   });
 }
@@ -68,6 +73,9 @@ export const GET = withTenant(async (_request, rc, ctx) => {
       therapistPosition: t?.position ?? null,
       therapistQualification: t?.qualification ?? null,
       therapistCollegiate: t?.collegiateNumber ?? null,
+      // El logo del centro (18/09/2026, AV-0172). `imagenLocal` solo lee de
+      // `public/` y nunca sale a la red; sin logo, el documento sale sin él.
+      logo: imagenLocal(ctx.tenant?.settings?.brand?.logoUrl),
     });
 
     let buffer;

@@ -2841,3 +2841,40 @@ Lo que se hizo:
 | Los 22.996 de antes | `scripts/vaciar-duracion-sesiones-volcadas.js <slug>` (simula por defecto, `--confirm` escribe, `--deshacer <fichero>` restaura con el valor anterior fila a fila). Toca SOLO las filas con el marcador del volcado; no roza el texto clínico. |
 
 La ficha pasa a decir «— min» donde no se sabe, que es lo que hay que decir.
+
+## El Word del informe lleva la marca del centro (18/09/2026, AV-0172, Rodrigo)
+
+El `.docx` editable existe desde el 09/09/2026 (AV-0099, lo pidió Laura Garrido
+para no subir un PDF con datos de un menor a un conversor de internet), y salió
+a propósito **sin logo ni colores**: era el borrador para seguir escribiendo, y
+el documento que recibe la familia es el PDF, con su portada y su pie legal.
+
+Laura volvió a pedirlo el 16/09 —«el formato de word que me genera es sin ningún
+tipo de formato, simplemente el texto sin logotipos ni diseño que sí sale en
+pdf»— y Rodrigo decidió el 18/09 que lo lleve. Así que:
+
+- **El logo del centro**, arriba del todo, a 4 cm de ancho y respetando su
+  proporción. Se lee con `imagenLocal` (`lib/pdf/imagenLocal.js`), la misma
+  pieza que el PDF: solo de `public/`, **nunca de la red** (el porqué, en ese
+  fichero: `brand.logoUrl` es texto libre y un `fetch` del servidor a un valor
+  de fuera es la forma de un SSRF).
+- **Los colores**, de `paletaDeInforme(brand)` —también la del PDF—: el nombre
+  del centro y los títulos de apartado en el principal, el título del informe en
+  el oscuro y un filete del acento debajo. Sin marca guardada sale la pizarra
+  neutra, igual que el PDF; Word quiere los colores sin almohadilla.
+- **Lo que sigue sin llevar**: el pie legal y el anexo de registros literales.
+  Eso es del documento que se entrega.
+
+⚠️ **El logo entra ENTERO o no entra.** `ficherosDelDocx` solo añade
+`word/media/logo.png`, su relación `rId3` y el `Default Extension="png"` si
+`parrafoDelLogo` ha sabido dibujarlo; un ZIP que declara una parte que no está
+es un documento que Word se niega a abrir. Un logo que no sea PNG, o sin
+dimensiones legibles, se ignora y el informe sale sin él: un informe no puede
+dejar de generarse porque falte una imagen. Las dimensiones salen del IHDR
+(`dimensionesPng`), solo de PNG — de un JPEG habría que recorrer sus segmentos,
+y un Word sin logo es mejor que uno con el logo deformado.
+
+Y el ZIP: `word/media/logo.png` es un **Buffer**, así que la ruta ya no hace
+`Buffer.from(contenido, "utf8")` a ciegas. Prueba:
+`scripts/_smoke-informe-word.mjs` (18 comprobaciones; las de la marca fijan que
+con logo entren las tres piezas y sin logo ninguna).
