@@ -112,9 +112,12 @@ export const POST = withTenant(async (request, { params }, ctx) => {
         fecha: new Date(),
       });
       const a = await publicar(models, { nombre: "resuelto", contenido: r.resuelto, actual: resuelto, nota, por });
-      const b = await publicar(models, { nombre: "backlog", contenido: r.backlog, actual: backlog, nota, por });
+      // El backlog se publica sin su tarea. Sus avisos hablan de OTRAS tareas —la
+      // de este aviso acaba de salir de ahí— y el panel del Buzón los enseñaba
+      // como un fallo del cierre (18/09/2026): se quedan para /admin/tablero.
+      await publicar(models, { nombre: "backlog", contenido: r.backlog, actual: backlog, nota, por });
       version = a.version;
-      avisos.push(...a.avisos, ...b.avisos);
+      avisos.push(...a.avisos);
     } else if (aviso.registroFicha) {
       // Tenía tarea y ya no está en el backlog: alguien la cerró o la borró.
       camino = "ya-cerrada";
