@@ -12,7 +12,7 @@ import BuscadorPaciente from "../../../components/citas/BuscadorPaciente.jsx";
 import SelectorPaciente from "../../../components/citas/SelectorPaciente.jsx";
 import { datosAlElegirFicha } from "../../../lib/clients/contactoDeFicha.js";
 import { repasarContactoDeCita, avisoDeContacto } from "../../../lib/citas/contactoCita.js";
-import { CADENCIAS, TOPE_REPETICIONES, fechasDeRepeticion, repeticionDeBloqueo } from "../../../lib/citas/recurrencia.js";
+import { CADENCIAS, TOPE_REPETICIONES, fechasDeRepeticion, repeticionDeBloqueo, finDelCurso } from "../../../lib/citas/recurrencia.js";
 import { cobroDelTipo, normalizarCobro, euros } from "../../../lib/citas/dineroDeLaCita.js";
 import { packsParaPaciente } from "../../../lib/citas/bonoDelPaciente.js";
 import {
@@ -224,6 +224,25 @@ export function NuevaCitaDrawer({
   const hayTalleres = useMemo(() => eventTypes.some((e) => e.tallerGrupoId), [eventTypes]);
 
   /*
+   * CUÁNTAS CITAS SALEN, mientras se escribe (18/09/2026, AV-0209). La misma
+   * cuenta que se ejecuta al guardar —sale de la misma función—, para que nadie
+   * se entere de que la tanda se quedaba en noviembre cuando ya está creada.
+   * Es lo que el panel de bloqueos ya hacía.
+   */
+  const previstoCitas = useMemo(() => {
+    const { repetir, repetirHasta, date, time } = createForm;
+    if (!repetir || !repetirHasta || !date || !time) return null;
+    const { fechas, sinDia } = fechasDeRepeticion(`${date}T${time}`, repetir, repetirHasta);
+    const ultima = fechas.at(-1);
+    return {
+      total: fechas.length + 1,
+      ultima: ultima ? ultima.toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit", year: "numeric" }) : null,
+      sinDia,
+      tope: fechas.length >= TOPE_REPETICIONES,
+    };
+  }, [createForm]);
+
+  /*
    * ── EL TECHO DE LOS 300 PACIENTES (28/08/2026) ────────────────────────────
    *
    * `patients` venía del padre, que pedía `/api/pacientes` sin más: ese endpoint
@@ -358,6 +377,23 @@ export function NuevaCitaDrawer({
       // toca el cartel del bono: la familia sigue elegida arriba y su bono
       // sigue siendo verdad.
       if (familia) buscarBono(familia);
+      return;
+    }
+    /*
+     * ── AL REPETIR, HASTA FIN DE CURSO (18/09/2026, AV-0209) ───────────────
+     * La casilla «Hasta el día» nacía en blanco y las tandas se quedaban
+     * cortas: en Aumenta hay series creadas en septiembre que se paran en
+     * noviembre, y de ahí los «huecos a partir de enero» que nos escribieron.
+     * Se PROPONE el final del curso (junio), que es como trabaja el centro, y
+     * se cambia antes de guardar. Solo si está vacío: una fecha ya escrita no
+     * se pisa, y elegir «No se repite» no deja la fecha puesta por detrás.
+     */
+    if (field === "repetir") {
+      setCreateForm((prev) => ({
+        ...prev,
+        repetir: value,
+        repetirHasta: value ? prev.repetirHasta || finDelCurso(prev.date) : "",
+      }));
       return;
     }
     setCreateForm((prev) => ({ ...prev, [field]: value }));
@@ -1132,6 +1168,20 @@ export function NuevaCitaDrawer({
                 <p className="text-[10px] text-neutral-400 -mt-2">
                   Se crean citas sueltas (cada una se mueve o cancela sola). Las que caigan en
                   festivo o bloqueo no se crean y se avisa. El correo a la familia sale solo con la primera.
+                </p>
+              )}
+              {previstoCitas && (
+                <p className="text-[11px] text-neutral-700 bg-white border border-neutral-200 rounded px-2 py-1.5 -mt-1">
+                  Se crearán <strong className="font-semibold">{previstoCitas.total} citas</strong>
+                  {previstoCitas.ultima ? <>, la última el {previstoCitas.ultima}</> : null}.
+                  {previstoCitas.sinDia > 0 && (
+                    <>
+                      {" "}
+                      {previstoCitas.sinDia} {previstoCitas.sinDia === 1 ? "mes no tiene" : "meses no tienen"} ese
+                      día y se saltan.
+                    </>
+                  )}
+                  {previstoCitas.tope && <> Es el máximo de {TOPE_REPETICIONES} repeticiones.</>}
                 </p>
               )}
               </>

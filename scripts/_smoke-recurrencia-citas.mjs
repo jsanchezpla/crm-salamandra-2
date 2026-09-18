@@ -2,7 +2,7 @@
 // Fija lib/citas/recurrencia.js: qué fechas materializa una cita que se repite.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { fechasDeRepeticion, TOPE_REPETICIONES, diasEntre, repeticionDeBloqueo } from "../lib/citas/recurrencia.js";
+import { fechasDeRepeticion, TOPE_REPETICIONES, diasEntre, repeticionDeBloqueo, finDelCurso } from "../lib/citas/recurrencia.js";
 
 test("semanal hasta una fecha: una por semana, sin la primera, tope inclusive", () => {
   const { fechas, sinDia } = fechasDeRepeticion("2026-09-01T16:00", "semana", "2026-09-29");
@@ -92,4 +92,35 @@ test("sin repetición no sale ningún tramo", () => {
   assert.equal(repeticionDeBloqueo({
     date: "2026-09-10", time: "09:00", endDate: "2026-09-10", repetir: "", repetirHasta: "",
   }).tramos.length, 0);
+});
+
+/*
+ * ── EL «HASTA» QUE SE PROPONE (18/09/2026, AV-0209) ───────────────────────
+ * Olga: «a partir de enero hay bastantes huecos sin rellenar». La casilla nacía
+ * en blanco y las tandas se quedaban cortas. El centro trabaja por curso.
+ */
+test("una serie que empieza en el curso llega hasta junio", () => {
+  assert.equal(finDelCurso("2026-09-18"), "2027-06-30");
+  assert.equal(finDelCurso("2026-12-31"), "2027-06-30");
+  assert.equal(finDelCurso("2027-01-07"), "2027-06-30");
+  assert.equal(finDelCurso("2027-06-01"), "2027-06-30");
+});
+
+test("y nunca propone un día anterior a la propia cita", () => {
+  // Julio y agosto el centro cierra: una cita de verano va con el curso que empieza.
+  assert.equal(finDelCurso("2027-07-01"), "2028-06-30");
+  assert.equal(finDelCurso("2027-08-30"), "2028-06-30");
+  for (const d of ["2026-09-18", "2027-01-07", "2027-07-01"]) assert.ok(finDelCurso(d) >= d);
+});
+
+test("sin fecha no se inventa ninguna", () => {
+  assert.equal(finDelCurso(""), "");
+  assert.equal(finDelCurso(null), "");
+  assert.equal(finDelCurso("mañana"), "");
+});
+
+test("de septiembre a fin de curso, una semanal cabe de sobra en el tope", () => {
+  const { fechas } = fechasDeRepeticion("2026-09-18T16:00", "semana", finDelCurso("2026-09-18"));
+  assert.ok(fechas.length > 35 && fechas.length < TOPE_REPETICIONES, `salieron ${fechas.length}`);
+  assert.equal(fechas.at(-1).getMonth(), 5); // junio
 });
