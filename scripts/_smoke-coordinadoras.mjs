@@ -14,7 +14,12 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { coordinadorasDe, esCoordinadora, veTodoElEquipo } from "../lib/clinica/coordinadoras.js";
+import {
+  coordinadorasDe,
+  esCoordinadora,
+  veTodoElEquipo,
+  avisaDelPendienteDeTodos,
+} from "../lib/clinica/coordinadoras.js";
 
 const A = "11111111-1111-4111-8111-111111111111";
 const B = "22222222-2222-4222-8222-222222222222";
@@ -50,5 +55,23 @@ describe("veTodoElEquipo", () => {
     assert.equal(veTodoElEquipo({ tenant, role: "user", teamMemberId: A }), true);
     assert.equal(veTodoElEquipo({ tenant, role: "user", teamMemberId: "33333333-3333-4333-8333-333333333333" }), false);
     assert.equal(veTodoElEquipo({ tenant: { settings: {} }, role: "user", teamMemberId: A }), false);
+  });
+});
+
+describe("avisaDelPendienteDeTodos", () => {
+  it("Inicio avisa del centro entero solo a quien dirige", () => {
+    assert.equal(avisaDelPendienteDeTodos({ role: "admin" }), true);
+    assert.equal(avisaDelPendienteDeTodos({ role: "superadmin" }), true);
+  });
+  it("coordinar NO es que te avisen: a la coordinadora, solo lo suyo (AV-0191)", () => {
+    // A coordina —`veTodoElEquipo` le dice que sí— y aun así Inicio le cuenta
+    // solo sus informes. Las dos preguntas tienen que separarse aquí o el
+    // arreglo se deshace solo la próxima vez que alguien las unifique.
+    assert.equal(veTodoElEquipo({ tenant, role: "user", teamMemberId: A }), true);
+    assert.equal(avisaDelPendienteDeTodos({ role: "user" }), false);
+  });
+  it("sin rol, no avisa de nada ajeno", () => {
+    assert.equal(avisaDelPendienteDeTodos({ role: undefined }), false);
+    assert.equal(avisaDelPendienteDeTodos({ role: null }), false);
   });
 });
