@@ -106,7 +106,8 @@ campos. Resumen:
 | `/api/clients/[id]/attachments/[attachmentId]/download` | GET | Stream del PDF | JWT |
 | `/api/clients/[id]/contact-methods` | GET/POST | Emails y teléfonos múltiples con uno principal (`lib/clients/contactMethods.js`) | JWT + `hasModule(clients)` |
 | `/api/clients/[id]/contact-methods/[methodId]` | PATCH/DELETE | Editar / borrar un medio de contacto | JWT + `hasModule(clients)` |
-| `/api/clients/[id]/guardians` | GET/PUT | Padres/tutores de la familia + estado de firma | JWT + `hasModule(clients)` |
+| `/api/clients/[id]/guardians` | GET/PUT | Padres/tutores de la familia + estado de firma (con DNI y quién firma) | JWT + `hasModule(clients)` |
+| `/api/pacientes/[id]/tutores` | PUT | Los MISMOS tutores, escritos desde la ficha del paciente: solo nombre, parentesco, teléfono y correo | JWT + `hasModule(clinica|pacientes)` + el centro con `clients` |
 | `/api/clients/[id]/contract` | GET/POST/DELETE | Contrato del Centro de la familia (PDF) | JWT + `hasModule(clients)` |
 | `/api/clients/[id]/contract/download` | GET | Stream del PDF del contrato | JWT + `hasModule(clients)` |
 | `/api/clients/[id]/contract/firmado/[documentoId]` | GET | La COPIA FIRMADA (`documents` con `source='contrato_firmado'` de ESTA ficha); `?ver=1` la abre inline. Cuelga de `clients` y no de `documents_avanzado` a propósito (06/08/2026) | JWT + `hasModule(clients)` |
@@ -164,7 +165,9 @@ además, no se sabía cuál de los dos tutores había firmado.
   desactiva la firma web (decisión de Rodrigo, 31/07).
 - **Quién firma**: los tutores marcados como firmantes; si la ficha no tiene
   tutores, el titular (`effectiveSigners()`). La lista de tutores se edita en
-  la sección «Padres y tutores» de la ficha
+  la sección «Padres y tutores» de la ficha —y, desde el 18/09/2026, también
+  desde la ficha del PACIENTE, pero allí sin DNI y sin tocar quién firma
+  (`fusionarTutoresDeFicha`); a un firmante no se le puede quitar desde ahí—
   (`components/clients/ClientGuardiansSection.jsx`): el endpoint existía desde
   el 29/07 pero no había pantalla, así que en la práctica ninguna familia tenía
   tutores y el caso de los padres separados no se podía representar.

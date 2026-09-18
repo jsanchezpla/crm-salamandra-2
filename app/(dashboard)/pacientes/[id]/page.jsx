@@ -15,10 +15,12 @@ import EnviarRegistroModal from "@/components/clinica/EnviarRegistroModal.jsx";
 import CitasDelPaciente from "@/components/citas/CitasDelPaciente.jsx";
 import PatientExternalContactsSection from "@/components/clinica/PatientExternalContactsSection.jsx";
 import InterventionPlanSection from "@/components/clinica/InterventionPlanSection.jsx";
+import TutoresDeLaFamilia from "@/components/clinica/TutoresDeLaFamilia.jsx";
 import PreviewBanner from "../../clinica/_components/PreviewBanner.jsx";
 import PropuestaIA from "@/components/clinica/PropuestaIA.jsx";
 import { REPORT_TYPES_NUEVOS, REPORT_TYPE_LABEL, nombreDelInforme } from "@/lib/clinica/serialize.js";
 import { edadDe, edadParaGuardar, fechaNacimientoCorta as fmtFechaNacimiento } from "@/lib/clinica/edad.js";
+import { PARENTESCOS } from "@/lib/clients/formularioAlta.js";
 import {
   aFormulario,
   apartadosConPlantillas,
@@ -859,10 +861,13 @@ export default function PacienteFichaPage() {
       // La fecha de nacimiento (03/09/2026, AV-0034): existía en la tabla y
       // la trajo Organízate, pero la ficha solo enseñaba la edad suelta.
       birthDate: patient.birthDate ?? "",
-      // Su DNI (18/09/2026, AV-0179): la ficha lo enseñaba y no había
-      // ninguna pantalla donde escribirlo — 502 de 1.201 lo trajeron de
-      // Organízate y el resto no se podía completar.
+      // Su DNI, su domicilio y su parentesco (18/09/2026, AV-0179 y la ficha
+      // «Datos tutor»): la ficha los ENSEÑABA y no había ninguna pantalla donde
+      // escribirlos. 502 de 1.201 traían DNI de Organízate y 922 domicilio; el
+      // resto no se podía completar. El PATCH ya los admitía en su lista blanca.
       dni: patient.dni ?? "",
+      address: patient.address ?? "",
+      relationship: patient.relationship ?? "",
       educationCenter: patient.educationCenter ?? "", educationLevel: patient.educationLevel ?? "",
       attendanceFrequency: patient.attendanceFrequency ?? "", referralReason: patient.referralReason ?? "",
       referredBy: patient.referredBy ?? "", objectives: (patient.objectives ?? []).join(", "), status: patient.status ?? "active",
@@ -890,6 +895,9 @@ export default function PacienteFichaPage() {
         // regla, con su prueba, en `lib/clinica/edad.js`.
         age: edadParaGuardar(editForm),
         birthDate: editForm.birthDate || null,
+        dni: editForm.dni.trim() || null,
+        address: editForm.address.trim() || null,
+        relationship: editForm.relationship || null,
         objectives: editForm.objectives.split(",").map((s) => s.trim()).filter(Boolean),
         // Las filas a medio rellenar (persona sin elegir) no se mandan. El
         // primero de la lista es el de referencia y el servidor pone con él
@@ -1146,58 +1154,17 @@ export default function PacienteFichaPage() {
             </div>
             {/*
               PADRES Y TUTORES DE LA FAMILIA (02/09/2026, AV-0023 y AV-0024 de
-              Aumenta). En Organízate cada paciente tenía su apartado de tutores;
-              aquí solo se veían en la ficha de la FAMILIA (Clientes), a la que
-              las terapeutas no entran, y quien miraba un paciente veía un solo
-              nombre y creía que los demás datos se habían perdido. No se habían
-              perdido: 1.846 tutores en producción, 813 familias con dos o más.
-
-              Es el mismo dato en otra pantalla, y de SOLO LECTURA a propósito:
-              se editan donde viven (la ficha de la familia), y aquí no viaja
-              ni el DNI ni quién firma (`tutoresParaFicha`). Con teléfono y
-              correo como enlaces, que es para lo que lo pidieron: llamar.
+              Aumenta; pasa a ESCRIBIR el 18/09/2026, ficha «Datos tutor»). El
+              porqué de las dos vueltas y qué se enseña y qué no, en el propio
+              componente. Aquí solo queda de quién son los tutores y qué hacer
+              cuando se guardan: recargar la ficha, que es quien los trae.
             */}
             {patient.client && (
-              <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5" data-testid="padres-y-tutores">
-                <div className="eyebrow mb-3 flex items-center gap-1.5">
-                  Padres y tutores
-                  <HelpTooltip title="Padres y tutores" placement="bottom" className="tracking-normal">
-                    Los padres o tutores de la familia de este paciente, con su teléfono y su correo,
-                    para poder llamarles sin pasar por Clientes.
-                    {" "}
-                    <strong className="text-white">Se editan en la ficha de la familia</strong>: aquí solo se consultan.
-                  </HelpTooltip>
-                </div>
-                {patient.client.guardians?.length ? (
-                  <ul className="space-y-2">
-                    {patient.client.guardians.map((g, i) => (
-                      <li key={g.id ?? i} className="text-[11px]">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-medium text-neutral-800">{g.name}</span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-neutral-100 text-neutral-500">{g.relationshipLabel}</span>
-                        </div>
-                        <div className="text-neutral-600 flex items-center gap-3 flex-wrap mt-0.5">
-                          {g.phone && (
-                            <a href={`tel:${g.phone}`} className="hover:underline">
-                              <span className="text-neutral-400">☎</span> {g.phone}
-                            </a>
-                          )}
-                          {g.email && (
-                            <a href={`mailto:${g.email}`} className="hover:underline break-all">
-                              <span className="text-neutral-400">✉</span> {g.email}
-                            </a>
-                          )}
-                          {!g.phone && !g.email && <span className="text-neutral-400">sin teléfono ni correo apuntados</span>}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-[11px] text-neutral-400">
-                    La familia no tiene padres ni tutores apuntados. Se apuntan en su ficha, en Clientes.
-                  </p>
-                )}
-              </div>
+              <TutoresDeLaFamilia
+                patientId={patient.id}
+                tutores={patient.client.guardians}
+                onSaved={load}
+              />
             )}
             <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
               <div className="eyebrow mb-3">Datos y consentimientos</div>
@@ -1525,8 +1492,41 @@ export default function PacienteFichaPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <input className={inputCls} placeholder="Curso" value={editForm.educationLevel} onChange={(e) => setEditForm({ ...editForm, educationLevel: e.target.value })} />
-                <input className={inputCls} placeholder="DNI / NIE" value={editForm.dni} onChange={(e) => setEditForm({ ...editForm, dni: e.target.value })} />
               </div>
+              {/* DNI, domicilio y parentesco (18/09/2026, AV-0179 y la ficha «Datos tutor»
+                  de Aumenta). La tarjeta «Datos y consentimientos» los enseña
+                  desde el sprint de Aumenta, pero solo se podían teclear desde
+                  la ficha de la familia, en Clientes, donde las terapeutas no
+                  entran. Aquí es donde se ve el «—», así que aquí se arregla. */}
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="text-[10px] uppercase tracking-wider text-neutral-400">DNI / NIE</span>
+                  <input className={`${inputCls} mt-0.5`} placeholder="12345678Z" value={editForm.dni} onChange={(e) => setEditForm({ ...editForm, dni: e.target.value })} />
+                </label>
+                <label className="block">
+                  <span className="text-[10px] uppercase tracking-wider text-neutral-400">Parentesco con el titular</span>
+                  {/* Las mismas opciones que el alta (`PARENTESCOS`), más la que
+                      ya tuviera guardada si vino de la importación y no está en
+                      la lista: un desplegable no puede borrar en silencio un
+                      dato que alguien escribió. */}
+                  <Select
+                    value={editForm.relationship}
+                    onChange={(v) => setEditForm({ ...editForm, relationship: v })}
+                    options={[
+                      { value: "", label: "Sin especificar" },
+                      ...PARENTESCOS.map((r) => ({ value: r, label: r })),
+                      ...(editForm.relationship && !PARENTESCOS.includes(editForm.relationship)
+                        ? [{ value: editForm.relationship, label: editForm.relationship }]
+                        : []),
+                    ]}
+                    className={`${inputCls} mt-0.5`}
+                  />
+                </label>
+              </div>
+              <label className="block">
+                <span className="text-[10px] uppercase tracking-wider text-neutral-400">Domicilio</span>
+                <input className={`${inputCls} mt-0.5`} placeholder="C/ Mallorca 210, 3º 2ª" value={editForm.address} onChange={(e) => setEditForm({ ...editForm, address: e.target.value })} />
+              </label>
               <input className={inputCls} placeholder="Centro escolar" value={editForm.educationCenter} onChange={(e) => setEditForm({ ...editForm, educationCenter: e.target.value })} />
               <div className="grid grid-cols-2 gap-3">
                 <input className={inputCls} placeholder="Frecuencia" value={editForm.attendanceFrequency} onChange={(e) => setEditForm({ ...editForm, attendanceFrequency: e.target.value })} />
