@@ -15,12 +15,18 @@
  *   · **El título dice las tres cosas** —qué pasó, a quién y cuándo— y cabe en
  *     los 200 caracteres de la columna; y **las dos faltas abren incidencia**,
  *     con prioridad distinta.
+ *   · **La falta NO se le asigna a nadie** (18/09/2026, AV-0197): se avisa por
+ *     la campana y la incidencia se queda en la pestaña «Faltas». Esto último
+ *     no es una función pura —escribe—, así que se vigila sobre el fuente, que
+ *     es lo que hay: si vuelve a aparecer un `setAssignees` ahí, la bandeja de
+ *     administración se llena sola otra vez.
  *
  *   node scripts/_smoke-incidencia-por-falta.mjs
  */
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   CATEGORIA_FALTA,
   SUBCATEGORIA_FALTA,
@@ -42,7 +48,7 @@ test("sin lista puesta no se abre ninguna incidencia", () => {
   assert.deepEqual(responsablesDeIncidenciaPorFalta({ settings: { citas: { incidenciaPorFalta: OLGA } } }), []);
 });
 
-test("con la lista puesta, salen sus responsables en orden", () => {
+test("con la lista puesta, salen los avisados en orden", () => {
   const tenant = { settings: { citas: { incidenciaPorFalta: [OLGA, ROSA] } } };
   assert.deepEqual(responsablesDeIncidenciaPorFalta(tenant), [OLGA, ROSA]);
 });
@@ -97,4 +103,30 @@ test("sin ficha ni fecha se dice, no se inventa", () => {
 test("entra por Administrativa · Citas, que es quien la resuelve", () => {
   assert.equal(CATEGORIA_FALTA, "administrativa");
   assert.equal(SUBCATEGORIA_FALTA, "Citas");
+});
+
+/*
+ * ── LA FALTA NO ES DE NADIE (18/09/2026, AV-0197 de Aumenta) ────────────────
+ * Olga: «sigo viendo incidencias en las que no estoy etiquetada». Eran estas:
+ * 41 de las 128 que tenía a su nombre se las había puesto el CRM por ser la
+ * destinataria de las faltas del centro. Ahora se avisa, pero no se asigna.
+ */
+const fuente = readFileSync(new URL("../lib/citas/incidenciaPorFalta.js", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+
+test("la incidencia de una falta nace sin responsable", () => {
+  assert.match(fuente, /assignedToId: null/);
+  assert.doesNotMatch(fuente, /assignedToId: ordenados/);
+  // Ni por la pivote, que es la otra puerta a la bandeja de alguien.
+  assert.doesNotMatch(fuente, /await incidencia\.setAssignees\(/);
+});
+
+test("pero se sigue avisando a quien lleva las faltas", () => {
+  // Quitar el aviso sería que una falta no llegue a nadie: la lista del centro
+  // deja de repartir trabajo, no de avisar.
+  assert.match(fuente, /userIds/);
+  assert.match(fuente, /type: "incidencia_falta"/);
+});
+
+test("y sin lista no se abre nada: la lista sigue siendo el interruptor", () => {
+  assert.match(fuente, /if \(!responsables\.length\) return null;/);
 });
