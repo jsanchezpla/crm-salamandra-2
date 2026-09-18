@@ -185,13 +185,36 @@ describe("cada terapia paga por SUS sesiones", () => {
     assert.equal(partes[0].rotulo, "desde el 15/09/2026 (3 de 5 sesiones)");
     /*
      * La psicología tiene UNA cita en todo el mes, y con una no hay patrón que
-     * deducir (AV-0082, esa misma tarde): esa línea vuelve a los días en vez
-     * de cobrar «1 de 5 sesiones» = 38 €, que es el número que aparece cuando
-     * lo que pasa de verdad es que faltan citas por poner.
+     * deducir (AV-0082): esa línea no puede cobrar «1 de 5 sesiones» = 38 €,
+     * que es el número que sale cuando lo que pasa de verdad es que faltan
+     * citas por poner.
+     *
+     * Hasta el 18/09/2026 caía entonces a DÍAS (16/30 = 101,33 €) y el total
+     * eran 215,33 €. Rodrigo lo cambió ese día con AV-0170 —«todas tienen que
+     * utilizar el tema de las sesiones, no los días»—: si otra partida del
+     * MISMO tramo dibujó patrón, esta cobra a ESE factor. Aquí hereda el 3 de
+     * 5 de la pedagogía, así que son 114 € y el total 228 €. Lo que NO puede
+     * hacer sigue siendo inventarse SU ritmo con una cita suelta.
      */
-    assert.equal(partes[1].importe, 101.33, "16/30 días");
+    assert.equal(partes[1].importe, 114, "hereda el 3 de 5 de la otra terapia (AV-0170)");
+    assert.equal(partes[1].rotulo, "desde el 15/09/2026 (3 de 5 sesiones)");
+    assert.equal(partes[1].prorrateo.heredado, true);
+    assert.equal(total, 228);
+  });
+
+  it("si NINGUNA dibuja patrón, las dos siguen yendo por días (AV-0082)", () => {
+    // Una cita cada una: no hay ritmo que heredar en todo el tramo.
+    const unaCadaUna = CITAS_ADRIANA.filter((c, i) => i === 0 || i === 1);
+    const { partes, total } = partesConProrrateo(
+      [
+        { importe: 190, inicio: "2026-09-15", conceptId: PEDAGOGIA },
+        { importe: 190, inicio: "2026-09-15", conceptId: PSICOLOGIA },
+      ],
+      { mes: "2026-09", citas: unaCadaUna }
+    );
+    assert.equal(partes[0].rotulo, "desde el 15/09/2026 (16/30 días)");
     assert.equal(partes[1].rotulo, "desde el 15/09/2026 (16/30 días)");
-    assert.equal(total, 215.33);
+    assert.equal(total, 202.66);
   });
 
   it("y no es lo que salía en pantalla, que eran los 16/30 días", () => {
@@ -227,10 +250,12 @@ describe("cada terapia paga por SUS sesiones", () => {
       citasPorClave: { "p:p1": CITAS_ADRIANA },
     });
     assert.equal(aGenerar.length, 1);
-    assert.equal(aGenerar[0].importe, 215.33, "114 de pedagogía + 101,33 de psicología");
-    // Una fue por sesiones y la otra por días: ninguna fracción describe el
-    // total, así que el rótulo se queda con la fecha y no finge una cuenta.
-    assert.equal(aGenerar[0].rotulo, "desde el 15/09/2026");
+    assert.equal(aGenerar[0].importe, 228, "114 de pedagogía + 114 de psicología, que hereda su ritmo (AV-0170)");
+    // Hasta el 18/09 una iba por sesiones y la otra por días, ninguna
+    // fracción describía el total y el rótulo se quedaba con la fecha a
+    // secas. Ahora la cuenta es UNA sola para toda la cuota (AV-0170), así
+    // que el rótulo vuelve a decirla —y dice lo mismo que el del cajón—.
+    assert.equal(aGenerar[0].rotulo, "desde el 15/09/2026 (3 de 5 sesiones)");
   });
 
   it("AV-0082: una entrevista inicial no le marca el ritmo a la mensualidad", () => {

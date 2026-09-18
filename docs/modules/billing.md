@@ -939,6 +939,25 @@ las reciben `planDeCuotasDelMes` por `citasPorClave` desde sus tres llamadores
 «Registrar cobro» y las líneas de factura siguen por días (`prorrateo.js`): no
 tienen las citas delante. Prueba: `_smoke-cuotas.mjs`.
 
+**Y dentro de una cuota, UNA SOLA VARA DE MEDIR** (18/09/2026, AV-0170;
+decidido por Rodrigo: «todas tienen que utilizar el tema de las sesiones, no
+los días»). Cada servicio se prorratea con SUS citas desde AV-0068, y eso hacía
+que en la misma cuota conviviesen dos cuentas: el que tenía citas apuntadas iba
+por sesiones y el que solo tenía una caía a días —justo cuando su agenda está a
+medias, que es el día del alta—. Rosa lo vio en una cuota de Logopedia 45x1 +
+T.O. 45x1 dada de alta el 21/09: esperaba 145 € y salieron 120,83 €. Ahora
+`repartoPorConcepto` da DOS pasadas: calcula el tramo de cada servicio y, si
+alguno dibujó patrón, **los demás cobran a ESE factor** (se suman los dos lados
+de la fracción de los que sí lo dibujaron, no se promedian factores). Si
+ninguno lo dibuja, se devuelve `null` y la cuota entera va por días, como
+antes: AV-0082 («una sola sesión no dibuja un patrón») sigue en pie, porque lo
+que no puede hacer un servicio es inventarse SU ritmo con una cita suelta —usar
+el que ya ha demostrado su cuota no es inventar nada—. El tramo ya no sale
+`mixto`, así que el rótulo vuelve a decir la fracción, y trae `heredado` para
+saber si alguno cobró al ritmo de otro. Prueba: `_smoke-cuota-una-vara.mjs`.
+**Los cobros ya emitidos NO se recalculan**: esto vale para lo que se genere a
+partir de ahora.
+
 ## «Devuelto» apunta la salida del dinero en Caja (07/09/2026)
 
 Salió de la revisión de código del 06/09/2026: marcar un cobro como
