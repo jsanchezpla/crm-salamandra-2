@@ -61,3 +61,14 @@ test("quien ESPERA PLAZA se queda en pausa, nunca de baja (AV-0177)", () => {
   assert.equal(estadoPorActividad({ esperandoPlaza: true, ultimaCita: "2026-09-20" }, cli), "active");
   assert.equal(estadoPorActividad({ esperandoPlaza: false }, pac), "discharged");
 });
+
+test("una ficha abierta ESTE curso tampoco puede ser baja", () => {
+  // Salió al medir AV-0177: el pase iba a dar de Baja a dos familias abiertas
+  // el 17/09 y a una del 11/09, sin cita todavía. Acaban de entrar.
+  assert.equal(estadoPorActividad({ altaEn: "2026-09-17" }, cli), "paused");
+  assert.equal(estadoPorActividad({ altaEn: "2026-09-01" }, pac), "paused");
+  // La de agosto sí: ya estaba antes de que empezara el curso y no ha venido.
+  assert.equal(estadoPorActividad({ altaEn: "2026-08-02" }, cli), "inactive");
+  // Y con cita del curso manda la cita, como siempre.
+  assert.equal(estadoPorActividad({ altaEn: "2026-09-17", ultimaCita: "2026-09-20" }, cli), "active");
+});

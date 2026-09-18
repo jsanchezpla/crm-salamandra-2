@@ -27,6 +27,7 @@
  *     `prospect` es «compró una vez» y la regla no aplica.
  *   · Quien está en la COLA DE ADMISIÓN se queda En pausa y nunca de Baja
  *     (18/09/2026, AV-0177): no tiene citas porque aún no le hemos dado hora.
+ *   · Y tampoco la ficha ABIERTA ESTE CURSO: acaba de entrar, no se ha ido.
  *
  * Ensayo por defecto: cuenta cuántos cambiarían, sin nombres. `--confirm`
  * escribe en UNA transacción, y ANTES deja en `RESPALDO_DIR` (defecto /tmp) un
@@ -121,7 +122,7 @@ async function main() {
   // Lo último a nombre de cada FAMILIA sin paciente concreto.
   const sinPac = (alias) => (conPacientes ? `AND ${alias}.patient_id IS NULL` : "");
   const familias = await q(`
-    SELECT c.id, c.status::text AS status,
+    SELECT c.id, c.status::text AS status, c.created_at::text AS alta,
       (SELECT max(b.scheduled_at) FROM ${S}.bookings b WHERE b.client_id = c.id ${sinPac("b")} AND b.status::text <> 'cancelled')::text AS cita,
       greatest(
         (SELECT max(p.paid_at) FROM ${S}.payments p WHERE p.client_id = c.id ${sinPac("p")} AND p.status::text = 'completed'),
@@ -133,7 +134,7 @@ async function main() {
   let pacientes = [];
   if (conPacientes) {
     pacientes = await q(`
-      SELECT pa.id, pa.client_id, pa.status::text AS status,
+      SELECT pa.id, pa.client_id, pa.status::text AS status, pa.created_at::text AS alta,
         (SELECT count(*) FROM ${S}.patients h WHERE h.client_id = pa.client_id)::int AS hermanos,
         greatest(
           (SELECT max(b.scheduled_at) FROM ${S}.bookings b WHERE b.patient_id = pa.id AND b.status::text <> 'cancelled')
@@ -162,6 +163,9 @@ async function main() {
         ultimoDinero: unico ? mayor(p.dinero, fam?.dinero) : p.dinero,
         cuotaVigente: p.cuota || (unico && fam?.cuota),
         esperandoPlaza: p.client_id ? esperando.has(String(p.client_id)) : false,
+        // La ficha del paciente o la de su familia: cualquiera de las dos
+        // recién abierta dice que este caso acaba de empezar.
+        altaEn: mayor(p.alta, fam?.alta),
       },
       { baja: "discharged", hoy }
     );
@@ -180,7 +184,13 @@ async function main() {
   const cambiosFam = [];
   for (const f of familias) {
     const propio = estadoPorActividad(
-      { ultimaCita: f.cita, ultimoDinero: f.dinero, cuotaVigente: f.cuota, esperandoPlaza: esperando.has(String(f.id)) },
+      {
+        ultimaCita: f.cita,
+        ultimoDinero: f.dinero,
+        cuotaVigente: f.cuota,
+        esperandoPlaza: esperando.has(String(f.id)),
+        altaEn: f.alta,
+      },
       { baja: "inactive", hoy }
     );
     const deHijos = (hijosDe.get(String(f.id)) ?? []).map((e) => (e === "discharged" ? "inactive" : e));
