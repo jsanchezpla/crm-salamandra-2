@@ -283,7 +283,7 @@ Fichero: `models/tenant/Patient.model.js`. Tabla: `patients`.
 | `firstName` | VARCHAR(120) NOT NULL | Nombre del paciente. |
 | `lastName` | VARCHAR(120) NOT NULL | Apellidos. |
 | `birthDate` | DATEONLY nullable | Fecha de nacimiento. |
-| `age` | INTEGER nullable | Edad escrita a mano (0-120). Desde el 03/09/2026 (AV-0034) es el RESPALDO: la ficha, el listado y los informes enseñan `edad`, que el serializador calcula desde `birthDate` con `lib/clinica/edad.js` y solo cae a `age` si no hay fecha. Los dos formularios (alta y editar) piden la fecha; la casilla «Edad» queda para quien no la sabe. |
+| `age` | INTEGER nullable | Edad escrita a mano (0-120). Desde el 03/09/2026 (AV-0034) es el RESPALDO: la ficha, el listado y los informes enseñan `edad`, que el serializador calcula desde `birthDate` con `lib/clinica/edad.js` y solo cae a `age` si no hay fecha. Los dos formularios (alta y editar) piden la fecha; la casilla «Edad» queda para quien no la sabe —y desde el 18/09/2026 (AV-0178) **desaparece en cuanto hay fecha**: en su sitio sale la edad calculada, que se actualiza mientras se teclea la fecha, y al guardar `age` se escribe a `null` (`edadParaGuardar`, misma prueba). Antes la casilla se quedaba en blanco al lado de una fecha ya puesta y parecía que había que rellenarla a mano. En producción, 999 de 1.201 pacientes de Aumenta tienen fecha y 33 edad escrita; de las 32 que tenían las dos, una ya se contradecía. |
 | `educationCenter` | VARCHAR(200) nullable | Centro escolar (ej. "CEIP Las Acacias"). |
 | `educationLevel` | VARCHAR(80) nullable | Curso académico (ej. "3º Primaria"). |
 | `referralReason` | TEXT nullable | Motivo de derivación. |
