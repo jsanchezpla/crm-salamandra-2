@@ -1308,10 +1308,28 @@ conceptos que la componen, importe, método, día de cobro, alta y baja.
   filas. Con un número escrito manda ese número: es el precio pactado con esa
   familia y no se mueve aunque suba la tarifa.
 - **Alta EN GRUPO**: el POST acepta `destinatarios: [{clientId, patientId}]` y
-  crea una cuota por cada uno con los mismos datos. Quien ya tiene cuota activa
-  para ese mismo paciente se salta con su motivo (`permitirDuplicadas: true` lo
-  fuerza): un lote de 40 familias no puede convertirse en 40 cuotas repetidas
-  por un doble clic.
+  crea una cuota por cada uno con los mismos datos. Quien REPITE se salta con su
+  motivo (`permitirDuplicadas: true` lo fuerza): un lote de 40 familias no puede
+  convertirse en 40 cuotas repetidas por un doble clic.
+- **El listado sale POR SERVICIO** (18/09/2026, AV-0194: «que salgan
+  ordenadas, todas las de TO juntas, todas las de logo juntas»). El GET de
+  `/api/billing/cuotas` devuelve las filas ordenadas por el NOMBRE de sus
+  conceptos y, dentro de cada servicio, por paciente (o por la familia cuando
+  la cuota es de toda la casa). Antes salían como las devolvía Postgres, o sea
+  sin orden. Una cuota de dos terapias hace grupo propio («Logopedia 45x1 +
+  T.O. 45x1»): meterla en uno de los dos montones sería elegir por el centro.
+  Las de importe suelto van al final. `ordenarCuotasPorServicio` en
+  `lib/billing/tiposDeCuota.js`, con su prueba.
+- **Repetir es volver a cobrar LO MISMO, no cobrar otra cosa** (18/09/2026,
+  AV-0195 y la tarea «Mensaje cuota activa»). Hasta ese día bastaba con tener
+  CUALQUIER cuota viva para quedarse fuera del alta, y eso dejaba sin segunda
+  terapia a quien ya pagaba una: en producción chocaban las **284** parejas
+  cliente+paciente con cuota viva, y de las 7 que llevan varias **ninguna**
+  comparte concepto (son dos terapias, o sea lo legítimo). Ahora choca la cuota
+  viva que lleve ALGUNO de los conceptos que llegan —y el importe suelto solo
+  con otro importe suelto—, y el motivo la nombra: «ya tiene esta cuota activa
+  (Cuota T.O. 60x1)». La regla vive en `lib/billing/cuotaDuplicada.js` con
+  `scripts/_smoke-cuota-duplicada.mjs`.
 - **Baja ≠ borrado.** `PATCH { endDate, active:false }` apaga la cuota desde una
   fecha y CONSERVA la fila (los cobros que salieron de ella siguen explicando
   por qué se cobró lo que se cobró). `DELETE` es para el alta equivocada de hace
