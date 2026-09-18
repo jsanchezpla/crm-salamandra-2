@@ -15,6 +15,12 @@ import { repasarContactoDeCita, avisoDeContacto } from "../../../lib/citas/conta
 import { CADENCIAS, TOPE_REPETICIONES, fechasDeRepeticion, repeticionDeBloqueo } from "../../../lib/citas/recurrencia.js";
 import { cobroDelTipo, normalizarCobro, euros } from "../../../lib/citas/dineroDeLaCita.js";
 import { packsParaPaciente } from "../../../lib/citas/bonoDelPaciente.js";
+import {
+  avisoDeChoque,
+  motivoDelChoque,
+  perdonesDeSerie,
+  MOTIVO_FESTIVO,
+} from "../../../lib/citas/choqueAlCrear.js";
 import { TRAMO_ENTREVISTA, duracionLimpia } from "../../../lib/citas/altaDesdeDiagnostico.js";
 import { ENTREVISTA, tipoDiagnosticoDe } from "../../../lib/clinica/diagnostico.js";
 import { inputCls } from "./chips.jsx";
@@ -576,24 +582,39 @@ export function NuevaCitaDrawer({
        * seguir con ellas.
        */
       let primeraCreada = true;
+      /*
+       * ── QUÉ SE PREGUNTA, Y QUÉ SE CUENTA (18/09/2026, AV-0166) ────────────
+       * Qué se puede forzar, y qué se le dice a quien apunta la cita, lo decide
+       * `lib/citas/choqueAlCrear.js` y no este JSX: aquí se olfateaba el TEXTO
+       * del error para reconocer el solape, y la pantalla tenía su propia idea
+       * de qué se perdona. Dos listas que se desincronizan es exactamente cómo
+       * nació el botón que no hacía nada.
+       */
+      const contexto = () => ({
+        error: j.error,
+        deQuien: j.deQuien,
+        profesional: teamMembers.find((m) => m.id === createForm.teamMemberId)?.displayName ?? null,
+      });
       if (res.status === 409 && !j.ok) {
-        // Los clientes viejos (y un 409 de otro sitio) no mandan `motivo`: se
-        // deduce del texto, que es el que ya dice «Solapa con otra cita».
-        const esSolape = j.motivo === "solape" || /^Solapa con otra cita/i.test(String(j.error ?? ""));
-        if (esSolape && !repeticion) {
-          await avisar({
-            titulo: "Ahí ya hay otra cita",
-            texto: `${j.error}\n\nEsa hora está ocupada en su agenda: ponla a otra hora, o mueve primero la que hay.`,
-          });
-          setSaving(false);
-          return;
-        }
-        if (esSolape) {
-          const cuantas = repeticion.fechas.length;
+        const aviso = avisoDeChoque({
+          motivo: j.motivo,
+          ...contexto(),
+          enSerie: Boolean(repeticion),
+          cuantas: repeticion?.fechas.length ?? 0,
+        });
+        if (!aviso.forzable) {
+          // Nada que forzar. Sin serie detrás no hay nada que seguir y se
+          // cuenta; con serie, las repeticiones sí saben saltarse las que
+          // chocan, así que se ofrece seguir con ellas (AV-0167).
+          if (!repeticion) {
+            await avisar({ titulo: aviso.titulo, texto: aviso.texto });
+            setSaving(false);
+            return;
+          }
           const seguir = await confirmar({
-            titulo: "Ahí ya hay otra cita",
-            texto: `${j.error}\n\nEsa primera no se puede crear. ¿Sigo con las otras ${cuantas} y te digo cuáles entran?`,
-            confirmar: cuantas === 1 ? "Probar con la otra" : `Probar con las otras ${cuantas}`,
+            titulo: aviso.titulo,
+            texto: aviso.texto,
+            confirmar: aviso.confirmar,
           });
           if (!seguir) {
             setSaving(false);
@@ -602,17 +623,37 @@ export function NuevaCitaDrawer({
           primeraCreada = false;
         } else {
           const crearIgualmente = await confirmar({
-            titulo: "Ese hueco está bloqueado",
-            texto: j.error,
-            confirmar: "Crearla igualmente",
+            titulo: aviso.titulo,
+            texto: aviso.texto,
+            confirmar: aviso.confirmar,
           });
           if (!crearIgualmente) {
             setSaving(false);
             return;
           }
+          const saltado = motivoDelChoque({ motivo: j.motivo, error: j.error });
           insistio = true;
           res = await enviar(true);
           j = await res.json();
+          /*
+           * Y SI AUN ASÍ CHOCA, se dice en un diálogo. Detrás de un hueco
+           * bloqueado suele haber otra cosa: el 18/09/2026 Aumenta tenía 9.620
+           * bloqueos vigentes y 302 con una cita activa encima. Ese segundo
+           * choque caía en el `throw` de abajo, que pinta el aviso rojo en la
+           * CABECERA del drawer —a seiscientas líneas de formulario del botón,
+           * fuera de la pantalla—: se pulsaba «Crearla igualmente» y no se veía
+           * absolutamente nada. Era la otra mitad de «no hace nada».
+           */
+          if (res.status === 409 && !j.ok) {
+            const segundo = avisoDeChoque({ motivo: j.motivo, ...contexto() });
+            const queEra = saltado === MOTIVO_FESTIVO ? "el día cerrado" : "el hueco bloqueado";
+            await avisar({
+              titulo: segundo.titulo,
+              texto: `Se ha saltado ${queEra}, pero hay otra cosa debajo.\n\n${segundo.texto}`,
+            });
+            setSaving(false);
+            return;
+          }
         }
       }
       if (primeraCreada && !j.ok) throw new Error(j.error || "Error creando cita");
@@ -663,10 +704,7 @@ export function NuevaCitaDrawer({
         // la serie sin avisar a nadie (18/09/2026, AV-0167).
         let sinAvisarAun = !primeraCreada && avisarCorreo;
         // Lo que ya se decidió arriba, para toda la serie (10/09/2026, AV-0105).
-        const perdones = {
-          ...(insistio ? { permitirFestivo: true, permitirBloqueo: true } : {}),
-          ...(desdeBloqueo ? { permitirBloqueo: true } : {}),
-        };
+        const perdones = perdonesDeSerie({ insistio, desdeBloqueo: Boolean(desdeBloqueo) });
         for (const f of repeticion.fechas) {
           try {
             const r = await fetch("/api/citas/bookings", {
