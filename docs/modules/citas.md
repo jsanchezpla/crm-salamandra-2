@@ -2516,6 +2516,31 @@ solo sin explicar por qué se lee como un error de la pantalla. **Es una
 sugerencia, no una valla**: el servidor impone los permisos igual. Pruebas: las
 seis últimas de `_smoke-citas-filtro-profesional.mjs`.
 
+### Y dura lo que esa persona bloquea, no una hora fija (18/09/2026, AV-0200)
+
+> «¿Un bloqueo puede durar 50 minutos?» — Rocío, la colaboradora de Laura.
+
+Puede: la duración es la hora de fin y es un campo libre (ella ya tenía cuatro
+bloqueos de 45 minutos). Lo que despistaba es que al pulsar un hueco el
+formulario proponía SIEMPRE una hora y había que corregirla cada vez.
+
+Ahora la propone el servidor con el listado de bloqueos
+(`duracionSugerida` / `duracionSugeridaDe` en `GET /api/citas/bloqueos`) y la
+regla vive en `lib/citas/duracionBloqueo.js`: **lo que más repite quien mira**,
+si no lo que más repite el centro, si no la duración más corta de sus tipos de
+cita, y si no hay nada, 60 como hasta hoy. Solo cuentan los bloqueos de hasta
+cuatro horas: unas vacaciones o un día entero (que se escribe 00:00–23:59, o
+sea 1.439 minutos) no dicen nada de cuánto dura un hueco suelto — sin ese corte,
+los seis días enteros de `nutri_laura` serían «la costumbre de la casa».
+
+**Por qué no salen de los tipos de cita, que era lo obvio**: medido el
+18/09/2026, los de `nutri_laura` son cuatro de 60 minutos y uno de 30, así que
+seguiría proponiendo 60 y el caso que lo originó no cambiaría. Lo que sí
+distingue es lo que cada persona bloquea: en `aumenta` conviven 3.830 bloqueos
+de 60 con 3.380 de 15 — dos costumbres dentro del mismo centro, que una sola
+cifra no puede servir. Pruebas: las siete últimas de
+`_smoke-duracion-bloqueo.mjs`.
+
 
 ## Los dos «ese hueco está ocupado», y la serie que no se pierde entera (18/09/2026, AV-0167 de Aumenta)
 

@@ -21,6 +21,7 @@ import {
   perdonesDeSerie,
   MOTIVO_FESTIVO,
 } from "../../../lib/citas/choqueAlCrear.js";
+import { DURACION_POR_DEFECTO } from "../../../lib/citas/duracionBloqueo.js";
 import { TRAMO_ENTREVISTA, duracionLimpia } from "../../../lib/citas/altaDesdeDiagnostico.js";
 import { ENTREVISTA, tipoDiagnosticoDe } from "../../../lib/clinica/diagnostico.js";
 import { inputCls } from "./chips.jsx";
@@ -63,6 +64,10 @@ export function NuevaCitaDrawer({
   // una cita»): las categorías del centro, si quien mira es dirección y su
   // propia ficha de equipo. Ver `BloqueoRapido`, abajo.
   categoriasBloqueo = [],
+  // Cuántos minutos dura ese bloqueo de entrada (18/09/2026, AV-0200). Lo
+  // calcula el servidor con lo que esa persona bloquea de verdad; ver
+  // `lib/citas/duracionBloqueo.js`. 60 mientras no haya llegado el listado.
+  duracionBloqueo = DURACION_POR_DEFECTO,
   viewerIsAdmin = false,
   // Administración también elige de quién es el bloqueo rápido (11/09/2026,
   // AV-0114 de Aumenta); cerrar el centro entero sigue siendo de dirección.
@@ -772,6 +777,7 @@ export function NuevaCitaDrawer({
       <BloqueoRapido
         inicial={inicial}
         categorias={categoriasBloqueo}
+        duracion={duracionBloqueo}
         esAdmin={viewerIsAdmin}
         puedeElegirPersona={puedeElegirPersona}
         miFicha={miFichaDeEquipo}
@@ -1483,12 +1489,18 @@ const corto = (d) => String(d ?? "").split("-").reverse().slice(0, 2).join("/");
  * cambiar a bloqueo aparte de una cita en lo alto del modal»).
  *
  * Es la versión corta del formulario de Citas → Bloqueos, con el hueco
- * pulsado ya puesto y una hora de duración de entrada. Mismas reglas que
+ * pulsado ya puesto y una duración de entrada. Mismas reglas que
  * allí, y las impone el servidor igual: quien no es dirección solo se
  * bloquea a sí mismo (el «Quién» ni se elige), el motivo es opcional, y las
  * citas que ya hubiera dentro no se tocan (se avisa cuántas hay).
+ *
+ * `duracion` eran SIEMPRE 60 minutos hasta el 18/09/2026 (AV-0200, Rocío en
+ * nutri_laura: preguntaba si un bloqueo podía durar 50). Ahora la propone el
+ * servidor a partir de lo que esa persona bloquea de verdad
+ * (`lib/citas/duracionBloqueo.js`); aquí solo se usa, y se sigue pudiendo
+ * escribir otra.
  */
-function BloqueoRapido({ inicial, categorias, esAdmin, puedeElegirPersona = esAdmin, miFicha, teamMembers, avisar, confirmar, onModo, onClose, onCreated }) {
+function BloqueoRapido({ inicial, categorias, duracion = DURACION_POR_DEFECTO, esAdmin, puedeElegirPersona = esAdmin, miFicha, teamMembers, avisar, confirmar, onModo, onClose, onCreated }) {
   /*
    * De quién es, de entrada: la profesional cuya agenda se está mirando si el
    * filtro deja solo una (18/09/2026, Aumenta), y si no, quien mira. Lo decide
@@ -1505,7 +1517,7 @@ function BloqueoRapido({ inicial, categorias, esAdmin, puedeElegirPersona = esAd
     date: inicial.date || "",
     time: inicial.time || "",
     endDate: inicial.date || "",
-    endTime: sumarMinutos(inicial.time, 60),
+    endTime: sumarMinutos(inicial.time, Number(duracion) > 0 ? Number(duracion) : DURACION_POR_DEFECTO),
     // Repetir el hueco las semanas siguientes (09/09/2026, AV-0090 de Aumenta).
     // Ver el porqué en la cabecera de `repeticionDeBloqueo`, más abajo.
     repetir: "",

@@ -8,7 +8,7 @@ import { categoriaDe, categoriasDe, claveValida } from "../../../../lib/citas/ca
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
 import { esAdministracion as esDeAdministracion, idsDeAdministracion } from "../../../../lib/team/departamentos.js";
 import { aNombreDeQuien, puedeElegirPersona, vetoParaTocar } from "../../../../lib/citas/permisosBloqueos.js";
-import { avisoDeBloqueoLargo } from "../../../../lib/citas/duracionBloqueo.js";
+import { avisoDeBloqueoLargo, duracionSugeridaDeBloqueo } from "../../../../lib/citas/duracionBloqueo.js";
 import { esBloqueoSiguiente, fechaCorta, ventanaDeBusqueda } from "../../../../lib/citas/siguientesIguales.js";
 // `veTodaLaAgenda` vuelve a este fichero (08/09/2026) para lo ÚNICO que ahora
 // depende de quién mira: el nombre del paciente de un hueco reservado. El
@@ -421,6 +421,40 @@ async function bloqueosSiguientesDe(TeamBlock, base) {
   return candidatos.filter((c) => esBloqueoSiguiente(b, c.toJSON ? c.toJSON() : c));
 }
 
+/**
+ * Cuántos minutos propone el bloqueo rápido al pulsar un hueco (18/09/2026,
+ * AV-0200). La regla —y por qué no sale de los tipos de cita— está en
+ * `lib/citas/duracionBloqueo.js`; aquí solo se le dan los ejemplos.
+ *
+ * Se piden pocas filas y por orden de creación: es lo último que esa persona
+ * ha hecho, que es lo que va a querer repetir. Los tipos de cita solo se
+ * consultan si no hay ni un bloqueo del que aprender, que es el centro recién
+ * abierto. Si algo falla, 60 y a otra cosa: es una propuesta, no un dato.
+ */
+async function duracionQueSePropone(ctx, yo) {
+  const { TeamBlock, EventType } = ctx.tenantModels ?? {};
+  if (!TeamBlock) return duracionSugeridaDeBloqueo();
+  const campos = { attributes: ["startAt", "endAt"], order: [["createdAt", "DESC"]], raw: true };
+  try {
+    const mios = yo?.teamMemberId
+      ? await TeamBlock.findAll({ ...campos, where: { teamMemberId: yo.teamMemberId }, limit: 40 })
+      : [];
+    const propia = duracionSugeridaDeBloqueo({ mios });
+    if (propia.de === "mios") return propia;
+
+    const delCentro = await TeamBlock.findAll({ ...campos, limit: 60 });
+    const delEquipo = duracionSugeridaDeBloqueo({ mios, delCentro });
+    if (delEquipo.de === "centro") return delEquipo;
+
+    const tipos = EventType
+      ? await EventType.findAll({ attributes: ["duration"], where: { active: true }, raw: true })
+      : [];
+    return duracionSugeridaDeBloqueo({ mios, delCentro, tiposDeCita: tipos.map((t) => t.duration) });
+  } catch {
+    return duracionSugeridaDeBloqueo();
+  }
+}
+
 export const GET = withTenant(async (request, _rc, ctx) => {
   try {
     const veto = gate(ctx);
@@ -483,6 +517,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     // para sus desplegables, y sacarlas de aquí ahorra otras tantas llamadas
     // en cada carga del calendario.
     const { equipo, administracion } = await equipoDelCentro(ctx.tenantModels);
+    const duracion = await duracionQueSePropone(ctx, yo);
     return ok({
       bloqueos: filas.map((f) => serializa(f, colorGeneral, autores, categorias, talleres, documentos, pacientes)),
       // Lo que se ha recortado, dicho (10/09/2026): ver el tope, arriba.
@@ -494,6 +529,11 @@ export const GET = withTenant(async (request, _rc, ctx) => {
       equipo,
       // Para el botón «Todos menos Administración» del selector de lectores.
       administracion,
+      // Minutos que propone el bloqueo rápido al pulsar un hueco, y de dónde
+      // salen ("mios" | "centro" | "tipos" | "defecto"), que es lo que le
+      // permite decirlo en pantalla en vez de cambiar el número sin explicar.
+      duracionSugerida: duracion.minutos,
+      duracionSugeridaDe: duracion.de,
     });
   } catch (err) {
     return serverError(err);

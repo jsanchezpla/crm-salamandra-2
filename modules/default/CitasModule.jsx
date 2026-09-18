@@ -110,6 +110,14 @@ export default function CitasModule({
   // menos Administración» del selector.
   const equipoRef = useRef([]);
   const administracionRef = useRef([]);
+  /*
+   * Cuántos minutos propone el bloqueo rápido al pulsar un hueco (18/09/2026,
+   * AV-0200): lo calcula el servidor con lo que esa persona bloquea de verdad
+   * (`lib/citas/duracionBloqueo.js`), porque el cliente no tiene el histórico.
+   * En un `ref` por lo mismo que las categorías: lo lee el drawer, que se monta
+   * después del clic. Hasta que llegue el listado, la hora de siempre.
+   */
+  const duracionBloqueoRef = useRef(60);
   // Vista: "calendar" (por defecto) o "waitlist". La lista de espera son las
   // reservas en estado 'pending' (solicitudes de la web sin confirmar). El
   // globito rojo de la pestaña muestra cuántas hay sin atender.
@@ -692,6 +700,9 @@ export default function CitasModule({
           yoBloqueosRef.current = jb.data.yo ?? null;
           equipoRef.current = jb.data.equipo ?? [];
           administracionRef.current = jb.data.administracion ?? [];
+          if (Number.isFinite(jb.data.duracionSugerida)) {
+            duracionBloqueoRef.current = jb.data.duracionSugerida;
+          }
           fondos = (jb.data.bloqueos ?? [])
             .filter((b) => {
               // Los cierres del centro (sin persona) los ve todo el mundo:
@@ -1837,6 +1848,8 @@ export default function CitasModule({
           // categorías del centro, si quien mira es dirección (elige a quién)
           // y su propia ficha (a quien no lo es se le bloquea a sí mismo).
           categoriasBloqueo={categoriasBloqueoRef.current}
+          // Y cuánto dura de entrada ese bloqueo, en vez de una hora fija.
+          duracionBloqueo={duracionBloqueoRef.current}
           viewerIsAdmin={viewerIsAdmin}
           miFichaDeEquipo={miFichaDeEquipo}
           exigeCobro={exigeCobro}
