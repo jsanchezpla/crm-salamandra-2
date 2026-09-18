@@ -16,6 +16,7 @@ import ClientModulesSection from "../../components/clients/ClientModulesSection.
 import ClientContactMethodsSection from "../../components/clients/ClientContactMethodsSection.jsx";
 import ClientFiscalSection from "../../components/clients/ClientFiscalSection.jsx";
 import { camposCliente, PERFIL_COMERCIAL } from "../../lib/clients/formularioAlta.js";
+import { fechaYEdad } from "../../lib/clients/fechaYEdad.js";
 import { rotuloCategoria } from "../../lib/booking/categorias.js";
 import { ACTIVO, estadosDeFicha, etiquetaDeEstado, tonoDeEstado, usaEstadoDePerfil } from "../../lib/clients/estados.js";
 import { avisoBorradoSegunModulos } from "../../lib/clients/avisoBorrado.js";
@@ -155,17 +156,13 @@ function formatDate(iso) {
   return new Date(iso).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-/**
- * Fecha de nacimiento, que llega como "2019-04-07" (DATEONLY) y NO como un
- * instante: se parte a mano en vez de dejársela a `new Date`, que la
- * interpretaría en UTC y en España la enseñaría un día antes.
+/*
+ * La fecha de nacimiento («2019-04-07», DATEONLY) se pinta con
+ * `lib/clients/fechaYEdad.js` desde el 18/09/2026 (AV-0210), que la parte a
+ * mano —igual que hacía aquí el `fmtFechaCorta` que sustituye, para que
+ * `new Date` no la interprete en UTC y en España salga un día antes— y le
+ * añade la edad.
  */
-function fmtFechaCorta(valor) {
-  const s = String(valor ?? "").slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
-  const [a, m, d] = s.split("-");
-  return `${d}/${m}/${a}`;
-}
 
 /**
  * Un campo del formulario de la ficha, del tipo que declare `camposCliente`.
@@ -577,6 +574,14 @@ export default function ClientDetailModule({
             </svg>
           </Link>
           <h1 className="text-gray-900 text-lg font-semibold min-w-0 [overflow-wrap:anywhere]">{client.name}</h1>
+          {/* La fecha de nacimiento y la edad de quien abre la ficha, cuando la
+              han dado (AV-0210). En Aumenta hoy la tienen 3 de 1.110 familias,
+              así que casi siempre no se pinta nada: es un dato de la persona
+              adulta, y el que importa de verdad —el del paciente— va en la
+              línea de abajo. */}
+          {fechaYEdad(client.birthDate).texto && (
+            <span className="text-sm text-gray-500 shrink-0">{fechaYEdad(client.birthDate).texto}</span>
+          )}
           <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${st.bg}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
             {usaEstado ? etiquetaDeEstado(client.status) : (STATUSES.find((s) => s.key === status)?.label ?? status)}
@@ -624,6 +629,32 @@ export default function ClientDetailModule({
         </div>
         {client.customFields?.company && (
           <p className="text-sm text-gray-500 ml-7">{client.customFields.company}</p>
+        )}
+        {/*
+          QUIÉN VIENE A CONSULTA Y QUÉ EDAD TIENE (18/09/2026, AV-0210 de
+          Aumenta, Olga: «al lado del nombre es un dato importante para manejar
+          las terapeutas»). La ficha es la FAMILIA y a quien se atiende es al
+          niño: su edad decidía el reparto y había que entrar en su ficha, una
+          por una, para leerla. Aquí sale en la primera pantalla, con enlace a
+          la suya.
+
+          Sin módulo asistencial `client.pacientes` llega vacío y no se pinta
+          nada, así que esto no aparece en un cliente comercial.
+        */}
+        {(client.pacientes ?? []).length > 0 && (
+          <div className="ml-7 mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-500">
+            {client.pacientes.map((p) => {
+              const nacimiento = fechaYEdad(p.birthDate, { edad: p.edad }).texto;
+              return (
+                <span key={p.id} className="inline-flex items-center gap-1.5">
+                  <Link href={`/pacientes/${p.id}`} className="text-gray-700 hover:text-[var(--color-primary)] hover:underline">
+                    {p.nombre}
+                  </Link>
+                  {nacimiento && <span className="text-xs text-gray-400">{nacimiento}</span>}
+                </span>
+              );
+            })}
+          </div>
         )}
       </div>
 
@@ -809,7 +840,9 @@ export default function ClientDetailModule({
                       así que a quien no tenga el dato no le aparece nada. */}
                   {[
                     { label: "DNI / NIE", value: client.taxId },
-                    { label: "Fecha de nacimiento", value: fmtFechaCorta(client.birthDate) },
+                    // Con la edad al lado (AV-0210): leer «14/06/1981» y restar
+                    // de cabeza es justo lo que se pidió evitar.
+                    { label: "Fecha de nacimiento", value: fechaYEdad(client.birthDate).texto },
                     { label: "Parentesco con el paciente", value: PARENTESCO_LABEL[client.customFields?.parentescoTitular] },
                     { label: "Domicilio", value: client.customFields?.domicilio },
                     { label: "Código postal", value: client.customFields?.postalCode },

@@ -26,6 +26,7 @@
 import { useCallback, useEffect, useState } from "react";
 import SpecialtyPicker from "../clinica/SpecialtyPicker.jsx";
 import { PARENTESCOS, PARENTESCO_ES_EL_CLIENTE, partirNombre } from "../../lib/clients/formularioAlta.js";
+import { fechaYEdad } from "../../lib/clients/fechaYEdad.js";
 
 const STATUS_LABEL = { active: "Activo", paused: "En pausa", discharged: "Baja" };
 
@@ -163,41 +164,51 @@ export default function ClientPatientsSection({ clientId }) {
 
         {patients.length > 0 && (
           <ul className="divide-y divide-gray-100">
-            {patients.map((p) => (
-              <li key={p.id} className="py-2.5 flex items-center gap-3">
-                <span
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white shrink-0"
-                  style={{ background: p.color || "var(--color-primary)" }}
-                >
-                  {p.initials}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <a href={`/pacientes/${p.id}`} className="text-sm font-medium text-gray-800 hover:text-[var(--color-primary)] hover:underline">
-                    {p.name}
-                  </a>
-                  <div className="text-xs text-gray-500 flex items-center gap-2 flex-wrap">
-                    {p.relationship && <span>{p.relationship}</span>}
-                  </div>
-                  {p.specialtyLabels?.length > 0 && (
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {p.specialtyLabels.map((lbl) => (
-                        <span
-                          key={lbl}
-                          className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                            lbl === "Nutrición" ? "bg-emerald-50 text-emerald-700" : "bg-indigo-50 text-indigo-700"
-                          }`}
-                        >
-                          {lbl}
-                        </span>
-                      ))}
+            {patients.map((p) => {
+              const nacimiento = fechaYEdad(p.birthDate, { edad: p.edad }).texto;
+              return (
+                <li key={p.id} className="py-2.5 flex items-center gap-3">
+                  <span
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white shrink-0"
+                    style={{ background: p.color || "var(--color-primary)" }}
+                  >
+                    {p.initials}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <a href={`/pacientes/${p.id}`} className="text-sm font-medium text-gray-800 hover:text-[var(--color-primary)] hover:underline">
+                      {p.name}
+                    </a>
+                    {/* La fecha de nacimiento y la edad, AL LADO DEL NOMBRE
+                        (18/09/2026, AV-0210 de Aumenta): con ella se decide qué
+                        terapeuta lleva al niño, y hasta hoy había que entrar en
+                        su ficha para leerla. La edad viene resuelta del servidor
+                        (`p.edad`: la fecha manda sobre la casilla «Edad» escrita
+                        a mano), y sin dato no se pinta nada. */}
+                    {nacimiento && <span className="ml-2 text-xs text-gray-500">{nacimiento}</span>}
+                    <div className="text-xs text-gray-500 flex items-center gap-2 flex-wrap">
+                      {p.relationship && <span>{p.relationship}</span>}
                     </div>
-                  )}
-                </div>
-                <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 shrink-0">
-                  {STATUS_LABEL[p.status] || p.status}
-                </span>
-              </li>
-            ))}
+                    {p.specialtyLabels?.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {p.specialtyLabels.map((lbl) => (
+                          <span
+                            key={lbl}
+                            className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                              lbl === "Nutrición" ? "bg-emerald-50 text-emerald-700" : "bg-indigo-50 text-indigo-700"
+                            }`}
+                          >
+                            {lbl}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 shrink-0">
+                    {STATUS_LABEL[p.status] || p.status}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         )}
 
