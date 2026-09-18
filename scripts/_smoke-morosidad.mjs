@@ -18,7 +18,10 @@ import {
   filtrarMorosos,
   repartirMorosos,
   resumenDeMorosidad,
+  textoDeMeses,
+  totalDeMorosidad,
 } from "../lib/billing/morosidad.js";
+import { mesesSeguidosSinPagar, mesesSinPagarSeguidos } from "../lib/billing/mesesSinPagar.js";
 
 const CON_CUOTA = { clientId: "1", name: "Familia Álvarez", tieneCuota: true, debe: 60, conceptos: ["Logopedia"] };
 const CON_CUOTA_MESES = { clientId: "2", name: "Familia Bueno", tieneCuota: true, mesesSeguidos: 3, conceptos: ["Psicología"] };
@@ -143,8 +146,67 @@ test("quien paga la cuota del niño cuenta como pagador suyo", () => {
   assert.equal(cobroDelPaciente(ANA, { clientId: "fundacion", patientId: null }, pagadoresDelPaciente(ANA, [])), false);
 });
 
+// ── Importe y mes (18/09/2026, Rosa) ────────────────────────────────────────
+
+test("los meses que debe se dicen por su nombre", () => {
+  assert.equal(textoDeMeses([{ mes: "2026-09" }]), "septiembre");
+  assert.equal(textoDeMeses([{ mes: "2026-09" }, { mes: "2026-08" }]), "septiembre, agosto");
+  assert.equal(textoDeMeses(["2026-09", "2026-08"]), "septiembre, agosto");
+});
+
+test("el año solo sale cuando hay más de uno", () => {
+  // En diciembre→enero hace falta; dentro del mismo año estorba.
+  assert.equal(textoDeMeses([{ mes: "2027-01" }, { mes: "2026-12" }]), "enero 2027, diciembre 2026");
+});
+
+test("la etiqueta lleva el importe y los meses a la vez", () => {
+  const m = { tieneCuota: true, debe: 120, mesesDebe: [{ mes: "2026-09", importe: 60 }, { mes: "2026-08", importe: 60 }] };
+  const e = etiquetaDeMoroso(m);
+  assert.equal(e.texto, "debe 120,00 €");
+  assert.equal(e.meses, "septiembre, agosto");
+});
+
+test("un mes sin importe se nombra igual, y la pastilla vuelve a contar meses", () => {
+  // Es la mitad honesta: el CRM sabe QUÉ mes no se pagó aunque no sepa cuánto.
+  const e = etiquetaDeMoroso({ tieneCuota: true, mesesSeguidos: 2, mesesDebe: [{ mes: "2026-09", importe: null }, { mes: "2026-08", importe: null }] });
+  assert.equal(e.texto, "2 meses");
+  assert.equal(e.meses, "septiembre, agosto");
+});
+
+test("los miles se separan con punto", () => {
+  // «22256,97 €» hay que contarlo con el dedo; el total de la cabecera son miles.
+  assert.equal(etiquetaDeMoroso({ debe: 22256.97 }).texto, "debe 22.256,97 €");
+});
+
+test("el total suma solo a quien trae importe, y dice de cuántos", () => {
+  const lista = [{ debe: 60 }, { debe: 120.5 }, { debe: null }, {}];
+  assert.deepEqual(totalDeMorosidad(lista), { total: 180.5, conImporte: 2, sinImporte: 2 });
+  assert.deepEqual(totalDeMorosidad([]), { total: 0, conImporte: 0, sinImporte: 0 });
+});
+
+test("el resumen enseña el total arriba, y calla si no sabe ninguno", () => {
+  const r = resumenDeMorosidad({ conCuota: [{ debe: 60 }, { debe: null }], sinCuota: [{ debe: null }] });
+  assert.equal(r.totalConCuota, "60,00 € en 1 de 2");
+  assert.equal(r.totalSinCuota, null);
+  const todos = resumenDeMorosidad({ conCuota: [{ debe: 60 }, { debe: 40 }] });
+  assert.equal(todos.totalConCuota, "100,00 € en total");
+});
+
+test("contar meses y nombrarlos no pueden discrepar", () => {
+  // El contador es la longitud de la lista, literalmente: si un día dejan de
+  // cuadrar, la pantalla diría «3 meses» y nombraría dos.
+  const caso = { meses: ["2026-09", "2026-08", "2026-07", "2026-06"], pagados: new Set(["2026-07"]), primerMes: "2026-01" };
+  assert.deepEqual(mesesSinPagarSeguidos(caso), ["2026-09", "2026-08"]);
+  assert.equal(mesesSeguidosSinPagar(caso), 2);
+  // Y no se acusa de antes de que el centro cobrara por el CRM.
+  assert.deepEqual(mesesSinPagarSeguidos({ ...caso, pagados: new Set(), primerMes: "2026-08" }), ["2026-09", "2026-08"]);
+});
+
 test("aguanta que no le pasen nada", () => {
   assert.deepEqual(repartirMorosos(), { conCuota: [], sinCuota: [] });
   assert.deepEqual(filtrarMorosos(), []);
   assert.equal(typeof etiquetaDeMoroso().texto, "string");
+  assert.equal(etiquetaDeMoroso().meses, "");
+  assert.equal(textoDeMeses(), "");
+  assert.equal(textoDeMeses([{ mes: "no-es-un-mes" }, null]), "");
 });

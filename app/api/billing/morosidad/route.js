@@ -1,7 +1,7 @@
 import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
-import { mesesSeguidosSinPagar, loQueFaltaDelMes } from "../../../../lib/billing/mesesSinPagar.js";
+import { mesesSinPagarSeguidos, loQueFaltaDelMes } from "../../../../lib/billing/mesesSinPagar.js";
 import { mesVigente, debeElMes } from "../../../../lib/billing/cuotas.js";
 import { cuotasDelPaciente, cobroDelPaciente, pagadoresDelPaciente, entraEnMorosidad } from "../../../../lib/billing/morosidad.js";
 
@@ -32,6 +32,14 @@ import { cuotasDelPaciente, cobroDelPaciente, pagadoresDelPaciente, entraEnMoros
  *
  * ⚠️ A la población sin cuota NO se le inventa un importe recalculando el mes:
  * eso se probó el 07/09 y acusó a ~95 familias de deber 30 € que no debían.
+ *
+ * ── IMPORTE Y MES (18/09/2026, Rosa) ───────────────────────────────────────
+ * «Sale el número de meses que debe pero quieren que salga también el importe
+ * que debe y al mes que corresponde.» Cada fila viaja ahora con `mesesDebe`
+ * —los MISMOS meses que cuenta `mesesSeguidos`, con el importe de cada uno— y
+ * `debe` es su suma. El importe de un mes es lo PENDIENTE de ese mes y nada
+ * más: se piden los pendientes de toda la ventana, no solo los del mes pedido.
+ * Un mes sin pendiente sale con su nombre y sin importe.
  */
 
 const MESES_ATRAS = 6;
@@ -142,9 +150,17 @@ export const GET = withTenant(async (request, _rc, ctx) => {
        * pedir el «Descuento reserva ya abonada» y acusaba a ~95 familias en
        * falso. Un pendiente ES lo que el centro pidió y no ha cobrado.
        */
+      /*
+       * TODA la ventana y no solo el mes pedido (18/09/2026, AV «Importe y mes
+       * en morosidad»): los pendientes son la única fuente honesta del importe
+       * de un mes, así que también hacen falta los de los meses de atrás para
+       * poder decir «debe 120 € · septiembre, agosto». Con tope arriba: los
+       * pendientes de meses FUTUROS (las recurrentes ya generadas) no son
+       * deuda de hoy.
+       */
       Payment.findAll({
-        where: { ...deAlguno, status: "pending", periodMonth: `${mes}-01` },
-        attributes: ["clientId", "patientId", "amount"],
+        where: { ...deAlguno, status: "pending", periodMonth: { [Op.gte]: desde, [Op.lte]: `${mes}-01` } },
+        attributes: ["clientId", "patientId", "periodMonth", "amount"],
         raw: true,
       }),
     ]);
@@ -183,12 +199,17 @@ export const GET = withTenant(async (request, _rc, ctx) => {
         }
         if (!ultimoCobro || new Date(c.paidAt) > new Date(ultimoCobro)) ultimoCobro = c.paidAt;
       }
-      let pendiente = 0;
+      // Lo pendiente MES A MES: es de donde sale el importe de cada mes que
+      // debe, y su suma la del mes pedido (que es lo que ya se usaba).
+      const pendientePorMes = new Map();
       for (const c of pendientes) {
         if (!cobroDelPaciente(p, c, pagadores)) continue;
         if (!c.patientId && tieneHermanos) compartido = true;
-        pendiente += Number(c.amount || 0);
+        const m = c.periodMonth ? String(c.periodMonth).slice(0, 7) : null;
+        if (!m) continue;
+        pendientePorMes.set(m, Math.round(((pendientePorMes.get(m) ?? 0) + Number(c.amount || 0)) * 100) / 100);
       }
+      const pendiente = pendientePorMes.get(mes) ?? 0;
       const esperado = pendiente > 0 ? Math.round((cobrado + pendiente) * 100) / 100 : null;
       const falta = pagados.has(mes) ? loQueFaltaDelMes({ pagado: cobrado, esperado }) : null;
       if (pagados.has(mes) && !falta) {
@@ -197,7 +218,9 @@ export const GET = withTenant(async (request, _rc, ctx) => {
       }
 
       const fam = familiaDe.get(cid);
-      const importes = [pendiente, ...suyas.map((f) => f.amount)];
+      // Lo que casa al buscar un número: lo pendiente de cualquiera de sus
+      // meses y lo que valen sus cuotas (AV-0136).
+      const importes = [...pendientePorMes.values(), ...suyas.map((f) => f.amount)];
       const fila = {
         patientId: pid,
         clientId: cid,
@@ -214,9 +237,17 @@ export const GET = withTenant(async (request, _rc, ctx) => {
         ultimoCobro,
       };
 
-      // Pagado a medias: sale con lo que falta y sin acumular meses.
+      // Pagado a medias: sale con lo que falta y sin acumular meses. El mes que
+      // debe es ese y solo ese.
       if (falta) {
-        morosos.push({ ...fila, mesesSeguidos: 0, debe: falta.debe, pagado: falta.pagado, esperado: falta.esperado });
+        morosos.push({
+          ...fila,
+          mesesSeguidos: 0,
+          debe: falta.debe,
+          pagado: falta.pagado,
+          esperado: falta.esperado,
+          mesesDebe: [{ mes, importe: falta.debe }],
+        });
         continue;
       }
       // Meses seguidos sin pagar, sin acusar de antes del primer cobro del
@@ -228,8 +259,21 @@ export const GET = withTenant(async (request, _rc, ctx) => {
         .filter((m) => /^\d{4}-\d{2}$/.test(m))
         .sort();
       if (inicios.length && inicios[0] > primerMesPaciente) primerMesPaciente = inicios[0];
-      const seguidos = mesesSeguidosSinPagar({ meses, pagados, primerMes: primerMesPaciente });
-      morosos.push({ ...fila, mesesSeguidos: seguidos });
+      const sinPagar = mesesSinPagarSeguidos({ meses, pagados, primerMes: primerMesPaciente });
+      /*
+       * QUÉ DEBE DE CADA MES (18/09/2026). El importe sale del cobro PENDIENTE
+       * de ese mes —lo que el centro pidió y no cobró— y de ningún otro sitio:
+       * el mes sin pendiente sale con su nombre y sin importe, que es lo que el
+       * CRM sabe. La regla, con su porqué, en `lib/billing/morosidad.js`.
+       */
+      const mesesDebe = sinPagar.map((m) => ({ mes: m, importe: pendientePorMes.get(m) ?? null }));
+      const sumado = mesesDebe.reduce((t, x) => (x.importe > 0 ? t + x.importe : t), 0);
+      morosos.push({
+        ...fila,
+        mesesSeguidos: sinPagar.length,
+        mesesDebe,
+        debe: sumado > 0 ? Math.round(sumado * 100) / 100 : null,
+      });
     }
     // Primero quien más meses acumula: es a quien hay que llamar hoy.
     morosos.sort((a, b) => b.mesesSeguidos - a.mesesSeguidos || a.name.localeCompare(b.name));

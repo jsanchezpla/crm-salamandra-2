@@ -1334,8 +1334,19 @@ export default function CobrosPage() {
             <>
               {debenConCuota.length > 0 && (
                 <>
-                  <div className="px-4 py-1.5 bg-neutral-50 text-[10px] uppercase tracking-wider text-neutral-500">
-                    {textoMorosidad.conCuota}
+                  <div className="px-4 py-1.5 bg-neutral-50 text-[10px] uppercase tracking-wider text-neutral-500 flex flex-wrap items-center gap-2">
+                    <span>{textoMorosidad.conCuota}</span>
+                    {/* Lo que suma la lista, sin bajar a contar fila a fila
+                        (18/09/2026). Solo cuenta a quien trae importe, y lo
+                        dice: un total que pareciera el de todos mentiría. */}
+                    {textoMorosidad.totalConCuota && (
+                      <span
+                        className="normal-case tracking-normal text-red-700 font-semibold"
+                        title="Suma de lo pendiente de cobro. Quien no tiene cobro pendiente escrito no suma."
+                      >
+                        {textoMorosidad.totalConCuota}
+                      </span>
+                    )}
                   </div>
                   <ul className="divide-y divide-neutral-50 max-h-64 overflow-y-auto">
                     {debenConCuota.map((m) => <FilaMoroso key={m.patientId} m={m} />)}
@@ -1345,14 +1356,20 @@ export default function CobrosPage() {
               {debenSinCuota.length > 0 && (
                 <>
                   <div className="px-4 py-2 bg-amber-50/60 border-t border-amber-100">
-                    <div className="text-[10px] uppercase tracking-wider text-amber-800">
-                      {textoMorosidad.sinCuota}
+                    <div className="text-[10px] uppercase tracking-wider text-amber-800 flex flex-wrap items-center gap-2">
+                      <span>{textoMorosidad.sinCuota}</span>
+                      {textoMorosidad.totalSinCuota && (
+                        <span className="normal-case tracking-normal font-semibold" title="Suma de lo pendiente de cobro de los que traen alguno">
+                          {textoMorosidad.totalSinCuota}
+                        </span>
+                      )}
                     </div>
                     {/* Sin cuota el CRM no sabe cuánto esperaba cobrar, y decirlo
                         es más útil que pintar «1 mes» junto a una deuda de
                         verdad. Es además la lista para ir completándolas. */}
                     <div className="text-[10px] text-amber-700/80 mt-0.5">
-                      No deben un importe: es que aún no tienen cuota, así que el CRM no sabe qué esperaba cobrarles.
+                      Casi ninguno debe un importe: aún no tienen cuota, así que el CRM no sabe qué esperaba cobrarles
+                      (si alguno trae importe, sale de un cobro suyo que quedó pendiente).
                       Se arreglan asignándoles una en Facturación → Cuotas.
                     </div>
                   </div>
@@ -2333,6 +2350,14 @@ function BotonCuota({ href, children = "Cambiar el importe" }) {
       </svg>
       {children}
     </Link>
+      {/* De qué MES es la deuda (18/09/2026): el número de meses ya estaba,
+          pero había que ir a buscar cuáles eran. Va fuera de la pastilla para
+          que el importe siga siendo lo primero que se lee. */}
+      {etiqueta.meses && (
+        <span className="text-[11px] text-neutral-500" title={`Meses sin pagar: ${etiqueta.meses}`}>
+          {etiqueta.meses}
+        </span>
+      )}
   );
 }
 
