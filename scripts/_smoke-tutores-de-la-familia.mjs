@@ -103,11 +103,34 @@ describe("tutoresDeLaFamilia: el titular entra en la lista", () => {
     assert.equal(lista[0].titular, true);
   });
 
-  it("dos DNI puestos y distintos son dos personas, aunque se llamen igual", () => {
+  /*
+   * El DNI CONFIRMA, pero no VETA (18/09/2026).
+   *
+   * La primera versión decía lo contrario: dos DNI puestos y distintos eran dos
+   * personas aunque se llamaran igual. Al comprobarlo contra las 1.107 familias
+   * de Aumenta ya desplegado, esa regla acertaba 0 de 18: en las 18 familias
+   * donde pasaba, el titular y el tutor son la MISMA persona con un DNI mal
+   * copiado, y la ficha del paciente enseñaba al padre DOS VECES.
+   *
+   * Dos padres de una misma familia con nombre y apellidos idénticos no
+   * existen; un DNI mal tecleado, 18 veces.
+   */
+  it("mismo nombre y DNI distinto es la MISMA persona", () => {
     const lista = tutoresDeLaFamilia({
       name: "Ana Ruiz",
       taxId: "11111111A",
-      guardians: [{ id: "a1", name: "Ana Ruiz", dni: "22222222B", relationship: "tutor" }],
+      guardians: [{ id: "a1", name: "Ana Ruiz", dni: "22222222B", relationship: "madre" }],
+    });
+    assert.equal(lista.length, 1, "el padre no puede salir dos veces en su propia ficha");
+    assert.equal(lista[0].id, "a1", "se queda la entrada real, con su id y su parentesco");
+    assert.equal(lista[0].titular, true);
+    assert.equal(lista[0].relationship, "madre");
+  });
+
+  it("nombres distintos siguen siendo dos personas aunque no haya DNI", () => {
+    const lista = tutoresDeLaFamilia({
+      name: "Ana Ruiz",
+      guardians: [{ id: "a1", name: "Javier Pérez", relationship: "padre" }],
     });
     assert.equal(lista.length, 2);
     assert.equal(lista[0].titular, true);
