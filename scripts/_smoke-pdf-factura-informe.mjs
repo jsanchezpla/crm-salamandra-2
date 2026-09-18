@@ -657,12 +657,20 @@ describe("buildInvoicePdfBuffer: número, estado y quién la emite", () => {
     assert.equal(borrador.includes("F2026-0007"), false, "un borrador no puede enseñar número");
   });
 
-  it("las fechas salen en formato español, y las que faltan como «—»", async () => {
+  it("las fechas salen en formato español, y el vencimiento solo si vence", async () => {
     const texto = await textoFactura();
     assert.ok(texto.includes("Fecha de emisión\n14/8/2026"));
     assert.ok(texto.includes("Vencimiento\n14/9/2026"));
+    // 18/09/2026, AV-0176: sin fecha, la fila entera se va — antes salía
+    // «Vencimiento —», una etiqueta con una raya debajo.
     const sinVencimiento = await textoFactura({ invoice: { dueDate: null } });
-    assert.ok(sinVencimiento.includes("Vencimiento\n—"));
+    assert.equal(sinVencimiento.includes("Vencimiento"), false);
+    // Y la del lote, que nace COBRADA con vencimiento el día de la emisión,
+    // tampoco: le decía a la familia que le vence hoy algo que ya ha pagado.
+    const cobrada = await textoFactura({
+      invoice: { status: "paid", dueDate: "2026-08-14", paidAmount: 121 },
+    });
+    assert.equal(cobrada.includes("Vencimiento"), false);
   });
 
   it("una fecha que no es fecha se imprime tal cual, sin «Invalid Date»", async () => {

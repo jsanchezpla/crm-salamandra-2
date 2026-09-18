@@ -85,7 +85,9 @@ async function mesesDeLaFamilia({ tenantModels, clientId, desde }) {
   if (BillingConcept) {
     try {
       const filas = await BillingConcept.findAll({ attributes: ["id", "name", "description", "unitPrice"] });
-      conceptos = filas.map((c) => ({ id: c.id, name: c.name, unitPrice: c.unitPrice }));
+      // Con `description` (el «Texto en la factura»): sin ella el cobro nace con
+      // el nombre interno del concepto de línea en la factura (17/09/2026).
+      conceptos = filas.map((c) => ({ id: c.id, name: c.name, description: c.description, unitPrice: c.unitPrice }));
     } catch (err) {
       if (!esTablaAusente(err)) throw err;
     }

@@ -149,3 +149,26 @@ test("el PDF imprime el vencimiento salvo que el centro lo apague", async () => 
   // Y no se lleva por delante lo de al lado: la emisión sigue estando.
   assert.match(apagado, /Fecha de emisión/);
 });
+
+/*
+ * ── Y LAS DOS CONDICIONES SE ENCUENTRAN AQUÍ (18/09/2026, Jorge) ────────────
+ * El mismo aviso se arregló por dos caminos a la vez: el interruptor por centro
+ * (arriba) y «solo si vence» (`vencimientoALaVista`, con su prueba en
+ * `_smoke-facturas-orden-y-vencimiento.mjs`). Mandan las DOS, y esta prueba fija
+ * justo el cruce, que es lo que ninguna de las otras dos ve: con el ajuste
+ * ENCENDIDO —lo que tiene todo el mundo— una factura ya cobrada tampoco imprime
+ * el vencimiento. Es un cambio de comportamiento para todos los centros.
+ */
+test("con el ajuste encendido, una factura ya cobrada no imprime vencimiento", async () => {
+  const cobrada = { ...INVOICE, status: "paid", paidAmount: "100.00" };
+  const texto = textoDe(await buildInvoicePdfBuffer({ invoice: cobrada, client: CLIENT, settings: SETTINGS }));
+  assert.ok(!/Vencimiento/.test(texto), "le decía a la familia que le vence algo que ya pagó");
+  assert.match(texto, /Fecha de emisión/);
+});
+
+test("y sin fecha de vencimiento la fila no sale, ni con el ajuste encendido", async () => {
+  const texto = textoDe(
+    await buildInvoicePdfBuffer({ invoice: { ...INVOICE, dueDate: null }, client: CLIENT, settings: SETTINGS })
+  );
+  assert.ok(!/Vencimiento/.test(texto), "antes salía «Vencimiento —», etiqueta y raya");
+});

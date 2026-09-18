@@ -144,7 +144,11 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
             searchParams.get("sortBy"),
             searchParams.get("sortDir"),
             allowedSort,
-            [["issueDate", "DESC"], ["number", "DESC"]]
+            [["issueDate", "DESC"], ["number", "DESC"]],
+            // El desempate va SIEMPRE detrás (18/09/2026, AV-0176): ordenando
+            // por fecha, las 229 facturas de septiembre empatan todas y salían
+            // sin orden. Ver `lib/billing/parseSort.js`.
+            [["number", "DESC"]]
           );
 
     const { count, rows } = await Invoice.findAndCountAll({

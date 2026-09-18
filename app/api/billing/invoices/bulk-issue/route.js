@@ -65,10 +65,22 @@ async function recogerLote({ tenantModels, mes, agrupacion = "pagador", metodos 
     order: [["paidAt", "ASC"]],
   });
 
-  const conceptos =
-    agrupacion === "terapia" && BillingConcept
-      ? await BillingConcept.findAll({ attributes: ["id", "name"] })
-      : [];
+  /*
+   * El catálogo hace DOS cosas aquí, y por eso se baja siempre (17/09/2026) y
+   * no solo al agrupar por terapia: rotula los grupos (`name`, de puertas
+   * adentro) y da el «Texto en la factura» (`description`) del cobro que no
+   * trae `invoiceText` —los apuntados a mano—, para que su línea no caiga a la
+   * nota. Si el schema aún no tiene la tabla (llegó el 31/08/2026), vacío.
+   */
+  let conceptos = [];
+  if (BillingConcept) {
+    try {
+      conceptos = await BillingConcept.findAll({ attributes: ["id", "name", "description"] });
+    } catch {
+      conceptos = [];
+    }
+  }
+  const textosPorConcepto = conceptos.map((c) => ({ id: c.id, description: c.description }));
   // Los nombres de los pacientes, solo cuando se agrupa por paciente: son el
   // rótulo de cada factura en la vista previa y en el resultado.
   const idsPacientes = agrupacion === "paciente" ? [...new Set(cobros.map((c) => c.patientId).filter(Boolean))] : [];
@@ -104,7 +116,7 @@ async function recogerLote({ tenantModels, mes, agrupacion = "pagador", metodos 
     conceptos: conceptos.map((c) => ({ id: c.id, name: c.name })),
     pacientes,
   });
-  return { ...lote, fichas: new Map(clientes.map((c) => [String(c.id), c])) };
+  return { ...lote, fichas: new Map(clientes.map((c) => [String(c.id), c])), textosPorConcepto };
 }
 
 /** Qué le falta al emisor para poder facturar (el PDF sale a su nombre). */
@@ -158,7 +170,7 @@ export const GET = withTenant(async (request, _rc, { tenant, tenantModels, hasMo
     const metodos = metodosValidos(params.getAll("metodo"));
 
     const settings = await TenantBillingSettings.findOne();
-    const { facturables, sinNif, fichas } = await recogerLote({ tenantModels, mes, agrupacion, metodos });
+    const { facturables, sinNif, fichas, textosPorConcepto } = await recogerLote({ tenantModels, mes, agrupacion, metodos });
     const hoy = madridToday();
 
     /*
@@ -180,7 +192,7 @@ export const GET = withTenant(async (request, _rc, { tenant, tenantModels, hasMo
       const fecha = /^\d{4}-\d{2}-\d{2}$/.test(fechaPedida ?? "") ? fechaPedida : hoy;
       const vatExempt = !!settings?.vatExempt;
       const vatRate = vatExempt ? 0 : Number(settings?.defaultVatRate ?? 21);
-      const calc = calculateInvoice({ lines: lineasDeCuota({ cobros: grupo.cobros, mes, vatRate }), irpfRate: 0 });
+      const calc = calculateInvoice({ lines: lineasDeCuota({ cobros: grupo.cobros, mes, vatRate, textosPorConcepto }), irpfRate: 0 });
       const ficha = fichas.get(grupo.clientId);
       const buffer = await buildInvoicePreviewPdfBuffer({
         brandColor: tenant?.settings?.brand?.primaryColor,
@@ -283,7 +295,7 @@ export const POST = withTenant(async (request, _rc, { tenant, tenantModels, hasM
     const vatRate = vatExempt ? 0 : Number(settings?.defaultVatRate ?? 21);
     const vatExemptNote = vatExempt ? settings?.vatExemptNote || NOTA_EXENCION : null;
 
-    const { facturables, sinNif, fichas } = await recogerLote({ tenantModels, mes, agrupacion, metodos });
+    const { facturables, sinNif, fichas, textosPorConcepto } = await recogerLote({ tenantModels, mes, agrupacion, metodos });
     const sequelize = Invoice.sequelize;
     const resultados = [];
     const auditoria = [];
@@ -365,7 +377,7 @@ export const POST = withTenant(async (request, _rc, { tenant, tenantModels, hasM
           // 2) Una factura por tutor, con sus partes.
           const salida = [];
           for (const g of partes) {
-            const lines = lineasDeCuota({ cobros: g.cobros, mes, vatRate });
+            const lines = lineasDeCuota({ cobros: g.cobros, mes, vatRate, textosPorConcepto });
             const calc = calculateInvoice({ lines, irpfRate: 0 });
             if (calc.total !== g.importe) {
               throw Object.assign(new Error(`El total (${calc.total}) no cuadra con lo cobrado (${g.importe})`), { code: "LOTE_DESCUADRE" });
@@ -430,7 +442,7 @@ export const POST = withTenant(async (request, _rc, { tenant, tenantModels, hasM
       }
       try {
         const invoice = await sequelize.transaction(async (t) => {
-          const lines = lineasDeCuota({ cobros: grupo.cobros, mes, vatRate });
+          const lines = lineasDeCuota({ cobros: grupo.cobros, mes, vatRate, textosPorConcepto });
           const calc = calculateInvoice({ lines, irpfRate: 0 });
           if (calc.total !== grupo.importe) {
             // No debería pasar (lotesCuotas lo garantiza); antes que emitir una

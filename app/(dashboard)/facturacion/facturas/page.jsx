@@ -19,6 +19,7 @@ import VistaPreviaFacturaModal from "../_components/VistaPreviaFacturaModal.jsx"
 import FacturarMesDrawer from "../_components/FacturarMesDrawer.jsx";
 import { ordenarConSugeridos } from "../../../../lib/billing/empleadosSugeridos.js";
 import { lineaDesdeConcepto } from "../../../../lib/billing/conceptosCatalogo.js";
+import { vencimientoALaVista, imprimeVencimiento } from "../../../../lib/billing/invoiceStatus.js";
 import { cuotasQueEntran, conceptosDeCuotas, huellaLineas, sePuedeRellenar } from "../../../../lib/billing/cuotaParaRellenar.js";
 import { prorrateoDeCuota, rotuloDeProrrateo } from "../../../../lib/billing/prorrateo.js";
 import { haySocios } from "../../../../lib/billing/socios.js";
@@ -958,7 +959,7 @@ export default function FacturasPage() {
             <div className="px-6 py-5">
               {/* MODO DETALLE (no edición) */}
               {!editing && openInvoice && (
-                <DetailView invoice={openInvoice} puedeFacturar={puedeFacturar} onAction={performAction} onEdit={startEdit} onOpenLinked={openDetailById} saving={saving} haySello={!!settings?.stampUrl} />
+                <DetailView invoice={openInvoice} puedeFacturar={puedeFacturar} onAction={performAction} onEdit={startEdit} onOpenLinked={openDetailById} saving={saving} haySello={!!settings?.stampUrl} imprimeVenc={imprimeVencimiento(settings)} />
               )}
 
               {/* MODO EDICIÓN o CREAR */}
@@ -1530,7 +1531,7 @@ function FormRow({ label, children }) {
   );
 }
 
-function DetailView({ invoice, puedeFacturar, onAction, onEdit, onOpenLinked, saving, haySello }) {
+function DetailView({ invoice, puedeFacturar, onAction, onEdit, onOpenLinked, saving, haySello, imprimeVenc = true }) {
   // La descarga del PDF puede llevar u omitir el nombre del paciente y el
   // sello (31/08/2026); por defecto salen los dos si existen.
   const [conPaciente, setConPaciente] = useState(true);
@@ -1583,7 +1584,11 @@ function DetailView({ invoice, puedeFacturar, onAction, onEdit, onOpenLinked, sa
         <DetailRow label="Empleado" value={invoice.employee?.displayName} />
         <DetailRow label="Socio" value={invoice.partnerId ? invoice.partnerId.charAt(0).toUpperCase() + invoice.partnerId.slice(1) : "—"} />
         <DetailRow label="Fecha emisión" value={fmtDate(invoice.issueDate)} />
-        <DetailRow label="Vencimiento" value={fmtDate(invoice.dueDate)} />
+        {/* El vencimiento, solo cuando queda por cobrar (18/09/2026, AV-0176):
+            la factura que nace cobrada lo llevaba puesto el mismo día de la
+            emisión. Y el centro puede apagarlo del todo. Las dos condiciones,
+            las mismas que el PDF: `imprimeVencimiento` y `vencimientoALaVista`. */}
+        {imprimeVenc && vencimientoALaVista(invoice) && <DetailRow label="Vencimiento" value={fmtDate(invoice.dueDate)} />}
         <DetailRow label="Serie" value={invoice.series} />
         <DetailRow label="Cobrado" value={`${fmtMoney(totalPaid)} / ${fmtMoney(invoice.total)}`} />
       </div>

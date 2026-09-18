@@ -52,8 +52,17 @@ async function recoger({ tenantModels, id, por }) {
   });
   const ficha = await Client.findByPk(factura.clientId, { attributes: ATRIBUTOS_PARA_CONGELAR });
 
-  const conceptos =
-    por === "terapia" && BillingConcept ? await BillingConcept.findAll({ attributes: ["id", "name"] }) : [];
+  // El catálogo entero (17/09/2026): el `name` rotula los grupos por terapia y
+  // la `description` es el «Texto en la factura» de los cobros que no traen
+  // `invoiceText`, para que su línea no caiga a la nota al rehacer las facturas.
+  let conceptos = [];
+  if (BillingConcept) {
+    try {
+      conceptos = await BillingConcept.findAll({ attributes: ["id", "name", "description"] });
+    } catch {
+      conceptos = [];
+    }
+  }
   const idsPacientes = por === "paciente" ? [...new Set(cobros.map((c) => c.patientId).filter(Boolean))] : [];
   const pacientes =
     idsPacientes.length && Patient
@@ -69,7 +78,7 @@ async function recoger({ tenantModels, id, por }) {
     conceptos: conceptos.map((c) => ({ id: c.id, name: c.name })),
     pacientes,
   });
-  return { factura, ficha, plan };
+  return { factura, ficha, plan, textosPorConcepto: conceptos.map((c) => ({ id: c.id, description: c.description })) };
 }
 
 const vistaGrupo = (g) => ({
@@ -120,7 +129,7 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     const r = await recoger({ tenantModels, id, por });
     if (!r) return notFound("Factura no encontrada");
     if (!r.plan.ok) return error(`No se puede partir: ${r.plan.motivo}`, 422);
-    const { factura: original, ficha, plan } = r;
+    const { factura: original, ficha, plan, textosPorConcepto } = r;
 
     // La fecha: hoy, o la que venga, y nunca anterior a la original (la
     // anulación no puede retroceder a otro periodo).
@@ -203,7 +212,7 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       /* 2 y 3. Las nuevas, como las del lote, con sus cobros cambiados de factura. */
       const nuevas = [];
       for (const grupo of plan.grupos) {
-        const lines = lineasDeCuota({ cobros: grupo.cobros, mes: plan.mes, vatRate });
+        const lines = lineasDeCuota({ cobros: grupo.cobros, mes: plan.mes, vatRate, textosPorConcepto });
         const calc = calculateInvoice({ lines, irpfRate: 0 });
         if (calc.total !== grupo.importe) {
           throw new PartirConflicto(`El total (${calc.total}) no cuadra con lo cobrado (${grupo.importe}) en ${grupo.paciente ?? grupo.terapia ?? "un grupo"}`);
