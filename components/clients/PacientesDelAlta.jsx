@@ -30,7 +30,7 @@ import {
 } from "../../lib/clients/formularioAlta.js";
 
 export const PACIENTE_VACIO = {
-  firstName: "", lastName: "", birthDate: "", educationCenter: "", educationLevel: "",
+  firstName: "", lastName: "", birthDate: "", dni: "", educationCenter: "", educationLevel: "",
   relationship: "", referralReason: "",
 };
 const VACIO = PACIENTE_VACIO;

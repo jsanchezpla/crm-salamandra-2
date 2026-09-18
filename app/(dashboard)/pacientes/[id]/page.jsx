@@ -859,6 +859,10 @@ export default function PacienteFichaPage() {
       // La fecha de nacimiento (03/09/2026, AV-0034): existía en la tabla y
       // la trajo Organízate, pero la ficha solo enseñaba la edad suelta.
       birthDate: patient.birthDate ?? "",
+      // Su DNI (18/09/2026, AV-0179): la ficha lo enseñaba y no había
+      // ninguna pantalla donde escribirlo — 502 de 1.201 lo trajeron de
+      // Organízate y el resto no se podía completar.
+      dni: patient.dni ?? "",
       educationCenter: patient.educationCenter ?? "", educationLevel: patient.educationLevel ?? "",
       attendanceFrequency: patient.attendanceFrequency ?? "", referralReason: patient.referralReason ?? "",
       referredBy: patient.referredBy ?? "", objectives: (patient.objectives ?? []).join(", "), status: patient.status ?? "active",
@@ -1521,6 +1525,7 @@ export default function PacienteFichaPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <input className={inputCls} placeholder="Curso" value={editForm.educationLevel} onChange={(e) => setEditForm({ ...editForm, educationLevel: e.target.value })} />
+                <input className={inputCls} placeholder="DNI / NIE" value={editForm.dni} onChange={(e) => setEditForm({ ...editForm, dni: e.target.value })} />
               </div>
               <input className={inputCls} placeholder="Centro escolar" value={editForm.educationCenter} onChange={(e) => setEditForm({ ...editForm, educationCenter: e.target.value })} />
               <div className="grid grid-cols-2 gap-3">

@@ -296,7 +296,7 @@ Fichero: `models/tenant/Patient.model.js`. Tabla: `patients`.
 | `dischargeDate` | DATEONLY nullable | Fecha de alta médica (cuando aplica). |
 | `dischargeReason` | TEXT nullable | Motivo del alta. |
 | `notes` | TEXT nullable | Notas internas. |
-| `dni` | VARCHAR(20) nullable | Datos personales (sprint Pacientes & Clientes, `migrate-patients-clients-phase1.js`). |
+| `dni` | VARCHAR(20) nullable | Datos personales (sprint Pacientes & Clientes, `migrate-patients-clients-phase1.js`). **Desde el 18/09/2026 (AV-0179) se puede escribir**: está en el alta (`CAMPOS_PACIENTE`, y en la lista blanca de `normalizarPacientes` —sin ella se tecleaba y no se guardaba—) y en «Editar ficha». La ficha lo enseñaba desde siempre y no había ninguna pantalla donde ponerlo: en Aumenta lo trajo la importación en 502 de 1.201 pacientes y los otros 699 no había forma de completarlos. |
 | `address` | VARCHAR(255) nullable | Domicilio. |
 | `relationship` | VARCHAR(60) nullable | Parentesco con el cliente que paga (hijo/a · tutor legal · cónyuge · el propio cliente · hermano/a; texto libre para «otro»). |
 | `consents` | JSONB NOT NULL DEFAULT `{}` | Consentimientos RGPD con traza legal: `{ images, marketing, whatsapp }`, cada uno `{ granted, at, by }` (`lib/clinica/consents.js`). |
