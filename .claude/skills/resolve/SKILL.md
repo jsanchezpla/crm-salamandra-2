@@ -37,6 +37,32 @@ Se para con Esc o Ctrl+C. Como cada tarea se cierra del todo antes de empezar la
 siguiente, pararla en cualquier momento deja el trabajo coherente — nunca a
 medias.
 
+## Una tarea, un contexto
+
+**Cada tarea se resuelve en un contexto propio, no encadenada en el de la
+anterior** (18/09/2026). Lo que se paga no es leer algo una vez: es tenerlo
+cargado en cada turno que queda por delante — el coste es turnos × tamaño del
+contexto. Encadenando, la décima tarea de una sesión costaba un ~80% más por
+turno que la primera haciendo el mismo trabajo.
+
+El reparto:
+
+- **Aquí, el padre**: bajar el Registro, enseñar la lista y, por cada tarea,
+  lanzar un subagente `general-purpose` con el texto entero de la ficha. Cuando
+  vuelve: desplegar, verificar, cerrarla y seguir. Este contexto crece unas
+  líneas por tarea, no una tarea entera.
+- **En el subagente, uno por tarea**: los pasos **1 a 5** —entender, reproducir,
+  arreglar, probar, commitear—, que es donde se va el grueso. Devuelve cinco
+  líneas: qué era, qué ficheros tocó, el hash del commit, la ruta del script de
+  reproducción del paso 2 y cómo se verifica.
+- **No baja nunca al subagente**: **desplegar**. Es acción hacia fuera, hay que
+  coordinarla con las otras sesiones y el permiso lo da quien lanzó esto.
+
+Si una tarea resulta ser de una línea, no montes subagente: hazla y sigue. El
+reparto es para las que cuestan, no para las que se ven de un vistazo.
+
+Esto **no** cambia nada de lo de arriba: el bucle sigue sin pararse ni preguntar.
+
 ---
 
 ## Qué se arregla sola (casi todo)
@@ -169,6 +195,11 @@ ssh crm-vps 'docker exec -i crm-salamandra-app-1 node --input-type=module -' < c
 
 Nunca imprimas filas con datos personales o de salud.
 
+**Guarda ese `consulta.mjs`** en el scratchpad de la sesión con el nombre de la
+ficha (`reproducir-<ficha>.mjs`) y di dónde queda: el paso 7 lo vuelve a lanzar
+**tal cual**, sin escribir otro. Cuesta la mitad y además verifica exactamente lo
+que se dijo que fallaba, no algo parecido.
+
 Si **ya no pasa**, salta a «Cerrarla» con el sello explicando cómo lo
 comprobaste. Es un final legítimo y de los más rentables. Comprueba en los DOS
 sentidos cuando se pueda: que donde debe verse se ve y donde no, no — un «false»
@@ -182,6 +213,16 @@ más pequeño posible encima. Si hace falta código en `lib/`, va con su prueba 
 `npm test` y su línea en `docs/modules/`.
 
 ### 4. Probarlo
+Mientras arreglas, solo las pruebas de lo que tocas — la suite entera son 407
+ficheros y más de dos minutos por vuelta:
+
+```bash
+node scripts/pruebas.mjs --solo=citas
+```
+
+Y **antes de commitear, la suite entera y el build**, que es lo que manda la
+regla 11:
+
 ```bash
 npm test
 ```
@@ -214,7 +255,9 @@ imposible saber cuál rompió algo.
 
 ### 7. Verificarlo en producción
 **No basta con que el despliegue termine: hay que ver el comportamiento nuevo.**
-Repite lo del paso 2 y comprueba que ahora sale lo que tiene que salir.
+**Vuelve a lanzar el mismo `reproducir-<ficha>.mjs` del paso 2, sin reescribirlo**,
+y comprueba que ahora sale lo que tiene que salir. Si para verificar necesitas
+cambiarlo, es que el paso 2 no comprobaba lo que creías: arréglalo allí y vuelve.
 
 Si no se puede comprobar, la tarea **no se cierra**: se queda con una nota de qué
 se intentó.
@@ -261,6 +304,10 @@ el bucle aquí, sabe exactamente dónde se quedó.
 ### 10. La siguiente
 **El bucle no pregunta si sigue: sigue.** Solo termina cuando no quedan tareas
 trabajables, o cuando lo paran.
+
+**Y empieza en limpio**: la siguiente va en un subagente nuevo (ver «Una tarea,
+un contexto»). Lo único que viaja de una tarea a la siguiente es el texto de su
+ficha — nunca lo que hubo que leer para resolver la anterior.
 
 ---
 

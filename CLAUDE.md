@@ -15,10 +15,20 @@ senior developer de referencia.
 
 ## Documentación
 
-**Antes de tocar un módulo, lee el `## Mapa` de su doc** (las 30 primeras
-líneas: dónde vive cada cosa, verificado contra el código el 19/08/2026) y
-luego lo que toque del resto. Si código y doc discrepan, **manda el código**:
-actualiza el doc.
+**Antes de tocar un módulo, el `## Mapa` de su doc dice dónde vive cada cosa**
+(al principio, verificado contra el código el 19/08/2026). ⚠️ **No se lee
+entero, se consulta por filas**: son pocas líneas pero enormes — el Mapa de
+`clinica.md` son 54 KB y el de `billing.md`, 42 KB, así que leerlo «por encima»
+cuesta más de 10.000 tokens y se paga otra vez en cada turno que queda por
+delante. Se busca la fila que toca:
+
+```bash
+sed -n '1,45p' docs/modules/citas.md | grep -i 'bloqueo'
+```
+
+Y **nunca el resto del doc entero**: `billing.md` son 3.003 líneas. Del Mapa
+sale el fichero; del fichero sale la respuesta. Si código y doc discrepan,
+**manda el código**: actualiza el doc.
 
 | Doc (`docs/modules/`) | moduleKey | Doc | moduleKey |
 | --- | --- | --- | --- |
@@ -131,7 +141,7 @@ PostgreSQL DB: salamandra
   `docs/decisions/2026-09-12-el-calendario-global-ve-todos-y-los-proyectos.md`).
 
 **Carpetas**: `app/` (rutas: `/api`, `(auth)`, `(dashboard)`, `admin/`,
-`portal/`, `widget/`), `components/`, `lib/` (33 carpetas: db, tenant, auth,
+`portal/`, `widget/`), `components/`, `lib/` (db, tenant, auth,
 billing, team, leads, training, clients, clinica, citas, nutricion, outreach,
 provisioning, demo, email, ai, pdf, utils…), `models/` (`master/`, `tenant/`),
 `modules/` (UI base por módulo; `modules/overrides/{slug-con-guion}/` solo
@@ -390,11 +400,14 @@ despliegue que toque módulos.
     algo intermedio (presets por oficio); se construye cuando lo pida la
     realidad.
 
-**Pruebas**: `npm test` lanza las ~40 pruebas ligeras de `scripts/_smoke-*.mjs`
+**Pruebas**: `npm test` lanza las pruebas ligeras de `scripts/_smoke-*.mjs`
 (`scripts/pruebas.mjs` las clasifica solo: ligera = no hace `fetch` ni toca
 Sequelize; la marca `// @prueba ligera|pesada` en la cabecera manda si hace
 falta) y se pasa antes de cada push o deploy sin preguntar; `npm run
-test:todo` añade las que piden base de datos y `npm run dev`. **Una prueba
+test:todo` añade las que piden base de datos y `npm run dev`. Son cientos y
+tardan minutos, así que **mientras arreglas, solo las de lo que tocas** —
+`node scripts/pruebas.mjs --solo=citas`, que sale con 1 si el patrón no encaja
+con nada—; la suite entera, antes de commitear. **Una prueba
 nueva de una función de `lib/` se escribe con `node:test` + `node:assert/strict`**
 (dentro de Node 22, cero dependencias; ejemplar `_smoke-citas-dinero.mjs`,
 19/08/2026): prueba lo que DEVUELVE, no cómo está escrito; el runner la lanza

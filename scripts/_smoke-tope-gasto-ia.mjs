@@ -294,7 +294,12 @@ describe("comprobarTopeDeGasto: nunca apaga la IA por un fallo suyo", () => {
       msMaximo: 20,
     });
     assert.equal(r.permitir, true);
-    assert.ok(Date.now() - inicio < 200, `tardó ${Date.now() - inicio} ms`);
+    // El margen es generoso a propósito (18/09/2026): lo que hay que cazar aquí
+    // es que NO se quede esperando a lo que está colgado, y eso se ve igual con
+    // 2 s que con 200 ms. Con 200 ms salía roja cuando la máquina estaba ocupada
+    // —se vio tardar 211 ms— y un rojo falso cuesta más que la precisión que
+    // daba: manda a buscar un fallo que no existe.
+    assert.ok(Date.now() - inicio < 2000, `tardó ${Date.now() - inicio} ms`);
   });
 
   it("sin contexto tampoco rompe", async () => {
@@ -418,7 +423,12 @@ describe("avisarTramoDelTope: una campana por admin, tramo, mes e importe", () =
     const ctx = { tenant: { id: TENANT }, tenantModels: { Notification: n.modelo } };
     const inicio = Date.now();
     assert.equal(await avisarTramoDelTope(ctx, estado, 80, { buscarAdmins: dosAdmins, ahora: SEPT, msMaximo: 20 }), 0);
-    assert.ok(Date.now() - inicio < 200, `tardó ${Date.now() - inicio} ms`);
+    // El margen es generoso a propósito (18/09/2026): lo que hay que cazar aquí
+    // es que NO se quede esperando a lo que está colgado, y eso se ve igual con
+    // 2 s que con 200 ms. Con 200 ms salía roja cuando la máquina estaba ocupada
+    // —se vio tardar 211 ms— y un rojo falso cuesta más que la precisión que
+    // daba: manda a buscar un fallo que no existe.
+    assert.ok(Date.now() - inicio < 2000, `tardó ${Date.now() - inicio} ms`);
   });
 
   it("un intento que falla o sigue en marcha no se repite en cada llamada: sí pasados 60 s", async () => {

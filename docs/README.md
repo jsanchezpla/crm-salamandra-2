@@ -17,11 +17,11 @@ flowchart LR
         ROUT["routing-overrides.md ★"]
         TEN["tenant-resolver.md"]
         ACC["module-access.md"]
-        FICHAS["20 fichas de módulo<br/><i>inventario de ficheros</i>"]
+        FICHAS["una ficha por módulo<br/><i>inventario de ficheros</i>"]
     end
 
     subgraph MODS["docs/modules/ — qué hace"]
-        NEG["16 docs funcionales<br/><i>negocio, endpoints, reglas</i>"]
+        NEG["un doc por módulo<br/><i>negocio, endpoints, reglas</i>"]
     end
 
     subgraph OTROS["histórico y trabajo en curso"]
@@ -51,9 +51,14 @@ flowchart LR
 
 **Voy a tocar un módulo** → el `## Mapa` al principio de
 [`modules/{modulo}.md`](modules/) (dónde vive cada cosa, verificado el
-19/08/2026) y luego el resto del doc para saber qué hace;
-[`base/{modulo}.md`](base/) para el inventario fino de ficheros (foto del
-07/08, ver su aviso).
+19/08/2026). **Se consulta por filas, no se lee entero**: son pocas líneas pero
+enormes —el Mapa de `clinica.md` son 54 KB—, así que `sed -n '1,45p'` + `grep`
+de lo que buscas, y del Mapa al fichero. El resto del doc, solo si el Mapa te
+manda a una sección concreta.
+
+> `base/{modulo}.md` es una foto del 07/08/2026 y **ya miente en varios sitios**
+> (cita carpetas que no existen y clientes dados de baja). Para saber qué
+> ficheros hay, el Mapa o el propio disco; `base/` solo para lo conceptual.
 
 **Un cliente pide algo** → la escalera de la **regla #16 de `CLAUDE.md`**
 antes de abrir un fichero: alta sin código → palabras → dato en `lib/` →

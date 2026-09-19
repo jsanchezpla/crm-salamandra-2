@@ -9,6 +9,30 @@ embudo estándar del CRM no sabía contarlo.
 
 ---
 
+## Mapa
+
+> Verificado contra el código el 18/09/2026. Si algo no cuadra, manda el código: corrige esta tabla. **Quién tiene el módulo NO se lista aquí**: `/admin/modulos` o `node scripts/inspect-tenant-modules.js <slug>`.
+
+> ⚠️ **`booking` (el módulo) no es `bookings` (la tabla).** La tabla `bookings` y las migraciones `migrate-booking-*` de `scripts/_module-migrations.js` son de **Citas**, no de esto. Este módulo no tiene tablas.
+
+| | |
+| --- | --- |
+| **moduleKey** | `booking` · requiere `clients` + `leads` (`lib/provisioning/catalogo.js:162`, `lib/provisioning/dependencias.js:454`). Sin ellos no hay nada que cambiar |
+| **Reina** | `laura_ubeda` (Laura Úbeda, cantante). Implementado el 24/08/2026 |
+| **Pantallas** | **Ninguna propia, no hay `/booking`.** Cambia tres que ya existen: `/leads` (se rotula «Propuestas» y usa otro embudo), Clientes (se rotula «Contratantes») y el desplegable «Tipo» del alta, de «Editar ficha» y de la ficha |
+| **Endpoints** | Ninguno propio. Usa los de `clients` y `leads` |
+| **Lógica** | `lib/booking/categorias.js` (las once categorías y su `contrata`: `rotuloCategoria`, `opcionesCategoria`) · `lib/leads/embudos.js` (`EMBUDO_BOOKING` en L126; la elección por módulo está en L157, `tieneModulo("booking")`) · `lib/clients/vocabulario.js` (el rótulo «Contratantes») · `lib/clients/formularioAlta.js:34` (el campo «Tipo» en el alta) |
+| **UI** | No hay `modules/booking/`. Lo leen `modules/default/ClientDetailModule.jsx:20` (`rotuloCategoria`) y `modules/correo/CorreoModule.jsx` (`conBooking` → «Propuestas») |
+| **Modelos** | **Ninguno propio y ninguna tabla.** El tipo del contratante vive en `Client.customFields.categoria` a propósito: una columna en `clients` la pagarían todos los tenants (§«El Tipo del contratante») |
+| **Interruptores y parámetros** | Ninguno. Lo que decide es tener el módulo, **nunca el slug** (§«Se decide por MÓDULO») |
+| **Pantallas propias** | Ninguna. No aparece en ningún mapa `UI_OVERRIDES` |
+| **Scripts** | `node scripts/enable-module.js <slug> booking`. **Sin migraciones propias** |
+| **Pruebas** | Ninguna con su nombre. Lo que cubre el embudo son `scripts/_smoke-leads-etapas.mjs` y `scripts/_smoke-leads-stages-embudos.mjs` |
+| **Decisiones** | Ninguna en `../decisions/`: lo que hay está en este doc (Rodrigo, 24/08 y 01/09/2026) |
+| **En este doc** | «La decisión de fondo» · «Se decide por MÓDULO, nunca por slug» · «El embudo» · «El “Tipo” del contratante» · «Qué NO hace todavía» · «Activarlo» |
+
+---
+
 ## La decisión de fondo: no trae pantallas, cambia las que hay
 
 `booking` **no tiene ni una ruta propia**. No hay `/booking`. Lo que hace es

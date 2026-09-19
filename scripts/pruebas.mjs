@@ -4,7 +4,15 @@
  *   npm test                  → las que no necesitan NADA encendido
  *   npm run test:todo         → todas, incluidas las que piden base de datos y servidor
  *
- *   node scripts/pruebas.mjs [--todo] [--listar] [--limite=90]
+ *   node scripts/pruebas.mjs [--todo] [--solo=citas] [--listar] [--limite=90]
+ *
+ * `--solo=<patrón>` lanza solo las pruebas que llevan ese texto en el nombre
+ * (varios, separados por comas). Es para el bucle de arreglar, donde lanzarlas
+ * todas y esperar dos minutos por vuelta se paga en CADA turno (18/09/2026); la
+ * suite entera va igual antes de commitear, que es lo que manda la regla 11. Si
+ * el patrón no encaja con nada, sale con 1: un «todo bien» que no ha probado
+ * nada es peor que un rojo. Y `--listar` no lista y sale — hace que al final se
+ * digan por su nombre las pesadas que no se han lanzado.
  *
  * ── POR QUÉ EXISTE ──────────────────────────────────────────────────────────
  *
@@ -77,6 +85,10 @@ const args = process.argv.slice(2);
 const TODAS = args.includes("--todo");
 const LISTAR = args.includes("--listar");
 const LIMITE_S = Number(args.find((a) => a.startsWith("--limite="))?.split("=")[1] ?? 90);
+const SOLO = (args.find((a) => a.startsWith("--solo="))?.split("=")[1] ?? "")
+  .split(",")
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
 
 // ── Descubrir ───────────────────────────────────────────────────────────────
 
@@ -131,7 +143,24 @@ const todas = readdirSync(join(RAIZ, "scripts"))
 
 const ligeras = todas.filter((p) => !p.pesada);
 const pesadas = todas.filter((p) => p.pesada);
-const aLanzar = TODAS ? todas : ligeras;
+const candidatas = TODAS ? todas : ligeras;
+
+// `--solo=citas` mira el nombre del fichero, que es como se llaman entre
+// nosotros: `_smoke-citas-dinero.mjs` encaja con `citas` y con `dinero`.
+const aLanzar = SOLO.length
+  ? candidatas.filter((p) => {
+      const donde = `${p.fichero} ${p.nombre}`.toLowerCase();
+      return SOLO.some((patron) => donde.includes(patron));
+    })
+  : candidatas;
+
+// Un `--solo` que no encaja con nada NO sale en verde.
+if (SOLO.length && !aLanzar.length) {
+  console.log(`
+Ninguna prueba encaja con --solo=${SOLO.join(",")}.`);
+  console.log("Los nombres son los de `scripts/_smoke-*.mjs` sin el prefijo.");
+  process.exit(1);
+}
 
 // ── Lanzar ──────────────────────────────────────────────────────────────────
 
@@ -179,7 +208,13 @@ const raya = "─".repeat(64);
 const ancho = Math.max(...aLanzar.map((p) => p.nombre.length), 10) + 2;
 
 console.log("");
-console.log(TODAS ? "Todas las pruebas" : "Pruebas que no necesitan nada encendido");
+console.log(
+  SOLO.length
+    ? `Solo las que encajan con --solo=${SOLO.join(",")} (${aLanzar.length} de ${candidatas.length})`
+    : TODAS
+      ? "Todas las pruebas"
+      : "Pruebas que no necesitan nada encendido"
+);
 console.log(raya);
 
 if (TODAS && !existsSync(ENTORNO)) {
@@ -205,7 +240,15 @@ console.log(
 
 // Lo que se ha quedado fuera se dice SIEMPRE, aunque no lo pidan: es la única
 // forma de que una prueba mal clasificada no desaparezca sin ruido.
-if (!TODAS && pesadas.length) {
+// Con `--solo` esto NO es la suite: que no se confunda un verde parcial con el
+// verde que pide la regla 11 antes de empujar.
+if (SOLO.length) {
+  console.log("");
+  console.log(`Esto es un SUBCONJUNTO: se han quedado fuera ${candidatas.length - aLanzar.length}.`);
+  console.log("Antes de commitear, la suite entera:  npm test");
+}
+
+if (!SOLO.length && !TODAS && pesadas.length) {
   const porMotivo = {};
   for (const p of pesadas) porMotivo[p.motivo] = (porMotivo[p.motivo] || 0) + 1;
   const detalle = Object.entries(porMotivo)
