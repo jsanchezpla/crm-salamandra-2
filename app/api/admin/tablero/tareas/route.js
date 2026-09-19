@@ -6,6 +6,7 @@ import { SECCIONES_BACKLOG, contarTareas } from "../../../../../lib/tablero/pars
 import { claveDeTarea, fundirEstado } from "../../../../../lib/tablero/estado.js";
 import {
   prepararPublicacion,
+  publicarCierre,
   publicarVersion,
   ultimaVersion,
 } from "../../../../../lib/tablero/documentos.js";
@@ -276,30 +277,18 @@ export const PATCH = withTenant(async (request, _ctx, ctx) => {
       });
 
       /*
-       * ⚠️ EL ORDEN NO ES INDIFERENTE: primero Resuelto, después el backlog.
-       *
-       * Son dos publicaciones y la segunda puede fallar (alguien publicó en
-       * medio y salta la UNIQUE). Escribiendo primero Resuelto, un fallo deja la
-       * tarea en los DOS sitios: se ve, molesta y se arregla en un minuto. Al
-       * revés, deja la tarea en ninguno: sale del backlog y no llega a Resuelto,
-       * y nadie va a echar de menos lo que ya no está escrito en ninguna parte.
+       * Los dos documentos se comprueban ANTES de escribir ninguno, y luego se
+       * escriben en este orden: primero Resuelto, después el backlog. El porqué
+       * de las dos cosas, en `publicarCierre`.
        */
-      const enResuelto = await publicar({
-        nombre: "resuelto",
-        contenido: r.resuelto,
-        actual: resuelto,
-        nota: `cerrar «${r.tarea.titulo.slice(0, 80)}», desde el tablero`,
-        por,
-      });
-      const enBacklog = await publicar({
-        nombre: "backlog",
-        contenido: r.backlog,
-        actual: backlog,
+      const cierre = await publicarCierre(getMasterModels(), {
+        resuelto: { contenido: r.resuelto, actual: resuelto },
+        backlog: { contenido: r.backlog, actual: backlog },
         nota: `cerrar «${r.tarea.titulo.slice(0, 80)}», desde el tablero`,
         por,
       });
 
-      return ok({ titulo: r.tarea.titulo, resuelto: enResuelto, backlog: enBacklog });
+      return ok({ titulo: r.tarea.titulo, resuelto: cierre.resuelto, backlog: cierre.backlog });
     }
 
     return error("No sé qué hacer: manda «mover», «editar» o «cerrar».");

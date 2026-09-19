@@ -528,6 +528,29 @@ Resuelto (Buzón) con Resuelto; las Activas son un punto previo.»
   registro»: ninguno tenía la tarea abierta en el backlog.
 - Prueba: `scripts/_smoke-buzon-sincronizar-registro.mjs`.
 
+### Dos avisos con el mismo asunto (19/09/2026, Rodrigo)
+
+«Se buguea el Registro cuando trato de mandar a Resuelto más de una tarea con
+el mismo nombre.» Eran tres frenos que se sumaban, y ninguno miraba lo que de
+verdad identifica a una tarea desde el 24/08/2026, que es su ficha:
+
+- **El título repetido paraba el envío.** El título de un mensaje del Buzón es
+  su asunto, y dos avisos con el mismo asunto son lo normal. Ahora lo que no se
+  repite en el día es el AVISO (`apuntarEnResuelto` lo desempata por su
+  `AV-####`, y `crearTarea` acepta `permitirRepetido` porque el endpoint ya ha
+  mirado la referencia); `comprobar` solo lo trata como error si a alguna de
+  las dos le falta la ficha, que es cuando de verdad se pisan.
+- **El freno del 70 % no dejaba cerrar con el backlog casi vacío**: de dos
+  tareas, cerrar una deja el 50 %. El freno pide ahora además que salgan más de
+  tres (`SALIDAS_QUE_NO_FRENAN`).
+- **El cierre escribía Resuelto antes de saber si el backlog pasaba.** Con eso,
+  el rebote dejaba la tarea en los DOS documentos y ya no se podía reintentar
+  (su ficha repetida tumbaba Resuelto). `publicarCierre` comprueba los dos y
+  solo entonces escribe, en el mismo orden de siempre.
+
+Lo que quedó escrito dos veces aquel día («Guía en PDF», ficha `y7m78h`) se
+limpió a mano sacándolo del backlog.
+
 ## Lo que NO hace
 
 - No borra desde ninguna pantalla. Lo que caduca se lo lleva `podar-buzon.js`,

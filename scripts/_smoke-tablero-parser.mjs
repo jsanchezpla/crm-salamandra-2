@@ -283,12 +283,37 @@ describe("comprobar: lo que NO se publica (errores)", () => {
     assert.deepEqual(r.errores, []);
   });
 
-  it("dos tareas con el mismo título en la misma sección", () => {
+  it("dos tareas con el mismo título en la misma sección, SIN ficha, se pisan: error", () => {
     const r = comprobar(
       "## Alta\n\n" + TAREA_COMPLETA("Igual") + TAREA_COMPLETA("Igual"),
       "backlog"
     );
     assert.ok(r.errores.some((e) => /mismo título/.test(e) && /«Igual»/.test(e)));
+  });
+
+  /*
+   * Dos mensajes del Buzón con el mismo asunto cerrados el mismo día caen bajo
+   * la misma fecha de Resuelto, y eso es normal: cada uno con su ficha se
+   * distinguen para todo lo que decide algo (19/09/2026).
+   */
+  it("con ficha propia cada una, el mismo título es aviso y no error", () => {
+    const conFicha = (titulo, id) =>
+      `### ${titulo} · \`aumenta\`\n\n<!--id:${id}-->\n\nCuerpo.\n\n`;
+    const r = comprobar(
+      "## 19/09/2026\n\n" + conFicha("Igual", "aaa111") + conFicha("Igual", "bbb222"),
+      "resuelto"
+    );
+    assert.deepEqual(r.errores, []);
+    assert.ok(r.avisos.some((a) => /mismo título/.test(a) && /ficha/.test(a)));
+  });
+
+  it("pero si a una le falta la ficha, sigue siendo error", () => {
+    const r = comprobar(
+      "## 19/09/2026\n\n### Igual · `aumenta`\n\n<!--id:aaa111-->\n\nCuerpo.\n\n" +
+        "### Igual · `aumenta`\n\nCuerpo.\n",
+      "resuelto"
+    );
+    assert.ok(r.errores.some((e) => /mismo título/.test(e)));
   });
 
   it("el mismo título en DOS secciones distintas no es error", () => {
@@ -558,25 +583,38 @@ describe("prepararPublicacion: los frenos antes de escribir", () => {
     assert.ok(r.avisos.some((a) => /--forzar/.test(a) && /se pierde/.test(a)));
   });
 
-  it("si salen más del 30 % de las tareas, frena («parece medio fichero») salvo con forzar", () => {
-    const dosDeCuatro =
+  it("si salen más del 30 % de las tareas y son más de tres, frena («parece medio fichero») salvo con forzar", () => {
+    const diez =
       "## Alta\n\n" +
-      TAREA_COMPLETA("El buscador no encuentra por apellido") +
-      TAREA_COMPLETA("Otra");
+      Array.from({ length: 10 }, (_, i) => TAREA_COMPLETA(`Tarea ${i + 1}`)).join("");
+    const dosDeDiez = "## Alta\n\n" + TAREA_COMPLETA("Tarea 1") + TAREA_COMPLETA("Tarea 2");
     const sin = prepararPublicacion({
       nombre: "backlog",
-      contenido: dosDeCuatro,
-      actual: actualDe(BACKLOG_BIEN),
+      contenido: dosDeDiez,
+      actual: actualDe(diez),
     });
     assert.ok(sin.errores.some((e) => /medio fichero/.test(e) && /--forzar/.test(e)));
     const con = prepararPublicacion({
       nombre: "backlog",
-      contenido: dosDeCuatro,
-      actual: actualDe(BACKLOG_BIEN),
+      contenido: dosDeDiez,
+      actual: actualDe(diez),
       forzar: true,
     });
     assert.deepEqual(con.errores, []);
     assert.ok(con.avisos.some((a) => /medio fichero/.test(a)));
+  });
+
+  /*
+   * El freno del 70 % se escribió con 133 tareas dentro. Con el backlog casi
+   * vacío el porcentaje deja de decir nada —cerrar una de dos es el 50 %— y
+   * frenaba justo el gesto normal, dejando además la tarea escrita en Resuelto
+   * y en el backlog a la vez (19/09/2026).
+   */
+  it("cerrar la única tarea que queda de dos NO frena: el porcentaje no dice nada con tan pocas", () => {
+    const dos = "## Alta\n\n" + TAREA_COMPLETA("Una") + TAREA_COMPLETA("Otra");
+    const una = "## Alta\n\n" + TAREA_COMPLETA("Otra");
+    const r = prepararPublicacion({ nombre: "backlog", contenido: una, actual: actualDe(dos) });
+    assert.deepEqual(r.errores, []);
   });
 
   it("cerrar una tarea de cuatro (queda el 75 %) NO frena: es lo normal", () => {

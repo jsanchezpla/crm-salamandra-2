@@ -114,7 +114,10 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     }
 
     const tarea = tareaDesdeAviso(aviso);
-    const { texto, id: ficha } = crearTarea(actual.contenido, tarea);
+    // El duplicado ya se ha mirado arriba por su `AV-####` (`yaEstaEnElRegistro`):
+    // que el título coincida con el de otra tarea solo quiere decir que dos
+    // avisos traen el mismo asunto, y eso no es motivo para no apuntarlo.
+    const { texto, id: ficha } = crearTarea(actual.contenido, { ...tarea, permitirRepetido: true });
     const plan = prepararPublicacion({ nombre: "backlog", contenido: texto, actual, base: actual.version });
     if (plan.errores.length) return error(plan.errores.join(" · "), 422);
 

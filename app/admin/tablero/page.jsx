@@ -903,7 +903,11 @@ export default function TableroPage() {
             <div className="space-y-px">
               {g.tareas.map((t) => (
                 <details
-                  key={`${g.titulo}·${t.titulo}`}
+                  // La ficha por delante: dos tareas pueden llamarse igual
+                  // dentro del mismo bloque (dos mensajes del Buzón con el
+                  // mismo asunto cerrados el mismo día), y con la clave repetida
+                  // React pinta una sola y las confunde al abrirlas.
+                  key={`${g.titulo}·${t.id ?? t.clave ?? t.titulo}`}
                   className="group rounded-lg px-4 py-3"
                   style={{ background: "var(--panel)", border: "1px solid var(--line)" }}
                 >

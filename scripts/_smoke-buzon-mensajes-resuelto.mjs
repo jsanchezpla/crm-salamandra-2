@@ -84,9 +84,27 @@ describe("Enviar a Resuelto", () => {
   });
 
   it("dos veces el mismo aviso el mismo día se para, en vez de romper el documento", () => {
-    const entrada = entradaDeResuelto(nuestro(), { hoy: HOY });
+    const entrada = { ...entradaDeResuelto(nuestro(), { hoy: HOY }), senal: "AV-0144" };
     const { texto } = apuntarEnResuelto(RESUELTO, entrada);
     assert.throws(() => apuntarEnResuelto(texto, entrada), /ya hay en Resuelto/);
+  });
+
+  /*
+   * Lo que no se repite es el AVISO, no el asunto: dos mensajes distintos con
+   * el mismo título son dos entradas, cada una con su ficha. Antes se miraba el
+   * título y el segundo no se podía enviar nunca (19/09/2026).
+   */
+  it("otro aviso con el mismo asunto sí entra, y el documento sigue siendo válido", () => {
+    const uno = { ...entradaDeResuelto(nuestro(), { hoy: HOY }), senal: "AV-0144" };
+    const { texto } = apuntarEnResuelto(RESUELTO, uno);
+    const otro = {
+      ...entradaDeResuelto(nuestro({ id: "av-145", numero: 145 }), { hoy: HOY }),
+      senal: "AV-0145",
+    };
+    const segundo = apuntarEnResuelto(texto, otro);
+    const r = comprobar(segundo.texto, "resuelto");
+    assert.deepEqual(r.errores, []);
+    assert.equal(localizar(segundo.texto, { id: segundo.id }).seccion.titulo, "15/09/2026");
   });
 
   it("lo del cliente lleva lo que contestamos (no las notas internas)", () => {

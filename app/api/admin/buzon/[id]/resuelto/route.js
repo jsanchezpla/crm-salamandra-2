@@ -33,6 +33,7 @@ import { entradaDeResuelto, notaDeCierre } from "../../../../../../lib/buzon/alR
 import { copiarCapturasAlRegistro } from "../../../../../../lib/buzon/capturasAlRegistro.js";
 import {
   prepararPublicacion,
+  publicarCierre,
   publicarVersion,
   ultimaVersion,
 } from "../../../../../../lib/tablero/documentos.js";
@@ -111,13 +112,21 @@ export const POST = withTenant(async (request, { params }, ctx) => {
         comoSeArreglo: notaDeCierre(aviso, cuerpo?.nota),
         fecha: new Date(),
       });
-      const a = await publicar(models, { nombre: "resuelto", contenido: r.resuelto, actual: resuelto, nota, por });
-      // El backlog se publica sin su tarea. Sus avisos hablan de OTRAS tareas —la
-      // de este aviso acaba de salir de ahí— y el panel del Buzón los enseñaba
-      // como un fallo del cierre (18/09/2026): se quedan para /admin/tablero.
-      await publicar(models, { nombre: "backlog", contenido: r.backlog, actual: backlog, nota, por });
-      version = a.version;
-      avisos.push(...a.avisos);
+      // Los dos se comprueban antes de escribir ninguno: si el backlog rebota
+      // después de haber escrito Resuelto, la tarea queda en los dos sitios y
+      // el aviso ya no se puede reenviar (19/09/2026, «Guía en PDF»).
+      //
+      // Del backlog solo se guarda la versión: sus avisos hablan de OTRAS
+      // tareas —la de este aviso acaba de salir de ahí— y el panel del Buzón los
+      // enseñaba como un fallo del cierre (18/09/2026).
+      const cierre = await publicarCierre(models, {
+        resuelto: { contenido: r.resuelto, actual: resuelto },
+        backlog: { contenido: r.backlog, actual: backlog },
+        nota,
+        por,
+      });
+      version = cierre.resuelto.version;
+      avisos.push(...cierre.resuelto.avisos);
     } else if (aviso.registroFicha) {
       // Tenía tarea y ya no está en el backlog: alguien la cerró o la borró.
       camino = "ya-cerrada";
@@ -125,7 +134,9 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     } else {
       camino = "nueva";
       const entrada = entradaDeResuelto(aviso, { nota: cuerpo?.nota });
-      const r = apuntarEnResuelto(resuelto.contenido, entrada);
+      // Lo que no se repite hoy es el AVISO, no el asunto: dos mensajes con el
+      // mismo título son dos entradas distintas, cada una con su ficha.
+      const r = apuntarEnResuelto(resuelto.contenido, { ...entrada, senal: ref });
       ficha = r.id;
       const a = await publicar(models, { nombre: "resuelto", contenido: r.texto, actual: resuelto, nota, por });
       version = a.version;
