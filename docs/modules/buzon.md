@@ -539,7 +539,11 @@ verdad identifica a una tarea desde el 24/08/2026, que es su ficha:
   repite en el día es el AVISO (`apuntarEnResuelto` lo desempata por su
   `AV-####`, y `crearTarea` acepta `permitirRepetido` porque el endpoint ya ha
   mirado la referencia); `comprobar` solo lo trata como error si a alguna de
-  las dos le falta la ficha, que es cuando de verdad se pisan.
+  las dos le falta la ficha, que es cuando de verdad se pisan. **En Resuelto no
+  se avisa siquiera** (misma tarde): la sección es un día, y el panel del Buzón
+  pinta los avisos en rojo y en el sitio de los fallos, así que Rodrigo leyó
+  que no se había podido mandar un mensaje que había entrado bien. En el
+  backlog el aviso se queda: allí dos tareas iguales comparten tick y reparto.
 - **El freno del 70 % no dejaba cerrar con el backlog casi vacío**: de dos
   tareas, cerrar una deja el 50 %. El freno pide ahora además que salgan más de
   tres (`SALIDAS_QUE_NO_FRENAN`).

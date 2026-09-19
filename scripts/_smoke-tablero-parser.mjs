@@ -296,15 +296,25 @@ describe("comprobar: lo que NO se publica (errores)", () => {
    * la misma fecha de Resuelto, y eso es normal: cada uno con su ficha se
    * distinguen para todo lo que decide algo (19/09/2026).
    */
-  it("con ficha propia cada una, el mismo título es aviso y no error", () => {
-    const conFicha = (titulo, id) =>
-      `### ${titulo} · \`aumenta\`\n\n<!--id:${id}-->\n\nCuerpo.\n\n`;
+  const CON_FICHA = (titulo, id) =>
+    `### ${titulo} · \`aumenta\`\n\n<!--id:${id}-->\n\nCuerpo.\n\n`;
+
+  it("en resuelto, con ficha propia cada una, el mismo título no dice nada: es un día, no un cajón", () => {
     const r = comprobar(
-      "## 19/09/2026\n\n" + conFicha("Igual", "aaa111") + conFicha("Igual", "bbb222"),
+      "## 19/09/2026\n\n" + CON_FICHA("Igual", "aaa111") + CON_FICHA("Igual", "bbb222"),
       "resuelto"
     );
     assert.deepEqual(r.errores, []);
-    assert.ok(r.avisos.some((a) => /mismo título/.test(a) && /ficha/.test(a)));
+    assert.deepEqual(r.avisos, []);
+  });
+
+  it("en el backlog sí se avisa: dos tareas iguales comparten el tick y el reparto", () => {
+    const r = comprobar(
+      "## Alta\n\n" + CON_FICHA("Igual", "aaa111") + CON_FICHA("Igual", "bbb222"),
+      "backlog"
+    );
+    assert.deepEqual(r.errores, []);
+    assert.ok(r.avisos.some((a) => /mismo título/.test(a) && /tick/.test(a)));
   });
 
   it("pero si a una le falta la ficha, sigue siendo error", () => {
